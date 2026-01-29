@@ -2276,6 +2276,75 @@ function syncAllUI() {
 }
 
 
+if (PAGE === "separator") {
+  initSeparatorPage();
+}
+
+async function initSeparatorPage() {
+  await loadSeparatorStructures();
+  await loadUsersForSeparator();
+  initSeparatorSubmit();
+}
+
+async function loadSeparatorStructures() {
+  const select = document.querySelector('[name="structure_id"]');
+  if (!select) return;
+
+  const res = await fetch('/api/structures');
+  const structures = await res.json();
+
+  structures.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.sep_str_id;
+    opt.textContent = s.name;
+    select.appendChild(opt);
+  });
+}
+
+async function loadUsersForSeparator() {
+  const select = document.querySelector('[name="created_by"]');
+  if (!select) return;
+
+  const res = await fetch('/api/users');
+  const users = await res.json();
+
+  users.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.user_id;
+    opt.textContent = u.name;
+    select.appendChild(opt);
+  });
+}
+
+
+function initSeparatorSubmit() {
+  const saveBtn = document.getElementById("saveBtn");
+  if (!saveBtn) return;
+
+  saveBtn.addEventListener("click", async () => {
+    const form = document.forms['separator-form'];
+    if (!form.reportValidity()) return;
+
+    const data = Object.fromEntries(new FormData(form));
+
+    const res = await fetch('/api/separators', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (!res.ok) {
+      alert('Ошибка сохранения');
+      return;
+    }
+
+    alert('Сепаратор сохранён');
+    form.reset();
+  });
+}
+
+
+
 // <<----- SPECIFIC TO CERTAIN PAGES ----->>
 // ----- BAL: Calculate Electrolyte Volume -----
 const dropQuantity = document.getElementById('drop-quantity');

@@ -26,6 +26,8 @@ pool.query('SELECT 1')
   .catch(err => console.error('Postgres connection error', err));
 
 // Routes
+
+// api/users
 app.post('/api/users', async (req, res) => {
   const { name } = req.body;
 
@@ -62,6 +64,7 @@ app.get('/api/users', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера'});
   }
 });
+
 app.put('/api/users/:id', async (req, res) => {
   const { id } = req.params;
   const { name, active } = req.body;
@@ -101,6 +104,88 @@ app.delete('/api/users/:id', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
+
+// api/separators
+app.post('/api/separators', async (req, res) => {
+  const {
+    name,
+    supplier,
+    brand,
+    batch,
+    structure_id,
+    air_perm,
+    air_perm_units,
+    thickness_um,
+    porosity,
+    comments,
+    status = 'available',
+    depleted_at,
+    file_path,
+    created_by
+  } = req.body;
+
+  if (!name || !structure_id || !created_by) {
+    return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO separators (
+        name, supplier, brand, batch,
+        structure_id,
+        air_perm, air_perm_units,
+        thickness_um, porosity,
+        comments,
+        status, depleted_at,
+        created_by,
+        file_path
+      )
+      VALUES (
+        $1,$2,$3,$4,
+        $5,
+        $6,$7,
+        $8,$9,
+        $10,
+        $11,$12,
+        $13,
+        $14
+      )
+      RETURNING sep_id
+      `,
+      [
+        name,
+        supplier,
+        brand,
+        batch,
+        structure_id,
+        air_perm || null,
+        air_perm_units || null,
+        thickness_um || null,
+        porosity || null,
+        comments || null,
+        status,
+        depleted_at || null,
+        created_by,
+        file_path || null
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+app.get('/api/structures', async (req, res) => {
+  const result = await pool.query(
+    'SELECT sep_str_id, name FROM separator_structure ORDER BY name'
+  );
+  res.json(result.rows);
+});
+
+
 
 // Start server
 app.listen(PORT, () => {

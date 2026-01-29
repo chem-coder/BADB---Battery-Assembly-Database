@@ -19,9 +19,8 @@
             <li>
               <!-- Navigation button without text -->
               <a href="index.html" target="_blank"><svg viewBox="0 0 24 24" width="24" height="24">
-                <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"
-                      fill="currentColor"/>
-              </svg></a>
+                <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"fill="currentColor"/></svg>
+              </a>
             </li>
             <li><a href="1-BAL.html" target="_blank">Протокол сборки аккумулятора</a></li>
             <li><a href="2-cathode.html" target="_blank">Катод</a></li>
@@ -40,84 +39,103 @@
         <p id="loaded-file-container" class="loaded-file-label" style="display:none;">
           Файл: <span id="loaded-file-name"></span>
         </p>
+        
+        <fieldset id="separator-meta">
+          <legend>Метаданные</legend>
+
+          <label for="separator-created-by">Кто добавил</label>
+          <select id="separator-created-by" name="created_by" required>
+            <option value="">— выбрать пользователя —</option>
+          </select>
+        </fieldset>
 
         <fieldset id="separator-intro">
-          <label for="project-name">Название проекта: </label>
-          <input id="project-name" type="text" name="project-name" placeholder="Какому проекту принадлежит?" value="" /><br>
           <!--N O T E: form fields must have a "name" attribute to be included in the FormData object. Otherwise, they're skipped: the "id" property doesn't count. */-->
+          <label for="separator-name">Название </label>
+          <input id="separator-name" type="text" name="name" placeholder="Celgard 2320" required><br>
 
-          <label for="separator-name">Сепаратор - название/код: </label>
-          <input id="separator-name" type="text" name="separator-name" placeholder="Celgard 2320" required><br>
+          <label for="separator-supplier">Производитель/ поставщик </label>
+          <input id="separator-supplier" type="text" name="supplier" placeholder="Celgard"><br>
+          
+          <label for="separator-brand">Марка </label>
+          <input id="separator-brand" type="text" name="brand" placeholder="2320"><br>
 
-          <label for="separator-batch">Сепаратор - партия: </label>
-          <input id="separator-batch" type="text" name="separator-batch" placeholder="A1" required><br>
+          <label for="separator-batch">Партия </label>
+          <input id="separator-batch" type="text" name="batch" placeholder="A1"><br>
+        </fieldset>
 
-          <label for="separator-notes">Сепаратор - заметки/комментарии: </label>
-          <textarea id="separator-notes" name="separator-notes" placeholder="Общие комментарии о сепараторе"></textarea>
+        <fieldset id="separator-structure">
+          <legend>Структура</legend>
+
+          <label for="separator-structure-id">Тип структуры</label>
+          <select id="separator-structure-id" name="structure_id" required>
+            <option value="">— выбрать —</option>
+            <!-- options later loaded from DB -->
+          </select>
         </fieldset>
 
         <fieldset id="separator-properties">
           <legend>Паспортные характеристики сепаратора</legend>
 
-          <label for="separator-material">Материал: </label>
-          <input
-            id="separator-material"
-            type="text"
-            name="separator-material"
-            placeholder="PE, PP, керамический, композитный и т.п."
-          /><br>
+          <label for="separator-air-permeability">Воздушная проницаемость </label>
+          <input id="separator-air-permeability" type="number" step="0.1" name="air_perm" placeholder="20"><br>
 
-          <label for="separator-layers">Число слоёв (структура): </label>
-          <select id="separator-layers" name="separator-layers">
-            <option value="">Выберите вариант</option>
-            <option value="mono">Однослойный</option>
-            <option value="bi">Двухслойный</option>
-            <option value="tri">Трёхслойный</option>
-            <option value="other">Другое</option>
-          </select><br>
+          <label for="separator-air-permeability-units">Единицы измерения воздушной проницаемости </label>
+          <input id="separator-air-permeability-units" type="text" name="air_perm_units" placeholder="s/100 мл или др. единицы (указать в комментариях)"><br>
 
-          <label for="separator-air-permeability">Воздушная проницаемость: </label>
+          <label for="separator-thickness-um">Толщина, мкм</label>
           <input
-            id="separator-air-permeability"
+            id="separator-thickness-um"
             type="number"
+            name="thickness_um"
             step="0.01"
             min="0"
-            name="separator-air-permeability"
-            placeholder="например, 200"
-          />
-          <span> s/100 мл или др. единицы (указать в комментариях)</span><br>
-
-          <label for="separator-thickness">Толщина: </label>
-          <input
-            id="separator-thickness"
-            type="number"
-            step="0.01"
-            min="0"
-            name="separator-thickness"
             placeholder="например, 20"
           />
-          <span> мкм</span><br>
 
-          <label for="separator-porosity">Пористость: </label>
+          <label for="separator-porosity">Пористость, %</label>
           <input
             id="separator-porosity"
             type="number"
+            name="porosity"
             step="0.1"
             min="0"
             max="100"
-            name="separator-porosity"
             placeholder="например, 40"
           />
-          <span> %</span><br>
+        </fieldset>
+
+        <fieldset id="separator-docs">
+          <legend>Документация</legend>
 
           <label for="separator-spec-notes">Комментарии к паспорту: </label><br>
           <textarea
             id="separator-spec-notes"
-            name="separator-spec-notes"
+            name="comments"
             rows="3"
             cols="50"
             placeholder="Единицы измерения, методики (Гурли и т.п.), особые замечания"
           ></textarea>
+
+          <label>Файл паспорта</label>
+          <input type="file" name="file">
+
+          <input type="hidden" name="file_path">
+
+        </fieldset>
+
+        <fieldset id="separator-status">
+          <legend>Статус</legend>
+
+          <label>Статус</label>
+          <select name="status">
+            <option value="available">в наличии</option>
+            <option value="used">израсходован</option>
+            <option value="scrap">забракован / списан</option>
+          </select>
+
+          <label>Дата списания</label>
+          <input type="date" name="depleted_at" disabled>
         </fieldset>
 
       </form>
