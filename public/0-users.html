@@ -80,12 +80,12 @@
     // -------- API helpers --------
 
     async function fetchUsers() {
-      const res = await fetch('/users');
+      const res = await fetch('/api/users');
       return res.json();
     }
 
     async function createUser(name) {
-      return fetch('/users', {
+      return fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_name: name })
@@ -93,7 +93,7 @@
     }
 
     async function updateUser(id, data) {
-      return fetch(`/users/${id}`, {
+      return fetch(`/api/users/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -101,7 +101,7 @@
     }
 
     async function deleteUser(id) {
-      return fetch(`/users/${id}`, { method: 'DELETE' });
+      return fetch(`/api/users/${id}`, { method: 'DELETE' });
     }
 
     // -------- Rendering --------
@@ -140,7 +140,7 @@
           deleteBtn.onclick = async () => {
             if (confirm('Вы уверены?')) {
               await deleteUser(user.user_id);
-              // loadUsers();
+              loadUsers();
             }
           };
 
@@ -179,11 +179,11 @@
             user_name: nameInput.value.trim(),
             active: statusSelect.value === 'true'
           });
-          // loadUsers();
+          loadUsers();
         }
 
         if (e.key === 'Escape') {
-          // loadUsers();
+          loadUsers();
         }
       };
     }

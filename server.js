@@ -7,6 +7,10 @@ const PORT = 3000;
 // middleware
 app.use(express.json());    // w/o this, req.body would be undefined
 app.use(express.static('public'));
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+}); 
 
 // Postgres connection
 const pool = new Pool({
@@ -21,19 +25,8 @@ pool.query('SELECT 1')
   .then(() => console.log('Postgres connected'))
   .catch(err => console.error('Postgres connection error', err));
 
-app.get('/users', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT user_id, user_name, active FROM users ORDER BY user_name');
-
-    res.json(result.rows);
-  } catch (err) {
-     console.error(err);
-     res.status(500).json({ error: 'Ошибка сервера'});
-  }
-});
-
-app.post('/users', async (req, res) => {
+// Routes
+app.post('/api/users', async (req, res) => {
   const { user_name } = req.body;
 
   if (!user_name) {
@@ -57,8 +50,31 @@ app.post('/users', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
-// app.put('/users/:id', ...);
-// app.delete('/users/:id', ...);
+
+app.get('/api/users', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT user_id, user_name, active FROM users ORDER BY user_name');
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера'});
+  }
+});
+// app.put('/api/users/:id', ...);
+
+app.delete('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await pool.query('DELETE FROM users WHERE user_id = $1', [id]);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
 
 // Start server
 app.listen(PORT, () => {
