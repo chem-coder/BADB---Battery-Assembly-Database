@@ -7,140 +7,367 @@
       content="width=device-width, initial-scale=1.0" />
     <title>Данные из паспорта сепаратора: </title>
     <link rel="stylesheet" type="text/css" href="styles.css">
-    <script type="text/javascript" src="script.js" defer></script>
+    
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        margin: 2rem;
+        max-width: 600px;
+      }
+
+      .add-user {
+        width: 100%;
+        font-size: 1rem;
+        padding: 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .users-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .user-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.4rem 0;
+      }
+
+      .user-info {
+        flex: 1;
+      }
+
+      .status {
+        margin-left: 0.5rem;
+        font-size: 0.9rem;
+        color: #666;
+      }
+
+      .inactive {
+        color: #aaa;
+      }
+
+      .actions button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+        margin-left: 0.5rem;
+      }
+
+      .edit-row input,
+      .edit-row select {
+        font-size: 0.9rem;
+        margin-right: 0.5rem;
+      }
+
+      .add-user:disabled {
+        background-color: #f5f5f5;
+        color: #999;
+        cursor: not-allowed;
+      }
+
+    </style>
   </head>
 
   <body data-page="separator">
-    <div class="container">
-      <header>
-        <h1>Сепаратор</h1>
-        <nav class="menu">
-          <ul>
-            <li>
-              <!-- Navigation button without text -->
-              <a href="index.html" target="_blank"><svg viewBox="0 0 24 24" width="24" height="24">
-                <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"fill="currentColor"/></svg>
-              </a>
-            </li>
-            <li><a href="1-BAL.html" target="_blank">Протокол сборки аккумулятора</a></li>
-            <li><a href="2-cathode.html" target="_blank">Катод</a></li>
-            <li><a href="3-anode.html" target="_blank">Анод</a></li>
-            <li><a href="4-electrolyte.html" target="_blank">Электролит</a></li>
-          </ul>
-        </nav>
-      </header>
-      
+    <header>
+      <h1>Сепараторы</h1>
+        <a href="index.html" ><svg viewBox="0 0 24 24" width="24" height="24">
+          <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"fill="currentColor"/></svg>
+        </a>
+    </header>
 
-      <form name="separator-form" autocomplete="on">
-        <button id="saveBtn" type="button">Сохранить файл</button>
-        <button id="loadBtn" type="button">Загрузить файл</button>
-        <button id="clearBtn" type="button">Очистить форму</button><br>
+    <!--Clicking "Enter" creates a new Separator record. It is not saved to the database yet. Instead, clicking ENTER 
+    shows the form that is HIDDEN by default. the HIDDEN form becomes UNHIDDEN, and the NAME of the new separator is 
+    filled from the input field. -->
+    <input
+      id="separator-name"
+      type="text" 
+      name="name"
+      class="add-user"
+      placeholder="+ Добавить сепаратор"
+      autocomplete="off"
+      required
+    />
+    
+    <!--The form is HIDDEN until someone enters a new SEPARATOR in the input field.
+    The form will also be UNHIDDEN when the user chooses to EDIT one of the separator records listed below.-->
+    <form name="separator-form" autocomplete="on" hidden>
+
+      <fieldset id="separator-meta">
+        <legend>Метаданные</legend>
+
+        <label for="separator-created-by">Кто добавил</label>
+        <select id="separator-created-by" name="created_by" required>
+          <option value="">— выбрать пользователя —</option>
+        </select>
+      </fieldset>
+
+      <fieldset id="separator-intro">
+        <!--N O T E: form fields must have a "name" attribute to be included in the FormData object. Otherwise, they're skipped: the "id" property doesn't count. */-->
         
-        <p id="loaded-file-container" class="loaded-file-label" style="display:none;">
-          Файл: <span id="loaded-file-name"></span>
-        </p>
+        <!--Inside this field goes the NAME of the separator that was input in the id="separator-name" field, so it gets filled when ENTER is clicked "up there"-->
+        <input
+          type="text"
+          name="name"
+          id="separator-name-input"
+          required
+          hidden
+        />
+        <h2></h2>
+
+        <label for="separator-supplier">Производитель/ поставщик </label>
+        <input id="separator-supplier" type="text" name="supplier" placeholder="Celgard"><br>
         
-        <fieldset id="separator-meta">
-          <legend>Метаданные</legend>
+        <label for="separator-brand">Марка </label>
+        <input id="separator-brand" type="text" name="brand" placeholder="2320"><br>
 
-          <label for="separator-created-by">Кто добавил</label>
-          <select id="separator-created-by" name="created_by" required>
-            <option value="">— выбрать пользователя —</option>
-          </select>
-        </fieldset>
+        <label for="separator-batch">Партия </label>
+        <input id="separator-batch" type="text" name="batch" placeholder="A1"><br>
+      </fieldset>
 
-        <fieldset id="separator-intro">
-          <!--N O T E: form fields must have a "name" attribute to be included in the FormData object. Otherwise, they're skipped: the "id" property doesn't count. */-->
-          <label for="separator-name">Название </label>
-          <input id="separator-name" type="text" name="name" placeholder="Celgard 2320" required><br>
+      <fieldset id="separator-structure">
+        <legend>Структура</legend>
 
-          <label for="separator-supplier">Производитель/ поставщик </label>
-          <input id="separator-supplier" type="text" name="supplier" placeholder="Celgard"><br>
-          
-          <label for="separator-brand">Марка </label>
-          <input id="separator-brand" type="text" name="brand" placeholder="2320"><br>
+        <label for="separator-structure-id">Тип структуры</label>
+        <select id="separator-structure-id" name="structure_id" required>
+          <option value="">— выбрать —</option>
+          <!-- options later loaded from DB -->
+        </select>
+      </fieldset>
 
-          <label for="separator-batch">Партия </label>
-          <input id="separator-batch" type="text" name="batch" placeholder="A1"><br>
-        </fieldset>
+      <fieldset id="separator-properties">
+        <legend>Паспортные характеристики сепаратора</legend>
 
-        <fieldset id="separator-structure">
-          <legend>Структура</legend>
+        <label for="separator-air-permeability">Воздушная проницаемость </label>
+        <input id="separator-air-permeability" type="number" step="0.1" name="air_perm" placeholder="20"><br>
 
-          <label for="separator-structure-id">Тип структуры</label>
-          <select id="separator-structure-id" name="structure_id" required>
-            <option value="">— выбрать —</option>
-            <!-- options later loaded from DB -->
-          </select>
-        </fieldset>
+        <label for="separator-air-permeability-units">Единицы измерения воздушной проницаемости </label>
+        <input id="separator-air-permeability-units" type="text" name="air_perm_units" placeholder="s/100 мл или др. единицы (указать в комментариях)"><br>
 
-        <fieldset id="separator-properties">
-          <legend>Паспортные характеристики сепаратора</legend>
+        <label for="separator-thickness-um">Толщина, мкм</label>
+        <input
+          id="separator-thickness-um"
+          type="number"
+          name="thickness_um"
+          step="0.01"
+          min="0"
+          placeholder="например, 20"
+        />
 
-          <label for="separator-air-permeability">Воздушная проницаемость </label>
-          <input id="separator-air-permeability" type="number" step="0.1" name="air_perm" placeholder="20"><br>
+        <label for="separator-porosity">Пористость, %</label>
+        <input
+          id="separator-porosity"
+          type="number"
+          name="porosity"
+          step="0.1"
+          min="0"
+          max="100"
+          placeholder="например, 40"
+        />
+      </fieldset>
 
-          <label for="separator-air-permeability-units">Единицы измерения воздушной проницаемости </label>
-          <input id="separator-air-permeability-units" type="text" name="air_perm_units" placeholder="s/100 мл или др. единицы (указать в комментариях)"><br>
+      <fieldset id="separator-docs">
 
-          <label for="separator-thickness-um">Толщина, мкм</label>
-          <input
-            id="separator-thickness-um"
-            type="number"
-            name="thickness_um"
-            step="0.01"
-            min="0"
-            placeholder="например, 20"
-          />
+        <legend>Документация</legend>
+        <label>Файл паспорта</label>
+        <input type="file" name="file">
+        <input type="hidden" name="file_path"><br>
 
-          <label for="separator-porosity">Пористость, %</label>
-          <input
-            id="separator-porosity"
-            type="number"
-            name="porosity"
-            step="0.1"
-            min="0"
-            max="100"
-            placeholder="например, 40"
-          />
-        </fieldset>
+        <label for="separator-spec-notes">Комментарии </label><br>
+        <textarea
+          id="separator-spec-notes"
+          name="comments"
+          rows="3"
+          cols="50"
+          placeholder="Единицы измерения, методики (Гурли и т.п.), особые замечания"
+        ></textarea>
 
-        <fieldset id="separator-docs">
-          <legend>Документация</legend>
+      </fieldset>
 
-          <label for="separator-spec-notes">Комментарии к паспорту: </label><br>
-          <textarea
-            id="separator-spec-notes"
-            name="comments"
-            rows="3"
-            cols="50"
-            placeholder="Единицы измерения, методики (Гурли и т.п.), особые замечания"
-          ></textarea>
+      <fieldset id="separator-status">
+        <legend>Статус</legend>
 
-          <label>Файл паспорта</label>
-          <input type="file" name="file">
+        <label>Статус</label>
+        <select name="status">
+          <option value="available">в наличии</option>
+          <option value="used">израсходован</option>
+          <option value="scrap">забракован / списан</option>
+        </select>
 
-          <input type="hidden" name="file_path">
-
-        </fieldset>
-
-        <fieldset id="separator-status">
-          <legend>Статус</legend>
-
-          <label>Статус</label>
-          <select name="status">
-            <option value="available">в наличии</option>
-            <option value="used">израсходован</option>
-            <option value="scrap">забракован / списан</option>
-          </select>
-
+        <div id="depleted-wrapper">
           <label>Дата списания</label>
-          <input type="date" name="depleted_at" disabled>
-        </fieldset>
+          <input type="date" name="depleted_at">
+        </div>
 
-      </form>
-      <p>Test output: <span id="test-output"></span></p>
-      <div class="autosave-message" aria-live="polite"></div>
-    </div>
+      </fieldset>
+
+      <button id="saveBtn" type="button">Сохранить запись</button>
+      <button id="clearBtn" type="button">Очистить форму</button><br>
+
+    </form>
+    <div class="status-feedback" aria-live="polite"></div>
+    <ul id="separatorsList" class="users-list"></ul>
+
+    <script>
+      const addInput = document.getElementById('separator-name');
+      const nameInput = document.getElementById('separator-name-input');
+      const form = document.forms['separator-form'];
+      const title = form.querySelector('h2');
+      const saveBtn = document.getElementById('saveBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const createdBySelect = document.getElementById('separator-created-by');
+      const statusSelect = form.querySelector('select[name="status"]');
+      const depletedInput = form.querySelector('input[name="depleted_at"]');
+
+      let mode = null; // 'create' | 'edit'
+      let currentId = null;
+
+      /* ---------- helpers ---------- */
+
+      function showForm() {
+        form.hidden = false;
+        addInput.disabled = true;
+      }
+
+      function hideForm() {
+        form.hidden = true;
+        addInput.disabled = false;
+      }
+
+      function resetForm() {
+        form.reset();
+        title.textContent = '';
+        mode = null;
+        currentId = null;
+        hideForm();
+      }
+
+      function formDataToObject(form) {
+        return Object.fromEntries(new FormData(form));
+      }
+
+      const statusBox = document.querySelector('.status-feedback');
+
+      function showStatus(msg, isError = false) {
+        statusBox.textContent = msg;
+        statusBox.style.color = isError ? '#b00020' : 'darkcyan';
+
+        setTimeout(() => {
+          statusBox.textContent = '';
+        }, 1000);
+      }
+
+
+      /* ---------- users dropdown ---------- */
+
+      async function loadUsers() {
+        const res = await fetch('/api/users');
+        const users = await res.json();
+
+        users
+          .filter(u => u.active)
+          .forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.user_id;
+            opt.textContent = u.name;
+            createdBySelect.appendChild(opt);
+          });
+      }
+
+      /* ---------- status logic ---------- */
+
+      const depletedWrapper = document.getElementById('depleted-wrapper');
+
+      function updateDepletedState() {
+        if (statusSelect.value === 'available') {
+          depletedWrapper.hidden = true;
+          depletedInput.value = '';
+        } else {
+          depletedWrapper.hidden = false;
+        }
+      }
+
+      statusSelect.addEventListener('change', updateDepletedState);
+
+      /* ---------- create flow ---------- */
+
+      addInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+
+        e.preventDefault();
+
+        const name = addInput.value.trim();
+        if (!name) return;
+
+        mode = 'create';
+        currentId = null;
+
+        nameInput.value = name;
+        title.textContent = name;
+
+        showForm();
+
+        addInput.value = '';
+      });
+
+      /* ---------- save ---------- */
+
+      saveBtn.addEventListener('click', async () => {
+        if (!mode) return;
+
+        const data = formDataToObject(form);
+        data.name = title.textContent;
+
+        console.log('SAVE MODE:', mode);
+        console.log('PAYLOAD:', data);
+        showStatus('Сепаратор сохранён');
+
+        // later:
+        // if (mode === 'create') POST /api/separators
+        // if (mode === 'edit')   PUT  /api/separators/:id
+
+        resetForm();
+      });
+
+      /* ---------- clear ---------- */
+
+      clearBtn.addEventListener('click', () => {
+        resetForm();
+      });
+
+      /* ------ name: editable ------ */
+
+      title.addEventListener('click', () => {
+        nameInput.hidden = false;
+        title.hidden = true;
+        nameInput.focus();
+      });
+
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          nameInput.blur();
+        }
+      });
+
+      nameInput.addEventListener('blur', () => {
+        const val = nameInput.value.trim();
+        if (!val) return;
+
+        title.textContent = val;
+        title.hidden = false;
+        nameInput.hidden = true;
+      });
+
+      /* ---------- init ---------- */
+
+      hideForm();
+      updateDepletedState();
+      loadUsers();
+    </script>
   </body>
 </html>

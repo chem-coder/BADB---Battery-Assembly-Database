@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+       name="viewport"
+       content="width=device-width, initial-scale=1.0" />
+    <title>Данные об электролите</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <script type="text/javascript" src="script.js" defer></script>
+  </head>
+
+  <body data-page="electrolyte">
+    <div class="container">
+      <header>
+        <h1>Электролит / Протокол приготовления электролита</h1>
+        <!-- Navigation button without text -->
+        <a href="index.html" ><svg viewBox="0 0 24 24" width="24" height="24">
+          <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"
+                fill="currentColor"/>
+        </svg></a>
+      </header>
+
+      <form name="electrolyte-form" autocomplete="on">
+        <button type="button" id="saveBtn">Сохранить файл</button>
+        <button type="button" id="loadBtn">Загрузить файл</button>
+        <button type="button" id="clearBtn">Очистить форму</button><br>
+
+        <p id="loaded-file-container" class="loaded-file-label" style="display:none;">
+          Файл: <span id="loaded-file-name"></span>
+        </p>
+
+        <fieldset id="electrolyte-intro">
+          <legend>Общая информация об электролите</legend>
+
+          <label for="project-name">Название проекта: </label>
+          <input
+            id="project-name"
+            type="text"
+            name="project-name"
+            placeholder="Какому проекту принадлежит?"
+          /><br>
+
+          <!-- N O T E: поля должны иметь name, иначе FormData их пропустит -->
+
+          <label for="electrolyte-name">Электролит – название/код: </label>
+          <input
+            id="electrolyte-name"
+            type="text"
+            name="electrolyte-name"
+            placeholder="Например, LP30, EC/DMC 1:1 + LiPF6 1М"
+            required
+          /><br>
+
+          <label for="electrolyte-batch">Электролит – партия/источник: </label>
+          <input
+            id="electrolyte-batch"
+            type="text"
+            name="electrolyte-batch"
+            placeholder="Номер партии, поставщик или дата приготовления"
+          /><br>
+
+          <label for="electrolyte-notes">Заметки / комментарии: </label><br>
+          <textarea
+            id="electrolyte-notes"
+            name="electrolyte-notes"
+            rows="4"
+            cols="50"
+            placeholder="Любая дополнительная информация об электролите, рецептура, особенности приготовления и т.п."
+          ></textarea>
+        </fieldset>
+      </form>
+
+      <p>Test output: <span id="test-output"></span></p>
+      <div class="autosave-message" aria-live="polite"></div>
+    </div>
+  </body>
+</html>
