@@ -436,6 +436,154 @@ app.delete('/api/structures/:id', async (req, res) => {
 });
 
 
+// PROJECTS routes would go here
+
+// ---------- PROJECTS ----------
+
+// CREATE
+app.post('/api/projects', async (req, res) => {
+  const {
+    name,
+    created_by,
+    lead_id,
+    start_date,
+    due_date,
+    status = 'active',
+    description
+  } = req.body;
+
+  const createdBy = Number(created_by);
+  const leadId = lead_id ? Number(lead_id) : null;
+
+  if (!name || !Number.isInteger(createdBy)) {
+    return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO projects
+        (name, created_by, lead_id, start_date, due_date, status, description)
+      VALUES
+        ($1,$2,$3,$4,$5,$6,$7)
+      RETURNING project_id
+      `,
+      [
+        name.trim(),
+        createdBy,
+        leadId,
+        start_date || null,
+        due_date || null,
+        status,
+        description || null
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// READ
+app.get('/api/projects', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        project_id,
+        name,
+        created_by,
+        lead_id,
+        start_date,
+        due_date,
+        status,
+        description
+      FROM projects
+      ORDER BY name;
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// UPDATE
+app.put('/api/projects/:id', async (req, res) => {
+  const { id } = req.params;
+  const {
+    name,
+    lead_id,
+    start_date,
+    due_date,
+    status,
+    description
+  } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Название проекта обязательно' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE projects
+      SET
+        name = $1,
+        lead_id = $2,
+        start_date = $3,
+        due_date = $4,
+        status = $5,
+        description = $6,
+        updated_at = now()
+      WHERE project_id = $7
+      RETURNING *
+      `,
+      [
+        name.trim(),
+        lead_id || null,
+        start_date || null,
+        due_date || null,
+        status || 'active',
+        description || null,
+        id
+      ]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Проект не найден' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// DELETE
+app.delete('/api/projects/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM projects WHERE project_id = $1',
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Проект не найден' });
+    }
+
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 
 // Start server
 app.listen(PORT, () => {

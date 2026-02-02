@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0" />
-    <title>Сепараторы</title>
+    <title>Проекты</title>
     <link rel="stylesheet" type="text/css" href="styles.css">
     
     <style>
@@ -76,36 +76,36 @@
     </style>
   </head>
 
-  <body data-page="separators">
+  <body data-page="projectsList">
     <header>
-      <h1>Сепараторы</h1>
+      <h1>Проекты</h1>
         <a href="index.html" ><svg viewBox="0 0 24 24" width="24" height="24">
           <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"fill="currentColor"/></svg>
         </a>
     </header>
 
-    <!--Clicking "Enter" creates a new Separator record. It is not saved to the database yet. Instead, clicking ENTER 
-    shows the form that is HIDDEN by default. the HIDDEN form becomes UNHIDDEN, and the NAME of the new separator is 
+    <!--Clicking "Enter" creates a new Project record. It is not saved to the database yet. Instead, clicking ENTER 
+    shows the form that is HIDDEN by default. the HIDDEN form becomes UNHIDDEN, and the NAME of the new project is 
     filled from the input field. -->
     <input
-      id="separator-name"
+      id="project-name"
       type="text" 
       name="name"
       class="add-user"
-      placeholder="+ Добавить сепаратор"
+      placeholder="+ Добавить проект"
       autocomplete="off"
       required
     />
     
-    <!--The form is HIDDEN until someone enters a new SEPARATOR in the input field.
-    The form will also be UNHIDDEN when the user chooses to EDIT one of the separator records listed below.-->
-    <form name="separator-form" autocomplete="on" hidden>
+    <!--The form is HIDDEN until someone enters a new PROJECT in the input field.
+    The form will also be UNHIDDEN when the user chooses to EDIT one of the project records listed below.-->
+    <form name="project-form" autocomplete="off" hidden>
 
-      <fieldset id="separator-meta">
+      <fieldset id="project-meta">
         <legend>Метаданные</legend>
 
-        <label for="separator-created-by">Кто добавил</label>
-        <select id="separator-created-by" name="created_by" required>
+        <label for="project-created-by">Кто добавил</label>
+        <select id="project-created-by" name="created_by" required>
           <option value="">— выбрать пользователя —</option>
         </select>
         <a href="reference/users.html" target="_blank" class="ref-link">
@@ -113,106 +113,54 @@
         </a>
       </fieldset>
 
-      <fieldset id="separator-intro">
+      <fieldset id="project-details">
         <!--N O T E: form fields must have a "name" attribute to be included in the FormData object. Otherwise, they're skipped: the "id" property doesn't count. */-->
         
-        <!--Inside this field goes the NAME of the separator that was input in the id="separator-name" field, so it gets filled when ENTER is clicked "up there"-->
+        <!--Inside this field goes the NAME of the project that was input in the id="project-name" field, so it gets filled when ENTER is clicked "up there"-->
         <input
           type="text"
           name="name"
-          id="separator-name-input"
+          id="project-name-input"
           required
           hidden
         />
         <h2></h2>
 
-        <label for="separator-supplier">Производитель/ поставщик </label>
-        <input id="separator-supplier" type="text" name="supplier" placeholder="Celgard"><br>
-        
-        <label for="separator-brand">Марка </label>
-        <input id="separator-brand" type="text" name="brand" placeholder="2320"><br>
 
-        <label for="separator-batch">Партия </label>
-        <input id="separator-batch" type="text" name="batch" placeholder="A1"><br>
-      </fieldset>
-
-      <fieldset id="separator-structure">
-        <legend>Структура</legend>
-
-        <label for="separator-structure-id">Тип структуры</label>
-        <select id="separator-structure-id" name="structure_id" required>
-          <option value="">— выбрать —</option>
-          <!-- options later loaded from DB -->
+        <label for="project-lead-id">Руководитель</label>
+        <select id="project-lead-id" name="lead_id">
+          <option value="">— выбрать пользователя —</option>
         </select>
-        <a href="reference/separator-structures.html" target="_blank" class="ref-link">
-          Управление структурами
+        <a href="reference/users.html" target="_blank" class="ref-link">
+          Управление пользователями
         </a>
-      </fieldset>
 
-      <fieldset id="separator-properties">
-        <legend>Паспортные характеристики сепаратора</legend>
-
-        <label for="separator-air-permeability">Воздушная проницаемость </label>
-        <input id="separator-air-permeability" type="number" step="0.1" name="air_perm" placeholder="20"><br>
-
-        <label for="separator-air-permeability-units">Единицы измерения воздушной проницаемости </label>
-        <input id="separator-air-permeability-units" type="text" name="air_perm_units" placeholder="s/100 мл или др. единицы (указать в комментариях)"><br>
-
-        <label for="separator-thickness-um">Толщина, мкм</label>
-        <input
-          id="separator-thickness-um"
-          type="number"
-          name="thickness_um"
-          step="0.01"
-          min="0"
-          placeholder="например, 20"
-        />
-
-        <label for="separator-porosity">Пористость, %</label>
-        <input
-          id="separator-porosity"
-          type="number"
-          name="porosity"
-          step="0.1"
-          min="0"
-          max="100"
-          placeholder="например, 40"
-        />
-      </fieldset>
-
-      <fieldset id="separator-docs">
-
-        <legend>Документация</legend>
-        <label>Файл паспорта</label>
-        <input type="file" name="file">
-        <input type="hidden" name="file_path"><br>
-
-        <label for="separator-spec-notes">Комментарии </label><br>
+        <label for="project-description">Описание проекта </label><br>
         <textarea
-          id="separator-spec-notes"
-          name="comments"
+          id="project-description"
+          name="description"
           rows="3"
           cols="50"
           placeholder="Единицы измерения, методики (Гурли и т.п.), особые замечания"
         ></textarea>
 
+        <label>Дата начала</label>
+        <input type="date" name="start_date">
+
+        <label>Плановая дата окончания</label>
+        <input type="date" name="due_date">
       </fieldset>
 
-      <fieldset id="separator-status">
+      <fieldset id="project-status">
         <legend>Статус</legend>
 
         <label>Статус</label>
         <select name="status">
-          <option value="available">в наличии</option>
-          <option value="used">израсходован</option>
-          <option value="scrap">забракован / списан</option>
+          <option value="active">активный</option>
+          <option value="paused">приостановлен</option>
+          <option value="completed">завершен</option>
+          <option value="archived">архивирован</option>
         </select>
-
-        <div id="depleted-wrapper">
-          <label>Дата списания</label>
-          <input type="date" name="depleted_at">
-        </div>
-
       </fieldset>
 
       <button id="saveBtn" type="button">Сохранить запись</button>
@@ -220,30 +168,30 @@
 
     </form>
     <div class="status-feedback" aria-live="polite"></div>
-    <ul id="separatorsList" class="users-list"></ul>
+    <ul id="projectsList" class="users-list"></ul>
 
     <script>
-      const addInput = document.getElementById('separator-name');
-      const nameInput = document.getElementById('separator-name-input');
-      const form = document.forms['separator-form'];
+      const addInput = document.getElementById('project-name');
+      const nameInput = document.getElementById('project-name-input');
+      const form = document.forms['project-form'];
       const title = form.querySelector('h2');
       const saveBtn = document.getElementById('saveBtn');
       const clearBtn = document.getElementById('clearBtn');
-      const createdBySelect = document.getElementById('separator-created-by');
+      const createdBySelect = document.getElementById('project-created-by');
       const statusSelect = form.querySelector('select[name="status"]');
-      const depletedInput = form.querySelector('input[name="depleted_at"]');
+      const leadSelect = document.getElementById('project-lead-id');
 
       let mode = null; // 'create' | 'edit'
       let currentId = null;
       
       // -------- API helpers --------
-      async function fetchSeparators() {
-        const res = await fetch('/api/separators');
+      async function fetchProjects() {
+        const res = await fetch('/api/projects');
         return res.json();
       }
 
-      async function createSeparator(data) {
-        const res = await fetch('/api/separators', {
+      async function createProject(data) {
+        const res = await fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
@@ -257,25 +205,8 @@
         return res.json();
       }
 
-      async function loadStructures() {
-        const res = await fetch('/api/structures');
-        const structures = await res.json();
-
-        const select = document.getElementById('separator-structure-id');
-
-        // CLEAR existing options first
-        select.innerHTML = '<option value="">— выбрать —</option>';
-
-        structures.forEach(s => {
-          const opt = document.createElement('option');
-          opt.value = s.sep_str_id;
-          opt.textContent = s.name;
-          select.appendChild(opt);
-        });
-      }
-
-      async function updateSeparator(id, data) {
-        const res = await fetch(`/api/separators/${id}`, {
+      async function updateProject(id, data) {
+        const res = await fetch(`/api/projects/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
@@ -289,8 +220,8 @@
         return res.json();
       }
 
-      async function deleteSeparator(id) {
-        const res = await fetch(`/api/separators/${id}`, {
+      async function deleteProject(id) {
+        const res = await fetch(`/api/projects/${id}`, {
           method: 'DELETE'
         });
 
@@ -301,12 +232,12 @@
       }
 
 
-      const separatorsList = document.getElementById('separatorsList');
+      const projectsList = document.getElementById('projectsList');
       // -------- Rendering --------
-      function renderSeparators(separators) {
-        separatorsList.innerHTML = '';
+      function renderProjects(projects) {
+        projectsList.innerHTML = '';
 
-        separators.forEach(sep => {
+        projects.forEach(proj => {
           const li = document.createElement('li');
           li.className = 'user-row';
 
@@ -314,14 +245,15 @@
           info.className = 'user-info';
 
           const nameSpan = document.createElement('span');
-          nameSpan.textContent = sep.name;
+          nameSpan.textContent = proj.name;
 
           const statusSpan = document.createElement('span');
           statusSpan.className = 'status';
           statusSpan.textContent =
-            sep.status === 'available' ? 'в наличии' :
-            sep.status === 'used' ? 'израсходован' :
-            'списан';
+            proj.status === 'active' ? 'активный' :
+            proj.status === 'paused' ? 'приостановлен' :
+            proj.status === 'completed' ? 'завершен' :
+            'архивирован';
 
           info.appendChild(nameSpan);
           info.appendChild(statusSpan);
@@ -334,32 +266,28 @@
           editBtn.title = 'Редактировать';          
           editBtn.onclick = () => {
             mode = 'edit';
-            currentId = sep.sep_id;
+            currentId = proj.project_id;
 
             // show form
             showForm();
 
             // title + name
-            title.textContent = sep.name;
-            nameInput.value = sep.name;
+            title.textContent = proj.name;
+            nameInput.value = proj.name;
 
             // fill fields we have
-            form.elements['supplier'].value = sep.supplier || '';
-            form.elements['brand'].value = sep.brand || '';
-            form.elements['batch'].value = sep.batch || '';
-            form.elements['comments'].value = sep.comments || '';
-            form.elements['status'].value = sep.status || 'available';
+            // N O T E: some fields may be NULL in DB, so we provide defaults
+            // add form.elements listed in the form in this document:
+            form.elements['lead_id'].value = proj.lead_id || '';
+            form.elements['start_date'].value = proj.start_date ? proj.start_date.slice(0,10) : '';
+            form.elements['due_date'].value = proj.due_date ? proj.due_date.slice(0,10) : '';
+            form.elements['description'].value = proj.description || '';
+            form.elements['status'].value = proj.status || 'active';
 
-            // structure + user (if present in list)
-            if (sep.structure_id) {
-              document.getElementById('separator-structure-id').value = sep.structure_id;
+            // user (if present in list)
+            if (proj.created_by) {
+              createdBySelect.value = proj.created_by;
             }
-
-            if (sep.created_by) {
-              createdBySelect.value = sep.created_by;
-            }
-
-            updateDepletedState();
           };
 
           const duplicateBtn = document.createElement('button');
@@ -367,19 +295,19 @@
           duplicateBtn.title = 'Дублировать';
 
           duplicateBtn.onclick = () => {
-            duplicateSeparator(sep);
+            duplicateProject(proj);
           };
 
           const deleteBtn = document.createElement('button');
           deleteBtn.textContent = '🗑';
           deleteBtn.title = 'Удалить';
           deleteBtn.onclick = async () => {
-            if (!confirm(`Удалить сепаратор "${sep.name}"?`)) return;
+            if (!confirm(`Удалить проект "${proj.name}"?`)) return;
 
             try {
-              await deleteSeparator(sep.sep_id);
-              showStatus('Сепаратор удалён');
-              loadSeparators();
+              await deleteProject(proj.project_id);
+              showStatus('Проект удалён');
+              loadProjects();
             } catch (err) {
               showStatus(err.message, true);
             }
@@ -392,45 +320,37 @@
           li.appendChild(info);
           li.appendChild(actions);
 
-          separatorsList.appendChild(li);
+          projectsList.appendChild(li);
         });
       }
 
-      function duplicateSeparator(sep) {
+      function duplicateProject(proj) {
         mode = 'create';
         currentId = null;
 
         showForm();
 
         // title + name
-        const copyName = sep.name + ' (копия)';
+        const copyName = proj.name + ' (копия)';
         title.textContent = copyName;
         nameInput.value = copyName;
 
         // fill fields
-        form.elements['supplier'].value = sep.supplier || '';
-        form.elements['brand'].value = sep.brand || '';
-        form.elements['batch'].value = sep.batch || '';
-        form.elements['comments'].value = sep.comments || '';
-        form.elements['status'].value = sep.status || 'available';
-
-        // structure
-        if (sep.structure_id) {
-          document.getElementById('separator-structure-id').value = sep.structure_id;
-        }
+        form.elements['lead_id'].value = proj.lead_id || '';
+        form.elements['start_date'].value = proj.start_date ? proj.start_date.slice(0,10) : '';
+        form.elements['due_date'].value = proj.due_date ? proj.due_date.slice(0,10) : '';
+        form.elements['description'].value = proj.description || '';  
+        form.elements['status'].value = proj.status || 'active';
 
         // IMPORTANT: reset things that must be new
         createdBySelect.value = '';
-        form.elements['file_path'].value = '';
-        depletedInput.value = '';
-
-        updateDepletedState();
+        leadSelect.value = '';
       }
 
       // -------- Loaders --------
-      async function loadSeparators() {
-        const separators = await fetchSeparators();
-        renderSeparators(separators);
+      async function loadProjects() {
+        const projects = await fetchProjects();
+        renderProjects(projects);
       }
 
       /* ---------- helpers ---------- */
@@ -471,48 +391,30 @@
       /* ---------- users dropdown ---------- */
 
       async function loadUsers() {
+        const prevCreated = createdBySelect.value;
+        const prevLead = leadSelect.value;
+
         const res = await fetch('/api/users');
         const users = await res.json();
 
-        // CLEAR existing options first
         createdBySelect.innerHTML = '<option value="">— выбрать пользователя —</option>';
+        leadSelect.innerHTML = '<option value="">— выбрать пользователя —</option>';
 
-        users
-          .filter(u => u.active)
-          .forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.user_id;
-            opt.textContent = u.name;
-            createdBySelect.appendChild(opt);
-          });
+        users.filter(u => u.active).forEach(u => {
+          const o1 = new Option(u.name, u.user_id);
+          const o2 = new Option(u.name, u.user_id);
+          createdBySelect.add(o1);
+          leadSelect.add(o2);
+        });
+
+        createdBySelect.value = prevCreated;
+        leadSelect.value = prevLead;
       }
-
-      /* ---------- status logic ---------- */
-
-      const depletedWrapper = document.getElementById('depleted-wrapper');
-
-      function updateDepletedState() {
-        if (statusSelect.value === 'available') {
-          depletedWrapper.hidden = true;
-          depletedInput.value = '';
-        } else {
-          depletedWrapper.hidden = false;
-        }
-      }
-
-      statusSelect.addEventListener('change', updateDepletedState);
 
       /* ---------- refresh reference dropdowns on focus ---------- */
 
-      const structureSelect = document.getElementById('separator-structure-id');
-
-      structureSelect.addEventListener('focus', () => {
-        loadStructures();
-      });
-
-      createdBySelect.addEventListener('focus', () => {
-        loadUsers();
-      });
+      leadSelect.addEventListener('focus', loadUsers);
+      createdBySelect.addEventListener('focus', loadUsers);
 
       /* ---------- create flow ---------- */
 
@@ -541,16 +443,10 @@
 
         // clear previous highlights
         createdBySelect.classList.remove('required-missing');
-        structureSelect.classList.remove('required-missing');
 
         if (!createdBySelect.value) {
           missing.push('Кто добавил');
           createdBySelect.classList.add('required-missing');
-        }
-
-        if (!structureSelect.value) {
-          missing.push('Тип структуры');
-          structureSelect.classList.add('required-missing');
         }
 
         if (missing.length) {
@@ -575,17 +471,17 @@
 
         try {
           if (mode === 'create') {
-            await createSeparator(data);
-            showStatus('Сепаратор сохранён');
+            await createProject(data);
+            showStatus('Проект сохранён');
           }
 
           if (mode === 'edit') {
-            await updateSeparator(currentId, data);
+            await updateProject(currentId, data);
             showStatus('Изменения сохранены');
           }
 
           resetForm();
-          loadSeparators();   // refresh list
+          loadProjects();   // refresh list
         } catch (err) {
           showStatus(err.message, true);
         }
@@ -625,10 +521,8 @@
       /* ---------- init ---------- */
 
       hideForm();
-      updateDepletedState();
       loadUsers();
-      loadStructures();
-      loadSeparators();
+      loadProjects();
 
     </script>
   </body>
