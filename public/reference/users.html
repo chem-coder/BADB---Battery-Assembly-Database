@@ -1,219 +1,167 @@
 <!DOCTYPE html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <title>Пользователи</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta 
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" 
+    />
+    <title>Пользователи</title>
+    <link rel="stylesheet" type="text/css" href="reference-styles.css" />
+  </head>
 
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      margin: 2rem;
-      max-width: 600px;
-    }
+  <body>
+    <header>
+      <h1>Пользователи</h1>
+      <a href="../index.html"><svg viewBox="0 0 24 24" width="24" height="24">
+        <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z" fill="currentColor"/></svg>
+      </a>    
+    </header>
 
-    .add-user {
-      width: 100%;
-      font-size: 1rem;
-      padding: 0.75rem;
-      margin-bottom: 1.5rem;
-    }
+    <input
+      id="addUserInput"
+      class="add-user"
+      placeholder="+ Добавить пользователя"
+      autocomplete="off"
+    />
 
-    .users-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
+    <ul id="usersList" class="users-list"></ul>
 
-    .user-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.4rem 0;
-    }
+    <script>
+      const usersList = document.getElementById('usersList');
+      const addUserInput = document.getElementById('addUserInput');
 
-    .user-info {
-      flex: 1;
-    }
+      // -------- API helpers --------
 
-    .status {
-      margin-left: 0.5rem;
-      font-size: 0.9rem;
-      color: #666;
-    }
-
-    .inactive {
-      color: #aaa;
-    }
-
-    .actions button {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 1rem;
-      margin-left: 0.5rem;
-    }
-
-    .edit-row input,
-    .edit-row select {
-      font-size: 0.9rem;
-      margin-right: 0.5rem;
-    }
-  </style>
-</head>
-
-<body>
-  <header>
-    <h1>Пользователи</h1>
-    <a href="../index.html"><svg viewBox="0 0 24 24" width="24" height="24">
-      <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z" fill="currentColor"/></svg>
-    </a>    
-  </header>
-
-  <input
-    id="addUserInput"
-    class="add-user"
-    placeholder="+ Добавить пользователя"
-    autocomplete="off"
-  />
-
-  <ul id="usersList" class="users-list"></ul>
-
-  <script>
-    const usersList = document.getElementById('usersList');
-    const addUserInput = document.getElementById('addUserInput');
-
-    // -------- API helpers --------
-
-    async function fetchUsers() {
-      const res = await fetch('/api/users');
-      return res.json();
-    }
-
-    async function createUser(name) {
-      return fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name })
-      });
-    }
-
-    async function updateUser(id, data) {
-      return fetch(`/api/users/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-    }
-
-    async function deleteUser(id) {
-      return fetch(`/api/users/${id}`, { method: 'DELETE' });
-    }
-
-    // -------- Rendering --------
-
-    function renderUsers(users) {
-      usersList.innerHTML = '';
-
-      users
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .forEach(user => {
-          const li = document.createElement('li');
-          li.className = 'user-row';
-
-          const info = document.createElement('div');
-          info.className = 'user-info';
-
-          const nameSpan = document.createElement('span');
-          nameSpan.textContent = user.name;
-
-          const statusSpan = document.createElement('span');
-          statusSpan.className = 'status' + (user.active ? '' : ' inactive');
-          statusSpan.textContent = user.active ? 'активен' : 'неактивен';
-
-          info.appendChild(nameSpan);
-          info.appendChild(statusSpan);
-
-          const actions = document.createElement('div');
-          actions.className = 'actions';
-
-          const editBtn = document.createElement('button');
-          editBtn.textContent = '✏️';
-          editBtn.onclick = () => enterEditMode(li, user);
-
-          const deleteBtn = document.createElement('button');
-          deleteBtn.textContent = '🗑';
-          deleteBtn.onclick = async () => {
-            if (confirm('Вы уверены?')) {
-              await deleteUser(user.user_id);
-              loadUsers();
-            }
-          };
-
-          actions.appendChild(editBtn);
-          actions.appendChild(deleteBtn);
-
-          li.appendChild(info);
-          li.appendChild(actions);
-
-          usersList.appendChild(li);
-        });
-    }
-
-    function enterEditMode(li, user) {
-      li.innerHTML = '';
-      li.className = 'user-row edit-row';
-
-      const nameInput = document.createElement('input');
-      nameInput.value = user.name;
-
-      const statusSelect = document.createElement('select');
-      statusSelect.innerHTML = `
-        <option value="true">активен</option>
-        <option value="false">неактивен</option>
-      `;
-      statusSelect.value = user.active.toString();
-
-      li.appendChild(nameInput);
-      li.appendChild(statusSelect);
-
-      nameInput.focus();
-
-      li.onkeydown = async (e) => {
-        if (e.key === 'Enter') {
-          await updateUser(user.user_id, {
-            name: nameInput.value.trim(),
-            active: statusSelect.value === 'true'
-          });
-          loadUsers();
-        }
-
-        if (e.key === 'Escape') {
-          loadUsers();
-        }
-      };
-    }
-
-    // -------- Events --------
-
-    addUserInput.addEventListener('keydown', async (e) => {
-      if (e.key === 'Enter') {
-        const name = addUserInput.value.trim();
-        if (!name) return;
-
-        await createUser(name);
-        addUserInput.value = '';
-        loadUsers();
+      async function fetchUsers() {
+        const res = await fetch('/api/users');
+        return res.json();
       }
-    });
 
-    async function loadUsers() {
-      const users = await fetchUsers();
-      renderUsers(users);
-    }
+      async function createUser(name) {
+        return fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        });
+      }
 
-    loadUsers();
-  </script>
+      async function updateUser(id, data) {
+        return fetch(`/api/users/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+      }
 
-</body>
+      async function deleteUser(id) {
+        return fetch(`/api/users/${id}`, { method: 'DELETE' });
+      }
+
+      // -------- Rendering --------
+
+      function renderUsers(users) {
+        usersList.innerHTML = '';
+
+        users
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .forEach(user => {
+            const li = document.createElement('li');
+            li.className = 'user-row';
+
+            const info = document.createElement('div');
+            info.className = 'user-info';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = user.name;
+
+            const statusSpan = document.createElement('span');
+            statusSpan.className = 'status' + (user.active ? '' : ' inactive');
+            statusSpan.textContent = user.active ? 'активен' : 'неактивен';
+
+            info.appendChild(nameSpan);
+            info.appendChild(statusSpan);
+
+            const actions = document.createElement('div');
+            actions.className = 'actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.textContent = '✏️';
+            editBtn.onclick = () => enterEditMode(li, user);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '🗑';
+            deleteBtn.onclick = async () => {
+              if (confirm('Вы уверены?')) {
+                await deleteUser(user.user_id);
+                loadUsers();
+              }
+            };
+
+            actions.appendChild(editBtn);
+            actions.appendChild(deleteBtn);
+
+            li.appendChild(info);
+            li.appendChild(actions);
+
+            usersList.appendChild(li);
+          });
+      }
+
+      function enterEditMode(li, user) {
+        li.innerHTML = '';
+        li.className = 'user-row edit-row';
+
+        const nameInput = document.createElement('input');
+        nameInput.value = user.name;
+
+        const statusSelect = document.createElement('select');
+        statusSelect.innerHTML = `
+          <option value="true">активен</option>
+          <option value="false">неактивен</option>
+        `;
+        statusSelect.value = user.active.toString();
+
+        li.appendChild(nameInput);
+        li.appendChild(statusSelect);
+
+        nameInput.focus();
+
+        li.onkeydown = async (e) => {
+          if (e.key === 'Enter') {
+            await updateUser(user.user_id, {
+              name: nameInput.value.trim(),
+              active: statusSelect.value === 'true'
+            });
+            loadUsers();
+          }
+
+          if (e.key === 'Escape') {
+            loadUsers();
+          }
+        };
+      }
+
+      // -------- Events --------
+
+      addUserInput.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+          const name = addUserInput.value.trim();
+          if (!name) return;
+
+          await createUser(name);
+          addUserInput.value = '';
+          loadUsers();
+        }
+      });
+
+      async function loadUsers() {
+        const users = await fetchUsers();
+        renderUsers(users);
+      }
+
+      loadUsers();
+      
+    </script>
+  </body>
 </html>

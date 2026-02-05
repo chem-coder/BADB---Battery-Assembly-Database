@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta 
+    name="viewport" 
+    content="width=device-width, initial-scale=1.0" />
+  <title>Materials</title>
+  <link rel="stylesheet" type="text/css" href="reference-styles.css">
+</head>
+
+<body dataPage>
+  <header>
+    <h1>Материалы</h1>
+    <a href="../index.html"><svg viewBox="0 0 24 24" width="24" height="24">
+        <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z" fill="currentColor"/></svg>
+    </a>    
+  </header>
+  
+  <!--Clicking "Enter" creates a new Project record. It is not saved to the database yet. Instead, clicking ENTER 
+  shows the form that is HIDDEN by default. the HIDDEN form becomes UNHIDDEN, and the NAME of the new project is 
+  filled from the input field. -->
+  <input
+    id="material-name"
+    type="text"
+    name="name"
+    class="add-user"
+    placeholder="+ Добавить материал"
+    autocomplete="off"
+    required
+  />
+
+  <!--The form is HIDDEN until someone enters a new PROJECT in the input field.
+  The form will also be UNHIDDEN when the user chooses to EDIT one of the project records listed below.-->
+  <form name="material-form" autocomplete="off" hidden>
+
+    <fieldset id="material-meta">
+      <legend>Метаданные</legend>
+
+      <label for="material-created-by">Кто добавил</label>
+      <select id="material-created-by" name="created_by" required>
+        <option value="">— выбрать пользователя —</option>
+      </select>
+      <a href="./users.html" target="_blank" class="ref-link">
+        Управление пользователями
+      </a>
+    </fieldset>
+
+    <fieldset id="material-details">
+      <!--N O T E: form fields must have a "name" attribute to be included in the FormData object. Otherwise, they're skipped: the "id" property doesn't count. */-->
+      
+      <!--Inside this field goes the NAME of the project that was input in the id="project-name" field, so it gets filled when ENTER is clicked "up there"-->
+      <input
+        type="text"
+        name="name"
+        id="material-name-input"
+        required
+        hidden
+      />
+      <h2></h2>
+
+      <label for="supplier">Поставщик</label>
+      <input type="text" name="supplier" id="supplier"><br>
+
+      <label for="brand">Бренд/Марка/Грейд</label>
+      <input type="text" name="brand" id="brand"><br>
+
+      <label for="default_role">Роль по умолчанию</label>
+      <select name="default_role">
+        <option value="active">активный компонент</option>
+        <option value="binder">связующее вещество</option>
+        <option value="conductive_additive">проводящая добавка</option>
+        <option value="solvent">растворитель</option>
+        <option value="other">другое</option>
+      </select><br>
+
+      <label for="exclude_from_composition">Исключать из расчёта состава?</label>
+      <select name="exclude_from_composition">
+        <option value="false">Нет</option>
+        <option value="true" default>Да</option>
+      </select><br>
+
+      <label for="material-comments">Комментарии </label><br>
+      <textarea
+        id="material-comments"
+        name="comments"
+        rows="3"
+        cols="50"
+        placeholder="Описание материала, комментарии, примечания и т.п."
+      ></textarea>
+    </fieldset>
+
+    <button id="saveBtn" type="button">Сохранить запись</button>
+    <button id="clearBtn" type="button">Очистить форму</button><br>
+
+  </form>
+  
+  <div class="status-feedback" aria-live="polite"></div>
+  <ul id="materialsList" class="users-list"></ul>
+  
+  <script>
+    // State and Helpers
+    const addInput = document.getElementById('material-name');
+    const nameInput = document.getElementById('material-name-input');
+    const form = document.forms['material-form'];
+    const title = form.querySelector('h2');
+    const saveBtn = document.getElementById('saveBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const materialslist = document.getElementById('materialsList');
+    const createdBySelect = document.getElementById('material-created-by');
+
+    let mode = null;       // 'create' | 'edit'
+    let currentId = null;
+
+    function showForm() {
+      form.hidden = false;
+      addInput.disabled = true;
+    }
+
+    function hideForm() {
+      form.hidden = true;
+      addInput.disabled = false;
+    }
+
+    function resetForm() {
+      form.reset();
+      title.textContent = '';
+      mode = null;
+      currentId = null;
+      hideForm();
+    }
+
+    function formDataToObject(form) {
+      return Object.fromEntries(new FormData(form));
+    }
+
+    // -------- API helpers --------
+    async function fetchMaterials() {
+      const res = await fetch('/api/materials');
+      return res.json();
+    }
+
+    async function createMaterial(data) {
+      const res = await fetch('/api/materials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Ошибка сохранения');
+        }
+
+        return res.json();
+      }
+
+    async function updateMaterial(id, data) {
+      const res = await fetch(`/api/materials/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Ошибка обновления');
+        }
+
+        return res.json();
+      }
+
+    async function deleteMaterial(id) {
+      const res = await fetch(`/api/materials/${id}`, { 
+        method: 'DELETE' 
+      });
+      
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Ошибка удаления');
+      }
+    }
+
+    // -------- Rendering --------    
+    function renderMaterials(materials) {
+      materialsList.innerHTML = '';
+
+      materials.forEach(m => {
+        const li = document.createElement('li');
+        li.className = 'user-row';
+
+        const info = document.createElement('div');
+        info.className = 'user-info';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = m.name;
+
+        const supplier = document.createElement('span');
+        supplier.textContent = m.supplier || '';
+
+        const brandSpan = document.createElement('span');
+        brandSpan.textContent = m.brand || '';
+
+        const roleSpan = document.createElement('span');
+        roleSpan.textContent = `${m.default_role}`;
+
+        info.appendChild(nameSpan);
+        info.appendChild(supplier);
+        info.appendChild(brandSpan);
+        info.appendChild(roleSpan);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '✏️';
+        editBtn.title = 'Редактировать';
+        editBtn.onclick = () => {
+          mode = 'edit';
+          currentId = m.material_id;
+
+          // Show form
+          showForm();
+
+          // title + name
+          title.textContent = m.name;
+          nameInput.value = m.name;
+
+          form.elements['created_by'].value = m.created_by || '';
+          form.elements['name'].value = m.name || '';
+          form.elements['supplier'].value = m.supplier || '';
+          form.elements['brand'].value = m.brand || '';
+          form.elements['default_role'].value = m.default_role || 'active';
+          form.elements['exclude_from_composition'].value = m.exclude_from_composition ? 'true' : 'false';
+          form.elements['comments'].value = m.comments || '';
+
+          // user (if present in list)
+          if (m.created_by) {
+            createdBySelect.value = m.created_by;
+          }
+        };
+
+        const duplicateBtn = document.createElement('button');
+        duplicateBtn.textContent = '📄';
+        duplicateBtn.title = 'Дублировать';
+
+        duplicateBtn.onclick = () => {
+          duplicateMaterial(m);
+        };
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '🗑';
+        deleteBtn.onclick = async () => {
+          if (!confirm(`Удалить материал "${m.name}"?`)) return;
+          try {
+            await deleteMaterial(m.material_id);
+            showStatus('Материал удалён');
+            loadMaterials();
+          } catch (err) {
+            showStatus(err.message, true);
+          }
+        };
+
+        actions.appendChild(editBtn);
+        actions.appendChild(duplicateBtn);
+        actions.appendChild(deleteBtn);
+
+        li.appendChild(info);
+        li.appendChild(actions);
+
+        materialsList.appendChild(li);
+      });
+    }
+
+    function duplicateMaterial(mat) {
+      mode = 'create';
+      currentId = null;
+
+      showForm();
+
+      // title + name
+      const copyName = mat.name + ' (копия)';
+      title.textContent = copyName;
+      nameInput.value = copyName;
+
+      // fill fields
+      form.elements['created_by'].value = mat.created_by || '';
+      form.elements['name'].value = mat.name || '';
+      form.elements['supplier'].value = mat.supplier || '';
+      form.elements['brand'].value = mat.brand || '';
+      form.elements['default_role'].value = mat.default_role || 'active';
+      form.elements['exclude_from_composition'].value = mat.exclude_from_composition ? 'true' : 'false';
+      form.elements['comments'].value = mat.comments || '';
+
+      // IMPORTANT: reset things that must be new
+      createdBySelect.value = '';
+    }  
+
+    /* ---------- Status Helper ---------- */
+
+    const statusBox = document.querySelector('.status-feedback');
+
+    function showStatus(msg, isError = false) {
+      statusBox.textContent = msg;
+      statusBox.style.color = isError ? '#b00020' : 'darkcyan';
+
+      setTimeout(() => {
+        statusBox.textContent = '';
+      }, 1000);
+    }
+
+    /* ---------- users dropdown ---------- */
+
+    async function loadUsers() {
+      const prevCreated = createdBySelect.value;
+
+      const res = await fetch('/api/users');
+      const users = await res.json();
+
+      createdBySelect.innerHTML = '<option value="">— выбрать пользователя —</option>';
+
+      users.filter(u => u.active).forEach(u => {
+        const o1 = new Option(u.name, u.user_id);
+        createdBySelect.add(o1);
+      });
+
+      createdBySelect.value = prevCreated;    
+    }
+
+    /* ---------- refresh reference dropdowns on focus ---------- */
+
+    createdBySelect.addEventListener('focus', loadUsers);    
+
+    /* ---------- Events---------- */
+
+    addInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+
+      e.preventDefault();
+
+      const name = addInput.value.trim();
+      if (!name) return;
+
+      mode = 'create';
+      currentId = null;
+
+      title.textContent = name;
+      nameInput.value = name;
+
+      showForm();
+
+      addInput.value = '';
+    });
+
+    function validateRequiredFields() {
+        let missing = [];
+
+        // clear previous highlights
+        createdBySelect.classList.remove('required-missing');
+
+        if (!createdBySelect.value) {
+          missing.push('Кто добавил');
+          createdBySelect.classList.add('required-missing');
+        }
+
+        if (missing.length) {
+          showStatus(
+            'Заполните обязательные поля: ' + missing.join(', '),
+            true
+          );
+          return false;
+        }
+
+        return true;
+      }
+
+    saveBtn.addEventListener('click', async () => {
+      if (!mode) return;
+
+      if (!validateRequiredFields()) return;
+
+      const data = formDataToObject(form);
+      data.name = title.textContent;
+
+      try {
+          if (mode === 'create') {
+            await createMaterial(data);
+            showStatus('Материал сохранён');
+          }
+
+          if (mode === 'edit') {
+            await updateMaterial(currentId, data);
+            showStatus('Изменения сохранены');
+          }
+
+          resetForm();
+          loadMaterials(); //refresh list
+        } catch (err) {
+          showStatus(err.message, true)
+        }
+    });
+
+    clearBtn.addEventListener('click', resetForm);
+
+    /* ------ name: editable ------ */
+
+    title.addEventListener('click', () => {
+      nameInput.hidden = false;
+      title.hidden = true;
+      nameInput.focus();
+    });
+
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        nameInput.blur();
+      }
+    });
+
+    nameInput.addEventListener('blur', () => {
+      const val = nameInput.value.trim();
+      if (!val) return;
+
+      title.textContent = val;
+      title.hidden = false;
+      nameInput.hidden = true;
+    });
+
+    /* ---------- init ---------- */
+
+    async function loadMaterials() {
+      const materials = await fetchMaterials();
+      renderMaterials(materials);
+    }
+
+    hideForm();
+    loadUsers();
+    loadMaterials();
+
+    </script>
+  </body>
+</html>

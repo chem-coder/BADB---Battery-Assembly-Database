@@ -486,21 +486,24 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
-// READ
+// READ projects list
 app.get('/api/projects', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-        project_id,
-        name,
-        created_by,
-        lead_id,
-        start_date,
-        due_date,
-        status,
-        description
-      FROM projects
-      ORDER BY name;
+        p.project_id,
+        p.name,
+        p.created_by,
+        p.lead_id,
+        u.name AS lead_name,
+        p.start_date,
+        p.due_date,
+        p.status,
+        p.description
+      FROM projects p
+      LEFT JOIN users u
+        ON p.lead_id = u.user_id
+      ORDER BY p.name;
     `);
 
     res.json(result.rows);
@@ -510,7 +513,7 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
-// UPDATE
+// UPDATE project
 app.put('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
   const {
@@ -583,6 +586,174 @@ app.delete('/api/projects/:id', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
+
+
+// ~~~~~ MATERIALS ~~~~~
+
+// GET /api/materials
+app.get('/api/materials', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        material_id,
+        name,
+        supplier,
+        brand,
+        default_role,
+        exclude_from_composition,
+        comments,
+        created_by,
+        created_at
+      FROM materials
+      ORDER BY name;
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// POST /api/materials
+app.post('/api/materials', async (req, res) => {
+  try {
+    let {
+      name,
+      supplier,
+      brand,
+      default_role,
+      exclude_from_composition,
+      comments,
+      created_by
+    } = req.body;
+
+    const result = await pool.query(
+      `
+      INSERT INTO materials (
+        name,
+        supplier,
+        brand,
+        default_role,
+        exclude_from_composition,
+        comments,
+        created_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *;
+      `,
+      [
+        name,
+        supplier || null,
+        brand || null,
+        default_role,
+        exclude_from_composition ?? false,
+        comments || null,
+        created_by
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+
+    // unique constraint violation (name, supplier, brand)
+    if (err.code === '23505') {
+      return res.status(400).json({
+        error: 'Материал с таким названием, поставщиком и брендом уже существует'
+      });
+    }
+
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+
+// PUT /api/materials/:id
+app.put('/api/materials/:id', async (req, res) => {
+  const { id } = req.params;
+  const {
+    name,
+    supplier,
+    brand,
+    default_role,
+    exclude_from_composition,
+    comments,
+    created_by
+  } = req.body;
+
+  if (!name || !created_by) {
+    return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE materials
+      SET
+        name = $1,
+        supplier = $2,
+        brand = $3,
+        default_role = $4,
+        exclude_from_composition = $5,
+        comments = $6,
+        created_by = $7
+      WHERE material_id = $8
+      RETURNING *;
+      `,
+      [
+        name.trim(),
+        supplier || null,
+        brand || null,
+        default_role,
+        exclude_from_composition ?? false,
+        comments || null,
+        created_by,
+        id
+      ]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Материал не найден' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+
+    if (err.code === '23505') {
+      return res.status(400).json({
+        error: 'Материал с такими параметрами уже существует'
+      });
+    }
+
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+
+// DELETE /api/materials/:id
+app.delete('/api/materials/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM materials WHERE material_id = $1',
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Материал не найден' });
+    }
+
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+
 
 
 // Start server

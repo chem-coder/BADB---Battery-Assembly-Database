@@ -6,80 +6,13 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0" />
     <title>Проекты</title>
-    <link rel="stylesheet" type="text/css" href="styles.css">
-    
-    <style>
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        margin: 2rem;
-        max-width: 600px;
-      }
-
-      .add-user {
-        width: 100%;
-        font-size: 1rem;
-        padding: 0.75rem;
-        margin-bottom: 1.5rem;
-      }
-
-      .users-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-      }
-
-      .user-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.4rem 0;
-      }
-
-      .user-info {
-        flex: 1;
-      }
-
-      .status {
-        margin-left: 0.5rem;
-        font-size: 0.9rem;
-        color: #666;
-      }
-
-      .inactive {
-        color: #aaa;
-      }
-
-      .actions button {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 1rem;
-        margin-left: 0.5rem;
-      }
-
-      .edit-row input,
-      .edit-row select {
-        font-size: 0.9rem;
-        margin-right: 0.5rem;
-      }
-
-      .add-user:disabled {
-        background-color: #f5f5f5;
-        color: #999;
-        cursor: not-allowed;
-      }
-
-      .required-missing {
-        border: 2px solid #b00020 !important;
-        background-color: #fff5f5;
-      }
-    </style>
+    <link rel="stylesheet" type="text/css" href="reference-styles.css">
   </head>
 
   <body data-page="projectsList">
     <header>
       <h1>Проекты</h1>
-        <a href="index.html" ><svg viewBox="0 0 24 24" width="24" height="24">
+        <a href="../index.html" ><svg viewBox="0 0 24 24" width="24" height="24">
           <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"fill="currentColor"/></svg>
         </a>
     </header>
@@ -108,7 +41,7 @@
         <select id="project-created-by" name="created_by" required>
           <option value="">— выбрать пользователя —</option>
         </select>
-        <a href="reference/users.html" target="_blank" class="ref-link">
+        <a href="./users.html" target="_blank" class="ref-link">
           Управление пользователями
         </a>
       </fieldset>
@@ -167,22 +100,47 @@
       <button id="clearBtn" type="button">Очистить форму</button><br>
 
     </form>
+
     <div class="status-feedback" aria-live="polite"></div>
     <ul id="projectsList" class="users-list"></ul>
 
     <script>
+      // State and Helpers
       const addInput = document.getElementById('project-name');
       const nameInput = document.getElementById('project-name-input');
       const form = document.forms['project-form'];
       const title = form.querySelector('h2');
       const saveBtn = document.getElementById('saveBtn');
       const clearBtn = document.getElementById('clearBtn');
+      const projectsList = document.getElementById('projectsList');
       const createdBySelect = document.getElementById('project-created-by');
       const statusSelect = form.querySelector('select[name="status"]');
       const leadSelect = document.getElementById('project-lead-id');
 
       let mode = null; // 'create' | 'edit'
       let currentId = null;
+
+      function showForm() {
+        form.hidden = false;
+        addInput.disabled = true;
+      }
+
+      function hideForm() {
+        form.hidden = true;
+        addInput.disabled = false;
+      }
+
+      function resetForm() {
+        form.reset();
+        title.textContent = '';
+        mode = null;
+        currentId = null;
+        hideForm();
+      }
+
+      function formDataToObject(form) {
+        return Object.fromEntries(new FormData(form));
+      }
       
       // -------- API helpers --------
       async function fetchProjects() {
@@ -231,8 +189,6 @@
         }
       }
 
-
-      const projectsList = document.getElementById('projectsList');
       // -------- Rendering --------
       function renderProjects(projects) {
         projectsList.innerHTML = '';
@@ -345,37 +301,9 @@
         // IMPORTANT: reset things that must be new
         createdBySelect.value = '';
         leadSelect.value = '';
-      }
+      }      
 
-      // -------- Loaders --------
-      async function loadProjects() {
-        const projects = await fetchProjects();
-        renderProjects(projects);
-      }
-
-      /* ---------- helpers ---------- */
-
-      function showForm() {
-        form.hidden = false;
-        addInput.disabled = true;
-      }
-
-      function hideForm() {
-        form.hidden = true;
-        addInput.disabled = false;
-      }
-
-      function resetForm() {
-        form.reset();
-        title.textContent = '';
-        mode = null;
-        currentId = null;
-        hideForm();
-      }
-
-      function formDataToObject(form) {
-        return Object.fromEntries(new FormData(form));
-      }
+      /* ---------- Status Helper ---------- */
 
       const statusBox = document.querySelector('.status-feedback');
 
@@ -416,7 +344,7 @@
       leadSelect.addEventListener('focus', loadUsers);
       createdBySelect.addEventListener('focus', loadUsers);
 
-      /* ---------- create flow ---------- */
+      /* ---------- Events---------- */
 
       addInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
@@ -429,15 +357,14 @@
         mode = 'create';
         currentId = null;
 
-        nameInput.value = name;
         title.textContent = name;
+        nameInput.value = name;
 
         showForm();
 
         addInput.value = '';
       });
 
-      /* ---------- save ---------- */
       function validateRequiredFields() {
         let missing = [];
 
@@ -459,7 +386,6 @@
 
         return true;
       }
-
 
       saveBtn.addEventListener('click', async () => {
         if (!mode) return;
@@ -485,15 +411,10 @@
         } catch (err) {
           showStatus(err.message, true);
         }
-
       });
 
-      /* ---------- clear ---------- */
-
-      clearBtn.addEventListener('click', () => {
-        resetForm();
-      });
-
+      clearBtn.addEventListener('click', resetForm);
+  
       /* ------ name: editable ------ */
 
       title.addEventListener('click', () => {
@@ -519,6 +440,11 @@
       });
 
       /* ---------- init ---------- */
+      
+      async function loadProjects() {
+        const projects = await fetchProjects();
+        renderProjects(projects);
+      }
 
       hideForm();
       loadUsers();
