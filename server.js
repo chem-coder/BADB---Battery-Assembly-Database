@@ -26,9 +26,12 @@ pool.query('SELECT 1')
   .catch(err => console.error('Postgres connection error', err));
 
 
-// ~~~~~ ROUTES ~~~~~
+// ** ~~~~~~~~~~ ** ROUTES ** ~~~~~~~~~~ **
 
-// api/users CREATE
+
+// -------- USERS --------
+
+// CREATE
 app.post('/api/users', async (req, res) => {
   const { name } = req.body;
 
@@ -54,7 +57,7 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// api/users READ
+// READ
 app.get('/api/users', async (req, res) => {
   try {
     const result = await pool.query(
@@ -67,7 +70,7 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// api/users/:id UPDATE
+// UPDATE
 app.put('/api/users/:id', async (req, res) => {
   const { id } = req.params;
   const { name, active } = req.body;
@@ -96,7 +99,7 @@ app.put('/api/users/:id', async (req, res) => {
   }
 });
 
-// api/users/:id DELETE
+// DELETE
 app.delete('/api/users/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -109,7 +112,10 @@ app.delete('/api/users/:id', async (req, res) => {
   }
 });
 
-// api/separators CREATE
+
+// -------- SEPARATORS --------
+
+// CREATE
 app.post('/api/separators', async (req, res) => {
   const {
     name,
@@ -129,12 +135,14 @@ app.post('/api/separators', async (req, res) => {
   const structure_id = Number(req.body.structure_id);
   const created_by  = Number(req.body.created_by);
 
-  if (!Number.isInteger(structure_id) || !Number.isInteger(created_by)) {
-    return res.status(400).json({ error: 'Некорректные идентификаторы' });
+  // 1. validate required strings
+  if (!name) {
+    return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
   }
 
-  if (!name || !structure_id || !created_by) {
-    return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
+  // 2. validate required foreign keys
+  if (!Number.isInteger(structure_id) || !Number.isInteger(created_by)) {
+    return res.status(400).json({ error: 'Некорректные идентификаторы' });
   }
 
   try {
@@ -187,7 +195,7 @@ app.post('/api/separators', async (req, res) => {
   }
 });
 
-// api/separators READ
+// READ
 app.get('/api/separators', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -217,8 +225,7 @@ app.get('/api/separators', async (req, res) => {
   }
 });
 
-// api/separators/:id UPDATE
-// api/separators/:id UPDATE
+// UPDATE
 app.put('/api/separators/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -303,7 +310,7 @@ app.put('/api/separators/:id', async (req, res) => {
   }
 });
 
-// api/separators/:id DELETE
+// DELETE
 app.delete('/api/separators/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -324,12 +331,14 @@ app.delete('/api/separators/:id', async (req, res) => {
   }
 });
 
-// api/structures
 
-// api/structures (create)
+// -------- STRUCTURES --------
+
+// CREATE
 app.post('/api/structures', async (req, res) => {
   const { name, comments } = req.body;
-
+  
+  // 1. validate required strings
   if (typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: 'Название структуры обязательно' });
   }
@@ -358,7 +367,7 @@ app.post('/api/structures', async (req, res) => {
   }
 });
 
-// api/structures (list)
+// READ
 app.get('/api/structures', async (req, res) => {
   try {
     const result = await pool.query(
@@ -371,7 +380,7 @@ app.get('/api/structures', async (req, res) => {
   }
 });
 
-// api/structures/:id (update)
+// UPDATE
 app.put('/api/structures/:id', async (req, res) => {
   const { id } = req.params;
   const { name, comments } = req.body;
@@ -407,7 +416,7 @@ app.put('/api/structures/:id', async (req, res) => {
   }
 });
 
-// api/structures/:id (delete)
+// DELETE
 app.delete('/api/structures/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -436,9 +445,7 @@ app.delete('/api/structures/:id', async (req, res) => {
 });
 
 
-// PROJECTS routes would go here
-
-// ---------- PROJECTS ----------
+// -------- PROJECTS --------
 
 // CREATE
 app.post('/api/projects', async (req, res) => {
@@ -455,8 +462,19 @@ app.post('/api/projects', async (req, res) => {
   const createdBy = Number(created_by);
   const leadId = lead_id ? Number(lead_id) : null;
 
-  if (!name || !Number.isInteger(createdBy)) {
-    return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
+  // 1. validate required strings
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Название проекта обязательно' });
+  }
+
+  // 2. validate required foreign keys
+  if (!Number.isInteger(createdBy)) {
+    return res.status(400).json({ error: 'Некорректные идентификаторы' });
+  }
+
+  // 3. validate optional foreign keys
+  if (leadId !== null && !Number.isInteger(leadId)) {
+    return res.status(400).json({ error: 'Некорректный руководитель' });
   }
 
   try {
@@ -486,7 +504,7 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
-// READ projects list
+// READ
 app.get('/api/projects', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -513,7 +531,7 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
-// UPDATE project
+// UPDATE
 app.put('/api/projects/:id', async (req, res) => {
   const { id } = req.params;
   const {
@@ -588,34 +606,9 @@ app.delete('/api/projects/:id', async (req, res) => {
 });
 
 
-// ~~~~~ MATERIALS ~~~~~
+// -------- MATERIALS --------
 
-// GET /api/materials
-app.get('/api/materials', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT
-        material_id,
-        name,
-        supplier,
-        brand,
-        default_role,
-        exclude_from_composition,
-        comments,
-        created_by,
-        created_at
-      FROM materials
-      ORDER BY name;
-    `);
-
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
-// POST /api/materials
+// CREATE
 app.post('/api/materials', async (req, res) => {
   try {
     let {
@@ -668,8 +661,32 @@ app.post('/api/materials', async (req, res) => {
   }
 });
 
+// READ
+app.get('/api/materials', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        material_id,
+        name,
+        supplier,
+        brand,
+        default_role,
+        exclude_from_composition,
+        comments,
+        created_by,
+        created_at
+      FROM materials
+      ORDER BY name;
+    `);
 
-// PUT /api/materials/:id
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// UPDATE
 app.put('/api/materials/:id', async (req, res) => {
   const { id } = req.params;
   const {
@@ -682,8 +699,20 @@ app.put('/api/materials/:id', async (req, res) => {
     created_by
   } = req.body;
 
-  if (!name || !created_by) {
+  // 1. validate name
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Название обязательно' });
+  }
+
+  // 2. validate created_by
+  if (!created_by) {
     return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
+  }
+
+  const createdBy = Number(created_by);
+
+  if (!Number.isInteger(createdBy)) {
+    return res.status(400).json({ error: 'Некорректные идентификаторы' });
   }
 
   try {
@@ -732,7 +761,7 @@ app.put('/api/materials/:id', async (req, res) => {
 });
 
 
-// DELETE /api/materials/:id
+// DELETE
 app.delete('/api/materials/:id', async (req, res) => {
   const { id } = req.params;
 
