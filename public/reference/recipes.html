@@ -1,224 +1,566 @@
 <!DOCTYPE html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Рецепты</title>
-  <link rel="stylesheet" type="text/css" href="styles.css" />
-  <script type="text/javascript" src="script.js" defer></script>
-</head>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Recipes</title>
+    <link rel="stylesheet" type="text/css" href="reference-styles.css">
 
-<body data-page="recipes">
-  <div class="container">
+    <style>
+      details > summary {
+        list-style: none; /* remove default marker */
+        cursor: pointer;
+        position: relative;
+      }
+
+      details > summary::before {
+        content: "▸";
+        display: inline-block;
+        margin-right: 0.5rem;
+        transition: transform 0.15s ease;
+        color: #666;
+      }
+
+      details[open] > summary::before {
+        transform: rotate(90deg);
+      }
+
+      details[open] > summary {
+        background-color: #f6f7f8;
+      }
+
+      .batch-row[data-status="depleted"],
+      .batch-row[data-status="scrap"] {
+        opacity: 0.6;
+      }
+
+    </style>
+  </head>
+
+  <body data-page="recipes">
     <header>
       <h1>Рецепты</h1>
-
-      <nav class="menu">
-        <ul>
-          <li>
-            <a href="index.html" target="_blank" aria-label="Домой">
-              <svg viewBox="0 0 24 24" width="24" height="24">
-                <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z" fill="currentColor"/>
-              </svg>
-            </a>
-          </li>
-          <li><a href="materials.html" target="_blank">Материалы</a></li>
-          <li><a href="batches.html" target="_blank">Партии</a></li>
-          <li><a href="tapes.html" target="_blank">Ленты</a></li>
-        </ul>
-      </nav>
+      <a href="../index.html">
+        <svg viewBox="0 0 24 24" width="24" height="24">
+          <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"
+            fill="currentColor"/>
+        </svg>
+      </a>
     </header>
 
-    <!-- ========== Top context row ========== -->
-    <section class="panel" id="recipesContext">
-      <div class="row">
-        <div class="field">
-          <label for="projectSelect">Проект</label>
-          <select id="projectSelect" name="project_id" required>
-            <option value="">— выбрать проект —</option>
-            <!-- options loaded from DB -->
-          </select>
-        </div>
+    <!-- Enter opens the form and copies the name into it -->
+    <input
+      id="recipe-name"
+      type="text"
+      name="name"
+      class="add-user"
+      placeholder="+ Добавить рецепт"
+      autocomplete="off"
+      required
+    />
 
-        <div class="field">
-          <button id="newRecipeBtn" type="button">➕ Новый рецепт</button>
-        </div>
+    <!-- Form hidden by default; shown on create/edit -->
+    <form name="recipe-form" autocomplete="off" hidden>
 
-        <div class="field" style="margin-left:auto;">
-          <label for="recipeSearch">Поиск</label>
-          <input id="recipeSearch" type="text" placeholder="название / вариант" autocomplete="off" />
-        </div>
-      </div>
-    </section>
+      <!-- FormData ignores fields without `name` -->
 
-    <!-- ========== Main split layout ========== -->
-    <main class="split">
-      <!-- ===== Left: Recipe list ===== -->
-      <section class="panel" id="recipesListPanel">
-        <div class="row">
-          <h2 style="margin:0;">Список рецептов</h2>
+      <fieldset id="recipe-meta">
+        <legend>Метаданные</legend>
 
-          <div class="field" style="margin-left:auto;">
-            <label for="recipeSort">Сортировка</label>
-            <select id="recipeSort">
-              <option value="created_desc">сначала новые</option>
-              <option value="created_asc">сначала старые</option>
-              <option value="name_asc">по названию (A–Z)</option>
-            </select>
-          </div>
-        </div>
+        <label for="recipe-created-by">Кто добавил</label>
+        <select id="recipe-created-by" name="created_by" required>
+          <option value="">— выбрать пользователя —</option>
+        </select>
+        <a href="reference/users.html" target="_blank" class="ref-link">
+          Управление пользователями
+        </a>
+      </fieldset>
 
-        <div class="table-wrap">
-          <table id="recipesTable" class="table">
-            <thead>
-              <tr>
-                <th>Название</th>
-                <th>Вариант</th>
-                <th>Роль</th>
-                <th>Создан</th>
-                <th style="width:140px;">Действия</th>
-              </tr>
-            </thead>
-            <tbody id="recipesTbody">
-              <!-- rows injected by JS -->
-              <!--
-              <tr data-recipe-id="1">
-                <td>...</td><td>A</td><td>катод</td><td>2026-02-08</td>
-                <td>
-                  <button class="editRecipeBtn" type="button">✏️</button>
-                  <button class="dupRecipeBtn" type="button">📄</button>
-                </td>
-              </tr>
-              -->
-            </tbody>
-          </table>
-        </div>
+      <fieldset id="recipe-details">
 
-        <p id="recipesEmptyState" class="muted" style="display:none;">
-          Нет рецептов для выбранного проекта.
-        </p>
-      </section>
+        <!-- Name copied here on create / "Enter" -->
+        <input
+          type="text"
+          name="name"
+          id="recipe-name-input"
+          required
+          hidden
+        />
+        <h2></h2>
 
-      <!-- ===== Right: Recipe editor ===== -->
-      <section class="panel" id="recipeEditorPanel">
-        <div class="row">
-          <h2 id="editorTitle" style="margin:0;">Редактор рецепта</h2>
-          <span id="editorModeBadge" class="badge" style="display:none;"></span>
-        </div>
+        <label for="recipe-variant">Вариант/версия</label>
+        <input
+          id="recipe-variant"
+          type="text"
+          name="variant_label"
+          placeholder="A / B / low binder / v2"
+        />
 
-        <!-- Hidden state holder -->
-        <input type="hidden" id="recipeId" value="" />
+        <label for="projectSelect">Проект</label>
+        <select id="projectSelect" name="project_id" required>
+          <option value="">— выбрать проект —</option>
+        </select>
 
-        <fieldset id="recipeMeta">
-          <legend>Метаданные</legend>
+        <label for="recipe-role">Роль электрода</label>
+        <select id="recipe-role" name="role" required>
+          <option value="">— выбрать —</option>
+          <option value="cathode">катод</option>
+          <option value="anode">анод</option>
+        </select>
+      </fieldset>
 
-          <div class="row">
-            <div class="field">
-              <label for="recipeName">Название (обязательно)</label>
-              <input id="recipeName" type="text" required placeholder="например, NMC811 slurry" />
-            </div>
+      <label for="recipe-notes">Комментарии</label>
+      <textarea
+        id="recipe-notes"
+        name="notes"
+        rows="3"
+        placeholder="Кратко: что это за рецепт и чем отличается"
+      ></textarea>
 
-            <div class="field">
-              <label for="recipeVariant">Вариант (опционально)</label>
-              <input id="recipeVariant" type="text" placeholder="A / B / low binder / v3" />
-            </div>
-          </div>
+      <!-- recipe fields later -->
 
-          <div class="row">
-            <div class="field">
-              <label for="recipeRole">Роль</label>
-              <select id="recipeRole" required>
-                <option value="">— выбрать —</option>
-                <option value="cathode">катод</option>
-                <option value="anode">анод</option>
-              </select>
-            </div>
+      <button id="saveBtn" type="button">Сохранить запись</button>
+      <button id="clearBtn" type="button">Очистить форму</button><br>
+    </form>
 
-            <div class="field">
-              <label for="recipeNotes">Заметки</label>
-              <textarea id="recipeNotes" rows="3" placeholder="кратко: что изменили и почему"></textarea>
-            </div>
-          </div>
-        </fieldset>
+    <div class="status-feedback" aria-live="polite"></div>
+    <ul id="recipesList" class="users-list"></ul>
 
-        <fieldset id="recipeLines">
-          <legend>Состав</legend>
+    <script>
 
-          <div class="table-wrap">
-            <table id="recipeLinesTable" class="table">
-              <thead>
-                <tr>
-                  <th>Материал</th>
-                  <th>Роль</th>
-                  <th>Режим</th>
-                  <th>Цель</th>
-                  <th style="width:60px;">🗑</th>
-                </tr>
-              </thead>
-              <tbody id="recipeLinesTbody">
-                <!-- rows injected by JS -->
-              </tbody>
-            </table>
-          </div>
+      // -------- State and helpers --------
 
-          <div class="row">
-            <button id="addLineBtn" type="button">+ Добавить компонент</button>
-            <span class="muted" id="linesHint">
-              Материал — из базы. Роль — active/binder/solvent/additive. Режим — масса/объём.
-            </span>
-          </div>
+      const addInput = document.getElementById('recipe-name');
+      const nameInput = document.getElementById('recipe-name-input');
+      const form = document.forms['recipe-form'];
+      const title = form.querySelector('h2');
+      const saveBtn = document.getElementById('saveBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const recipesList = document.getElementById('recipesList');
+      const createdBySelect = document.getElementById('recipe-created-by');
 
-          <!-- Template for JS cloning (kept in DOM for convenience) -->
-          <template id="recipeLineRowTemplate">
-            <tr class="recipe-line-row" data-line-id="">
-              <td>
-                <select class="lineMaterialSelect" required>
-                  <option value="">— материал —</option>
-                  <!-- options loaded from DB -->
-                </select>
-              </td>
+      const projectSelect = document.getElementById('projectSelect');
 
-              <td>
-                <select class="lineRoleSelect" required>
-                  <option value="">— роль —</option>
-                  <option value="active">active</option>
-                  <option value="binder">binder</option>
-                  <option value="solvent">solvent</option>
-                  <option value="additive">additive</option>
-                </select>
-              </td>
+      let mode = null;       // 'create' | 'edit'
+      let currentId = null;
 
-              <td>
-                <select class="lineModeSelect" required>
-                  <option value="mass">масса (g)</option>
-                  <option value="volume">объём (ml)</option>
-                </select>
-              </td>
+      function showForm() {
+        form.hidden = false;
+        addInput.disabled = true;
+      }
 
-              <td>
-                <input class="lineTargetInput" type="number" step="0.0001" min="0" required placeholder="0.0000" />
-              </td>
+      function hideForm() {
+        form.hidden = true;
+        addInput.disabled = false;
+      }
 
-              <td style="text-align:center;">
-                <button class="removeLineBtn" type="button" aria-label="Удалить строку">🗑</button>
-              </td>
-            </tr>
-          </template>
-        </fieldset>
+      function resetForm() {
+        form.reset();
 
-        <section class="row" id="editorActions">
-          <button id="saveRecipeBtn" type="button">Сохранить</button>
-          <button id="cancelEditBtn" type="button">Отмена</button>
-          <span id="saveStatus" class="muted" aria-live="polite"></span>
-        </section>
+        title.textContent = '';
+        title.hidden = false;
+        nameInput.hidden = true;
 
-        <section class="panel subtle" id="editorReadOnlyHint" style="display:none;">
-          <p class="muted" style="margin:0;">
-            Чтобы создать новый рецепт на основе этого, нажмите «📄 Дублировать» в списке слева.
-          </p>
-        </section>
-      </section>
-    </main>
-  </div>
-</body>
+        addInput.value = '';
+        addInput.blur();
+
+        mode = null;
+        currentId = null;
+
+        hideForm();
+      }
+
+      function formDataToObject(form) {
+        return Object.fromEntries(new FormData(form));
+      }
+
+
+      // -------- API helpers --------
+      
+      async function fetchAllRecipes() {
+        const res = await fetch('/api/recipes');
+        return res.json();
+      }
+
+      async function fetchProjects() {
+        const res = await fetch('/api/projects');
+        return res.json();
+      }
+
+      async function loadRecipes() {
+        const recipes = await fetchAllRecipes();
+        renderRecipes(recipes);
+      }
+
+      async function loadProjects() {
+        const res = await fetch('/api/projects');
+        const projects = await res.json();
+
+        projectSelect.innerHTML =
+          '<option value="">— выбрать проект —</option>';
+
+        projects.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.project_id;
+          opt.textContent = p.name;
+          projectSelect.appendChild(opt);
+        });
+      }
+
+      async function loadUsers() {
+        const res = await fetch('/api/users');
+        const users = await res.json();
+
+        createdBySelect.innerHTML =
+          '<option value="">— выбрать пользователя —</option>';
+
+        users
+          .filter(u => u.active)
+          .forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.user_id;
+            opt.textContent = u.name;
+            createdBySelect.appendChild(opt);
+          });
+      }
+
+      async function createRecipe(data) {
+        const res = await fetch('/api/recipes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Ошибка сохранения рецепта');
+        }
+
+        return res.json();
+      }
+
+      // This is where things start to get different
+
+      async function updateRecipe(id, data) {
+        const res = await fetch(`/api/recipes/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Ошибка обновления');
+        }
+
+        return res.json();
+      }
+
+      async function deleteRecipe(id) {
+        const res = await fetch(`/api/recipes/${id}`, {
+          method: 'DELETE'
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Ошибка удаления рецепта');
+        }
+      }
+
+      async function duplicateRecipe(id, createdBy) {
+        const res = await fetch(`/api/recipes/${id}/duplicate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ created_by: createdBy })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Ошибка дублирования рецепта');
+        }
+
+        return res.json();
+      }
+
+
+      async function fetchRecipeLines (recipeId) {
+        const res = await fetch(`/api/recipes/${recipeId}/recipe_lines`);
+        if (!res.ok) throw new Error('Ошибка загрузки составляющих');
+        return res.json();
+      }
+
+      async function createRecipeLine (recipeId, data) {
+        const res = await fetch(`/api/recipes/${recipeId}/recipe_lines`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Ошибка сохранения ингредиента');
+        }
+
+        return res.json();
+      }
+
+      async function updateRecipeLineStatus(recipeLineId, status) {
+        const res = await fetch(`/api/recipe-lines/${recipeLineId}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Ошибка обновления статуса');
+        }
+
+        return res.json();
+      }
+
+      async function deleteRecipeLine (recipeLineId) {
+        const res = await fetch(`/api/recipe-lines/${recipeLineId}`, {
+          method: 'DELETE'
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Ошибка удаления ингредиента');
+        }
+      }
+
+
+      // -------- Rendering --------
+
+      function renderRecipes(recipes) {
+        recipesList.innerHTML = '';
+
+        recipes.forEach(r => {
+          const li = document.createElement('li');
+          li.className = 'user-row';
+
+          const info = document.createElement('div');
+          info.className = 'user-info';
+
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = r.name;
+
+          const roleSpan = document.createElement('span');
+          roleSpan.textContent = r.role === 'cathode' ? 'катод' : 'анод';
+
+          const variantSpan = document.createElement('span');
+          variantSpan.textContent = r.variant_label || '';
+
+          info.appendChild(nameSpan);
+          info.appendChild(roleSpan);
+          info.appendChild(variantSpan);
+
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+
+          // ✏️ EDIT (already wired earlier)
+          const editBtn = document.createElement('button');
+          editBtn.textContent = '✏️';
+          editBtn.title = 'Редактировать';
+          editBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            mode = 'edit';
+            currentId = r.tape_recipe_id;
+
+            showForm();
+
+            title.textContent = r.name;
+            nameInput.value = r.name;
+
+            form.elements['project_id'].value = r.project_id || '';
+            form.elements['created_by'].value = r.created_by || '';
+            form.elements['role'].value = r.role || '';
+            form.elements['variant_label'].value = r.variant_label || '';
+            form.elements['notes'].value = r.notes || '';
+          };
+
+          // 📄 DUPLICATE
+          const duplicateBtn = document.createElement('button');
+          duplicateBtn.textContent = '📄';
+          duplicateBtn.title = 'Дублировать';
+          duplicateBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            try {
+              await duplicateRecipe(r.tape_recipe_id, form.elements['created_by'].value);
+              showStatus('Рецепт продублирован');
+              loadRecipes();
+            } catch (err) {
+              showStatus(err.message, true);
+            }
+          };
+
+          // 🗑 DELETE
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = '🗑';
+          deleteBtn.title = 'Удалить';
+          deleteBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (!confirm(`Удалить рецепт "${r.name}"?`)) return;
+
+            try {
+              await deleteRecipe(r.tape_recipe_id);
+              showStatus('Рецепт удалён');
+              loadRecipes();
+            } catch (err) {
+              showStatus(err.message, true);
+            }
+          };
+
+          actions.appendChild(editBtn);
+          actions.appendChild(duplicateBtn);
+          actions.appendChild(deleteBtn);
+
+          li.appendChild(info);
+          li.appendChild(actions);
+
+          recipesList.appendChild(li);
+        });
+      }
+
+
+      // -------- Status helper --------
+
+      const statusBox = document.querySelector('.status-feedback');
+
+      function showStatus(msg, isError = false) {
+        statusBox.textContent = msg;
+        statusBox.style.color = isError ? '#b00020' : 'darkcyan';
+
+        setTimeout(() => {
+          statusBox.textContent = '';
+        }, 1000);
+      }
+
+
+      // -------- Events --------
+
+      addInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+
+        e.preventDefault();
+        if (!form.hidden) return;
+
+        const name = addInput.value.trim();
+        if (!name) return;
+
+        mode = 'create';
+        currentId = null;
+
+        title.textContent = name;
+        nameInput.value = name;
+
+        showForm();
+        addInput.value = '';
+      });
+
+      function validateRequiredFields() {
+        let missing = [];
+
+        projectSelect.classList.remove('required-missing');
+        createdBySelect.classList.remove('required-missing');
+
+        if (!projectSelect.value) {
+          missing.push('Проект');
+          projectSelect.classList.add('required-missing');
+        }
+
+        if (!createdBySelect.value) {
+          missing.push('Кто добавил');
+          createdBySelect.classList.add('required-missing');
+        }
+
+        if (missing.length) {
+          showStatus(
+            'Заполните обязательные поля: ' + missing.join(', '),
+            true
+          );
+          return false;
+        }
+
+        return true;
+      }
+
+      saveBtn.addEventListener('click', async () => {
+        if (!mode) return;
+
+        if (!validateRequiredFields()) return;
+
+        const data = formDataToObject(form);
+        data.name = title.textContent;
+
+        // enforce types for API validation
+        data.project_id = Number(data.project_id);
+        data.created_by = Number(data.created_by);
+
+        // required by API (v1: no lines yet)
+        data.lines = [];
+
+        try {
+          if (mode === 'create') {
+            await createRecipe(data);
+            showStatus('Рецепт сохранён');
+          }
+
+          if (mode === 'edit') {
+            await updateRecipe(currentId, data);
+            showStatus('Изменения сохранены');
+          }
+          
+          resetForm();
+          loadRecipes(); //refresh list
+        } catch (err) {
+          showStatus(err.message, true);
+        }
+      });
+
+      clearBtn.addEventListener('click', resetForm);
+      createdBySelect.addEventListener('focus', loadUsers);
+
+      // ------ name: editable ------
+      title.addEventListener('click', () => {
+        nameInput.hidden = false;
+        title.hidden = true;
+        nameInput.focus();
+      });
+
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          nameInput.blur();
+        }
+      });
+
+      nameInput.addEventListener('blur', () => {
+        const val = nameInput.value.trim();
+        if (!val) return;
+
+        title.textContent = val;
+        title.hidden = false;
+        nameInput.hidden = true;
+      });
+
+      // -------- Init --------
+
+      hideForm();
+      loadProjects();
+      loadUsers();
+      loadRecipes();
+
+    </script>
+  </body>
 </html>

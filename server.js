@@ -783,6 +783,615 @@ app.delete('/api/materials/:id', async (req, res) => {
 });
 
 
+// -------- MATERIAL BATCHES --------
+
+// CREATE batch for material
+app.post('/api/materials/:id/batches', async (req, res) => {
+  const materialId = Number(req.params.id);
+
+  if (!Number.isInteger(materialId)) {
+    return res.status(400).json({ error: 'Некорректный material_id' });
+  }
+
+  const {
+    batch_code,
+    supplier_lot,
+    received_at,
+    status = 'available',
+    depleted_at,
+    passport_file,
+    comments,
+    created_by
+  } = req.body;
+
+  // ---- validation ----
+  if (!batch_code || !batch_code.trim()) {
+    return res.status(400).json({ error: 'Код партии обязателен' });
+  }
+
+  const createdBy = created_by ? Number(created_by) : null;
+  if (created_by && !Number.isInteger(createdBy)) {
+    return res.status(400).json({ error: 'Некорректный created_by' });
+  }
+
+  // enforce status ↔ depleted_at rule
+  const cleanDepletedAt =
+    status === 'available' ? null : (depleted_at || new Date());
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO material_batches (
+        material_id,
+        batch_code,
+        supplier_lot,
+        received_at,
+        status,
+        depleted_at,
+        passport_file,
+        comments,
+        created_by
+      )
+      VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9
+      )
+      RETURNING *;
+      `,
+      [
+        materialId,
+        batch_code.trim(),
+        supplier_lot || null,
+        received_at || null,
+        status,
+        cleanDepletedAt,
+        passport_file || null,
+        comments || null,
+        createdBy
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    // unique (material_id, batch_code)
+    if (err.code === '23505') {
+      return res.status(409).json({
+        error: 'Партия с таким кодом уже существует для этого материала'
+      });
+    }
+
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// READ (batches for a material)
+app.get('/api/materials/:id/batches', async (req, res) => {
+  const materialId = Number(req.params.id);
+
+  if (!Number.isInteger(materialId)) {
+    return res.status(400).json({ error: 'Некорректный material_id' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        material_batch_id,
+        material_id,
+        batch_code,
+        supplier_lot,
+        received_at,
+        status,
+        depleted_at,
+        passport_file,
+        comments,
+        created_by,
+        created_at,
+        edited_by,
+        edited_at
+      FROM material_batches
+      WHERE material_id = $1
+      ORDER BY created_at DESC, material_batch_id DESC;
+      `,
+      [materialId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// UPDATE batch status
+app.put('/api/material-batches/:id/status', async (req, res) => {
+  const batchId = Number(req.params.id);
+  const { status } = req.body;
+
+  if (!Number.isInteger(batchId)) {
+    return res.status(400).json({ error: 'Некорректный batch_id' });
+  }
+
+  if (!['available', 'depleted', 'scrap'].includes(status)) {
+    return res.status(400).json({ error: 'Некорректный статус' });
+  }
+
+  const depletedAt = status === 'available' ? null : new Date();
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE material_batches
+      SET
+        status = $1,
+        depleted_at = $2
+      WHERE material_batch_id = $3
+      RETURNING *;
+      `,
+      [status, depletedAt, batchId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Партия не найдена' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// DELETE batch
+app.delete('/api/material-batches/:id', async (req, res) => {
+  const batchId = Number(req.params.id);
+
+  if (!Number.isInteger(batchId)) {
+    return res.status(400).json({ error: 'Некорректный batch_id' });
+  }
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM material_batches WHERE material_batch_id = $1',
+      [batchId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Партия не найдена' });
+    }
+
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+
+// -------- RECIPES --------
+
+// CREATE: new recipe + lines
+app.post('/api/recipes', async (req, res) => {
+  const {
+    project_id,
+    role,
+    name,
+    variant_label,
+    notes,
+    created_by,
+    lines
+  } = req.body;
+
+  if (
+    !Number.isInteger(project_id) ||
+    !Number.isInteger(created_by) ||
+    !name ||
+    !role ||
+    !Array.isArray(lines)
+  ) {
+    return res.status(400).json({ error: 'Некорректные данные запроса' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const recipeResult = await client.query(
+      `
+      INSERT INTO tape_recipes (
+        project_id, role, name, variant_label, notes, created_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING tape_recipe_id
+      `,
+      [project_id, role, name, variant_label || null, notes || null, created_by]
+    );
+
+    const recipeId = recipeResult.rows[0].tape_recipe_id;
+
+    for (const line of lines) {
+      const {
+        material_id,
+        recipe_role,
+        measure_mode,
+        target_mass_g,
+        target_volume_ml
+      } = line;
+
+      await client.query(
+        `
+        INSERT INTO tape_recipe_lines (
+          tape_recipe_id,
+          material_id,
+          recipe_role,
+          measure_mode,
+          target_mass_g,
+          target_volume_ml
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          recipeId,
+          material_id,
+          recipe_role,
+          measure_mode,
+          target_mass_g || null,
+          target_volume_ml || null
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ tape_recipe_id: recipeId });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  } finally {
+    client.release();
+  }
+});
+
+// COPY: duplicate recipe + lines
+app.post('/api/recipes/:id/duplicate', async (req, res) => {
+  const sourceRecipeId = Number(req.params.id);
+  const { created_by } = req.body;
+
+  if (!Number.isInteger(sourceRecipeId) || !Number.isInteger(created_by)) {
+    return res.status(400).json({ error: 'Некорректные данные запроса' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // create new recipe by copying header
+    const recipeResult = await client.query(
+      `
+      INSERT INTO tape_recipes (
+        project_id,
+        role,
+        name,
+        variant_label,
+        notes,
+        created_by
+      )
+      SELECT
+        project_id,
+        role,
+        name,
+        variant_label,
+        notes,
+        $2
+      FROM tape_recipes
+      WHERE tape_recipe_id = $1
+      RETURNING tape_recipe_id
+      `,
+      [sourceRecipeId, created_by]
+    );
+
+    if (recipeResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Рецепт не найден' });
+    }
+
+    const newRecipeId = recipeResult.rows[0].tape_recipe_id;
+
+    // copy recipe lines
+    await client.query(
+      `
+      INSERT INTO tape_recipe_lines (
+        tape_recipe_id,
+        material_id,
+        recipe_role,
+        measure_mode,
+        target_mass_g,
+        target_volume_ml
+      )
+      SELECT
+        $2,
+        material_id,
+        recipe_role,
+        measure_mode,
+        target_mass_g,
+        target_volume_ml
+      FROM tape_recipe_lines
+      WHERE tape_recipe_id = $1
+      `,
+      [sourceRecipeId, newRecipeId]
+    );
+
+    await client.query('COMMIT');
+    res.status(201).json({ tape_recipe_id: newRecipeId });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  } finally {
+    client.release();
+  }
+});
+
+// READ: list recipes by project_id
+app.get('/api/recipes', async (req, res) => {
+  const projectId = req.query.project_id
+    ? Number(req.query.project_id)
+    : null;
+
+  try {
+    const result = projectId
+      ? await pool.query(
+          `
+          SELECT
+            r.tape_recipe_id,
+            r.project_id,
+            r.role,
+            r.name,
+            r.variant_label,
+            r.notes,
+            r.created_by,
+            r.created_at,
+            u.name AS created_by_name
+          FROM tape_recipes r
+          JOIN users u ON u.user_id = r.created_by
+          WHERE r.project_id = $1
+          ORDER BY r.created_at DESC;
+          `,
+          [projectId]
+        )
+      : await pool.query(
+          `
+          SELECT
+            r.tape_recipe_id,
+            r.project_id,
+            r.role,
+            r.name,
+            r.variant_label,
+            r.notes,
+            r.created_by,
+            r.created_at,
+            u.name AS created_by_name
+          FROM tape_recipes r
+          JOIN users u ON u.user_id = r.created_by
+          ORDER BY r.created_at DESC;
+          `
+        );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// READ: recipe details (header only)
+app.get('/api/recipes/:id', async (req, res) => {
+  const recipeId = Number(req.params.id);
+
+  if (!Number.isInteger(recipeId)) {
+    return res.status(400).json({ error: 'Некорректный tape_recipe_id' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        tape_recipe_id,
+        project_id,
+        role,
+        name,
+        variant_label,
+        notes,
+        created_by,
+        created_at
+      FROM tape_recipes
+      WHERE tape_recipe_id = $1
+      `,
+      [recipeId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Рецепт не найден' });
+    }
+
+    res.json(result.rows[0]); // one recipe object
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// READ: recipe lines (composition)
+app.get('/api/recipes/:id/lines', async (req, res) => {
+  const recipeId = Number(req.params.id);
+
+  if (!Number.isInteger(recipeId)) {
+    return res.status(400).json({ error: 'Некорректный tape_recipe_id' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        rl.recipe_line_id,
+        rl.material_id,
+        m.name AS material_name,
+        rl.recipe_role,
+        rl.measure_mode,
+        rl.target_mass_g,
+        rl.target_volume_ml
+      FROM tape_recipe_lines rl
+      JOIN materials m ON m.material_id = rl.material_id
+      WHERE rl.tape_recipe_id = $1
+      ORDER BY rl.recipe_line_id
+      `,
+      [recipeId]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// UPDATE: recipe header + replace-all lines
+app.put('/api/recipes/:id', async (req, res) => {
+  const recipeId = Number(req.params.id);
+
+  const {
+    role,
+    name,
+    variant_label,
+    notes,
+    lines
+  } = req.body;
+
+  if (
+    !Number.isInteger(recipeId) ||
+    !name ||
+    !role ||
+    !Array.isArray(lines)
+  ) {
+    return res.status(400).json({ error: 'Некорректные данные запроса' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const updateResult = await client.query(
+      `
+      UPDATE tape_recipes
+      SET
+        role = $2,
+        name = $3,
+        variant_label = $4,
+        notes = $5
+      WHERE tape_recipe_id = $1
+      `,
+      [
+        recipeId,
+        role,
+        name,
+        variant_label || null,
+        notes || null
+      ]
+    );
+
+    if (updateResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Рецепт не найден' });
+    }
+
+    // remove old lines
+    await client.query(
+      `
+      DELETE FROM tape_recipe_lines
+      WHERE tape_recipe_id = $1
+      `,
+      [recipeId]
+    );
+
+    // insert new lines
+    for (const line of lines) {
+      const {
+        material_id,
+        recipe_role,
+        measure_mode,
+        target_mass_g,
+        target_volume_ml
+      } = line;
+
+      await client.query(
+        `
+        INSERT INTO tape_recipe_lines (
+          tape_recipe_id,
+          material_id,
+          recipe_role,
+          measure_mode,
+          target_mass_g,
+          target_volume_ml
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          recipeId,
+          material_id,
+          recipe_role,
+          measure_mode,
+          target_mass_g || null,
+          target_volume_ml || null
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE recipe (header + cascade lines)
+app.delete('/api/recipes/:id', async (req, res) => {
+  const recipeId = Number(req.params.id);
+
+  if (!Number.isInteger(recipeId)) {
+    return res.status(400).json({ error: 'Некорректный tape_recipe_id' });
+  }
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM tape_recipes WHERE tape_recipe_id = $1',
+      [recipeId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Рецепт не найден' });
+    }
+
+    // lines are deleted automatically (ON DELETE CASCADE)
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+
+
+
 
 
 // Start server
