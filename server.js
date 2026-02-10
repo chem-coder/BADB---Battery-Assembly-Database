@@ -1016,9 +1016,11 @@ app.post('/api/recipes', async (req, res) => {
         recipe_role,
         measure_mode,
         target_mass_g,
-        target_volume_ml
+        target_volume_ml,
+        include_in_pct,
+        line_notes
       } = line;
-
+      
       await client.query(
         `
         INSERT INTO tape_recipe_lines (
@@ -1027,17 +1029,21 @@ app.post('/api/recipes', async (req, res) => {
           recipe_role,
           measure_mode,
           target_mass_g,
-          target_volume_ml
+          target_volume_ml,
+          include_in_pct,
+          line_notes
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         `,
         [
           recipeId,
           material_id,
           recipe_role,
           measure_mode,
-          target_mass_g || null,
-          target_volume_ml || null
+          target_mass_g ?? null,
+          target_volume_ml ?? null,
+          include_in_pct ?? null,
+          line_notes ?? null
         ]
       );
     }
@@ -1109,7 +1115,9 @@ app.post('/api/recipes/:id/duplicate', async (req, res) => {
         recipe_role,
         measure_mode,
         target_mass_g,
-        target_volume_ml
+        target_volume_ml,
+        include_in_pct,
+        line_notes
       )
       SELECT
         $2,
@@ -1117,7 +1125,9 @@ app.post('/api/recipes/:id/duplicate', async (req, res) => {
         recipe_role,
         measure_mode,
         target_mass_g,
-        target_volume_ml
+        target_volume_ml,
+        include_in_pct,
+        line_notes
       FROM tape_recipe_lines
       WHERE tape_recipe_id = $1
       `,
@@ -1243,7 +1253,9 @@ app.get('/api/recipes/:id/lines', async (req, res) => {
         rl.recipe_role,
         rl.measure_mode,
         rl.target_mass_g,
-        rl.target_volume_ml
+        rl.target_volume_ml,
+        rl.include_in_pct,
+        rl.line_notes
       FROM tape_recipe_lines rl
       JOIN materials m ON m.material_id = rl.material_id
       WHERE rl.tape_recipe_id = $1
@@ -1325,7 +1337,9 @@ app.put('/api/recipes/:id', async (req, res) => {
         recipe_role,
         measure_mode,
         target_mass_g,
-        target_volume_ml
+        target_volume_ml,
+        include_in_pct,
+        line_notes
       } = line;
 
       await client.query(
@@ -1336,17 +1350,21 @@ app.put('/api/recipes/:id', async (req, res) => {
           recipe_role,
           measure_mode,
           target_mass_g,
-          target_volume_ml
+          target_volume_ml,
+          include_in_pct,
+          line_notes
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         `,
         [
           recipeId,
           material_id,
           recipe_role,
           measure_mode,
-          target_mass_g || null,
-          target_volume_ml || null
+          target_mass_g ?? null,
+          target_volume_ml ?? null,
+          include_in_pct ?? null,
+          line_notes ?? null
         ]
       );
     }

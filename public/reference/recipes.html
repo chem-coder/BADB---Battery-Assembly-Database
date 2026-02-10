@@ -9,9 +9,12 @@
     <title>Recipes</title>
     <link rel="stylesheet" type="text/css" href="reference-styles.css">
 
-    <style>
+    <style> 
+
+      /* ---------- details toggle ---------- */
+
       details > summary {
-        list-style: none; /* remove default marker */
+        list-style: none;
         cursor: pointer;
         position: relative;
       }
@@ -32,11 +35,76 @@
         background-color: #f6f7f8;
       }
 
+      /* ---------- status visuals ---------- */
+
       .batch-row[data-status="depleted"],
       .batch-row[data-status="scrap"] {
         opacity: 0.6;
       }
 
+      /* ---------- recipe table ---------- */
+
+      #recipe-composition {
+        overflow-x: auto;
+      }
+
+      .recipe-table {
+        border-collapse: collapse;
+        table-layout: fixed;
+        min-width: 1200px;
+      }
+
+      .recipe-table th,
+      .recipe-table td {
+        padding: 0.25rem 0.4rem;
+        vertical-align: middle;
+        white-space: nowrap;
+        text-align: left;
+      }
+
+      .recipe-table thead th {
+        border-bottom: 1px solid #ccc;
+        font-weight: 600;
+      }
+
+      .recipe-table input,
+      .recipe-table select {
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      /* column sizing */
+      .recipe-table th:nth-child(1),
+      .recipe-table td:nth-child(1) { width: 180px; }
+
+      .recipe-table th:nth-child(2),
+      .recipe-table td:nth-child(2) { width: 260px; }
+
+      /* ---------- controls ---------- */
+
+      .measure-mode {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.15rem;
+      }
+
+      .measure-mode label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        margin: 0;
+      }
+
+      .measure-mode input {
+        margin: 0;
+      }
+
+      .line-notes {
+        width: 100%;
+        white-space: normal;
+      }
+      
     </style>
   </head>
 
@@ -110,7 +178,7 @@
           <option value="">— выбрать —</option>
           <option value="cathode">катод</option>
           <option value="anode">анод</option>
-        </select><br>
+        </select>
 
         <label for="recipe-notes">Комментарии</label>
         <textarea
@@ -123,20 +191,27 @@
 
       <fieldset id="recipe-composition">
         <legend>Состав рецепта</legend>
-        <div class="recipe-header">
-          <span>Компонент</span>
-          <span>Код материала</span>
-          <span>m, г</span>
-          <span>V, мл</span>
-        </div>
-
-        <div id="recipe-lines-rows"></div>
-
-        <button type="button" id="add-recipe-line">Добавить компонент</button>        
+          <table class="recipe-table">
+            <thead>
+              <tr>
+                <th>Компонент</th>
+                <th>Марка</th>
+                <th>В %</th>
+                <th>% мас</th> <!-- % dry slurry (blank) -->
+                <th>Режим</th>
+                <th>m, г</th>
+                <th>V, мл</th>
+                <th>Удалить</th>
+                <th>Прим.</th>
+              </tr>
+            </thead>
+            <tbody id="recipe-lines-rows"></tbody>
+          </table>
+        <button type="button" id="add-recipe-line">+ Добавить компонент</button>        
       </fieldset>
 
       <button id="saveBtn" type="button">Сохранить запись</button>
-      <button id="clearBtn" type="button">Очистить форму</button><br>
+      <button id="clearBtn" type="button">Выйти</button><br>
     </form>
 
     <div class="status-feedback" aria-live="polite"></div>
@@ -326,17 +401,28 @@
           const opt = document.createElement('option');
           opt.value = m.material_id;
           opt.textContent = m.name;
+          opt.dataset.brand = m.brand || '';
           opt.dataset.defaultRole = m.default_role || '';
+          opt.dataset.excludeDefault = m.exclude_from_composition ? 'true' : 'false';
           select.appendChild(opt);
         });
 
         select.addEventListener('change', () => {
-          const roleSelect = row.querySelector('.role-select');
+          const brandSpan = row.querySelector('.brand-cell');
+          if (brandSpan) brandSpan.textContent = chosen?.dataset?.brand || '';
 
+          const roleSelect = row.querySelector('.role-select');
           if (roleSelect?.dataset.locked === 'true') return;
 
           const chosen = select.selectedOptions[0];
           if (!chosen || !chosen.dataset.defaultRole) return;
+
+          const includeSel = row.querySelector('[data-field="include_in_pct"]');
+
+          if (includeSel && includeSel.value === '') {
+            includeSel.value =
+              chosen.dataset.excludeDefault === 'true' ? 'no' : 'yes';
+          }
 
           const mapRole = (r) => {
             if (r === 'conductive_additive') return 'additive';
@@ -344,11 +430,63 @@
           };
 
           roleSelect.value = mapRole(chosen.dataset.defaultRole);
+          recalcDryPercent();
         });
       }
 
 
       // -------- Other helpers --------
+
+      function recalcDryPercent() {
+        const rows = document.querySelectorAll('.recipe-line-row');
+
+        let totalMass = 0;
+
+        rows.forEach(row => {
+          const mode = row.querySelector('input[type="radio"]:checked')?.value;
+          if (mode !== 'mass') return;
+
+          const m = Number(row.querySelector('[data-field="target_mass_g"]')?.value);
+          if (!m) return;
+
+          const includeSel = row.querySelector('[data-field="include_in_pct"]');
+          let include;
+
+          if (includeSel?.value === 'yes') include = true;
+          else if (includeSel?.value === 'no') include = false;
+          else {
+            const opt = row.querySelector('.material-select option:checked');
+            include = opt?.dataset?.excludeDefault !== 'true';
+          }
+
+          if (include) totalMass += m;
+        });
+
+        rows.forEach(row => {
+          const out = row.querySelector('[data-field="dry_percent"]');
+          if (!out) return;
+
+          const mode = row.querySelector('input[type="radio"]:checked')?.value;
+          const m = Number(row.querySelector('[data-field="target_mass_g"]')?.value);
+
+          if (mode !== 'mass' || !m || totalMass <= 0) {
+            out.value = '';
+            return;
+          }
+
+          const includeSel = row.querySelector('[data-field="include_in_pct"]');
+          let include;
+
+          if (includeSel?.value === 'yes') include = true;
+          else if (includeSel?.value === 'no') include = false;
+          else {
+            const opt = row.querySelector('.material-select option:checked');
+            include = opt?.dataset?.excludeDefault !== 'true';
+          }
+
+          out.value = include ? ((m / totalMass) * 100).toFixed(2) : '';
+        });
+      }
 
       function duplicateRecipeUI(recipe) {
         mode = 'create';
@@ -393,6 +531,7 @@
             massInput.disabled = true;
             massInput.value = '';
           }
+          recalcDryPercent();
         }
 
         radios.forEach(r => r.addEventListener('change', update));
@@ -400,44 +539,87 @@
       }
 
       function createRecipeLineRow(index) {
-        const row = document.createElement('div');
+        const row = document.createElement('tr');
         row.className = 'recipe-line-row';
+
         row.dataset.index = index;
 
         row.innerHTML = `
-          <select class="material-select" data-field="material_id">
-            <option value="">Материал</option>
-          </select>
+          <td>
+            <select class="role-select" data-field="recipe_role">
+              <option value="active">Активный</option>
+              <option value="binder">Связующее</option>
+              <option value="additive">Добавка</option>
+              <option value="solvent">Растворитель</option>
+            </select>
+          </td>
 
-          <select class="role-select" data-field="recipe_role">
-            <option value="active">Активный компонент</option>
-            <option value="binder">Связующее</option>
-            <option value="additive">Проводящая добавка</option>
-            <option value="solvent">Растворитель</option>
-          </select>
+          <td>
+            <select class="material-select" data-field="material_id">
+              <option value="">Материал</option>
+            </select>
+          </td>
 
-          <div class="measure-mode">
-            <label>
-              <input type="radio" name="measure_mode_${index}" value="mass" checked>
-              m, г
-            </label>
-            <label>
-              <input type="radio" name="measure_mode_${index}" value="volume">
-              V, мл
-            </label>
-          </div>
+          <td>
+            <select class="include-select" data-field="include_in_pct">
+              <option value=""></option>
+              <option value="yes">Да</option>
+              <option value="no">Нет</option>
+            </select>
+          </td>
 
-          <input type="number" step="0.0001" placeholder="m, г" data-field="target_mass_g">
-          <input type="number" step="0.001"  placeholder="V, мл" data-field="target_volume_ml" disabled>
+          <td>
+            <input
+              type="number"
+              step="0.01"
+              data-field="dry_percent"
+              class="dry-percent"
+              disabled
+            >
+          </td> <!-- % dry slurry, intentionally empty -->
 
-          <button type="button" class="delete-line">🗑</button>
+          <td>
+            <div class="measure-mode">
+              <label>
+                <input type="radio" name="measure_mode_${index}" value="mass" checked>
+                m
+              </label>
+              <label>
+                <input type="radio" name="measure_mode_${index}" value="volume">
+                V
+              </label>
+            </div>
+          </td>
+
+          <td>
+            <input type="number" step="0.0001" data-field="target_mass_g">
+          </td>
+
+          <td>
+            <input type="number" step="0.001" data-field="target_volume_ml" disabled>
+          </td>
+
+          <td>
+            <button type="button" class="delete-line">🗑</button>
+          </td>
+
+          <td>
+            <input type="text" data-field="line_notes">
+          </td>
         `;
-
+        
         // wire behaviors
         wireMeasureMode(row);
 
+        row.querySelector('[data-field="target_mass_g"]')
+          ?.addEventListener('input', recalcDryPercent);
+
+        row.querySelector('[data-field="include_in_pct"]')
+          ?.addEventListener('change', recalcDryPercent);
+
         row.querySelector('.delete-line').addEventListener('click', () => {
           row.remove();
+          recalcDryPercent();
         });
 
         return row;
@@ -455,9 +637,13 @@
         // Optional: apply preset values (used for edit/duplicate)
         if (preset) {
           row.querySelector('[data-field="material_id"]').value = preset.material_id || '';
+          row.querySelector('[data-field="line_notes"]').value = preset.line_notes ?? '';
 
           const roleSelect = row.querySelector('[data-field="recipe_role"]');
           roleSelect.value = preset.recipe_role || 'active';
+
+          const inc = row.querySelector('[data-field="include_in_pct"]');
+          if (inc) inc.value = preset.include_in_pct || '';
 
           if (preset.lockRole) {
             roleSelect.dataset.locked = 'true';
@@ -480,6 +666,7 @@
           }
         }
 
+        recalcDryPercent();
         return row;
       }
 
@@ -522,7 +709,15 @@
             recipe_role: recipeRole,
             measure_mode: mode,
             target_mass_g,
-            target_volume_ml
+            target_volume_ml,
+            include_in_pct:
+              row.querySelector('[data-field="include_in_pct"]')?.value === 'yes'
+                ? true
+                : row.querySelector('[data-field="include_in_pct"]')?.value === 'no'
+                  ? false
+                  : null,
+            line_notes:
+              row.querySelector('[data-field="line_notes"]')?.value || null
           });
         });
 
@@ -644,6 +839,8 @@
             measure_mode: line.measure_mode,
             target_mass_g: line.target_mass_g,
             target_volume_ml: line.target_volume_ml,
+            include_in_pct: line.include_in_pct,
+            line_notes: line.line_notes,
             lockRole: true
           });
         }
