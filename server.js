@@ -1408,7 +1408,155 @@ app.delete('/api/recipes/:id', async (req, res) => {
 });
 
 
+// ---------- ELECTROLYTES ----------
 
+// CREATE electrolyte
+// POST /api/electrolytes
+app.post('/api/electrolytes', async (req, res) => {
+  const {
+    project_id,
+    name,
+    electrolyte_type,
+    solvent_system,
+    salts,
+    concentration,
+    additives,
+    notes,
+    status = 'active',
+    created_by
+  } = req.body;
+
+  if (!project_id || !name || !electrolyte_type || !created_by) {
+    return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO electrolytes (
+        project_id,
+        name,
+        electrolyte_type,
+        solvent_system,
+        salts,
+        concentration,
+        additives,
+        notes,
+        status,
+        created_by
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      RETURNING *
+      `,
+      [
+        project_id,
+        name,
+        electrolyte_type,
+        solvent_system || null,
+        salts || null,
+        concentration || null,
+        additives || null,
+        notes || null,
+        status,
+        created_by
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка при создании электролита' });
+  }
+});
+
+// READ all electrolytes (global list)
+// GET /api/electrolytes
+app.get('/api/electrolytes', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        e.electrolyte_id,
+        e.name,
+        e.electrolyte_type,
+        e.project_id,
+        p.name AS project_name,
+        e.created_by,
+        u.name AS created_by_name,
+        e.created_at,
+        e.status,
+        e.solvent_system,
+        e.salts,
+        e.concentration,
+        e.additives,
+        e.notes
+      FROM electrolytes e
+      JOIN projects p ON p.project_id = e.project_id
+      JOIN users u ON u.user_id = e.created_by
+      ORDER BY e.created_at DESC
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка при получении электролитов' });
+  }
+});
+
+// UPDATE electrolyte
+// PUT /api/electrolytes/:id
+app.put('/api/electrolytes/:id', async (req, res) => {
+  const electrolyteId = Number(req.params.id);
+
+  if (!Number.isInteger(electrolyteId)) {
+    return res.status(400).json({ error: 'Некорректный electrolyte_id' });
+  }
+
+  const {
+    name,
+    electrolyte_type,
+    solvent_system,
+    salts,
+    concentration,
+    additives,
+    notes,
+    status
+  } = req.body;
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE electrolytes
+      SET
+        name = $1,
+        electrolyte_type = $2,
+        solvent_system = $3,
+        salts = $4,
+        concentration = $5,
+        additives = $6,
+        notes = $7,
+        status = $8
+      WHERE electrolyte_id = $9
+      RETURNING *
+      `,
+      [
+        name,
+        electrolyte_type,
+        solvent_system || null,
+        salts || null,
+        concentration || null,
+        additives || null,
+        notes || null,
+        status || 'active',
+        electrolyteId
+      ]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка при обновлении электролита' });
+  }
+});
 
 
 

@@ -142,7 +142,7 @@
         <select id="recipe-created-by" name="created_by" required>
           <option value="">— выбрать пользователя —</option>
         </select>
-        <a href="reference/users.html" target="_blank" class="ref-link">
+        <a href="users.html" target="_blank" class="ref-link">
           Управление пользователями
         </a>
       </fieldset>
@@ -520,17 +520,31 @@
         const volInput  = row.querySelector('[data-field="target_volume_ml"]');
 
         function update() {
-          const mode = row.querySelector('input[type="radio"]:checked')?.value;
+          const mode =
+            row.querySelector('input[type="radio"]:checked')?.value;
+
+          const includeSel =
+            row.querySelector('[data-field="include_in_pct"]');
 
           if (mode === 'mass') {
             massInput.disabled = false;
             volInput.disabled = true;
             volInput.value = '';
-          } else if (mode === 'volume') {
+
+            if (includeSel) includeSel.disabled = false;
+          }
+
+          if (mode === 'volume') {
             volInput.disabled = false;
             massInput.disabled = true;
             massInput.value = '';
+
+            if (includeSel) {
+              includeSel.value = 'no';
+              includeSel.disabled = true;
+            }
           }
+
           recalcDryPercent();
         }
 
@@ -663,6 +677,16 @@
             row.querySelector('[data-field="target_mass_g"]').value = preset.target_mass_g ?? '';
           } else if (preset.measure_mode === 'volume') {
             row.querySelector('[data-field="target_volume_ml"]').value = preset.target_volume_ml ?? '';
+          }
+          const includeSel = row.querySelector('[data-field="include_in_pct"]');
+
+          // set include in pct based on preset, but if not explicitly set, infer from material's exclude_from_composition
+          if (includeSel && includeSel.value === '') {
+            const opt = row.querySelector('.material-select option:checked');
+            if (opt) {
+              includeSel.value =
+                opt.dataset.excludeDefault === 'true' ? 'no' : 'yes';
+            }
           }
         }
 

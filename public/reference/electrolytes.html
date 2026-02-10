@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+    <title>Электролиты</title>
+    <link rel="stylesheet" type="text/css" href="reference-styles.css">
+  </head>
+
+  <body data-page="electrolytes">
+    <header>
+      <h1>Электролиты</h1>
+      <a href="../index.html"><svg viewBox="0 0 24 24" width="24" height="24">
+        <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z" fill="currentColor"/></svg>
+      </a>
+    </header>
+
+    <!-- Enter opens the form and copies the name into it -->
+    <input
+      id="electrolyte-name"
+      name="name"
+      type="text"
+      class="add-user"
+      placeholder="+ Добавить электролит"
+      autocomplete="off"
+      required
+    />
+    
+    <!-- Form hidden by default; shown on create/edit -->
+    <form name="electrolyte-form" autocomplete="on" hidden>
+
+      <!-- FormData ignores fields without `name` -->
+
+      <fieldset id="electrolyte-meta">
+        <legend>Метаданные</legend>
+
+        <label for="electrolyte-created-by">Кто добавил</label>
+        <select id="electrolyte-created-by" name="created_by" required>
+          <option value="">— выбрать пользователя —</option>
+        </select>
+        <a href="users.html" target="_blank" class="ref-link">
+          Управление пользователями
+        </a>
+
+        <label for="project_id">Проект</label>
+        <select id="project_id" name="project_id" required>
+          <option value="">— выбрать проект —</option>
+        </select><br>
+
+        <label for="electrolyte_type">Тип электролита</label>
+        <select id="electrolyte_type" name="electrolyte_type" required>
+          <option value="">— выбрать тип —</option>
+          <option value="liquid">Жидкий</option>
+          <option value="solid">Твёрдый</option>
+          <option value="gel">Гелевый</option>
+        </select><br>
+      </fieldset>
+
+      <fieldset id="electrolyte-intro">
+
+        <!-- Name copied here on create / "Enter" -->
+        <input
+          type="text"
+          name="name"
+          id="electrolyte-name-input"
+          required
+          hidden
+        />
+        <h2></h2>
+
+      <fieldset id="electrolyte-chemistry">
+        <legend>Состав и описание (пока описательно)</legend>
+
+        <label for="electrolyte-solvent-system">Растворители (система)</label>
+        <input
+          id="electrolyte-solvent-system"
+          type="text"
+          name="solvent_system"
+          placeholder="например: EC/DMC 1:1"
+        /><br>
+
+        <label for="electrolyte-salts">Соли</label>
+        <input
+          id="electrolyte-salts"
+          type="text"
+          name="salts"
+          placeholder="например: LiPF6"
+        /><br>
+
+        <label for="electrolyte-concentration">Концентрация</label>
+        <input
+          id="electrolyte-concentration"
+          type="text"
+          name="concentration"
+          placeholder="например: 1 M"
+        /><br>
+
+        <label for="electrolyte-additives">Добавки</label>
+        <input
+          id="electrolyte-additives"
+          type="text"
+          name="additives"
+          placeholder="например: 2% VC"
+        /><br>
+
+        <label for="electrolyte-notes">Примечания</label><br>
+        <textarea
+          id="electrolyte-notes"
+          name="notes"
+          rows="3"
+          placeholder="Любая дополнительная информация"
+        ></textarea>
+      </fieldset>
+
+      </fieldset>
+      
+      <fieldset id="electrolyte-status">
+        <legend>Статус</legend>
+
+        <label>Статус</label>
+        <select name="status">
+          <option value="active">активный</option>
+          <option value="inactive">не используется</option>
+          <option value="archived">архив</option>
+        </select>
+      </fieldset>
+
+      <button id="saveBtn" type="button">Сохранить запись</button>
+      <button id="clearBtn" type="button">Выход</button><br>
+
+    </form>
+    <div class="status-feedback" aria-live="polite"></div>
+    <ul id="electrolytesList" class="users-list"></ul>
+
+    <script>
+
+      // -------- State and helpers --------
+      
+      const addInput = document.getElementById('electrolyte-name');
+      const nameInput = document.getElementById('electrolyte-name-input');
+      const form = document.forms['electrolyte-form'];
+      const title = form.querySelector('h2');
+      const saveBtn = document.getElementById('saveBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const createdBySelect = document.getElementById('electrolyte-created-by');
+      const projectSelect = document.getElementById('project_id');
+      const typeSelect = document.getElementById('electrolyte_type');
+      
+      const electrolytesList = document.getElementById('electrolytesList');
+
+      let mode = null; // 'create' | 'edit'
+      let currentId = null;
+
+      function showForm() {
+        form.hidden = false;
+        addInput.disabled = true;
+      }
+
+      function hideForm() {
+        form.hidden = true;
+        addInput.disabled = false;
+      }
+
+      function resetForm() {
+        form.reset();
+        title.textContent = '';
+        mode = null;
+        currentId = null;
+        hideForm();
+      }
+
+      function formDataToObject(form) {
+        return Object.fromEntries(new FormData(form));
+      }
+      
+
+      // -------- API helpers --------
+
+      async function createElectrolyte (data) {
+        const res = await fetch('/api/electrolytes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Ошибка сохранения');
+        }
+
+        return res.json();
+      }
+
+      async function updateElectrolyte(id, data) {
+        const res = await fetch(`/api/electrolytes/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Ошибка обновления');
+        }
+
+        return res.json();
+      }
+
+
+      // -------- Rendering --------
+      function renderElectrolytes(electrolytes) {
+        electrolytesList.innerHTML = '';
+
+        electrolytes.forEach(el => {
+          const li = document.createElement('li');
+          li.className = 'user-row';
+
+          const info = document.createElement('div');
+          info.className = 'user-info';
+
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = el.name;
+
+          const statusSpan = document.createElement('span');
+          statusSpan.className = 'status';
+          statusSpan.textContent =
+            el.status === 'active' ? 'активный' :
+            el.status === 'inactive' ? 'не используется' :
+            'архив';
+          
+          const projectSpan = document.createElement('span');
+          projectSpan.textContent = el.project_name;
+
+          const authorSpan = document.createElement('span');
+          authorSpan.textContent = el.created_by_name;
+
+          const dateSpan = document.createElement('span');
+          dateSpan.textContent = new Date(el.created_at).toLocaleDateString();
+
+          info.appendChild(nameSpan);
+          info.appendChild(statusSpan);
+          info.appendChild(projectSpan);
+          info.appendChild(authorSpan);
+          info.appendChild(dateSpan);
+
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+
+          const editBtn = document.createElement('button');
+          editBtn.textContent = '✏️';
+          editBtn.title = 'Редактировать';          
+          editBtn.onclick = () => {
+            mode = 'edit';
+            currentId = el.electrolyte_id;
+
+            // show form
+            showForm();
+
+            // title + name
+            title.textContent = el.name;
+            nameInput.value = el.name;
+
+            // fill fields we have
+            form.elements['project_id'].value = el.project_id;
+            form.elements['electrolyte_type'].value = el.electrolyte_type;
+            form.elements['solvent_system'].value = el.solvent_system || '';
+            form.elements['salts'].value = el.salts || '';
+            form.elements['concentration'].value = el.concentration || '';
+            form.elements['additives'].value = el.additives || '';
+            form.elements['notes'].value = el.notes || '';
+            form.elements['status'].value = el.status || 'active';
+
+            if (el.created_by) {
+              createdBySelect.value = el.created_by;
+            }
+          };
+
+          const duplicateBtn = document.createElement('button');
+          duplicateBtn.textContent = '📄';
+          duplicateBtn.title = 'Дублировать';
+
+          duplicateBtn.onclick = () => {
+            duplicateElectrolyte(el);
+          };
+
+          actions.appendChild(editBtn);
+          actions.appendChild(duplicateBtn);
+
+          li.appendChild(info);
+          li.appendChild(actions);
+
+          electrolytesList.appendChild(li);
+        });
+      }
+
+      function duplicateElectrolyte(el) {
+        mode = 'create';
+        currentId = null;
+
+        showForm();
+
+        // title + name
+        const copyName = el.name + ' (копия)';
+        title.textContent = copyName;
+        nameInput.value = copyName;
+
+        // fill fields
+        form.elements['project_id'].value = el.project_id;
+        form.elements['electrolyte_type'].value = el.electrolyte_type;
+        form.elements['solvent_system'].value = el.solvent_system || '';
+        form.elements['salts'].value = el.salts || '';
+        form.elements['concentration'].value = el.concentration || '';
+        form.elements['additives'].value = el.additives || '';
+        form.elements['notes'].value = el.notes || '';
+        form.elements['status'].value = el.status || 'active';
+
+        createdBySelect.value = '';
+
+        // IMPORTANT: reset things that must be new
+        createdBySelect.value = '';
+      }
+
+      // -------- Status helper --------
+
+      const statusBox = document.querySelector('.status-feedback');
+
+      function showStatus(msg, isError = false) {
+        statusBox.textContent = msg;
+        statusBox.style.color = isError ? '#b00020' : 'darkcyan';
+
+        setTimeout(() => {
+          statusBox.textContent = '';
+        }, 1000);
+      }
+
+      
+      // -------- Reference dropdowns --------
+
+      async function loadProjects() {
+        const select = document.getElementById('project_id');
+
+        try {
+          const res = await fetch('/api/projects');
+          const projects = await res.json();
+
+          select.innerHTML =
+            '<option value="">— выбрать проект —</option>';
+
+          projects.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.project_id;
+            opt.textContent = p.name;
+            select.appendChild(opt);
+          });
+
+          const saved = localStorage.getItem('electrolytes_project_id');
+          if (saved && select.querySelector(`option[value="${saved}"]`)) {
+            select.value = saved;
+            loadElectrolytes(saved);
+            return;
+          }
+
+          select.addEventListener('change', () => {
+            if (!select.value) return;
+            localStorage.setItem('electrolytes_project_id', select.value);
+            loadElectrolytes(select.value);
+          });
+
+        } catch (err) {
+          console.error(err);
+        }
+        
+        if (select.options.length === 2) {
+          select.selectedIndex = 1;
+          loadElectrolytes(select.value);
+        }
+      }
+
+      async function loadUsers() {
+        const res = await fetch('/api/users');
+        const users = await res.json();
+
+        // CLEAR existing options first
+        createdBySelect.innerHTML = '<option value="">— выбрать пользователя —</option>';
+
+        users
+          .filter(u => u.active)
+          .forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.user_id;
+            opt.textContent = u.name;
+            createdBySelect.appendChild(opt);
+          });
+      }
+
+      // Refresh reference dropdowns on focus
+      projectSelect.addEventListener('focus', loadProjects);
+      createdBySelect.addEventListener('focus', loadUsers);
+      
+
+      // -------- Events --------
+      
+      addInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+
+        e.preventDefault();
+
+        if (!form.hidden) return;   // prevent double-create
+
+        const name = addInput.value.trim();
+        if (!name) return;
+
+        mode = 'create';
+        currentId = null;
+
+        nameInput.value = name;
+        title.textContent = name;
+
+        showForm();
+
+        addInput.value = '';
+      });
+
+      function validateRequiredFields() {
+        let missing = [];
+
+        // clear previous highlights
+        projectSelect.classList.remove('required-missing');
+        typeSelect.classList.remove('required-missing');
+        createdBySelect.classList.remove('required-missing');
+
+        if (!projectSelect.value) {
+          missing.push('Проект');
+          projectSelect.classList.add('required-missing');
+        }
+  
+        if (!typeSelect.value) {
+          missing.push('Тип электролита');
+          typeSelect.classList.add('required-missing');
+        }
+
+        if (!createdBySelect.value) {
+          missing.push('Кто добавил');
+          createdBySelect.classList.add('required-missing');
+        }
+
+        if (missing.length) {
+          showStatus(
+            'Заполните обязательные поля: ' + missing.join(', '),
+            true
+          );
+          return false;
+        }
+
+        return true;
+      }
+
+      saveBtn.addEventListener('click', async () => {
+        if (!mode) return;
+        
+        if (!validateRequiredFields()) return;
+        
+        const data = formDataToObject(form);
+        data.project_id = Number(data.project_id);
+        data.created_by = Number(data.created_by);
+        data.name = title.textContent;
+
+        try {
+          if (mode === 'create') {
+            await createElectrolyte(data);
+            showStatus('Электролит сохранён');
+          }
+
+          if (mode === 'edit') {
+            await updateElectrolyte(currentId, data);
+            showStatus('Изменения сохранены');
+          }
+
+          resetForm();
+          loadElectrolytes(data.project_id);   // refresh list
+        } catch (err) {
+          showStatus(err.message, true);
+        }
+
+      });
+
+      clearBtn.addEventListener('click', resetForm);
+
+      /* ------ name: editable ------ */
+
+      title.addEventListener('click', () => {
+        nameInput.hidden = false;
+        title.hidden = true;
+        nameInput.focus();
+      });
+
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          nameInput.blur();
+        }
+      });
+
+      nameInput.addEventListener('blur', () => {
+        const val = nameInput.value.trim();
+        if (!val) return;
+
+        title.textContent = val;
+        title.hidden = false;
+        nameInput.hidden = true;
+      });
+
+
+      // -------- Init --------
+
+      async function loadElectrolytes() {
+        const list = document.getElementById('electrolytesList');
+        if (!list) return;
+
+        try {
+          const res = await fetch('/api/electrolytes');
+          const data = await res.json();
+
+          renderElectrolytes(data);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+
+      hideForm();
+      loadUsers();
+      loadProjects();
+      loadElectrolytes();
+
+    </script>
+  </body>
+</html>
