@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+    <title>Протокол приготовления электродных лент</title>
+    <link rel="stylesheet" type="text/css" href="reference/reference-styles.css">
+  </head>
+
+  <body data-page="tapes">
+
+    <header>
+      <h1>Протокол приготовления электродных лент</h1>
+      <a href="../index.html"><svg viewBox="0 0 24 24" width="24" height="24">
+        <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z" fill="currentColor"/></svg>
+      </a>
+    </header>
+
+    <!-- Enter opens the form and copies the name into it -->
+    <input
+      name="name"
+      id="tape-name"
+      type="text"
+      class="add-user"
+      placeholder="+ Добавить электродную ленту"
+      autocomplete="off"
+      required
+    />
+
+    <form name="tapes-form" autocomplete="on">
+
+      <!-- FormData ignores fields without `name` -->
+
+      <fieldset id="tapes-meta">
+        <legend>Метаданные</legend>
+
+        <label for="tape-created-by">Кто добавил</label>
+        <select id="tape-created-by" name="created_by" required>
+          <option value="">— выбрать пользователя —</option>
+        </select>
+        <a href="reference/users.html" target="_blank" class="ref-link">
+          Управление пользователями
+        </a><br>
+
+        <label for="project_id">Проект</label>
+        <select id="project_id" name="project_id" required>
+          <option value="">— выбрать проект —</option>
+        </select><br>
+
+        <label for="tape_type">Тип электродной ленты</label>
+        <select id="tape_type" name="tape_type" required>
+          <option value="">— выбрать тип —</option>
+          <option value="cathode">Катод</option>
+          <option value="anode">Анод</option>
+        </select><br>
+      </fieldset>
+
+      <button type="button" id="saveBtn">Сохранить файл</button>
+      <button type="button" id="clearBtn">Очистить форму</button><br>
+      
+      <p id="loaded-file-container" class="loaded-file-label" style="display:none;">
+        Файл: <span id="loaded-file-name"></span>
+      </p>
+
+      <fieldset id="cathode-intro">
+        <legend>Общая информация о катоде</legend>
+        <label for="project-name">Название проекта: </label>
+        <input id="project-name" type="text" name="project-name" placeholder="Какому проекту принадлежит?" required value="" /><br>
+        <!--N O T E: form fields must have a "name" attribute to be included in the FormData object. Otherwise, they're skipped: the "id" property doesn't count. */-->
+
+        <label for="cathode-name">Катод - название/код: </label>
+        <input id="cathode-name" type="text" name="cathode-name" placeholder="NMC811 или NMC811-KGX и т.п." required><br>
+
+        <label for="cathode-batch">Катод - партия: </label>
+        <input id="cathode-batch" type="text" name="cathode-batch" placeholder="37B или 2025-03-17-B и т.п." required><br>
+
+        <label for="cathode-notes">Катод - заметки/комментарии: </label>
+        <textarea id="cathode-notes" name="cathode-notes" placeholder="Общие комментарии о катодной ленте и процессе ее приготовления"></textarea>
+      </fieldset>
+
+      <details id="0-pre-prep">
+        <summary>0. Предподготовка</summary>
+        <fieldset id="0-pre-prep-f">
+          <legend class="visually-hidden">0. Предподготовка</legend>
+
+          <fieldset id="0-drying">
+            <legend>Сушка активного материала в шкафу</legend>
+
+            <!-- кто/когда -->
+            <label for="0-drying-operator">Оператор: </label>
+            <input id="0-drying-operator" type="text" name="0-drying-operator" placeholder="Инициалы/ФИО">
+
+            <label for="0-drying-date">Дата: </label>
+            <input id="0-drying-date" type="date" name="0-drying-date" placeholder="Дата начала сушки">
+
+            <label for="0-drying-time">Время: </label>
+            <input id="0-drying-time" type="time" name="0-drying-time" placeholder="Время начала сушки">
+
+            <button type="button" class="date-time-now-button" id="0-drying-now-button">Сейчас</button><br>
+
+            <label for="0-drying-temperature">Температура: </label>
+            <input id="0-drying-temperature" type="number" step="1" min="-273" name="0-drying-temperature" placeholder="Температура сушки">, °C<br>
+
+            <label for="0-cathode-pre-prep-notes">Заметки/комментарии: </label>
+            <textarea id="0-cathode-pre-prep-notes" name="0-cathode-pre-prep-notes" placeholder="Комментарии о предподготовке катодной ленты"></textarea>
+          </fieldset>
+
+        </fieldset>
+      </details>
+
+      <details id="1-slurry">
+        <summary>I. Приготовление катодной пасты</summary>
+        <fieldset id="1-slurry-f">
+          <legend class="visually-hidden">I. Приготовление катодной пасты</legend>
+
+          <fieldset id="1-slurry-mix">
+            <legend>Замес катодной пасты</legend>
+
+            <!-- кто/когда -->
+            <label for="1-slurry-operator">Оператор: </label>
+            <input id="1-slurry-operator" type="text" name="1-slurry-operator" placeholder="Инициалы/ФИО">
+
+            <label for="1-slurry-date">Дата: </label>
+            <input id="1-slurry-date" type="date" name="1-slurry-date" placeholder="Дата начала сушки">
+
+            <label for="1-slurry-time">Время: </label>
+            <input id="1-slurry-time" type="time" name="1-slurry-time" placeholder="Время начала сушки">
+
+            <button type="button" class="date-time-now-button" id="1-slurry-now-button">Сейчас</button><br>
+
+            <label for="1-cathode-slurry-notes">Заметки/комментарии: </label>
+            <textarea id="1-cathode-slurry-notes" name="1-cathode-slurry-notes" placeholder="Комментарии о подготовке катодной пасты"></textarea><br>
+
+            <h4>Рецепт катодной пасты</h4>
+
+            <div class="recipe-header">
+              <span>Компонент</span>
+              <span>Код материала</span>
+              <span>мас. %</span>
+              <span>m, г</span>
+              <span>V, мкл</span>
+            </div>
+
+            <div id="cathode-recipe-rows">
+              <div class="cathode-recipe-row" data-index="0">
+                <select name="cathode-recipe[0][type]">
+                  <option value="" disabled selected>Выберите компонент</option>
+                  <option value="active">Активный материал</option>
+                  <option value="binder">Связующее</option>
+                  <option value="conductive">Электропроводящая добавка</option>
+                  <option value="solvent">Растворитель</option>
+                  <option value="cnt">ОУНТ</option>
+                  <option value="other">Другое</option>
+                </select>
+
+                <input name="cathode-recipe[0][name]" placeholder="Код материала">
+                <input name="cathode-recipe[0][percent]" placeholder="% состав" type="number" step="0.01">
+                <input name="cathode-recipe[0][mass]"    placeholder="масса, г" type="number" step="0.0001">
+                <input name="cathode-recipe[0][volume]"  placeholder="объем, мкл" type="number" step="0.001">
+              </div>
+            </div>
+            
+            <button type="button" id="add-cathode-recipe-row">Добавить компонент</button>
+
+            <h4>Фактические значения (что реально добавлено)</h4>
+
+            <div class="actual-header">
+              <span>Код материала</span>
+              <span>m, г (факт)</span>
+              <span>V, мкл (факт)</span>
+            </div>
+
+            <div id="cathode-actual-rows">
+              <div class="actual-row" data-index="0">
+                  <!-- заполняется автоматически из recipe[0][name] -->
+                <span class="actual-code" data-recipe-index="0"></span>
+                <input 
+                  name="cathode-recipe[0][actualMass]"  placeholder="масса, г (факт)" type="number" step="0.0001">
+                <input name="cathode-recipe[0][actualVolume]" placeholder="объем, мкл (факт)" type="number" step="0.001">
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset id="1-mixing">
+            <legend>Перемешивание катодной пасты</legend>
+
+            <!-- кто/когда -->
+            <label for="1-mixing-operator">Оператор: </label>
+            <input id="1-mixing-operator" type="text" name="1-mixing-operator" placeholder="Инициалы/ФИО">
+
+            <label for="1-mixing-date">Дата: </label>
+            <input id="1-mixing-date" type="date" name="1-mixing-date" placeholder="Дата начала сушки">
+
+            <label for="1-mixing-time">Время: </label>
+            <input id="1-mixing-time" type="time" name="1-mixing-time" placeholder="Время начала сушки">
+
+            <button type="button" class="date-time-now-button" id="1-mixing-now-button">Сейчас</button><br>
+
+            <!-- Объём пасты: просто записываем, ничего не блокирует -->
+            <label for="mix-volume">Объём пасты, мл: </label>
+            <input id="mix-volume"
+                    name="mix-volume"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Например, 25">, мл<br>
+
+            <div class="mix-columns">
+              <!-- Сухое перемешивание -->
+              <fieldset>
+                <legend>Сухое перемешивание (порошок)</legend>
+
+                <label>
+                  <input type="radio"
+                          name="mix-dry-technique"
+                          value="dry-mortar">
+                  Вручную: ступка и пестик
+                </label><br>
+
+                <label>
+                  <input type="radio"
+                          name="mix-dry-technique"
+                          value="dry-spatula">
+                  Вручную: шпателем
+                </label><br>
+
+                <label>
+                  <input type="radio"
+                          name="mix-dry-technique"
+                          value="dry-turbula"
+                          data-params-target="mix-dry-turbula-params">
+                  Пьяная бочка / Turbula
+                </label>
+              </fieldset>
+
+              <!-- Мокрое перемешивание -->
+              <fieldset>
+                <legend>Мокрое перемешивание (паста)</legend>
+
+                <label>
+                  <input type="radio"
+                          name="mix-wet-technique"
+                          value="wet-manual">
+                  Вручную (стеклянная палочка / шпатель)
+                </label><br>
+
+                <label>
+                  <input type="radio"
+                          name="mix-wet-technique"
+                          value="wet-magnet"
+                          data-params-target="mix-wet-magnet-params">
+                  Магнитная мешалка
+                </label><br>
+
+                <label>
+                  <input type="radio"
+                          name="mix-wet-technique"
+                          value="wet-vacuum"
+                          data-params-target="mix-wet-vacuum-params">
+                  Вакуумный миксер GN-VM-7
+                </label>
+              </fieldset>
+            </div>
+
+            <!-- Параметры для сухого машинного перемешивания (Turbula) -->
+            <div class="mix-params" id="mix-dry-turbula-params" hidden>
+              <h4>Параметры сухого перемешивания (Turbula)</h4>
+              
+              <label for="dry-turbula-start-date">Время запуска: </label>
+              <input id="dry-turbula-start-date" type="date" name="dry-turbula-start-date" placeholder="Дата начала сушки">
+
+              <label for="dry-turbula-start-time">Время: </label>
+              <input id="dry-turbula-start-time" type="time" name="dry-turbula-start-time" placeholder="Время начала сушки">
+
+              <button type="button" class="date-time-now-button" id="dry-turbula-start-now-button">Сейчас</button><br>
+
+              <label>Длительность, мин:
+                <input type="number" name="dry-turbula-time" min="0" step="1">
+              </label>
+              <label>Скорость / режим (RPM, комментарий):
+                <input type="text"
+                        name="dry-turbula-rpm-note"
+                        placeholder="Например: ~60 об/мин, режим 2">
+              </label>
+            </div>
+
+            <!-- Параметры для магнитной мешалки -->
+            <div class="mix-params" id="mix-wet-magnet-params" hidden>
+              <h4>Параметры мокрого перемешивания (магнитная мешалка)</h4>
+
+              <label for="wet-magnet-start-date">Время запуска: </label>
+              <input id="wet-magnet-start-date" type="date" name="wet-magnet-start-date" placeholder="Дата начала сушки">
+
+              <label for="wet-magnet-start-time">Время: </label>
+              <input id="wet-magnet-start-time" type="time" name="wet-magnet-start-time" placeholder="Время начала сушки">
+
+              <button type="button" class="date-time-now-button" id="wet-magnet-start-now-button">Сейчас</button><br>
+
+              <label>Длительность, мин:
+                <input type="number" name="wet-magnet-time" min="0" step="1">
+              </label>
+              <label>Скорость / режим (RPM, комментарий):
+                <input type="text"
+                        name="wet-magnet-rpm-note"
+                        placeholder="Например: 500–800 об/мин">
+              </label>
+            </div>
+
+            <!-- Параметры для вакуумного миксера -->
+            <div class="mix-params" id="mix-wet-vacuum-params" hidden>
+              <h4>Параметры мокрого перемешивания (вакуумный миксер)</h4>
+              
+              <label for="wet-vac-start-date">Время запуска: </label>
+              <input id="wet-vac-start-date" type="date" name="wet-vac-start-date" placeholder="Дата начала сушки">
+
+              <label for="wet-vac-start-time">Время: </label>
+              <input id="wet-vac-start-time" type="time" name="wet-vac-start-time" placeholder="Время начала сушки">
+
+              <button type="button" class="date-time-now-button" id="wet-vac-start-now-button">Сейчас</button><br>
+
+              <label>Длительность, мин:
+                <input type="number" name="wet-vac-time" min="0" step="1">
+              </label>
+              <label>Скорость / режим (RPM, комментарий):
+                <input type="text"
+                        name="wet-vac-rpm-note"
+                        placeholder="Например: 300 об/мин, 2 цикла по 10 мин">
+              </label>
+            </div>
+          </fieldset>
+        </fieldset>
+      </details>
+
+      <details id="2-tape">
+        <summary>II. Приготовление катодной ленты</summary>
+        <fieldset id="2-tape-f">
+          <legend class="visually-hidden">II. Приготовление катодной ленты</legend>
+
+          <fieldset id="2-application">
+            <legend>Нанесение</legend>
+
+            <!-- кто/когда -->
+            <label for="2-application-operator">Оператор: </label>
+            <input id="2-application-operator" type="text" name="2-application-operator" placeholder="Инициалы/ФИО">
+
+            <label for="2-application-date">Дата: </label>
+            <input id="2-application-date" type="date" name="2-application-date" placeholder="Дата начала сушки">
+
+            <label for="2-application-time">Время: </label>
+            <input id="2-application-time" type="time" name="2-application-time" placeholder="Время начала сушки">
+
+            <button type="button" class="date-time-now-button" id="2-application-now-button">Сейчас</button><br>
+
+            <label for="2-cathode-tape-notes">Заметки/комментарии: </label>
+            <textarea id="2-cathode-tape-notes" name="2-cathode-tape-notes" placeholder="Комментарии о подготовке катодной ленты"></textarea>
+
+            <h4>Фольга</h4>
+            <label><input type="radio" id="foil-Al" name="foil" value="Al" checked/>Al</label>
+            <label><input type="radio" id="foil-other" name="foil" value="other"/>Другое </label>
+            <!-- text box tied to the "other" radio above -->
+            <input 
+              type="text" 
+              name="foil-other" 
+              class="other-input" 
+              id="foil-other-box"
+              placeholder="Specify other"
+              hidden
+            ><br><br>
+
+            <label for="foil-batch">Марка: <input type="text" id="foil-batch" name="foil-batch" value=""/></label><br>
+            
+            <h4>Способ нанесения</h4>
+            <label><input type="radio" id="application-method-dr-blade" name="application-method" value="dr-blade" data-params-target="dr-blade-params"/>Ракель / Dr. Blade / Film Coater GN-VC-15H</label>
+            <label><input type="radio" id="application-method-coating-machine" name="application-method" value="coating-machine" data-params-target="coating-machine-params" />Mашина для намазки (большая)</label>
+            <label><input type="radio" id="application-method-other" name="application-method" value="other" data-params-target="other-params" />Другое </label>
+            <!-- text box tied to the "other" radio above -->
+            <input 
+              type="text" 
+              name="application-method-other" 
+              class="other-input" 
+              id="application-method-other-box"
+              placeholder="Specify other"
+              hidden
+            ><br>
+
+            <h4>Параметры нанесения катодной пасты: </h4>
+            <label for="blade-gap">Зазор ракеля: </label>
+            <input id="blade-gap" type="number" step="1" min="0" name="blade-gap" placeholder="150">, мкм
+
+            <!-- Параметры для Dr. Blade -->
+            <div class="application-method-params" id="dr-blade-params" hidden>                
+              <label for="dr-blade-temp">Температура сушки: </label>
+              <input id="dr-blade-temp" type="number" step="1" min="-273" name="dr-blade-temp" placeholder="Дата начала сушки"><br>
+
+              <label for="dr-blade-dry-time">Длительность сушки: </label>
+              <input id="dr-blade-dry-time" type="number" min="0" step="1" name="dr-blade-dry-time" placeholder="Длительность сушки"><br>
+            </div>
+
+            <!-- Параметры для Coating Machine -->
+            <div class="application-method-params" id="coating-machine-params" hidden>
+              <label for="coating-machine-temp">Температура сушки: </label>
+              <input id="coating-machine-temp" type="number" step="1" min="-273" name="coating-machine-temp" placeholder="Дата начала сушки"><br>
+
+              <label for="coating-machine-dry-time">Длительность сушки (?????): </label>
+              <input id="coating-machine-dry-time" type="number" min="0" step="1" name="coating-machine-dry-time" placeholder="Длительность сушки"><br>
+
+              <label for="coating-machine-speed">Скорость прокатки (??): </label>
+              <input id="coating-machine-speed" type="number" min="0" step="1" name="coating-machine-speed"><br>
+
+              <label for="coating-machine-param1">Параметр - шаблон1: </label>
+              <input id="coating-machine-param1" type="number" min="0" step="1" name="coating-machine-param1"><br>
+
+              <label for="coating-machine-param2">Параметр - шаблон2: </label>
+              <input id="coating-machine-param2" type="text" name="coating-machine-param2"><br>
+            </div>
+
+            <!-- Параметры для Other -->
+            <div class="application-method-params" id="other-params" hidden>
+              <label for="other-method-comments">Параметр - comment: </label>
+              <textarea id="other-method-comments" name="other-method-comments"></textarea><br>
+
+              <label for="other-method-param1">Параметр - шаблон1: </label>
+              <input id="other-method-param1" type="number" min="0" step="1" name="other-method-param1"><br>
+
+              <label for="other-method-param2">Параметр - шаблон2: </label>
+              <input id="other-method-param2" type="text" name="other-method-param2"><br>
+            </div>
+          </fieldset>
+
+          <fieldset id="2a-drying">
+            <legend>Сушка ленты в шкафу (до каландрирования)</legend>
+
+            <!-- кто/когда -->
+            <label for="2a-drying-operator">Оператор: </label>
+            <input id="2a-drying-operator" type="text" name="2a-drying-operator" placeholder="Инициалы/ФИО">
+
+            <label for="2a-drying-date">Дата: </label>
+            <input id="2a-drying-date" type="date" name="2a-drying-date" placeholder="Дата начала сушки">
+
+            <label for="2a-drying-time">Время: </label>
+            <input id="2a-drying-time" type="time" name="2a-drying-time" placeholder="Время начала сушки">
+
+            <button type="button" class="date-time-now-button" id="2a-drying-now-button">Сейчас</button><br>
+
+            <label for="2a-drying-temperature">Температура: </label>
+            <input id="2a-drying-temperature" type="number" step="1" min="-273" name="2a-drying-temperature" placeholder="Температура сушки">, °C<br>
+          </fieldset>
+
+          <fieldset id="2-calendering">
+            <legend>Каландрирование</legend>
+
+            <!-- кто/когда -->
+            <label for="2-calendering-operator">Оператор: </label>
+            <input id="2-calendering-operator" type="text" name="2-calendering-operator" placeholder="Инициалы/ФИО">
+
+            <label for="2-calendering-date">Дата: </label>
+            <input id="2-calendering-date" type="date" name="2-calendering-date" placeholder="Дата начала сушки">
+
+            <label for="2-calendering-time">Время: </label>
+            <input id="2-calendering-time" type="time" name="2-calendering-time" placeholder="Время начала сушки">
+
+            <button type="button" class="date-time-now-button" id="2-calendering-now-button">Сейчас</button><br>
+
+            <!-- параметры процесса -->
+            <h4>Параметры каландрирования:</h4>
+            <label for="calender-temp">Температура валов, °C: </label>
+            <input id="calender-temp" type="number" step="1" min="-273" name="calender-temp"><br>
+
+            <label for="calender-pressure">Давление, кН/см или МПа: </label>
+            <input id="calender-pressure" type="number" step="0.01" min="0" name="calender-pressure"><br>
+
+            <label for="calender-speed">Скорость протяжки, м/мин: </label>
+            <input id="calender-speed" type="number" step="0.01" min="0" name="calender-speed"><br>
+
+            <label for="calender-other">Другие параметры (комментарии): </label>
+            <input id="calender-other" type="text" name="calender-other"><br>
+
+            <h4>Толщина ленты</h4>
+            <label for="initial-thickness">Начальная толщина: </label>
+            <input id="initial-thickness" type="number" step="1" min="0" name="initial-thickness" placeholder="100">, мкм<br>
+
+            <label for="final-thickness">Конечная толщина: </label>
+            <input id="final-thickness" type="number" step="1" min="0" name="final-thickness" placeholder="70">, мкм<br>
+
+            <label for="passes-number">Количество прокаток: </label>
+            <input id="passes-number" type="number" step="1" min="0" name="passes-number" placeholder="5"><br>
+            
+            <h4>Внешний вид после каландрирования</h4>
+            <input type="checkbox" id="etrode-shine" name="etrode-look" value="shine">
+            <label for="etrode-shine">Блеск</label><br>
+
+            <input type="checkbox" id="etrode-curl" name="etrode-look" value="curl">
+            <label for="etrode-curl">Закрутка</label><br>
+            
+            <input type="checkbox" id="etrode-dots" name="etrode-look" value="dots">
+            <label for="etrode-dots">Точечки</label><br>
+            
+            <input type="checkbox" id="etrode-look-other" name="etrode-look" value="other">
+            <label for="etrode-look-other">Другое</label>
+            
+            <!-- text box tied to the "other" checkbox above -->
+            <input 
+              type="text" 
+              name="etrode-look-other" 
+              class="other-input" 
+              id="etrode-look-other-box"
+              placeholder="Specify other"
+              hidden
+            ><br><br>
+          </fieldset>
+
+          <fieldset id="2b-drying">
+            <legend>Сушка готовой катодной ленты в шкафу (после каландрирования)</legend>
+
+            <!-- кто/когда -->
+            <label for="2b-drying-operator">Оператор: </label>
+            <input id="2b-drying-operator" type="text" name="2b-drying-operator" placeholder="Инициалы/ФИО">
+
+            <label for="2b-drying-date">Дата: </label>
+            <input id="2b-drying-date" type="date" name="2b-drying-date" placeholder="Дата начала сушки">
+
+            <label for="2b-drying-time">Время: </label>
+            <input id="2b-drying-time" type="time" name="2b-drying-time" placeholder="Время начала сушки">
+
+            <button type="button" class="date-time-now-button" id="2b-drying-now-button">Сейчас</button><br>
+
+            <label for="2b-drying-temperature">Температура: </label>
+            <input id="2b-drying-temperature" type="number" step="1" min="-273" name="2b-drying-temperature" placeholder="Температура сушки">, °C<br>
+          </fieldset>
+        </fieldset>
+      </details>
+
+    </form>
+
+    <div class="autosave-message" aria-live="polite"></div>
+  </body>
+</html>

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+    <title>Протокол приготовления катодов</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <script type="text/javascript" src="script.js" defer></script>
+  </head>
+
+  <body data-page="cathode">
+    <div class="container">
+      <header>
+        <h1>Протокол приготовления катодов</h1>
+        <!-- Navigation button without text -->
+        <a href="/index.html" ><svg viewBox="0 0 24 24" width="24" height="24">
+          <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"
+                fill="currentColor"/>
+        </svg></a>
+      </header>
+
+      <fieldset id="electrodes-role-block">
+        <legend>Тип электрода</legend>
+
+        <label for="electrode-role">Что вырезаем?</label>
+        <select id="electrode-role" required>
+          <option value="">— выбрать —</option>
+          <option value="cathode">Катоды</option>
+          <option value="anode">Аноды</option>
+        </select>
+      </fieldset>
+
+      <fieldset id="electrodes-tape-block" hidden>
+        <legend>Выбор ленты</legend>
+
+        <label for="electrodes-tape-id">Лента</label>
+        <select id="electrodes-tape-id" required>
+          <option value="">— выбрать ленту —</option>
+        </select>
+      </fieldset>
+
+      <fieldset id="electrodes-meta-block" hidden>
+        <legend>Метаданные партии</legend>
+
+        <label for="electrodes-project-id">Проект</label>
+        <select id="electrodes-project-id" required>
+          <option value="">— выбрать проект —</option>
+        </select>
+        <a href="/reference/projects.html" target="_blank" class="ref-link">
+          Управление проектами
+        </a><br>
+
+        <label for="electrodes-created-by">Оператор</label>
+        <select id="electrodes-created-by" required>
+          <option value="">— выбрать пользователя —</option>
+        </select>
+        <a href="/reference/users.html" target="_blank" class="ref-link">
+          Управление пользователями
+        </a>
+      </fieldset>
+
+      <div id="cutting-workflow" hidden>
+
+        <form name="cathode-prep-form" autocomplete="on">
+
+          <fieldset id="3-electrodes-f">
+            <legend>III. Приготовление катодов</legend>
+
+            <fieldset id="3-cutting-weighing">
+              <legend>Вырезание и взвешивание катодов</legend>
+
+              <label for="3-cathodes-notes">Заметки/комментарии: </label>
+              <textarea id="3-cathodes-notes" name="3-cathodes-notes" placeholder="Комментарии о вырезании катодов"></textarea>
+
+              <!-- геометрия -->
+              <h4>Геометрия катодов:</h4>
+
+              <legend>Форма катодов:
+                <label>
+                  <input type="radio"
+                        name="etrode-shape"
+                        value="circle"
+                        data-params-target="etrode-geom-circle">
+                  Круг (монета)
+                </label>
+                <label>
+                  <input type="radio"
+                        name="etrode-shape"
+                        value="rectangle"
+                        data-params-target="etrode-geom-rect">
+                  Прямоугольник (лента)
+                </label>
+              </legend>
+
+              <!-- Для круглых электродов -->
+              <div id="etrode-geom-circle" hidden>
+                <label for="etrode-diameter">Диаметр катода, мм: </label>
+                <input id="etrode-diameter" type="number" step="0.01" min="0" name="etrode-diameter"><br>
+              </div>
+
+              <!-- Для прямоугольных электродов -->
+              <div id="etrode-geom-rect" hidden>
+                <label for="etrode-length">Длина катода, мм: </label>
+                <input id="etrode-length" type="number" step="0.01" min="0" name="etrode-length"><br>
+
+                <label for="etrode-width">Ширина катода, мм: </label>
+                <input id="etrode-width" type="number" step="0.01" min="0" name="etrode-width"><br>
+              </div>
+
+              <!-- Площадь катода (рассчитывается автоматически) -->
+              <label>Площадь катода, мм²: <span id="etrode-area" class="computed-field"></span></label>
+
+              <label for="foil-mass">Масса фольги одного катода, г: </label>
+              <input id="foil-mass" type="number" step="0.0001" min="0" name="foil-mass"><br><br>
+
+              <!-- масса -->
+              <h4>Массы отдельных катодов</h4>
+              <div class="etrodes-header">
+                <span>№ катода</span>
+                <span>№ чашечки</span>
+                <span>Масса, г</span>
+                <span>Статус</span>
+              </div>
+
+              <div id="etrode-rows">
+                <div class="etrode-row" data-index="0">
+                  <input name="etrode[0][etrode-No]" placeholder="№ электрода" type="number" step="1">
+                  <input name="etrode[0][cup-No]" placeholder="№ чашечки" type="number" step="1">
+                  <input name="etrode[0][m]"    placeholder="Масса, г" type="number" step="0.0001">
+
+                  <select name="etrode[0][status]" class="etrode-status">
+                    <option value="free" selected>свободен</option>
+                    <option value="used">использован</option>
+                    <option value="scrap">брак</option>
+                  </select>
+                </div>
+              </div>
+              
+              <button type="button" id="add-etrode-row">Добавить катод</button>
+
+            </fieldset>
+
+            <fieldset id="3-drying">
+              <legend>Хранение готовых катодов в шкафу</legend>
+
+              <!-- кто/когда -->
+              <label for="3-drying-operator">Оператор: </label>
+              <input id="3-drying-operator" type="text" name="3-drying-operator" placeholder="Инициалы/ФИО">
+
+              <label for="3-drying-date">Дата: </label>
+              <input id="3-drying-date" type="date" name="3-drying-date" placeholder="Дата начала сушки">
+
+              <label for="3-drying-time">Время: </label>
+              <input id="3-drying-time" type="time" name="3-drying-time" placeholder="Время начала сушки">
+
+              <button type="button" class="date-time-now-button" id="3-drying-now-button">Сейчас</button><br>
+
+              <label for="3-drying-temperature">Температура: </label>
+              <input id="3-drying-temperature" type="number" step="1" min="-273" name="3-drying-temperature" placeholder="Температура сушки">, °C<br>
+            </fieldset>
+          </fieldset>
+          
+          <button type="button" id="saveBtn">Сохранить</button>
+
+        </form>
+      </div>
+
+      <div class="autosave-message" aria-live="polite"></div>
+    </div>
+  
+    <script>
+      const roleSelect = document.getElementById('electrode-role');
+      const tapeBlock = document.getElementById('electrodes-tape-block');
+
+      roleSelect.addEventListener('change', async () => {
+        if (roleSelect.value) {
+          tapeBlock.hidden = false;
+          await loadTapesByRole(roleSelect.value);
+        } else {
+          tapeBlock.hidden = true;
+        }
+      });
+
+      const tapeSelect = document.getElementById('electrodes-tape-id');
+      const metaBlock = document.getElementById('electrodes-meta-block');
+      const workflow = document.getElementById('cutting-workflow');
+
+      tapeSelect.addEventListener('change', async () => {
+        if (!tapeSelect.value) {
+          metaBlock.hidden = true;
+          workflow.hidden = true;
+          return;
+        }
+
+        metaBlock.hidden = false;
+
+        const res = await fetch(`/api/tapes`);
+        const tapes = await res.json();
+
+        const selectedTape = tapes.find(
+          t => t.tape_id === Number(tapeSelect.value)
+        );
+
+        if (selectedTape) {
+          const projectSelect = document.getElementById('electrodes-project-id');
+          projectSelect.value = selectedTape.project_id;
+        }
+      });
+
+      document.getElementById('electrodes-created-by')
+        .addEventListener('change', () => {
+          if (
+            tapeSelect.value &&
+            document.getElementById('electrodes-project-id').value &&
+            document.getElementById('electrodes-created-by').value
+          ) {
+            workflow.hidden = false;
+          }
+        });
+
+      document.getElementById('electrodes-project-id')
+        .addEventListener('change', () => {
+          if (
+            tapeSelect.value &&
+            document.getElementById('electrodes-project-id').value &&
+            document.getElementById('electrodes-created-by').value
+          ) {
+            workflow.hidden = false;
+          }
+        });
+
+
+        // -------- Reference dropdowns --------
+        async function loadTapesByRole(role) {
+          const select = document.getElementById('electrodes-tape-id');
+
+          const res = await fetch(`/api/tapes?role=${role}`);
+          const data = await res.json();
+
+          select.innerHTML = '<option value="">— выбрать ленту —</option>';
+
+          data.forEach(t => {
+            const option = document.createElement('option');
+            option.value = t.tape_id;
+            option.textContent = `${t.recipe_name} (#${t.tape_id})`;
+            select.appendChild(option);
+          });
+        }
+
+        async function loadProjects() {
+          const select = document.getElementById('electrodes-project-id');
+          const res = await fetch('/api/projects?project_id=0');
+          const data = await res.json();
+
+          select.innerHTML = '<option value="">— выбрать проект —</option>';
+
+          data.forEach(p => {
+            const option = document.createElement('option');
+            option.value = p.project_id;
+            option.textContent = p.name;
+            select.appendChild(option);
+          });
+        }
+
+        async function loadUsers() {
+          const select = document.getElementById('electrodes-created-by');
+          const res = await fetch('/api/users');
+          const data = await res.json();
+
+          select.innerHTML = '<option value="">— выбрать пользователя —</option>';
+
+          data.forEach(u => {
+            const option = document.createElement('option');
+            option.value = u.user_id;
+            option.textContent = u.full_name || u.name;
+            select.appendChild(option);
+          });
+        }
+
+        // -------- Events --------
+        
+        loadProjects();
+        loadUsers();
+
+
+    </script>
+
+  </body>
+</html>

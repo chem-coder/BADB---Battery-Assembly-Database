@@ -1,0 +1,557 @@
+<!--
+BAL = battery-assembly-log
+Created by Dalia K. Maraoulaite 
+Analytical Division for 
+Lab KhIT - RENERA
+Jan 28, 2026
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+       name="viewport"
+       content="width=device-width, initial-scale=1.0" />
+    <title>Протокол сборки аккумуляторов</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <script type="text/javascript" src="script.js" defer></script>
+  </head>
+
+  <body data-page="BAL">
+    <div class="container">
+      <header>
+        <h1>Протокол сборки аккумуляторa</h1>
+        <!-- Navigation button without text -->
+        <a href="index.html" ><svg viewBox="0 0 24 24" width="24" height="24">
+          <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"
+                fill="currentColor"/>
+        </svg></a>
+      </header>
+
+      <form name="battery-assembly-log-form" autocomplete="on">
+        <fieldset id="BAL-intro">
+          <legend>Общая информация об аккумуляторе</legend>
+          <label for="project-name">Название проекта: </label>
+          <input id="project-name" type="text" name="project-name" placeholder="Какому проекту принадлежит?" required value="" /><br>
+          <!--N O T E: form fields must have a "name" attribute to be included in the FormData object. Otherwise, they're skipped: the "id" property doesn't count. */-->
+
+          <label for="BA-operator">Оператор сборщик: </label>
+          <input id="BA-operator" type="text" name="BA-operator" placeholder="Инициалы/ФИО" required><br>
+
+          <label for="form-factor">Форм-фактор: </label>
+          <select id="form-factor" name="form-factor">
+            <option value="" disabled selected>Выберите подходящий вариант</option>
+            <option value="half2032">Монетка 2032 против лития</option>
+            <option value="full2032">Монетка 2032 - полный элемент</option>
+            <option value="pouch">Пакетный (Pouch)</option>
+            <option value="18650">Цилиндрический (18650)</option>
+            <option value="prism">Призматический (Prismatic)</option>
+            <option value="other" class="other">Другой</option>
+          </select>
+          <input type="text" name="form-factor-other" class="other-input" id="form-factor-other" placeholder="Введите форм-фактор" hidden>
+          <br>
+
+          <!-- Type of half-cell vs Li -->
+          <div id="half-cell-type-wrapper" hidden>
+            <label for="half-cell-type">Тип половинчатой ячейки 2032 против Li: </label>
+            <select id="half-cell-type" name="half-cell-type">
+              <option value="" disabled selected>Выберите тип</option>
+              <option value="cathode-vs-Li">Катод vs Li</option>
+              <option value="anode-vs-Li">Анод vs Li</option>
+            </select>
+          </div><br>
+
+          <!-- Кнопка и input для загрузки файла катода -->
+          <div id="load-cathode-file-div">
+            <button type="button" id="load-cathode-file-btn">Загрузить файл катода…</button>
+            <input
+              type="file"
+              id="load-cathode-file-input"
+              accept=".json"
+              style="display:none"
+            ><br>
+          </div>
+
+          <!-- Кнопка и input для загрузки файла анода -->
+          <div id="load-anode-file-div">
+            <button type="button" id="load-anode-file-btn">Загрузить файл анода…</button>
+            <input
+              type="file"
+              id="load-anode-file-input"
+              accept=".json"
+              style="display:none"
+            ><br>
+          </div>
+          
+          <!-- Кнопка и input для загрузки файла электролита -->
+          <div id="load-electrolyte-file-div">
+            <button type="button" id="load-electrolyte-file-btn">Загрузить файл электролита…</button>
+            <input
+              type="file"
+              id="load-electrolyte-file-input"
+              accept=".json"
+              style="display:none"
+            ><br>
+          </div>  
+
+          <!-- Кнопка и input для загрузки файла сепаратора -->
+          <div id="load-separator-file-div">
+            <button type="button" id="load-separator-file-btn">Загрузить файл сепаратора…</button>
+            <input
+              type="file"
+              id="load-separator-file-input"
+              accept=".json"
+              style="display:none"
+            ><br><br>
+          </div>
+          
+          <button id="loadBtn" type="button">Загрузить файл аккумулятора...</button><br>
+          <button id="saveBtn" type="button">Сохранить файл аккумулятора</button><br>
+          <button id="loadDraftBtn" type="button">Загрузить автосохранённый черновик</button><br>
+          <button id="clearBtn" type="button">Очистить форму</button><br>
+
+          <label for="BA-notes">Заметки/Комментарии: </label>
+          <textarea id="BA-notes" name="BA-notes" placeholder="Общие комментарии об аккумуляторе или процессе сборки"></textarea>
+        </fieldset>
+
+        <details id="cathode-details">
+          <summary>Катод</summary>
+          <fieldset id="BAL-cathode">
+            <legend class="visually-hidden">Катод</legend>
+            <label for="cathode-name">Катод - название/код: </label>
+            <input id="cathode-name" type="text" name="cathode-name" placeholder="NMC811 или NMC811-KGX и т.п." required><br>
+
+            <label for="cathode-batch">Катод - партия: </label>
+            <input id="cathode-batch" type="text" name="cathode-batch" placeholder="37B или 2025-03-17-B и т.п." required><br>
+
+            <label for="cathode-notes">Катод - заметки/комментарии: </label>
+            <textarea id="cathode-notes" name="cathode-notes" placeholder="Общие комментарии о катодной ленте и процессе ее приготовления"></textarea>
+          </fieldset>
+        </details>
+
+        <details id="anode-details">
+          <summary>Анод</summary>
+          <fieldset id="BAL-anode">
+            <legend class="visually-hidden">Анод</legend>
+            <div class="variant variant--half2032 variant--full2032 active">
+              <label for="anode-name">Анод - название/код: </label>
+              <input id="anode-name" type="text" name="anode-name" placeholder="HC synth" required><br>
+
+              <label for="anode-batch">Анод - партия: </label>
+              <input id="anode-batch" type="text" name="anode-batch" placeholder="1234" required><br>
+
+              <label for="anode-notes">Анод - заметки/комментарии: </label>
+              <textarea id="anode-notes" name="anode-notes" placeholder="Общие комментарии об анодной ленте и процессе ее приготовления"></textarea>
+            </div>
+          </fieldset>
+        </details>
+
+        <details id="stack-details" open>
+          <summary>Стек</summary>
+          <fieldset id="BAL-stack">
+            <legend class="visually-hidden">Стек</legend>
+
+            <p class="stack-hint stack-hint--formfactor">
+              Сначала выберите форм-фактор. Пока он не выбран, все чекбоксы стека отключены.
+            </p>
+
+            <p class="stack-hint stack-hint--half-type">
+              Уточните тип полуячейки 2032 против лития.
+            </p>
+
+            <p class="stack-hint stack-hint--load-all">
+              Загрузите файлы электродов.
+            </p>
+
+            <p class="stack-hint stack-hint--load-cathode">
+              Загрузите файл катода.
+            </p>
+
+            <p class="stack-hint stack-hint--load-anode">
+              Загрузите файл анода.
+            </p>
+
+            <div class="stack-main" hidden>
+              <p>Выберите электроды для данного стека:</p>
+
+              <div class="stack-cathode-block">
+                <table class="stack-table">
+                  <thead>
+                    <tr>
+                      <th>№ катода</th>
+                      <th>№ стаканчика</th>
+                      <th>m, мг</th>
+                      <th>Выбрать</th>
+                    </tr>
+                  </thead>
+                  <tbody id="stack-cathode-table-body">
+                    <!-- строки добавляет JS -->
+                  </tbody>
+                </table>
+
+                <!-- Download updated cathode JSON -->
+                <button type="button" id="download-updated-cathode-btn">
+                  Скачать обновлённый файл катода…
+                </button><br><br>
+              </div>
+
+              <div class="stack-anode-block">
+                <table class="stack-table">
+                  <thead>
+                    <tr>
+                      <th>№ анода</th>
+                      <th>№ стаканчика</th>
+                      <th>m, мг</th>
+                      <th>Выбрать</th>
+                    </tr>
+                  </thead>
+                  <tbody id="stack-anode-table-body">
+                    <!-- строки добавляет JS -->
+                  </tbody>
+                </table>
+
+                <!-- Download updated anode JSON -->
+                <button type="button" id="download-updated-anode-btn">
+                  Скачать обновлённый файл анода…
+                </button><br><br>
+              </div>
+
+              <h4>Электроды выбранные для стека:</h4>
+
+              <div class="stack-cathode-block">
+                <table class="stack-table">
+                  <thead>
+                    <tr>
+                      <th>№ катода</th>
+                      <th>№ стаканчика</th>
+                      <th>m, мг</th>
+                    </tr>
+                  </thead>
+                  <tbody id="stack-cathode-summary-body">
+                    <!-- строки добавляет JS -->
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="stack-anode-block">
+                <table class="stack-table">
+                  <thead>
+                    <tr>
+                      <th>№ анода</th>
+                      <th>№ стаканчика</th>
+                      <th>m, мг</th>
+                    </tr>
+                  </thead>
+                  <tbody id="stack-anode-summary-body">
+                    <!-- строки добавляет JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </fieldset>
+        </details>
+
+        <details id="electrolyte-details">
+          <summary>Электролит</summary>
+          <fieldset id="BAL-electrolyte">
+            <legend class="visually-hidden">Электролит</legend>
+
+            <div class="variant variant--half2032 variant--full2032 active">
+              <label for="electrolyte-name">Электролит – название/код: </label>
+              <input
+                id="electrolyte-name"
+                type="text"
+                name="electrolyte-name"
+                placeholder="Например, LP30, EC/DMC 1:1 + LiPF6 1М"
+              ><br>
+
+              <label for="electrolyte-batch">Электролит – партия/источник: </label>
+              <input
+                id="electrolyte-batch"
+                type="text"
+                name="electrolyte-batch"
+                placeholder="Номер партии, поставщик или дата приготовления"
+              ><br>
+
+              <label for="electrolyte-notes">Заметки / комментарии: </label><br>
+              <textarea
+                id="electrolyte-notes"
+                name="electrolyte-notes"
+                rows="4"
+                cols="50"
+                placeholder="Любая дополнительная информация об электролите, рецептура, особенности приготовления и т.п."
+              ></textarea>
+            </div>
+          </fieldset>
+        </details>
+
+        <details id="separator-details">
+          <summary>Сепаратор</summary>
+          <fieldset id="BAL-separator">
+            <legend class="visually-hidden">Сепаратор</legend>
+
+            <div class="variant variant--half2032 variant--full2032 active">
+              <label for="separator-name">Сепаратор - название/код: </label>
+              <input
+                id="separator-name"
+                type="text"
+                name="separator-name"
+                placeholder="ТЛА"
+              ><br>
+
+              <label for="separator-batch">Сепаратор - партия: </label>
+              <input
+                id="separator-batch"
+                type="text"
+                name="separator-batch"
+                placeholder="ABC123"
+              ><br>
+
+              <label for="separator-notes">Сепаратор - заметки/комментарии: </label><br>
+              <textarea
+                id="separator-notes"
+                name="separator-notes"
+                placeholder="Общие комментарии о сепараторе"
+              ></textarea><br>
+
+              <fieldset id="separator-properties">
+                <legend>Паспортные характеристики сепаратора</legend>
+
+                <label for="separator-material">Материал: </label>
+                <input
+                  id="separator-material"
+                  type="text"
+                  name="separator-material"
+                  placeholder="PE, PP, керамический, композитный и т.п."
+                ><br>
+
+                <label for="separator-layers">Число слоёв (структура): </label>
+                <select id="separator-layers" name="separator-layers">
+                  <option value="">Выберите вариант</option>
+                  <option value="mono">Монослойный</option>
+                  <option value="bi">Двухслойный</option>
+                  <option value="tri">Трёхслойный</option>
+                  <option value="other">Другое</option>
+                </select><br>
+
+                <label for="separator-air-permeability">Воздушная проницаемость: </label>
+                <input
+                  id="separator-air-permeability"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  name="separator-air-permeability"
+                  placeholder="например, 200"
+                >
+                <span> s/100 мл или др. единицы (указать в комментариях)</span><br>
+
+                <label for="separator-thickness">Толщина: </label>
+                <input
+                  id="separator-thickness"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  name="separator-thickness"
+                  placeholder="например, 20"
+                >
+                <span> мкм</span><br>
+
+                <label for="separator-porosity">Пористость: </label>
+                <input
+                  id="separator-porosity"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  name="separator-porosity"
+                  placeholder="например, 40"
+                >
+                <span> %</span><br>
+
+                <label for="separator-spec-notes">Комментарии к паспорту: </label><br>
+                <textarea
+                  id="separator-spec-notes"
+                  name="separator-spec-notes"
+                  rows="3"
+                  cols="50"
+                  placeholder="Единицы измерения, методики (Гурли и т.п.), особые замечания"
+                ></textarea>
+              </fieldset>
+            </div>
+
+            <p class="tiny-note">Детальный протокол — в файле сепаратора.</p>
+          </fieldset>
+        </details>
+
+        <details id="structure-details">
+          <summary>Конструкция</summary>
+          <fieldset id="BAL-structure">
+            <legend class="visually-hidden">Конструкция</legend>
+              <div class="variant variant--half2032 variant--full2032 active">
+                
+                <fieldset>
+                  <legend>Схема расположения сепаратора и электролита, где [E — одна капля электролита], а [S — один слой сепаратора]: </legend>
+
+                  <!-- Electrolyte-Separator Arrangement Radio buttons -->
+                  <label>
+                    <input type="radio" id="separator-layout-SEE" name="separator-layout" value="SEE" />
+                    (-) S-E-E (+) (анод - сепаратор - капля - капля - катод)
+                  </label><br>
+
+                  <label>
+                    <input type="radio" id="separator-layout-ESE" name="separator-layout" value="ESE" />
+                    (-) E-S-E (+) (анод - капля - сепаратор - капля - катод)
+                  </label><br>
+
+                  <label>
+                    <input type="radio" id="separator-layout-EES" name="separator-layout" value="EES" />
+                    (-) E-E-S (+) (анод - капля - капля - сепаратор - катод)
+                  </label><br>
+
+                  <label>
+                    <input type="radio" id="separator-layout-ES" name="separator-layout" value="ES" />
+                    (-) E-S (+) (анод - капля - сепаратор - катод)
+                  </label><br>
+
+                  <label>
+                    <input type="radio" id="separator-layout-SE" name="separator-layout" value="SE" />
+                    (-) S-E (+) (анод - сепаратор - капля - катод)
+                  </label><br>
+
+                  <label>
+                    <input type="radio" id="separator-layout-other" name="separator-layout" value="other" />
+                    Другое
+                  </label>
+                  <br>
+                  <input type="text" name="separator-layout-other" class="other-input" id="separator-layout-other-box" placeholder="Введите форм-фактор" hidden>
+                </fieldset>
+
+                <!-- Electrolyte section -->
+                <fieldset>
+                  <legend>Электролит</legend>
+                  
+                  <!-- 1. Number of drops -->
+                  <label for="drop-quantity">Количество капель электролита: </label>
+                  <input type="number" id="drop-quantity" name="drop-quantity" step="0.1" min="0"><br>
+
+                  <!-- 2. Volume per drop -->
+                  <label for="drop-volume">Объём одной капли электролита: </label>
+                  <input type="number" id="drop-volume" name="drop-volume" step="0.1" min="0"><span>, мкл</span><br>
+
+                  <!-- 3. Total electrolyte volume = volume per drop * number of drops -->
+                <label>Общий объём электролита (мкл): <span id="electrolyte-volume" class="computed-field"></span></label>
+                </fieldset>
+
+                <!-- Spacer section -->
+                <fieldset>
+                  <legend>Спэйсер/ы</legend>
+
+                  <!-- 4. Spacer thickness -->
+                  <label for="spacer-thickness">Толщина спэйсера: </label>
+                  <input type="number" id="spacer-thickness" name="spacer-thickness" step="0.01" min="0"><span>, мм</span><br>
+
+                  <!-- 5. Number of spacers -->
+                  <label for="spacer-count">Количество спэйсеров: </label>
+                  <input type="number" id="spacer-count" name="spacer-count" min="0">
+                </fieldset>
+
+                <!-- Li foil notes: only meaningful for half-cells vs Li -->
+                <div id="li-foil-notes-wrapper" hidden>
+                  <label for="li-foil-notes">Li-фольга — поставщик / партия / толщина / обработка: </label><br>
+                  <textarea
+                    id="li-foil-notes"
+                    name="li-foil-notes"
+                    rows="2"
+                    cols="50"
+                  >поставщик / партия / толщина / скоблили щеткой</textarea>
+                </div>
+
+            </div>
+          </fieldset>
+        </details>
+
+        <details id="qc-details">
+          <summary>Выходной контроль</summary>
+          <fieldset id="BAL-QC">
+            <legend class="visually-hidden">Выходной контроль</legend>
+            <div class="variant variant--half2032 variant--full2032 active">
+                <label for="ocv">НРЦ: </label>
+                <input id="ocv" type="number" step="0.001" name="ocv" /><span>, В</span><br>
+
+                <label for="esr">ESR: </label>
+                <input id="esr" type="number" step="0.001" name="esr" /><span>, мОм</span><br> 
+            </div>
+          </fieldset>
+        </details>
+
+        <details id="electrochem-details">
+          <summary>Электрохимия</summary>
+          <fieldset id="BAL-EC">
+            <legend class="visually-hidden">Электрохимия</legend>
+            <p>Сюда можно будет привязать файлы/загрузить данные из файлов с результатами испытаний.</p>
+          </fieldset>
+        </details>
+
+        <details id="test-details">
+          <summary>TEST</summary>
+          <fieldset id="test-fieldset">
+            <legend class="visually-hidden">TEST</legend>
+
+            <!-- SELECT with other -->
+            <select id="test-select" name="test-select">
+              <option value="" disabled selected>Select a value</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="other">other</option>
+            </select>
+            <input type="text" name="test-select-other" class="other-input" id="test-select-other" placeholder="Specify other" hidden><br><br>
+
+            <!-- CHECKBOXES with 'other' text box -->
+            <input type="checkbox" id="test-checkbox-A" name="test-checkbox" value="A">
+            <label for="test-checkbox-A">A</label><br>
+
+            <input type="checkbox" id="test-checkbox-B" name="test-checkbox" value="B">
+            <label for="test-checkbox-B">B</label><br>
+            
+            <input type="checkbox" id="test-checkbox-C" name="test-checkbox" value="C">
+            <label for="test-checkbox-C">C</label><br>
+            
+            <input type="checkbox" id="test-checkbox-other" name="test-checkbox" value="other">
+            <label for="test-checkbox-other">other</label>
+            
+            <!-- text box tied to the "other" checkbox above -->
+            <input 
+              type="text" 
+              name="test-checkbox-other" 
+              class="other-input" 
+              id="test-checkbox-other-box"
+              placeholder="Specify other"
+              hidden
+            ><br><br>
+
+            <!-- RADIO with 'other' text box -->
+            <label><input type="radio" id="test-radio-r1" name="test-radio" value="r1"/>r1</label><br>
+            <label><input type="radio" id="test-radio-r2" name="test-radio" value="r2"/>r2</label><br>
+            <label><input type="radio" id="test-radio-r3" name="test-radio" value="r3"/>r3</label><br>
+            <label><input type="radio" id="test-radio-other" name="test-radio" value="other"/>other</label>
+            <!-- text box tied to the "other" radio above -->
+            <input 
+              type="text" 
+              name="test-radio-other" 
+              class="other-input" 
+              id="test-radio-other-box"
+              placeholder="Specify other"
+              hidden
+            ><br><br>
+
+          </fieldset>
+        </details>
+
+      </form>
+      <p>Test output: <span id="test-output"></span></p>
+      <div class="autosave-message" aria-live="polite"></div>
+    </div>
+  </body>
+</html>
