@@ -32,10 +32,25 @@
         background-color: #f6f7f8;
       }
 
-      .instance-row[data-status="depleted"],
-      .instance-row[data-status="scrap"] {
-        opacity: 0.6;
+      .materials-toolbar {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        margin: 0.75rem 0;
       }
+
+      .materials-toolbar button[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .level-instance {
+  margin-left: 1.5rem;
+}
+
+.level-component {
+  margin-left: 3rem;
+}
 
     </style>
   </head>
@@ -76,6 +91,15 @@
     </form>
     
     <div class="status-feedback" aria-live="polite"></div>
+    <div class="materials-toolbar">
+      <button type="button" id="toggleInstancesBtn">
+        Развернуть/свернуть экземпляры
+      </button>
+
+      <button type="button" id="toggleCompositionsBtn" disabled>
+        Развернуть/свернуть составы
+      </button>
+    </div>
     <ul id="materialsList" class="users-list"></ul>
 
     <script>
@@ -87,7 +111,58 @@
       const createMaterialBtn = document.getElementById('createMaterialBtn');
 
       const materialsList = document.getElementById('materialsList');
+
+      const roleMap = {
+            cathode_active: 'катодный активный материал',
+            anode_active: 'анодный активный материал',
+            binder: 'связующее',
+            conductive_additive: 'проводящая добавка',
+            solvent: 'растворитель',
+            other: 'другое'
+          };
+
+      const toggleInstancesBtn = document.getElementById('toggleInstancesBtn');
+      const toggleCompositionsBtn = document.getElementById('toggleCompositionsBtn');
+
+      let allMaterialsExpanded = false;
+      let compositionsExpanded = false;
       let editingMaterialId = null;
+      let currentEdit = null; 
+
+      function exitEditMode(row) {
+        const summary = row.querySelector('summary');
+        summary.innerHTML = row.dataset.originalContent;
+        currentEdit = null;
+      }
+
+      function captureOpenState() {
+        return {
+          materials: Array.from(
+            materialsList.querySelectorAll('details[data-type="material"][open]')
+          ).map(d => d.dataset.id),
+
+          instances: Array.from(
+            materialsList.querySelectorAll('details[data-type="instance"][open]')
+          ).map(d => d.dataset.id)
+        };
+      }
+
+      function restoreOpenState(state) {
+        state.materials.forEach(id => {
+          const d = materialsList.querySelector(
+            `details[data-type="material"][data-id="${id}"]`
+          );
+          if (d) d.open = true;
+        });
+
+        state.instances.forEach(id => {
+          const d = materialsList.querySelector(
+            `details[data-type="instance"][data-id="${id}"]`
+          );
+          if (d) d.open = true;
+        });
+      }
+
 
       
       // -------- API --------
@@ -217,258 +292,679 @@
         }
       });
 
-      function buildInstanceRow(inst, materialId) {
-        const row = document.createElement('li');
-        row.className = 'instance-row';
-
-        const supplier = document.createElement('span');
-        supplier.textContent = inst.supplier || '';
-
-        const brand = document.createElement('span');
-        brand.textContent = inst.brand || '';
-
-        const batch = document.createElement('span');
-        batch.textContent = inst.batch || '';
-
-        row.appendChild(supplier);
-        row.appendChild(brand);
-        row.appendChild(batch);
-
-        if (inst.file_path) {
-          const link = document.createElement('a');
-          link.href = inst.file_path;
-          link.textContent = '📎 файл';
-          link.target = '_blank';
-          link.rel = 'noopener';
-          row.appendChild(link);
-        }
-
-        const actions = document.createElement('span');
-        actions.className = 'actions';
-
-        const editBtn = document.createElement('button');
-        editBtn.textContent = '✏️';
-        editBtn.onclick = async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-
-          try {
-            const updated = await updateInstance(inst.material_instance_id, {
-              supplier: supplierVal,
-              brand: brandVal,
-              batch: batchVal,
-              notes: inst.notes,
-              file_path: inst.file_path
-            });
-
-            row.replaceWith(buildInstanceRow(updated, materialId));
-          } catch (err) {
-            alert(err.message);
-          }
-        };
-
-        const duplicateBtn = document.createElement('button');
-        duplicateBtn.textContent = '📄';
-        duplicateBtn.onclick = async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-
-          try {
-            const copy = await createInstance(materialId, {
-              supplier: inst.supplier,
-              brand: inst.brand,
-              batch: inst.batch,
-              notes: inst.notes,
-              file_path: inst.file_path
-            });
-
-            row.parentElement.prepend(buildInstanceRow(copy, materialId));
-          } catch (err) {
-            alert(err.message);
-          }
-        };
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '🗑';
-        deleteBtn.onclick = async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-
-          if (!confirm('Удалить экземпляр?')) return;
-
-          try {
-            await deleteInstance(inst.material_instance_id);
-            row.remove();
-          } catch (err) {
-            alert(err.message);
-          }
-        };
-
-        actions.appendChild(editBtn);
-        actions.appendChild(duplicateBtn);
-        actions.appendChild(deleteBtn);
-
-        row.appendChild(actions);
-
-        return row;
-      }
-
       function renderMaterials(materials) {
         materialsList.innerHTML = '';
 
-        materials.forEach(m => {
-          const li = document.createElement('li');
-          const details = document.createElement('details');
-          const summary = document.createElement('summary');
+        materials
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .forEach(material => {
 
-          const info = document.createElement('span');
-          info.className = 'material-summary-info';
+            const details = document.createElement('details');
+            details.classList.add('tree-row', 'level-material');
+            details.dataset.type = 'material';
+            details.dataset.id = material.material_id;
+            details.dataset.role = material.role;
 
-          const nameSpan = document.createElement('span');
-          nameSpan.textContent = m.name;
-          nameSpan.style="display:inline-block; width:12vw;"
+            // collapsed by default
+            details.open = false;
 
-          const roleSpan = document.createElement('span');
-          const roleMap = {
-            cathode_active: 'катодный активный материал',
-            anode_active: 'анодный активный материал',
-            binder: 'связующее',
-            conductive_additive: 'проводящая добавка',
-            solvent: 'растворитель',
-            other: 'другое'
-          };
-          roleSpan.textContent = roleMap[m.role] || m.role;
-          roleSpan.style="display:inline-block; width:25vw;"
+            const summary = document.createElement('summary');
 
-          info.appendChild(nameSpan);
-          info.appendChild(roleSpan);
+            const title = document.createElement('span');
+            title.classList.add('row-title');
+            title.textContent = material.name;
+            title.style = "display:inline-block; width:10vw;";
 
-          const actions = document.createElement('span');
-          actions.className = 'actions';
+            const role = document.createElement('span');
+            role.classList.add('row-meta');
+            role.textContent = `${roleMap[material.role] || material.role}`;
+            role.style = "display:inline-block; width:25vw;";
+            role.dataset.role = material.role;
 
-          const editBtn = document.createElement('button');
-          editBtn.textContent = '✏️';
-          editBtn.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.textContent = '✏️';
+            editBtn.dataset.action = 'edit';
 
-            newNameInput.value = m.name;
-            newRoleSelect.value = m.role;
-            editingMaterialId = m.material_id;
-            createMaterialBtn.textContent = 'Сохранить';
-            newNameInput.focus();
-          };
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.textContent = '🗑';
+            deleteBtn.dataset.action = 'delete';
 
+            summary.appendChild(title);
+            summary.appendChild(role);
+            summary.appendChild(editBtn);
+            summary.appendChild(deleteBtn);
 
-          const deleteBtn = document.createElement('button');
-          deleteBtn.textContent = '🗑';
-          deleteBtn.onclick = async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            details.appendChild(summary);
 
-            if (!confirm(`Удалить материал "${m.name}"?`)) return;
+            const childrenContainer = document.createElement('div');
+            childrenContainer.classList.add('children-container');
+            details.appendChild(childrenContainer);
 
-            try {
-              await deleteMaterial(m.material_id);
-              loadMaterials();
-            } catch (err) {
-              alert(err.message);
-            }
-          };
-
-          actions.appendChild(editBtn);
-          actions.appendChild(deleteBtn);
-
-          summary.appendChild(info);
-          summary.appendChild(actions);
-
-          const body = document.createElement('div');
-          const instanceList = document.createElement('ul');
-
-          const addBtn = document.createElement('button');
-          addBtn.textContent = '+ Добавить экземпляр';
-          addBtn.type = 'button';
-
-          const form = document.createElement('form');
-          form.hidden = true;
-
-          form.innerHTML = `
-            <input type="text" name="supplier" placeholder="Поставщик">
-            <input type="text" name="brand" placeholder="Бренд">
-            <input type="text" name="batch" placeholder="Номер партии">
-            <input type="url" name="file_path" placeholder="Ссылка на файл">
-            <button type="button" class="save">Сохранить</button>
-            <button type="button" class="cancel">Отмена</button>
-          `;
-
-          addBtn.onclick = () => {
-            form.hidden = false;
-            addBtn.hidden = true;
-          };
-
-          form.addEventListener('click', async (e) => {
-            if (e.target.classList.contains('cancel')) {
-              form.reset();
-              form.hidden = true;
-              addBtn.hidden = false;
-              return;
-            }
-
-            if (!e.target.classList.contains('save')) return;
-
-            const data = Object.fromEntries(new FormData(form).entries());
-
-            if (!data.supplier && !data.brand && !data.batch) {
-              alert('Заполните хотя бы одно поле');
-              return;
-            }
-
-            try {
-              const inst = await createInstance(m.material_id, data);
-              instanceList.prepend(buildInstanceRow(inst, m.material_id));
-              form.reset();
-              form.hidden = true;
-              addBtn.hidden = false;
-            } catch (err) {
-              alert(err.message);
-            }
-          });
-
-          details.addEventListener('toggle', async () => {
+            details.addEventListener('toggle', async () => {
             if (!details.open) return;
 
-            const instances = await fetchInstances(m.material_id);
-            instanceList.innerHTML = '';
+            // prevent reloading if already loaded
+            if (childrenContainer.dataset.loaded === 'true') return;
 
-            if (!instances.length) {
-              const empty = document.createElement('li');
-              empty.textContent = 'Экземпляров пока нет';
-              instanceList.appendChild(empty);
-            } else {
-              instances.forEach(inst => {
-                instanceList.appendChild(buildInstanceRow(inst, m.material_id));
-              });
+            try {
+              const instances = await fetchInstances(material.material_id);
+
+              instances
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(inst => {
+                  const instDetails = document.createElement('details');
+                  instDetails.classList.add('tree-row', 'level-instance');
+                  instDetails.dataset.type = 'instance';
+                  instDetails.dataset.id = inst.material_instance_id;
+                  instDetails.dataset.notes = inst.notes || '';
+
+                  instDetails.open = false;
+
+                  const instSummary = document.createElement('summary');
+
+                  const instTitle = document.createElement('span');
+                  instTitle.classList.add('row-title');
+                  instTitle.textContent = inst.name;
+                  instTitle.style = "display:inline-block; width:35.6vw;";
+
+                  const editBtn = document.createElement('button');
+                  editBtn.type = 'button';
+                  editBtn.textContent = '✏️';
+                  editBtn.dataset.action = 'edit';
+
+                  const deleteBtn = document.createElement('button');
+                  deleteBtn.type = 'button';
+                  deleteBtn.textContent = '🗑';
+                  deleteBtn.dataset.action = 'delete';
+
+                  instSummary.appendChild(instTitle);
+                  instSummary.appendChild(editBtn);
+                  instSummary.appendChild(deleteBtn);
+
+                  instDetails.appendChild(instSummary);
+
+                  const instChildren = document.createElement('div');
+                  instChildren.classList.add('children-container');
+                  instDetails.appendChild(instChildren);
+
+                  instDetails.addEventListener('toggle', async () => {
+                  if (!instDetails.open) return;
+
+                  if (instChildren.dataset.loaded === 'true') return;
+
+                  try {
+                    const res = await fetch(`/api/material-instances/${inst.material_instance_id}/components`);
+                    if (!res.ok) throw new Error('Ошибка загрузки состава');
+
+                    const components = await res.json();
+
+                    components.forEach(comp => {
+                      const compDetails = document.createElement('details');
+                      compDetails.classList.add('tree-row', 'level-component');
+                      compDetails.dataset.type = 'component';
+                      compDetails.dataset.id = comp.material_instance_component_id;
+                      compDetails.dataset.materialName = comp.material_name || '';
+                      compDetails.dataset.massFraction = comp.mass_fraction;
+                      compDetails.dataset.notes = comp.notes || '';
+
+                      compDetails.open = false;
+
+                      const compSummary = document.createElement('summary');
+                      
+                      const nameSpan = document.createElement('span');
+                      nameSpan.classList.add('row-title');
+                      nameSpan.textContent = comp.name;
+
+                      const percentSpan = document.createElement('span');
+                      percentSpan.classList.add('row-meta');
+                      percentSpan.textContent = (comp.mass_fraction * 100).toFixed(2) + ' %';
+                      percentSpan.style.marginLeft = '1rem';
+
+                      const editBtn = document.createElement('button');
+                      editBtn.type = 'button';
+                      editBtn.textContent = '✏️';
+                      editBtn.dataset.action = 'edit';
+
+                      const deleteBtn = document.createElement('button');
+                      deleteBtn.type = 'button';
+                      deleteBtn.textContent = '🗑';
+                      deleteBtn.dataset.action = 'delete';
+
+                      compSummary.appendChild(nameSpan);
+                      compSummary.appendChild(percentSpan);
+                      compSummary.appendChild(editBtn);
+                      compSummary.appendChild(deleteBtn);
+
+                      compDetails.appendChild(compSummary);
+
+                      instChildren.appendChild(compDetails);
+                    });
+
+                    /* + Состав button */
+                    const addComponentBtn = document.createElement('button');
+                    addComponentBtn.type = 'button';
+                    addComponentBtn.textContent = '+ Состав';
+                    addComponentBtn.style.marginLeft = '3rem';
+
+                    addComponentBtn.onclick = () => {
+
+                      if (instChildren.querySelector('.component-create-row')) return;
+
+                      const createRow = document.createElement('div');
+                      createRow.classList.add('component-create-row');
+                      createRow.style.marginLeft = '3rem';
+
+                      // Populate the material select options with material instances
+                      const materialSelect = document.createElement('select');
+                      materialSelect.style.marginRight = '0.5rem';
+
+                      // load all material instances for dropdown
+                      fetch('/api/material-instances')
+                      .then(res => {
+                        if (!res.ok) throw new Error('Ошибка загрузки экземпляров');
+                        return res.json();
+                      })
+                      .then(allInstances => {
+
+                        const placeholderOption = document.createElement('option');
+                        placeholderOption.value = '';
+                        placeholderOption.textContent = '— экземпляр —';
+                        materialSelect.appendChild(placeholderOption);
+
+                        allInstances.forEach(i => {
+                          const opt = document.createElement('option');
+                          opt.value = i.material_instance_id;
+                          opt.textContent = i.name;
+                          materialSelect.appendChild(opt);
+                        });
+
+                      })
+                      .catch(err => console.error(err));
+
+                      const percentInput = document.createElement('input');
+                      percentInput.type = 'number';
+                      percentInput.step = '0.01';
+                      percentInput.min = '0';
+                      percentInput.max = '100';
+                      percentInput.placeholder = '%';
+                      percentInput.style.width = '80px';
+
+                      const notesInput = document.createElement('textarea');
+                      notesInput.rows = 2;
+                      notesInput.placeholder = 'Комментарий (необязательно)';
+                      notesInput.style.display = 'block';
+                      notesInput.style.marginTop = '0.4rem';
+
+                      const saveBtn = document.createElement('button');
+                      saveBtn.type = 'button';
+                      saveBtn.textContent = 'Сохранить';
+
+                      const cancelBtn = document.createElement('button');
+                      cancelBtn.type = 'button';
+                      cancelBtn.textContent = 'Отмена';
+
+                      createRow.appendChild(materialSelect);
+                      createRow.appendChild(percentInput);
+                      createRow.appendChild(notesInput);
+
+                      createRow.appendChild(saveBtn);
+                      createRow.appendChild(cancelBtn);
+
+                      instChildren.appendChild(createRow);
+
+                      percentInput.focus();
+
+                      saveBtn.onclick = async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        const materialId = materialSelect.value;
+                        const percent = Number(percentInput.value) / 100;
+
+                        if (!materialId) return;
+                        if (!Number.isFinite(percent) || percent <= 0 || percent > 1) return;
+
+                        try {
+                          const res = await fetch(
+                            `/api/material-instances/${inst.material_instance_id}/components`,
+                            {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                              component_material_instance_id: Number(materialId),
+                              mass_fraction: percent
+                              })
+                            }
+                          );
+
+                          if (!res.ok) throw new Error('Ошибка создания компонента');
+
+                          const newComp = await res.json();
+
+                          const compDetails = document.createElement('details');
+                          compDetails.classList.add('tree-row', 'level-component');
+                          compDetails.dataset.type = 'component';
+                          compDetails.dataset.id = newComp.material_instance_component_id;
+                          compDetails.dataset.materialName = newComp.material_name;
+                          compDetails.dataset.massFraction = newComp.mass_fraction;
+                          compDetails.dataset.notes = newComp.notes || '';
+
+                          const compSummary = document.createElement('summary');
+
+                          const nameSpan = document.createElement('span');
+                          nameSpan.classList.add('row-title');
+                          nameSpan.textContent = newComp.name;
+
+                          const percentSpan = document.createElement('span');
+                          percentSpan.classList.add('row-meta');
+                          percentSpan.textContent = (newComp.mass_fraction * 100).toFixed(2) + ' %';
+                          percentSpan.style.marginLeft = '1rem';
+
+                          const editBtn = document.createElement('button');
+                          editBtn.type = 'button';
+                          editBtn.textContent = '✏️';
+                          editBtn.dataset.action = 'edit';
+
+                          const deleteBtn = document.createElement('button');
+                          deleteBtn.type = 'button';
+                          deleteBtn.textContent = '🗑';
+                          deleteBtn.dataset.action = 'delete';
+
+                          compSummary.appendChild(nameSpan);
+                          compSummary.appendChild(percentSpan);
+                          compSummary.appendChild(editBtn);
+                          compSummary.appendChild(deleteBtn);
+                          compDetails.appendChild(compSummary);
+
+                          instChildren.insertBefore(compDetails, createRow);
+                          createRow.remove();
+
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      };
+
+                      cancelBtn.onclick = () => {
+                        createRow.remove();
+                      };
+
+                      percentInput.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          saveBtn.click();
+                        }
+                        if (e.key === 'Escape') {
+                          cancelBtn.click();
+                        }
+                      });
+                    };
+
+                    instChildren.appendChild(addComponentBtn);
+
+                    instChildren.dataset.loaded = 'true';
+
+                  } catch (err) {
+                    console.error(err);
+                  }
+                });
+
+                  childrenContainer.appendChild(instDetails);
+                });
+
+              /* + Экземпляр button */
+              const addInstanceBtn = document.createElement('button');
+              addInstanceBtn.type = 'button';
+              addInstanceBtn.textContent = '+ Экземпляр';
+              addInstanceBtn.style.marginLeft = '1.5rem';
+
+              addInstanceBtn.onclick = () => {
+
+                if (childrenContainer.querySelector('.instance-create-row')) return;
+
+                const createRow = document.createElement('div');
+                createRow.classList.add('instance-create-row');
+                createRow.style.marginLeft = '1.5rem';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.placeholder = 'Название экземпляра';
+                input.style.marginRight = '0.5rem';
+
+                const notesInput = document.createElement('textarea');
+                notesInput.rows = 2;
+                notesInput.placeholder = 'Комментарий (необязательно)';
+                notesInput.style.display = 'block';
+                notesInput.style.marginTop = '0.4rem';
+
+                const saveBtn = document.createElement('button');
+                saveBtn.type = 'button';
+                saveBtn.textContent = 'Сохранить';
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.type = 'button';
+                cancelBtn.textContent = 'Отмена';
+
+                createRow.appendChild(input);
+                createRow.appendChild(notesInput);
+                createRow.appendChild(saveBtn);
+                createRow.appendChild(cancelBtn);
+
+                childrenContainer.appendChild(createRow);
+
+                input.focus();
+
+                saveBtn.onclick = async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+
+                  const name = input.value.trim();
+                  if (!name) return;
+
+                  try {
+                    await createInstance(material.material_id, {
+                      name,
+                      notes: notesInput.value.trim() || null
+                    });
+
+                    childrenContainer.dataset.loaded = '';
+                    childrenContainer.innerHTML = '';
+                    details.dispatchEvent(new Event('toggle'));
+
+                  } catch (err) {
+                    console.error(err);
+                  }
+                };
+
+                cancelBtn.onclick = () => {
+                  createRow.remove();
+                };
+
+                input.addEventListener('keydown', (e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveBtn.click();
+                  }
+                  if (e.key === 'Escape') {
+                    cancelBtn.click();
+                  }
+                });
+
+              };
+
+              childrenContainer.appendChild(addInstanceBtn);
+
+              childrenContainer.dataset.loaded = 'true';
+
+            } catch (err) {
+              console.error(err);
             }
           });
 
-          body.appendChild(instanceList);
-          body.appendChild(addBtn);
-          body.appendChild(form);
+            materialsList.appendChild(details);
+          });
+      }
 
-          details.appendChild(summary);
-          details.appendChild(body);
-          li.appendChild(details);
-          materialsList.appendChild(li);
+
+      // -------- Inline Edit Controller (Tree Rows) --------
+
+      function enterEditMode(row, type, id) {
+
+        // prevent multiple edit states
+        if (currentEdit) {
+          exitEditMode(currentEdit);
+        }
+
+        currentEdit = row;
+
+        const summary = row.querySelector('summary');
+        const originalContent = summary.innerHTML;
+
+        row.dataset.originalContent = originalContent;
+
+        const titleSpan = summary.querySelector('.row-title');
+        const currentText = titleSpan ? titleSpan.textContent : '';
+        const input = document.createElement('input');
+        if (type === 'component') {
+          input.type = 'number';
+          input.step = '0.01';
+          input.min = '0';
+          input.max = '100';
+          input.value = (Number(row.dataset.massFraction) * 100).toFixed(2);
+        } else {
+          input.type = 'text';
+          input.value = currentText;
+        }
+        
+        summary.innerHTML = '';
+        let notesInput = null;
+
+        if (type === 'instance' || type === 'component') {
+          notesInput = document.createElement('textarea');
+          notesInput.rows = 2;
+          notesInput.placeholder = 'Комментарий (необязательно)';
+          notesInput.value = row.dataset.notes || '';
+          notesInput.style.display = 'block';
+          notesInput.style.marginTop = '0.4rem';
+        }
+
+        // To prevent input from shrinking when buttons are added
+        input.style.flex = '1';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.textContent = 'Сохранить';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = 'Отмена';
+
+        summary.appendChild(input);
+
+        if (notesInput) {
+          summary.appendChild(notesInput);
+        }
+
+        summary.appendChild(saveBtn);
+        summary.appendChild(cancelBtn);
+
+        input.focus();
+
+        saveBtn.onclick = async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const newValue = input.value.trim();
+          if (!newValue) return;
+
+          try {
+
+            if (type === 'material') {
+              await updateMaterial(Number(id), {
+                name: newValue,
+                role: row.dataset.role
+              });
+
+              exitEditMode(row);
+              row.querySelector('.row-title').textContent = newValue;
+
+              return;
+            }
+
+            if (type === 'instance') {
+
+              const notesEl = summary.querySelector('textarea');
+              const notesValue = notesEl ? notesEl.value.trim() || '' : '';
+
+              await updateInstance(Number(id), {
+                name: newValue,
+                notes: notesValue || null
+              });
+
+              exitEditMode(row);
+              row.querySelector('.row-title').textContent = newValue;
+              row.dataset.notes = notesValue;
+              return;
+            }
+
+            if (type === 'component') {
+
+              const percent = Number(newValue) / 100;
+              if (!Number.isFinite(percent) || percent <= 0 || percent > 1) return;
+
+              const notesEl = summary.querySelector('textarea');
+
+              const res = await fetch(`/api/material-instance-components/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  mass_fraction: percent,
+                  notes: notesEl ? notesEl.value.trim() || null : null
+                })
+              });
+
+              if (!res.ok) throw new Error('Ошибка обновления компонента');
+
+              exitEditMode(row);
+              
+              const nameSpan = row.querySelector('.row-title');
+              const percentSpan = row.querySelector('.row-meta');
+
+              nameSpan.textContent = row.dataset.materialName;
+              percentSpan.textContent = (percent * 100).toFixed(2) + ' %';
+              row.dataset.massFraction = percent;
+
+              return;
+            }
+
+          } catch (err) {
+            console.error(err);
+          }
+
+        };
+
+        cancelBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          exitEditMode(row);
+        };
+
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            saveBtn.click();
+          }
+          if (e.key === 'Escape') {
+            cancelBtn.click();
+          }
         });
       }
+
+      // -------- Event listeners --------
+      toggleInstancesBtn.addEventListener('click', () => {
+        const materialDetails = materialsList.querySelectorAll(
+          'details[data-type="material"]'
+        );
+
+        allMaterialsExpanded = !allMaterialsExpanded;
+
+        materialDetails.forEach(d => {
+          d.open = allMaterialsExpanded;
+        });
+
+        if (!allMaterialsExpanded) {
+          // collapse compositions too
+          compositionsExpanded = false;
+          toggleCompositionsBtn.disabled = true;
+
+          const instanceDetails = materialsList.querySelectorAll(
+            'details[data-type="instance"]'
+          );
+
+          instanceDetails.forEach(d => {
+            d.open = false;
+          });
+        } else {
+          toggleCompositionsBtn.disabled = false;
+        }
+      });
+
+      toggleCompositionsBtn.addEventListener('click', () => {
+
+        if (toggleCompositionsBtn.disabled) return;
+
+        const instanceDetails = materialsList.querySelectorAll(
+          'details[data-type="instance"]'
+        );
+
+        compositionsExpanded = !compositionsExpanded;
+
+        instanceDetails.forEach(d => {
+          d.open = compositionsExpanded;
+        });
+
+      });
+
+      materialsList.addEventListener('click', async (e) => {
+
+        const action = e.target.dataset.action;
+        if (!action) return;
+
+        const row = e.target.closest('details');
+        if (!row) return;
+
+        const type = row.dataset.type;
+        const id = row.dataset.id;
+
+        if (action === 'edit') {
+          enterEditMode(row, type, id);
+        }
+
+        if (action === 'delete') {
+          
+          if (!confirm('Удалить?')) return;
+
+          try {
+
+            if (type === 'material') {
+              await deleteMaterial(Number(id));
+              row.remove();
+              return;
+            }
+
+            if (type === 'instance') {
+              await deleteInstance(Number(id));
+              row.remove();
+              return;
+            }
+
+            if (type === 'component') {
+              await fetch(`/api/material-instance-components/${id}`, {
+                method: 'DELETE'
+              });
+              row.remove();
+              return;
+            }
+
+          } catch (err) {
+            console.error(err);
+          }
+        }
+
+      });
+
+
 
       // -------- Init --------
 
       async function loadMaterials() {
+        const state = captureOpenState();
         const materials = await fetchMaterials();
         renderMaterials(materials);
+        restoreOpenState(state);
       }
-
 
       loadMaterials();
 

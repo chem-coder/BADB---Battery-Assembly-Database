@@ -740,27 +740,28 @@ app.post('/api/materials/:id/instances', async (req, res) => {
     return res.status(400).json({ error: 'Некорректный material_id' });
   }
 
-  const { supplier, brand, batch, notes, file_path } = req.body;
+  const { name, notes } = req.body;
 
   try {
     const result = await pool.query(
       `
       INSERT INTO material_instances (
-        material_id, supplier, brand, batch, notes, file_path
+        material_id, name, notes
       )
-      VALUES ($1,$2,$3,$4,$5,$6)
+      VALUES ($1,$2,$3)
       RETURNING
-        material_instance_id, material_id, supplier, brand, batch, notes, file_path, created_at
+        material_instance_id,
+        material_id,
+        name,
+        notes,
+        created_at
       `,
       [
         materialId,
-        supplier || null,
-        brand || null,
-        batch || null,
-        notes || null,
-        file_path || null
+        name,
+        notes || null
       ]
-    );
+      );
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -781,13 +782,39 @@ app.get('/api/materials/:id/instances', async (req, res) => {
     const result = await pool.query(
       `
       SELECT
-        material_instance_id, material_id, supplier, brand, batch, notes, file_path, created_at
+        material_instance_id,
+        material_id,
+        name,
+        notes,
+        created_at
       FROM material_instances
       WHERE material_id = $1
       ORDER BY created_at DESC, material_instance_id DESC
       `,
       [materialId]
     );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// GET all instances with material names (for dropdowns, etc.)
+app.get('/api/material-instances', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        mi.material_instance_id,
+        mi.material_id,
+        mi.name,
+        m.name AS material_name
+      FROM material_instances mi
+      JOIN materials m
+        ON m.material_id = mi.material_id
+      ORDER BY m.name, mi.name
+    `);
 
     res.json(result.rows);
   } catch (err) {
@@ -804,28 +831,26 @@ app.put('/api/material-instances/:id', async (req, res) => {
     return res.status(400).json({ error: 'Некорректный material_instance_id' });
   }
 
-  const { supplier, brand, batch, notes, file_path } = req.body;
+  const { name, notes } = req.body;
 
   try {
     const result = await pool.query(
       `
       UPDATE material_instances
       SET
-        supplier = $1,
-        brand = $2,
-        batch = $3,
-        notes = $4,
-        file_path = $5
-      WHERE material_instance_id = $6
+        name = $1,
+        notes = $2
+      WHERE material_instance_id = $3
       RETURNING
-        material_instance_id, material_id, supplier, brand, batch, notes, file_path, created_at
+        material_instance_id,
+        material_id,
+        name,
+        notes,
+        created_at
       `,
       [
-        supplier || null,
-        brand || null,
-        batch || null,
+        name,
         notes || null,
-        file_path || null,
         instanceId
       ]
     );
@@ -865,6 +890,140 @@ app.delete('/api/material-instances/:id', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
+
+
+// -------- MATERIAL INSTANCE COMPONENTS --------
+
+// --- GET components for a material instance ---
+app.get('/api/material-instances/:id/components', async (req, res) => {
+  const id = Number(req.params.id);
+
+  const result = await pool.query(
+    `
+    SELECT
+      mic.material_instance_component_id,
+      mic.parent_material_instance_id,
+      mic.component_material_instance_id,
+      mic.mass_fraction,
+      mi.material_id,
+      m.name AS material_name
+    FROM material_instance_components mic
+    JOIN material_instances mi
+      ON mic.component_material_instance_id = mi.material_instance_id
+    JOIN materials m
+      ON mi.material_id = m.material_id
+    WHERE mic.parent_material_instance_id = $1
+    ORDER BY m.name;
+    `,
+    [id]
+  );
+
+  res.json(result.rows);
+});
+
+// --- ADD component to instance ---
+app.post('/api/material-instances/:id/components', async (req, res) => {
+  const parentId = Number(req.params.id);
+  const { component_material_instance_id, mass_fraction } = req.body;
+
+  const result = await pool.query(
+    `
+    INSERT INTO material_instance_components
+    (parent_material_instance_id, component_material_instance_id, mass_fraction)
+    VALUES ($1, $2, $3)
+    RETURNING
+      material_instance_component_id,
+      parent_material_instance_id,
+      component_material_instance_id,
+      mass_fraction;
+    `,
+    [parentId, component_material_instance_id, mass_fraction]
+  );
+
+  const compId = result.rows[0].material_instance_component_id;
+
+  const full = await pool.query(
+    `
+    SELECT
+      mic.material_instance_component_id,
+      mic.parent_material_instance_id,
+      mic.component_material_instance_id,
+      mic.mass_fraction,
+      mi.name,
+      m.name AS material_name
+    FROM material_instance_components mic
+    JOIN material_instances mi
+      ON mic.component_material_instance_id = mi.material_instance_id
+    JOIN materials m
+      ON mi.material_id = m.material_id
+    WHERE mic.material_instance_component_id = $1
+    `,
+    [compId]
+  );
+
+  res.json(full.rows[0]);
+  
+});
+
+// --- UPDATE component ---
+app.put('/api/material-instance-components/:id', async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Некорректный material_instance_component_id' });
+  }
+
+  const { mass_fraction, notes } = req.body;
+
+  const mf =
+    mass_fraction === '' || mass_fraction === null || mass_fraction === undefined
+      ? null
+      : Number(mass_fraction);
+
+  if (mf === null || !Number.isFinite(mf) || mf < 0 || mf > 1) {
+    return res.status(400).json({ error: 'Некорректный mass_fraction (ожидается число 0..1)' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE material_instance_components
+      SET
+        mass_fraction = $1,
+        notes = $2
+      WHERE material_instance_component_id = $3
+      RETURNING *
+      `,
+      [mf, notes || null, id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Компонент не найден' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// --- DELETE component ---
+app.delete('/api/material-instance-components/:id', async (req, res) => {
+  const id = Number(req.params.id);
+
+  await pool.query(
+    `
+    DELETE FROM material_instance_components
+    WHERE material_instance_component_id = $1;
+    `,
+    [id]
+  );
+
+  res.json({ success: true });
+});
+
+
 
 
 // -------- RECIPES --------
