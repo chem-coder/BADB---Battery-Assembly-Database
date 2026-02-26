@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -7,54 +7,54 @@
       content="width=device-width, initial-scale=1.0" />
     <title>Протокол приготовления электродных лент</title>
     <link rel="stylesheet" type="text/css" href="reference/reference-styles.css">
+
+    <style>
+      .recipe-line-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1.5fr 1fr 1fr 1fr;
+        align-items: start;
+        gap: 0.5rem;
+      }
+
+      .recipe-line-header {
+        font-weight: 600;
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 0.25rem;
+        margin-bottom: 0.25rem;
+      }
+
+      .numeric {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .recipe-line-header,
+      .extended-header {
+        font-weight: 600;
+      }
+
+      .recipe-line-row,
+      .extended-row {
+        font-size: 0.95rem;
+      }
+
+      .extended-row {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr 1.2fr 1fr 1fr 1fr;
+        gap: 0.5rem;
+        align-items: start;
+      }
+
+      .section-divider {
+        margin: 2rem 0 1rem 0;
+        border-top: 2px solid #ddd;
+      }
+
+      .recipe-line-row:nth-child(even):not(.recipe-line-header) {
+        background: #fafafa;
+      }
+    </style>
   </head>
-
-  <style>
-    .recipe-line-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1.5fr 1fr 1fr 1fr;
-      align-items: start;
-      gap: 0.5rem;
-    }
-
-    .recipe-line-header {
-      font-weight: 600;
-      border-bottom: 1px solid #ccc;
-      padding-bottom: 0.25rem;
-      margin-bottom: 0.25rem;
-    }
-
-    .numeric {
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .recipe-line-header,
-    .extended-header {
-      font-weight: 600;
-    }
-
-    .recipe-line-row,
-    .extended-row {
-      font-size: 0.95rem;
-    }
-
-    .extended-row {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr 1.2fr 1fr 1fr 1fr;
-      gap: 0.5rem;
-      align-items: start;
-    }
-
-    .section-divider {
-      margin: 2rem 0 1rem 0;
-      border-top: 2px solid #ddd;
-    }
-
-    .recipe-line-row:nth-child(even):not(.recipe-line-header) {
-      background: #fafafa;
-    }
-  </style>
 
   <body data-page="tapes">
 
@@ -78,8 +78,13 @@
 
     <form name="tape-form" hidden autocomplete="on">
 
+      <div class="form-actions" style="display:flex; gap:.5rem; align-items:center; margin:.5rem 0 1rem 0;">
+        <button type="button" id="saveBtn">Создать ленту</button>
+        <button type="button" id="clearBtn">Отмена</button>
+      </div>
+  
       <!-- FormData ignores fields without `name` -->
-      <details id="0-general-info">
+      <details id="0-general-info" open>
         <summary>Общая информация о ленте</summary>
       
         <fieldset id="tapes-general-info">
@@ -118,7 +123,7 @@
         </fieldset>
       </details>
       
-      <details id="0-tape-recipe-materials">
+      <details id="0-tape-recipe-materials" closed>
         <summary>Рецепт ленты</summary>
 
         <fieldset id="tape-recipe-and-materials">
@@ -133,14 +138,15 @@
           </a><br>
 
           <label for="calc-mode">Расчёт по</label>
-          <select id="calc-mode">
-            <option value="active_mass">массе активного материала</option>
-            <option value="total_mass">общей массе суспензии</option>
+          <select id="calc-mode" name="calc_mode">
+            <option value="from_active_mass">массе активного материала</option>
+            <option value="from_slurry_mass">общей массе суспензии</option>
           </select><br>
 
-          <label for="active-mass-g">Масса активного материала, г</label>
+          <label for="target-mass-g">Масса активного материала, г</label>
           <input
-            id="active-mass-g"
+            id="target-mass-g"
+            name="target_mass_g"
             type="number"
             step="0.0001"
             min="0"
@@ -165,7 +171,12 @@
 
           <!-- кто/когда -->
           <label for="0-drying-operator">Оператор: </label>
-          <input id="0-drying-operator" type="text" name="0-drying-operator" placeholder="Инициалы/ФИО">
+          <select id="0-drying-operator" name="0-drying-operator">
+            <option value="">— выбрать пользователя —</option>
+          </select>
+          <a href="reference/users.html" target="_blank" class="ref-link">
+            Управление пользователями
+          </a><br>
 
           <label for="0-drying-date">Дата: </label>
           <input id="0-drying-date" type="date" name="0-drying-date" placeholder="Дата начала сушки">
@@ -195,7 +206,12 @@
 
             <!-- кто/когда -->
             <label for="1-slurry-operator">Оператор: </label>
-            <input id="1-slurry-operator" type="text" name="1-slurry-operator" placeholder="Инициалы/ФИО">
+            <select id="1-slurry-operator" name="1-slurry-operator">
+              <option value="">— выбрать пользователя —</option>
+            </select>
+            <a href="reference/users.html" target="_blank" class="ref-link">
+              Управление пользователями
+            </a><br>
 
             <label for="1-slurry-date">Дата: </label>
             <input id="1-slurry-date" type="date" name="1-slurry-date" placeholder="Дата начала сушки">
@@ -263,7 +279,12 @@
 
             <!-- кто/когда -->
             <label for="1-mixing-operator">Оператор: </label>
-            <input id="1-mixing-operator" type="text" name="1-mixing-operator" placeholder="Инициалы/ФИО">
+            <select id="1-mixing-operator" name="1-mixing-operator">
+              <option value="">— выбрать пользователя —</option>
+            </select>
+            <a href="reference/users.html" target="_blank" class="ref-link">
+              Управление пользователями
+            </a><br>
 
             <label for="1-mixing-date">Дата: </label>
             <input id="1-mixing-date" type="date" name="1-mixing-date" placeholder="Дата начала сушки">
@@ -418,7 +439,12 @@
 
             <!-- кто/когда -->
             <label for="2-application-operator">Оператор: </label>
-            <input id="2-application-operator" type="text" name="2-application-operator" placeholder="Инициалы/ФИО">
+            <select id="2-application-operator" name="2-application-operator">
+              <option value="">— выбрать пользователя —</option>
+            </select>
+            <a href="reference/users.html" target="_blank" class="ref-link">
+              Управление пользователями
+            </a><br>
 
             <label for="2-application-date">Дата: </label>
             <input id="2-application-date" type="date" name="2-application-date" placeholder="Дата начала сушки">
@@ -509,7 +535,12 @@
 
             <!-- кто/когда -->
             <label for="2a-drying-operator">Оператор: </label>
-            <input id="2a-drying-operator" type="text" name="2a-drying-operator" placeholder="Инициалы/ФИО">
+            <select id="2a-drying-operator" name="2a-drying-operator">
+              <option value="">— выбрать пользователя —</option>
+            </select>
+            <a href="reference/users.html" target="_blank" class="ref-link">
+              Управление пользователями
+            </a><br>
 
             <label for="2a-drying-date">Дата: </label>
             <input id="2a-drying-date" type="date" name="2a-drying-date" placeholder="Дата начала сушки">
@@ -528,7 +559,12 @@
 
             <!-- кто/когда -->
             <label for="2-calendering-operator">Оператор: </label>
-            <input id="2-calendering-operator" type="text" name="2-calendering-operator" placeholder="Инициалы/ФИО">
+            <select id="2-calendering-operator" name="2-calendering-operator">
+              <option value="">— выбрать пользователя —</option>
+            </select>
+            <a href="reference/users.html" target="_blank" class="ref-link">
+              Управление пользователями
+            </a><br>
 
             <label for="2-calendering-date">Дата: </label>
             <input id="2-calendering-date" type="date" name="2-calendering-date" placeholder="Дата начала сушки">
@@ -591,7 +627,12 @@
 
             <!-- кто/когда -->
             <label for="2b-drying-operator">Оператор: </label>
-            <input id="2b-drying-operator" type="text" name="2b-drying-operator" placeholder="Инициалы/ФИО">
+            <select id="2b-drying-operator" name="2b-drying-operator">
+              <option value="">— выбрать пользователя —</option>
+            </select>
+            <a href="reference/users.html" target="_blank" class="ref-link">
+              Управление пользователями
+            </a><br>
 
             <label for="2b-drying-date">Дата: </label>
             <input id="2b-drying-date" type="date" name="2b-drying-date" placeholder="Дата начала сушки">
@@ -625,6 +666,7 @@
       let currentId = null;
 
       const createdBySelect = document.getElementById('tape-created-by');
+      const dryingOperatorSelect = document.getElementById('0-drying-operator');
       const projectSelect   = document.getElementById('project_id');
       const tapeTypeSelect  = document.getElementById('tape_type');
       const recipeSelect    = document.getElementById('tape-recipe-id'); // already added in HTML
@@ -647,9 +689,18 @@
 
       function resetForm() {
         form.reset();
+
         title.textContent = '';
+        title.hidden = false;
+
+        nameInput.value = '';
+        nameInput.hidden = true;
+
         mode = null;
         currentId = null;
+        currentTapeId = null;
+
+        if (saveBtn) saveBtn.textContent = 'Создать ленту';
         hideForm();
       }
 
@@ -794,6 +845,20 @@
         }
       }
       
+      async function fetchDryingStep(tapeId, operationCode) {
+        if (!tapeId) return null;
+
+        const qs = operationCode ? `?operation_code=${encodeURIComponent(operationCode)}` : '';
+        const res = await fetch(`/api/tapes/${tapeId}/steps/drying${qs}`);
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Ошибка загрузки сушки');
+        }
+
+        return res.json(); // object or null
+      }
+ 
       // -------- Rendering --------
       function recipeRoleLabel(recipeRole) {
         const map = {
@@ -1005,13 +1070,13 @@
 
         let target; // active dry mass (g)
 
-        if (mode !== 'active_mass' && mode !== 'total_mass') return;
+        if (mode !== 'from_active_mass' && mode !== 'from_slurry_mass') return;
 
-        if (mode === 'active_mass') {
+        if (mode === 'from_active_mass') {
           target = inputValue;
         }
 
-        if (mode === 'total_mass' && !Number.isFinite(inputValue)) return;
+        if (mode === 'from_slurry_mass' && !Number.isFinite(inputValue)) return;
 
         // Find active material line
         const activeLine = currentRecipeLines.find(l =>
@@ -1025,7 +1090,7 @@
         const activePercent = Number(activeLine.slurry_percent);
         if (!Number.isFinite(activePercent) || activePercent <= 0) return;
 
-        if (mode === 'total_mass') {
+        if (mode === 'from_slurry_mass') {
           const totalWetMass = inputValue;
 
           const totalDryPercent = currentRecipeLines
@@ -1260,12 +1325,13 @@
           const info = document.createElement('div');
           info.className = 'user-info';
 
-          const nameSpan = document.createElement('span');
-          nameSpan.textContent = t.name;
+          const nameSpan = document.createElement('strong');
+          nameSpan.textContent = t.name || '— без названия —';
 
-          const dateSpan = document.createElement('span');
+          const dateSpan = document.createElement('small');
+          dateSpan.style.color = '#666';
           dateSpan.textContent =
-            new Date(t.created_at).toLocaleDateString();
+            ' — ' + new Date(t.created_at).toLocaleDateString();
 
           info.appendChild(nameSpan);
           info.appendChild(dateSpan);
@@ -1276,18 +1342,92 @@
           const editBtn = document.createElement('button');
           editBtn.textContent = '✏️';
 
-          editBtn.onclick = () => {
+          editBtn.onclick = async() => {
             mode = 'edit';
             currentId = t.tape_id;
+            currentTapeId = t.tape_id;
+
+            // --- RESTORE DRYING STEP ---
+            try {
+              const res = await fetch(`/api/tapes/${currentTapeId}/steps/drying?operation_code=drying_am`);
+              if (!res.ok) throw new Error('Drying load failed');
+
+              const drying = await res.json();
+              const dryingDetails = document.getElementById('0-drying');
+
+              if (drying) {
+                dryingDetails.open = true;
+
+                const started = drying.started_at ? new Date(drying.started_at) : null;
+
+                if (started) {
+                  const yyyy = started.getFullYear();
+                  const mm   = String(started.getMonth() + 1).padStart(2, '0');
+                  const dd   = String(started.getDate()).padStart(2, '0');
+
+                  const hh   = String(started.getHours()).padStart(2, '0');
+                  const min  = String(started.getMinutes()).padStart(2, '0');
+
+                  document.getElementById('0-drying-date').value = `${yyyy}-${mm}-${dd}`;
+                  document.getElementById('0-drying-time').value = `${hh}:${min}`;
+                } else {
+                  document.getElementById('0-drying-date').value = '';
+                  document.getElementById('0-drying-time').value = '';
+                }
+
+                document.getElementById('0-drying-temperature').value =
+                  drying.temperature_c ?? '';
+
+                document.getElementById('0-cathode-pre-prep-notes').value =
+                  drying.comments || '';
+              } else {
+                dryingDetails.open = false;
+
+                document.getElementById('0-drying-date').value = '';
+                document.getElementById('0-drying-time').value = '';
+                document.getElementById('0-drying-temperature').value = '';
+                document.getElementById('0-cathode-pre-prep-notes').value = '';
+              }
+            } catch (err) {
+              console.error(err);
+            }
+
+            if (saveBtn) saveBtn.textContent = 'Обновить ленту';
 
             showForm();
             
+            const currentName = (t.name || '').trim();
 
-            title.textContent = t.name;
-            nameInput.value = t.name;
+            title.textContent = currentName || '— без названия —';
+            nameInput.value = currentName;
+
+            // If unnamed, immediately open inline rename
+            if (!currentName) {
+              nameInput.hidden = false;
+              title.hidden = true;
+              nameInput.focus();
+            } else {
+              title.hidden = false;
+              nameInput.hidden = true;
+            }
 
             form.elements['notes'].value = t.notes || '';
-          };
+            // --- populate general info ---
+            form.elements['created_by'].value = t.created_by || '';
+            form.elements['project_id'].value = t.project_id || '';
+            form.elements['tape_type'].value = t.role || '';
+
+            // Load recipes first, then restore selection
+            await loadRecipesDropdown();
+
+            form.elements['tape_recipe_id'].value = t.tape_recipe_id || '';
+            form.elements['calc_mode'].value = t.calc_mode || 'from_active_mass';
+            form.elements['target_mass_g'].value = t.target_mass_g || '';
+
+            // Trigger manual change to render recipe lines
+            if (t.tape_recipe_id) {
+              recipeSelect.dispatchEvent(new Event('change'));
+            }          };
 
           const duplicateBtn = document.createElement('button');
           duplicateBtn.textContent = '📄';
@@ -1295,6 +1435,8 @@
           duplicateBtn.onclick = () => {
             mode = 'create';
             currentId = null;
+            currentTapeId = null;
+            if (saveBtn) saveBtn.textContent = 'Создать ленту';
 
             showForm();
 
@@ -1342,13 +1484,30 @@
         try {
           const users = await fetchUsers();
 
+          const placeholder = '<option value="">— выбрать пользователя —</option>';
+
+          // 1) always fill "Кто добавил"
           fillSelect(
             createdBySelect,
             users,
             'user_id',
             u => u.name,
-            '<option value="">— выбрать пользователя —</option>'
+            placeholder
           );
+
+          // 2) fill every operator select on the page
+          const operatorSelects = Array.from(document.querySelectorAll('select[id$="-operator"]'));
+
+          operatorSelects.forEach(sel => {
+            fillSelect(
+              sel,
+              users,
+              'user_id',
+              u => u.name,
+              placeholder
+            );
+          });
+
         } catch (err) {
           logLoadError(err);
         }
@@ -1371,7 +1530,6 @@
       }
 
       async function loadRecipesDropdown() {
-        document.getElementById('0-tape-recipe-materials').open = true;
         try {
           const role = tapeTypeSelect.value || null;
 
@@ -1417,12 +1575,6 @@
       recipeSelect.addEventListener('focus', loadRecipesDropdown);
       tapeTypeSelect.addEventListener('change', loadRecipesDropdown);
 
-      // optional: when project changes, recipes list should match the project
-      projectSelect.addEventListener('change', () => {
-        // selection should not be wiped during focus refresh; on project change, a refresh is intended
-        loadRecipesDropdown();
-      });
-
       recipeSelect.addEventListener('change', async () => {
         const recipeId = recipeSelect.value;
 
@@ -1451,12 +1603,12 @@
         }
       });
 
-      const activeMassInput = document.getElementById('active-mass-g');
+      const activeMassInput = document.getElementById('target-mass-g');
       const calcModeSelect  = document.getElementById('calc-mode');
-      const activeMassLabel = document.querySelector('label[for="active-mass-g"]');
+      const activeMassLabel = document.querySelector('label[for="target-mass-g"]');
 
       calcModeSelect.addEventListener('change', () => {
-        if (calcModeSelect.value === 'total_mass') {
+        if (calcModeSelect.value === 'from_slurry_mass') {
           activeMassLabel.textContent = 'Общая масса суспензии, г';
         } else {
           activeMassLabel.textContent = 'Масса активного материала, г';
@@ -1482,9 +1634,32 @@
         nameInput.value = name;
 
         showForm();
-        document.getElementById('0-general-info').open = true;
 
         addInput.value = '';
+      });
+
+      /* ------ name: editable ------ */
+
+      title.addEventListener('click', () => {
+        nameInput.hidden = false;
+        title.hidden = true;
+        nameInput.focus();
+      });
+
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          nameInput.blur();
+        }
+      });
+
+      nameInput.addEventListener('blur', () => {
+        const val = nameInput.value.trim();
+        if (!val) return;
+
+        title.textContent = val;
+        title.hidden = false;
+        nameInput.hidden = true;
       });
 
       // -------- Buttons --------
@@ -1503,19 +1678,26 @@
 
         try {
           if (mode === 'create') {
-            await createTape(data);
+            const created = await createTape(data);
+
+            await loadTapes();
+            resetForm();   // close + clear
+            return;
           }
 
           if (mode === 'edit') {
             await updateTape(currentId, data);
-          }
 
-          resetForm();
-          loadTapes();
+            await loadTapes();
+            resetForm();   // close + clear
+            return;
+          }
         } catch (err) {
           console.error(err);
         }
       });
+
+      clearBtn.addEventListener('click', resetForm);
 
       const dryingSaveBtn = document.getElementById('0-drying-save-btn');
 
@@ -1535,7 +1717,7 @@
 
         const payload = {
           operation_code: 'drying_am',
-          performed_by: Number(document.getElementById('tape-created-by').value),
+          performed_by: Number(document.getElementById('tape-created-by').value) || null,
           started_at: startedAt,
           comments: document.getElementById('0-cathode-pre-prep-notes').value || null,
           temperature_c: Number(document.getElementById('0-drying-temperature').value) || null,

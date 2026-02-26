@@ -1503,6 +1503,62 @@ app.delete('/api/recipes/:id', async (req, res) => {
 });
 
 
+// -- RECIPE LINE ACTUALS --
+// CREATE
+app.post('/api/tapes/:id/actuals', async (req, res) => {
+  const tapeId = Number(req.params.id);
+
+  if (!Number.isInteger(tapeId)) {
+    return res.status(400).json({ error: 'Некорректный tape_id' });
+  }
+
+  const {
+    recipe_line_id,
+    material_instance_id,
+    measure_mode,
+    actual_mass_g,
+    actual_volume_ml
+  } = req.body;
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO tape_recipe_line_actuals (
+        tape_id,
+        recipe_line_id,
+        material_instance_id,
+        measure_mode,
+        actual_mass_g,
+        actual_volume_ml
+      )
+      VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (tape_id, recipe_line_id)
+      DO UPDATE SET
+        material_instance_id = EXCLUDED.material_instance_id,
+        measure_mode = EXCLUDED.measure_mode,
+        actual_mass_g = EXCLUDED.actual_mass_g,
+        actual_volume_ml = EXCLUDED.actual_volume_ml,
+        recorded_at = now()
+      RETURNING *
+      `,
+      [
+        tapeId,
+        recipe_line_id,
+        material_instance_id,
+        measure_mode,
+        actual_mass_g,
+        actual_volume_ml
+      ]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сохранения фактических данных' });
+  }
+});
+
+
 
 // ---------- ELECTROLYTES ----------
 
@@ -1919,7 +1975,9 @@ app.post('/api/tapes', async (req, res) => {
     project_id,
     tape_recipe_id,
     created_by,
-    notes
+    notes,
+    calc_mode,
+    target_mass_g
   } = req.body;
 
   const projectId = Number(project_id);
@@ -1942,17 +2000,20 @@ app.post('/api/tapes', async (req, res) => {
         project_id,
         tape_recipe_id,
         created_by,
-        notes
+        notes,
+        calc_mode,
+        target_mass_g
       )
-      VALUES ($1,$2,$3,$4, $5)
-      RETURNING *
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       `,
       [
         name,
         projectId,
         recipeId,
         createdBy,
-        notes || null
+        notes || null,
+        calc_mode || null,
+        target_mass_g || null
       ]
     );
 
@@ -1974,9 +2035,15 @@ app.get('/api/tapes', async (req, res) => {
           `
           SELECT
             t.tape_id,
+            t.name,
             t.project_id,
+            t.tape_recipe_id,
+            t.created_by,
             t.created_at,
             t.status,
+            t.notes,
+            t.calc_mode,
+            t.target_mass_g,
             r.role,
             r.name AS recipe_name
           FROM tapes t
@@ -1991,9 +2058,15 @@ app.get('/api/tapes', async (req, res) => {
           `
           SELECT
             t.tape_id,
+            t.name,
             t.project_id,
+            t.tape_recipe_id,
+            t.created_by,
             t.created_at,
             t.status,
+            t.notes,
+            t.calc_mode,
+            t.target_mass_g,
             r.role,
             r.name AS recipe_name
           FROM tapes t
@@ -2017,18 +2090,53 @@ app.put('/api/tapes/:id', async (req, res) => {
     return res.status(400).json({ error: 'Некорректный ID' });
   }
 
-  const { name, notes } = req.body;
+  const {
+    name,
+    project_id,
+    tape_recipe_id,
+    created_by,
+    notes,
+    calc_mode,
+    target_mass_g
+  } = req.body;
+
+  const projectId = Number(project_id);
+  const recipeId  = Number(tape_recipe_id);
+  const createdBy = Number(created_by);
+
+  if (
+    !Number.isInteger(projectId) ||
+    !Number.isInteger(recipeId) ||
+    !Number.isInteger(createdBy)
+  ) {
+    return res.status(400).json({ error: 'Некорректные данные' });
+  }
 
   try {
     const result = await pool.query(
       `
       UPDATE tapes
-      SET name = $1,
-          notes = $2
-      WHERE tape_id = $3
+      SET
+        name = $1,
+        project_id = $2,
+        tape_recipe_id = $3,
+        created_by = $4,
+        notes = $5,
+        calc_mode = $6,
+        target_mass_g = $7
+      WHERE tape_id = $8
       RETURNING *
       `,
-      [name, notes || null, id]
+      [
+        name,
+        projectId,
+        recipeId,
+        createdBy,
+        notes || null,
+        calc_mode || null,
+        target_mass_g || null,
+        id
+      ]
     );
 
     res.json(result.rows[0]);
@@ -2101,7 +2209,7 @@ app.post('/api/tapes/:tapeId/steps/drying', async (req, res) => {
     const step = await client.query(
       `
       INSERT INTO tape_process_steps (tape_id, operation_type_id, performed_by, started_at, comments)
-      VALUES ($1, $2, $3, COALESCE($4::timestamptz, DEFAULT), $5)
+      VALUES ($1, $2, $3, $4::timestamptz, $5)
       RETURNING step_id, tape_id, operation_type_id, performed_by, started_at, comments
       `,
       [
@@ -2138,6 +2246,47 @@ app.post('/api/tapes/:tapeId/steps/drying', async (req, res) => {
     res.status(500).json({ error: 'Ошибка при сохранении сушки ленты' });
   } finally {
     client.release();
+  }
+});
+
+// READ latest drying step for a tape (tape_process_steps + tape_step_drying)
+app.get('/api/tapes/:tapeId/steps/drying', async (req, res) => {
+  const tapeId = Number(req.params.tapeId);
+  if (!Number.isInteger(tapeId)) {
+    return res.status(400).json({ error: 'Некорректный tape_id' });
+  }
+
+  const { operation_code } = req.query; // optional filter, e.g. ?operation_code=drying_am
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        s.step_id,
+        s.tape_id,
+        ot.code AS operation_code,
+        s.performed_by,
+        s.started_at,
+        s.comments,
+        d.temperature_c,
+        d.atmosphere,
+        d.target_duration_min,
+        d.other_parameters
+      FROM tape_process_steps s
+      JOIN operation_types ot ON ot.operation_type_id = s.operation_type_id
+      JOIN tape_step_drying d ON d.step_id = s.step_id
+      WHERE s.tape_id = $1
+        AND ($2::text IS NULL OR ot.code = $2)
+      ORDER BY s.started_at DESC, s.step_id DESC
+      LIMIT 1
+      `,
+      [tapeId, operation_code || null]
+    );
+
+    res.json(result.rows[0] || null);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки сушки' });
   }
 });
 
