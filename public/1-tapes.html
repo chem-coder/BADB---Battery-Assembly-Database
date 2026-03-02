@@ -118,7 +118,7 @@
             <option value="anode">Анод</option>
           </select><br>
           
-          <label for="notes">Заметки: </label>
+          <label for="notes">Примечания: </label>
           <textarea id="notes" name="notes" placeholder="Общие комментарии о ленте и процессе ее приготовления"></textarea>
         </fieldset>
       </details>
@@ -155,7 +155,7 @@
           <hr>
           <div id="recipe-lines-container"></div>
           
-          <!-- <hr class="section-divider"> -->
+          <hr class="section-divider">
           <details id="calculations-expanded">
             <summary>Расчёт состава (расширенный вид)</summary><br>
             <div id="expanded-calculation-container"></div>
@@ -163,119 +163,99 @@
         </fieldset>
       </details>
 
-      <details id="0-materials-preparation">
+      <details id="0-drying_materials">
         <summary>Подготовка материалов</summary>
 
-        <fieldset id="0-drying">
-          <legend>Сушка активного материала в шкафу</legend>
+        <fieldset id="0-drying_am">
+          <legend>0. Сушка активного материала в шкафу</legend>
 
           <!-- кто/когда -->
-          <label for="0-drying-operator">Оператор: </label>
-          <select id="0-drying-operator" name="0-drying-operator">
+          <label for="0-drying_am-operator">Оператор: </label>
+          <select id="0-drying_am-operator" name="0-drying_am-operator">
             <option value="">— выбрать пользователя —</option>
           </select>
           <a href="reference/users.html" target="_blank" class="ref-link">
             Управление пользователями
           </a><br>
 
-          <label for="0-drying-date">Дата: </label>
-          <input id="0-drying-date" type="date" name="0-drying-date" placeholder="Дата начала сушки">
+          <label for="0-drying_am-date">Дата: </label>
+          <input id="0-drying_am-date" type="date" name="0-drying_am-date" placeholder="Дата начала сушки">
 
-          <label for="0-drying-time">Время: </label>
-          <input id="0-drying-time" type="time" name="0-drying-time" placeholder="Время начала сушки">
+          <label for="0-drying_am-time">Время: </label>
+          <input id="0-drying_am-time" type="time" name="0-drying_am-time" placeholder="Время начала сушки">
 
-          <button type="button" class="date-time-now-button" id="0-drying-now-button">Сейчас</button><br>
+          <button type="button" class="date-time-now-button" id="0-drying_am-now-button">Сейчас</button><br>
 
-          <label for="0-drying-temperature">Температура: </label>
-          <input id="0-drying-temperature" type="number" step="1" min="-273" name="0-drying-temperature" placeholder="Температура сушки">, °C<br>
+          <label for="0-drying_am-notes">Примечания: </label>
+          <textarea id="0-drying_am-notes" name="0-drying_am-notes" placeholder="Примечания к этапу сушки активного материала"></textarea><br>
 
-          <label for="0-cathode-pre-prep-notes">Заметки/комментарии: </label>
-          <textarea id="0-cathode-pre-prep-notes" name="0-cathode-pre-prep-notes" placeholder="Комментарии о предподготовке катодной ленты"></textarea>
-          <br>
-          <button type="button" id="0-drying-save-btn">Сохранить сушку</button>
+          <label for="0-drying_am-temperature">Температура: </label>
+          <input id="0-drying_am-temperature" type="number" step="1" min="-273" name="0-drying_am-temperature" placeholder="Температура сушки">, °C<br>
+
+          <label for="0-drying_am-atmosphere">Атмосфера: </label>
+          <select id="0-drying_am-atmosphere" name="0-drying_am-atmosphere">
+            <option value="">— не выбрано —</option>
+          </select>
+
+          <label for="0-drying_am-target-duration">Длительность: </label>
+          <input id="0-drying_am-target-duration" type="number" step="1" min="0" name="0-drying_am-target-duration" placeholder="Плановая длительность">, мин
+
+          <button type="button" id="0-drying_am-save-btn">Сохранить сушку</button>
         </fieldset>
       </details>
 
       <details id="1-slurry">
-        <summary>I. Приготовление катодной пасты</summary>
+        <summary>I. Приготовление электродной пасты</summary>
         <fieldset id="1-slurry-f">
-          <legend class="visually-hidden">I. Приготовление катодной пасты</legend>
+          <legend class="visually-hidden">I. Приготовление электродной пасты</legend>
 
-          <fieldset id="1-slurry-mix">
-            <legend>Замес катодной пасты</legend>
+          <fieldset id="1-weighing">
+            <legend>I.1. Замес пасты</legend>
 
             <!-- кто/когда -->
-            <label for="1-slurry-operator">Оператор: </label>
-            <select id="1-slurry-operator" name="1-slurry-operator">
+            <label for="1-weighing-operator">Оператор: </label>
+            <select id="1-weighing-operator" name="1-weighing-operator">
               <option value="">— выбрать пользователя —</option>
             </select>
             <a href="reference/users.html" target="_blank" class="ref-link">
               Управление пользователями
             </a><br>
 
-            <label for="1-slurry-date">Дата: </label>
-            <input id="1-slurry-date" type="date" name="1-slurry-date" placeholder="Дата начала сушки">
+            <label for="1-weighing-date">Дата: </label>
+            <input id="1-weighing-date" type="date" name="1-weighing-date" placeholder="Дата начала сушки">
 
-            <label for="1-slurry-time">Время: </label>
-            <input id="1-slurry-time" type="time" name="1-slurry-time" placeholder="Время начала сушки">
+            <label for="1-weighing-time">Время: </label>
+            <input id="1-weighing-time" type="time" name="1-weighing-time" placeholder="Время начала сушки">
 
-            <button type="button" class="date-time-now-button" id="1-slurry-now-button">Сейчас</button><br>
+            <button type="button" class="date-time-now-button" id="1-weighing-now-button">Сейчас</button><br>
 
-            <label for="1-cathode-slurry-notes">Заметки/комментарии: </label>
-            <textarea id="1-cathode-slurry-notes" name="1-cathode-slurry-notes" placeholder="Комментарии о подготовке катодной пасты"></textarea><br>
+            <label for="1-weighing-notes">Примечания: </label>
+            <textarea id="1-weighing-notes" name="1-weighing-notes" placeholder="Примечания к этапу подготовки пасты"></textarea><br>
+          
+            <fieldset id="1-slurry-mix-quantities">
+              <legend>Компоненты и фактические значения</legend>
 
-            <h4>Рецепт катодной пасты</h4>
+              <table class="slurry-actuals-table">
+                <thead>
+                  <tr>
+                    <th>Роль</th>
+                    <th>Экземпляр материала</th>
+                    <th>К добавлению</th>
+                    <th>Фактическое значение</th>
+                  </tr>
+                </thead>
+                <tbody id="slurry-actuals-body">
+                  <!-- строки будут генерироваться из recipe lines -->
+                </tbody>
+              </table>
+            </fieldset>
 
-            <div class="recipe-header">
-              <span>Компонент</span>
-              <span>Код материала</span>
-              <span>мас. %</span>
-              <span>m, г</span>
-              <span>V, мкл</span>
-            </div>
+            <button type="button" id="1-weighing-save-btn">Сохранить этап замеса</button>
 
-            <div id="cathode-recipe-rows">
-              <div class="cathode-recipe-row" data-index="0">
-                <select name="cathode-recipe[0][type]">
-                  <option value="" disabled selected>Выберите компонент</option>
-                  <option value="active">Активный материал</option>
-                  <option value="binder">Связующее</option>
-                  <option value="conductive">Электропроводящая добавка</option>
-                  <option value="solvent">Растворитель</option>
-                  <option value="cnt">ОУНТ</option>
-                  <option value="other">Другое</option>
-                </select>
-
-                <input name="cathode-recipe[0][name]" placeholder="Код материала">
-                <input name="cathode-recipe[0][percent]" placeholder="% состав" type="number" step="0.01">
-                <input name="cathode-recipe[0][mass]"    placeholder="масса, г" type="number" step="0.0001">
-                <input name="cathode-recipe[0][volume]"  placeholder="объем, мкл" type="number" step="0.001">
-              </div>
-            </div>
-            
-            <button type="button" id="add-cathode-recipe-row">Добавить компонент</button>
-
-            <h4>Фактические значения (что реально добавлено)</h4>
-
-            <div class="actual-header">
-              <span>Код материала</span>
-              <span>m, г (факт)</span>
-              <span>V, мкл (факт)</span>
-            </div>
-
-            <div id="cathode-actual-rows">
-              <div class="actual-row" data-index="0">
-                  <!-- заполняется автоматически из recipe[0][name] -->
-                <span class="actual-code" data-recipe-index="0"></span>
-                <input 
-                  name="cathode-recipe[0][actualMass]"  placeholder="масса, г (факт)" type="number" step="0.0001">
-                <input name="cathode-recipe[0][actualVolume]" placeholder="объем, мкл (факт)" type="number" step="0.001">
-              </div>
-            </div>
           </fieldset>
 
           <fieldset id="1-mixing">
-            <legend>Перемешивание катодной пасты</legend>
+            <legend>I.2. Перемешивание пасты</legend>
 
             <!-- кто/когда -->
             <label for="1-mixing-operator">Оператор: </label>
@@ -293,6 +273,9 @@
             <input id="1-mixing-time" type="time" name="1-mixing-time" placeholder="Время начала сушки">
 
             <button type="button" class="date-time-now-button" id="1-mixing-now-button">Сейчас</button><br>
+
+            <label for="1-mixing-notes">Примечания: </label>
+            <textarea id="1-mixing-notes" name="1-mixing-notes" placeholder="Примечания к этапу перемешивания"></textarea><br>
 
             <!-- Объём пасты: просто записываем, ничего не блокирует -->
             <label for="mix-volume">Объём пасты, мл: </label>
@@ -413,7 +396,7 @@
 
               <label for="wet-vac-start-time">Время: </label>
               <input id="wet-vac-start-time" type="time" name="wet-vac-start-time" placeholder="Время начала сушки">
-
+              
               <button type="button" class="date-time-now-button" id="wet-vac-start-now-button">Сейчас</button><br>
 
               <label>Длительность, мин:
@@ -425,37 +408,40 @@
                         placeholder="Например: 300 об/мин, 2 цикла по 10 мин">
               </label>
             </div>
+
+            <button type="button" id="1-mixing-save-btn">Сохранить этап перемешивания</button>
+
           </fieldset>
         </fieldset>
       </details>
 
       <details id="2-tape">
-        <summary>II. Приготовление катодной ленты</summary>
+        <summary>II. Приготовление электродной ленты</summary>
         <fieldset id="2-tape-f">
-          <legend class="visually-hidden">II. Приготовление катодной ленты</legend>
+          <legend class="visually-hidden">II. Приготовление электродной ленты</legend>
 
-          <fieldset id="2-application">
-            <legend>Нанесение</legend>
+          <fieldset id="2-coating">
+            <legend>II.1. Нанесение</legend>
 
             <!-- кто/когда -->
-            <label for="2-application-operator">Оператор: </label>
-            <select id="2-application-operator" name="2-application-operator">
+            <label for="2-coating-operator">Оператор: </label>
+            <select id="2-coating-operator" name="2-coating-operator">
               <option value="">— выбрать пользователя —</option>
             </select>
             <a href="reference/users.html" target="_blank" class="ref-link">
               Управление пользователями
             </a><br>
 
-            <label for="2-application-date">Дата: </label>
-            <input id="2-application-date" type="date" name="2-application-date" placeholder="Дата начала сушки">
+            <label for="2-coating-date">Дата: </label>
+            <input id="2-coating-date" type="date" name="2-coating-date" placeholder="Дата начала сушки">
 
-            <label for="2-application-time">Время: </label>
-            <input id="2-application-time" type="time" name="2-application-time" placeholder="Время начала сушки">
+            <label for="2-coating-time">Время: </label>
+            <input id="2-coating-time" type="time" name="2-coating-time" placeholder="Время начала сушки">
 
-            <button type="button" class="date-time-now-button" id="2-application-now-button">Сейчас</button><br>
+            <button type="button" class="date-time-now-button" id="2-coating-now-button">Сейчас</button><br>
 
-            <label for="2-cathode-tape-notes">Заметки/комментарии: </label>
-            <textarea id="2-cathode-tape-notes" name="2-cathode-tape-notes" placeholder="Комментарии о подготовке катодной ленты"></textarea>
+            <label for="2-cathode-tape-notes">Примечания: </label>
+            <textarea id="2-cathode-tape-notes" name="2-cathode-tape-notes" placeholder="Комментарии к подготовке ленты"></textarea>
 
             <h4>Фольга</h4>
             <label><input type="radio" id="foil-Al" name="foil" value="Al" checked/>Al</label>
@@ -486,7 +472,7 @@
               hidden
             ><br>
 
-            <h4>Параметры нанесения катодной пасты: </h4>
+            <h4>Параметры нанесения пасты: </h4>
             <label for="blade-gap">Зазор ракеля: </label>
             <input id="blade-gap" type="number" step="1" min="0" name="blade-gap" placeholder="150">, мкм
 
@@ -528,34 +514,47 @@
               <label for="other-method-param2">Параметр - шаблон2: </label>
               <input id="other-method-param2" type="text" name="other-method-param2"><br>
             </div>
+
+            <button type="button" id="2-coating-save-btn">Сохранить этап нанесения</button>
           </fieldset>
 
-          <fieldset id="2a-drying">
-            <legend>Сушка ленты в шкафу (до каландрирования)</legend>
+          <fieldset id="2a-drying_tape">
+            <legend>II.2. Сушка ленты в шкафу (до каландрирования)</legend>
 
             <!-- кто/когда -->
-            <label for="2a-drying-operator">Оператор: </label>
-            <select id="2a-drying-operator" name="2a-drying-operator">
+            <label for="2a-drying_tape-operator">Оператор: </label>
+            <select id="2a-drying_tape-operator" name="2a-drying_tape-operator">
               <option value="">— выбрать пользователя —</option>
             </select>
             <a href="reference/users.html" target="_blank" class="ref-link">
               Управление пользователями
             </a><br>
 
-            <label for="2a-drying-date">Дата: </label>
-            <input id="2a-drying-date" type="date" name="2a-drying-date" placeholder="Дата начала сушки">
+            <label for="2a-drying_tape-date">Дата: </label>
+            <input id="2a-drying_tape-date" type="date" name="2a-drying_tape-date" placeholder="Дата начала сушки">
 
-            <label for="2a-drying-time">Время: </label>
-            <input id="2a-drying-time" type="time" name="2a-drying-time" placeholder="Время начала сушки">
+            <label for="2a-drying_tape-time">Время: </label>
+            <input id="2a-drying_tape-time" type="time" name="2a-drying_tape-time" placeholder="Время начала сушки">
 
-            <button type="button" class="date-time-now-button" id="2a-drying-now-button">Сейчас</button><br>
+            <button type="button" class="date-time-now-button" id="2a-drying_tape-now-button">Сейчас</button><br>
 
-            <label for="2a-drying-temperature">Температура: </label>
-            <input id="2a-drying-temperature" type="number" step="1" min="-273" name="2a-drying-temperature" placeholder="Температура сушки">, °C<br>
+            <label for="2a-drying-notes">Примечания: </label>
+            <textarea id="2a-drying-notes" name="2a-drying-notes" placeholder="Примечания к этапу сушки"></textarea>
+
+            <label for="2a-drying_tape-temperature">Температура: </label>
+            <input id="2a-drying_tape-temperature" type="number" step="1" min="-273" name="2a-drying_tape-temperature" placeholder="Температура сушки">, °C<br>
+            
+            <label for="2a-drying_tape-atmosphere">Атмосфера: </label>
+            <select id="2a-drying_tape-atmosphere" name="2a-drying_tape-atmosphere">
+              <option value="">— не выбрано —</option>
+            </select>
+
+            <button type="button" id="2a-drying_tape-save-btn">Сохранить этап сушки</button>
+
           </fieldset>
 
           <fieldset id="2-calendering">
-            <legend>Каландрирование</legend>
+            <legend>II.3. Каландрирование</legend>
 
             <!-- кто/когда -->
             <label for="2-calendering-operator">Оператор: </label>
@@ -574,19 +573,22 @@
 
             <button type="button" class="date-time-now-button" id="2-calendering-now-button">Сейчас</button><br>
 
+            <label for="2-calendering-notes">Примечания: </label>
+            <textarea id="2-calendering-notes" name="2-calendering-notes" placeholder="Примечания к этапу каландрирования">
+
             <!-- параметры процесса -->
             <h4>Параметры каландрирования:</h4>
-            <label for="calender-temp">Температура валов, °C: </label>
-            <input id="calender-temp" type="number" step="1" min="-273" name="calender-temp"><br>
+            <label for="2-calendering-temp">Температура валов, °C: </label>
+            <input id="2-calendering-temp" type="number" step="1" min="-273" name="2-calendering-temp"><br>
 
-            <label for="calender-pressure">Давление, кН/см или МПа: </label>
-            <input id="calender-pressure" type="number" step="0.01" min="0" name="calender-pressure"><br>
+            <label for="2-calendering-pressure">Давление, кН/см или МПа: </label>
+            <input id="2-calendering-pressure" type="number" step="0.01" min="0" name="2-calendering-pressure"><br>
 
-            <label for="calender-speed">Скорость протяжки, м/мин: </label>
-            <input id="calender-speed" type="number" step="0.01" min="0" name="calender-speed"><br>
+            <label for="2-calendering-speed">Скорость протяжки, м/мин: </label>
+            <input id="2-calendering-speed" type="number" step="0.01" min="0" name="2-calendering-speed"><br>
 
-            <label for="calender-other">Другие параметры (комментарии): </label>
-            <input id="calender-other" type="text" name="calender-other"><br>
+            <label for="2-calendering-other">Другие параметры (комментарии): </label>
+            <input id="2-calendering-other" type="text" name="2-calendering-other"><br>
 
             <h4>Толщина ленты</h4>
             <label for="initial-thickness">Начальная толщина: </label>
@@ -620,30 +622,44 @@
               placeholder="Specify other"
               hidden
             ><br><br>
+
+            <button type="button" id="2-calendering-save-btn">Сохранить этап каландрирования</button>
+
           </fieldset>
 
-          <fieldset id="2b-drying">
-            <legend>Сушка готовой катодной ленты в шкафу (после каландрирования)</legend>
+          <fieldset id="2b-drying_pressed_tape">
+            <legend>II.4. Сушка готовой ленты в шкафу (после каландрирования)</legend>
 
             <!-- кто/когда -->
-            <label for="2b-drying-operator">Оператор: </label>
-            <select id="2b-drying-operator" name="2b-drying-operator">
+            <label for="2b-drying_pressed_tape-operator">Оператор: </label>
+            <select id="2b-drying_pressed_tape-operator" name="2b-drying_pressed_tape-operator">
               <option value="">— выбрать пользователя —</option>
             </select>
             <a href="reference/users.html" target="_blank" class="ref-link">
               Управление пользователями
             </a><br>
 
-            <label for="2b-drying-date">Дата: </label>
-            <input id="2b-drying-date" type="date" name="2b-drying-date" placeholder="Дата начала сушки">
+            <label for="2b-drying_pressed_tape-date">Дата: </label>
+            <input id="2b-drying_pressed_tape-date" type="date" name="2b-drying_pressed_tape-date" placeholder="Дата начала сушки">
 
-            <label for="2b-drying-time">Время: </label>
-            <input id="2b-drying-time" type="time" name="2b-drying-time" placeholder="Время начала сушки">
+            <label for="2b-drying_pressed_tape-time">Время: </label>
+            <input id="2b-drying_pressed_tape-time" type="time" name="2b-drying_pressed_tape-time" placeholder="Время начала сушки">
+            
+            <button type="button" class="date-time-now-button" id="2b-drying_pressed_tape-now-button">Сейчас</button><br>
 
-            <button type="button" class="date-time-now-button" id="2b-drying-now-button">Сейчас</button><br>
+            <label for="2b-drying_pressed_tape-notes">Примечания: </label>
+            <textarea id="2b-drying_pressed_tape-notes" name="2b-drying_pressed_tape-notes" placeholder="Примечания к этапу сушки"></textarea>
 
-            <label for="2b-drying-temperature">Температура: </label>
-            <input id="2b-drying-temperature" type="number" step="1" min="-273" name="2b-drying-temperature" placeholder="Температура сушки">, °C<br>
+            <label for="2b-drying_pressed_tape-temperature">Температура: </label>
+            <input id="2b-drying_pressed_tape-temperature" type="number" step="1" min="-273" name="2b-drying_pressed_tape-temperature" placeholder="Температура сушки">, °C<br>
+
+            <label for="2b-drying_pressed_tape-atmosphere">Атмосфера: </label>
+            <select id="2b-drying_pressed_tape-atmosphere" name="2b-drying_pressed_tape-atmosphere">
+              <option value="">— не выбрано —</option>
+            </select>
+
+            <button type="button" id="2b-drying_pressed_tape-save-btn">Сохранить этап сушки</button>
+
           </fieldset>
         </fieldset>
       </details>
@@ -666,7 +682,7 @@
       let currentId = null;
 
       const createdBySelect = document.getElementById('tape-created-by');
-      const dryingOperatorSelect = document.getElementById('0-drying-operator');
+      const dryingOperatorSelect = document.getElementById('0-drying_am-operator');
       const projectSelect   = document.getElementById('project_id');
       const tapeTypeSelect  = document.getElementById('tape_type');
       const recipeSelect    = document.getElementById('tape-recipe-id'); // already added in HTML
@@ -676,7 +692,8 @@
       let selectedInstanceByLineId = {}; // { [recipe_line_id]: material_instance_id }
       let instanceCacheByMaterialId = {}; // { [material_id]: [instances...] }
       let instanceComponentsCache = {}; // { [material_instance_id]: [ { component_material_id, component_name, mass_fraction } ] }
-      
+      let isRestoringTape = false;
+
       function showForm() {
         form.hidden = false;
         addInput.disabled = true;
@@ -858,7 +875,42 @@
 
         return res.json(); // object or null
       }
- 
+
+      async function fetchTapeActuals(tapeId) {
+        if (!tapeId) return [];
+
+        const res = await fetch(`/api/tapes/${tapeId}/actuals`);
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Ошибка загрузки фактических данных');
+        }
+
+        return res.json(); // array
+      }
+
+      async function loadDryingAtmospheres(selectEl, selectedCode = '') {
+        if (!selectEl) return;
+
+        const res = await fetch('/api/drying-atmospheres');
+        if (!res.ok) throw new Error('Failed to load drying atmospheres');
+
+        const items = await res.json();
+
+        selectEl.innerHTML = '<option value="">— не выбрано —</option>';
+
+        items.forEach(item => {
+          const opt = document.createElement('option');
+          opt.value = item.code;         // store code in DB
+          opt.textContent = item.display; // show Russian label
+          selectEl.appendChild(opt);
+        });
+
+        if (selectedCode) {
+          selectEl.value = selectedCode;
+        }
+      }
+
       // -------- Rendering --------
       function recipeRoleLabel(recipeRole) {
         const map = {
@@ -873,13 +925,16 @@
         return map[recipeRole] || recipeRole || '';
       }
       
-      function renderRecipeLines(lines) {
+      function renderRecipeLines(lines, restoringActuals = []) {
         const container = document.getElementById('recipe-lines-container');
         if (!container) return;
-
         container.innerHTML = '';
         container.classList.add('recipe-lines-list');
-
+        
+        const slurryBody = document.getElementById('slurry-actuals-body');
+        if (slurryBody) {
+          slurryBody.innerHTML = '';
+        }
         // ----- Header row -----
         const headerRow = document.createElement('div');
         headerRow.className = 'recipe-line-row recipe-line-header';
@@ -922,6 +977,7 @@
           // material instance selector
           const instanceSelect = document.createElement('select');
           instanceSelect.className = 'material-instance-select';
+          instanceSelect.dataset.recipeLineId = line.recipe_line_id;
 
           // placeholder option
           const placeholderOpt = document.createElement('option');
@@ -929,38 +985,65 @@
           placeholderOpt.textContent = '— выбрать экземпляр —';
           instanceSelect.appendChild(placeholderOpt);
 
-          // restore previously selected instance if any
-          if (selectedInstanceByLineId[line.recipe_line_id]) {
-            instanceSelect.value = selectedInstanceByLineId[line.recipe_line_id];
-          }
+          const slurryInstanceSelect = document.createElement('select');
+          slurryInstanceSelect.className = 'material-instance-select slurry-instance-select';
+          slurryInstanceSelect.dataset.recipeLineId = line.recipe_line_id;
 
-          // load instances asynchronously
+          // load instances asynchronously (populate BOTH selects)
           fetchMaterialInstances(line.material_id)
             .then(instances => {
               const prev = selectedInstanceByLineId[line.recipe_line_id] || '';
 
-              instances
+              const sorted = instances
                 .slice()
-                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                .forEach(inst => {
-                  const opt = document.createElement('option');
-                  opt.value = inst.material_instance_id;
-                  opt.textContent = inst.name || `ID ${inst.material_instance_id}`;
-                  instanceSelect.appendChild(opt);
-                });
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-              // restore selection after options are appended
-              if (prev) instanceSelect.value = String(prev);
+              sorted.forEach(inst => {
+                const opt1 = document.createElement('option');
+                opt1.value = inst.material_instance_id;
+                opt1.textContent = inst.name || `ID ${inst.material_instance_id}`;
+                instanceSelect.appendChild(opt1);
+
+                const opt2 = document.createElement('option');
+                opt2.value = inst.material_instance_id;
+                opt2.textContent = inst.name || `ID ${inst.material_instance_id}`;
+                slurryInstanceSelect.appendChild(opt2);
+              });
+
+              // restore selection after options are appended (BOTH)
+              if (prev) {
+                const prevStr = String(prev);
+
+                if ([...instanceSelect.options].some(o => o.value === prevStr)) {
+                  instanceSelect.value = prevStr;
+                }
+
+                if ([...slurryInstanceSelect.options].some(o => o.value === prevStr)) {
+                  slurryInstanceSelect.value = prevStr;
+                }
+              }
+
+              recalculatePlannedMasses();
             })
             .catch(err => console.error(err));
 
           // store selection in state
-          instanceSelect.addEventListener('change', () => {
-            selectedInstanceByLineId[line.recipe_line_id] =
-              instanceSelect.value || null;
+          function setInstanceForLine(recipeLineId, value) {
+            selectedInstanceByLineId[recipeLineId] = value || null;
 
-            // recalculation will later depend on instance compositions
+            // sync both selects without loops
+            if (instanceSelect.value !== (value || '')) instanceSelect.value = value || '';
+            if (slurryInstanceSelect.value !== (value || '')) slurryInstanceSelect.value = value || '';
+
             recalculatePlannedMasses();
+          }
+
+          instanceSelect.addEventListener('change', () => {
+            setInstanceForLine(line.recipe_line_id, instanceSelect.value || '');
+          });
+
+          slurryInstanceSelect.addEventListener('change', () => {
+            setInstanceForLine(line.recipe_line_id, slurryInstanceSelect.value || '');
           });
 
           // percent (right) with % sign
@@ -994,6 +1077,84 @@
           row.appendChild(plannedSpan);
 
           container.appendChild(row);
+
+          // --- SLURRY ACTUALS ROW ---
+          const tr = document.createElement('tr');
+          tr.dataset.recipeLineId = line.recipe_line_id;
+
+          // 1. Role
+          const roleTd = document.createElement('td');
+          roleTd.textContent = recipeRoleLabel(line.recipe_role);
+          tr.appendChild(roleTd);
+
+          // 2. Material instance (mirrors main selector)
+          const instanceTd = document.createElement('td');
+
+          // placeholder option
+          const slurryPlaceholderOpt = document.createElement('option');
+          slurryPlaceholderOpt.value = '';
+          slurryPlaceholderOpt.textContent = '— выбрать экземпляр —';
+          slurryInstanceSelect.appendChild(slurryPlaceholderOpt);
+
+          instanceTd.appendChild(slurryInstanceSelect);
+          tr.appendChild(instanceTd);
+
+          // 3. Planned amount (reuse existing planned mass if available)
+          const plannedTd = document.createElement('td');
+          plannedTd.className = 'planned-amount-cell';
+          plannedTd.classList.add('numeric');
+          plannedTd.dataset.recipeLineId = line.recipe_line_id;
+          tr.appendChild(plannedTd);
+
+          // 4. Actual value (mode + input)
+          const actualTd = document.createElement('td');
+
+          const modeSelect = document.createElement('select');
+          modeSelect.className = 'actual-mode-select';
+          modeSelect.dataset.recipeLineId = line.recipe_line_id;
+          modeSelect.innerHTML = `
+            <option value="mass">m (г)</option>
+            <option value="volume">V (мкл)</option>
+          `;
+
+          const valueInput = document.createElement('input');
+          valueInput.type = 'number';
+          valueInput.step = '0.0001';
+          valueInput.className = 'actual-value-input';
+          valueInput.dataset.recipeLineId = line.recipe_line_id;
+
+          actualTd.appendChild(modeSelect);
+          actualTd.appendChild(valueInput);
+          tr.appendChild(actualTd);
+
+          slurryBody.appendChild(tr);
+
+          // restore actual value for this line if present
+          const saved = restoringActuals.find(
+            a => Number(a.recipe_line_id) === Number(line.recipe_line_id)
+          );
+
+          if (saved) {
+            const modeSelect = tr.querySelector('.actual-mode-select');
+            const valueInput = tr.querySelector('.actual-value-input');
+
+            if (modeSelect && valueInput) {
+              modeSelect.value = saved.measure_mode;
+
+              if (saved.measure_mode === 'mass') {
+                valueInput.value = saved.actual_mass_g ?? '';
+              }
+
+              if (saved.measure_mode === 'volume') {
+                valueInput.value = saved.actual_volume_ml ?? '';
+              }
+            }
+          }
+
+          // restore selected instance from saved actuals (if not already chosen)
+          if (saved && saved.material_instance_id && !selectedInstanceByLineId[line.recipe_line_id]) {
+            selectedInstanceByLineId[line.recipe_line_id] = String(saved.material_instance_id);
+          }
         });
       }
             
@@ -1181,6 +1342,15 @@
 
           if (!selectedInstanceId) {
             if (plannedCell) plannedCell.textContent = '';
+
+            const slurryPlannedCell = document.querySelector(
+              `.planned-amount-cell[data-recipe-line-id="${lineId}"]`
+            );
+
+            if (slurryPlannedCell) {
+              slurryPlannedCell.textContent = '';
+            }
+
             continue;
           }
 
@@ -1190,6 +1360,16 @@
           // If this line's material is already satisfied by previous mixtures, show 0.0000 g to weigh
           if (!Number.isFinite(needDry) || needDry <= 0) {
             if (plannedCell) plannedCell.textContent = (0).toFixed(4);
+
+            // mirror planned mass into slurry table
+            const slurryPlannedCell = document.querySelector(
+              `.planned-amount-cell[data-recipe-line-id="${lineId}"]`
+            );
+
+            if (slurryPlannedCell) {
+              slurryPlannedCell.textContent = plannedCell.textContent;
+            }
+
             continue;
           }
 
@@ -1257,6 +1437,14 @@
 
           if (plannedCell) {
             plannedCell.textContent = instanceMassToWeigh.toFixed(4);
+
+            const slurryPlannedCell = document.querySelector(
+              `.planned-amount-cell[data-recipe-line-id="${lineId}"]`
+            );
+
+            if (slurryPlannedCell) {
+              slurryPlannedCell.textContent = instanceMassToWeigh.toFixed(4);
+            }
           }
 
           // Add contributions of every component from this instance
@@ -1349,11 +1537,13 @@
 
             // --- RESTORE DRYING STEP ---
             try {
-              const res = await fetch(`/api/tapes/${currentTapeId}/steps/drying?operation_code=drying_am`);
+              const res = await fetch(
+                `/api/tapes/${currentTapeId}/steps/by-code/drying_am`
+              );
               if (!res.ok) throw new Error('Drying load failed');
 
               const drying = await res.json();
-              const dryingDetails = document.getElementById('0-drying');
+              const dryingDetails = document.getElementById('0-drying_am');
 
               if (drying) {
                 dryingDetails.open = true;
@@ -1368,31 +1558,65 @@
                   const hh   = String(started.getHours()).padStart(2, '0');
                   const min  = String(started.getMinutes()).padStart(2, '0');
 
-                  document.getElementById('0-drying-date').value = `${yyyy}-${mm}-${dd}`;
-                  document.getElementById('0-drying-time').value = `${hh}:${min}`;
+                  document.getElementById('0-drying_am-date').value = `${yyyy}-${mm}-${dd}`;
+                  document.getElementById('0-drying_am-time').value = `${hh}:${min}`;
                 } else {
-                  document.getElementById('0-drying-date').value = '';
-                  document.getElementById('0-drying-time').value = '';
+                  document.getElementById('0-drying_am-date').value = '';
+                  document.getElementById('0-drying_am-time').value = '';
                 }
 
-                document.getElementById('0-drying-temperature').value =
+                document.getElementById('0-drying_am-temperature').value =
                   drying.temperature_c ?? '';
 
-                document.getElementById('0-cathode-pre-prep-notes').value =
+                document.getElementById('0-drying_am-notes').value =
                   drying.comments || '';
               } else {
                 dryingDetails.open = false;
 
-                document.getElementById('0-drying-date').value = '';
-                document.getElementById('0-drying-time').value = '';
-                document.getElementById('0-drying-temperature').value = '';
-                document.getElementById('0-cathode-pre-prep-notes').value = '';
+                document.getElementById('0-drying_am-date').value = '';
+                document.getElementById('0-drying_am-time').value = '';
+                document.getElementById('0-drying_am-temperature').value = '';
+                document.getElementById('0-drying_am-notes').value = '';
               }
             } catch (err) {
               console.error(err);
             }
+            
+            const res = await fetch(
+              `/api/tapes/${currentTapeId}/steps/by-code/mixing`
+            );
 
-            if (saveBtn) saveBtn.textContent = 'Обновить ленту';
+            if (!res.ok) throw new Error('Mixing load failed');
+
+            const mixing = await res.json();
+
+            if (mixing) {
+
+              if (mixing.started_at) {
+                const dt = new Date(mixing.started_at);
+
+                const yyyy = dt.getFullYear();
+                const mm   = String(dt.getMonth() + 1).padStart(2, '0');
+                const dd   = String(dt.getDate()).padStart(2, '0');
+                const hh   = String(dt.getHours()).padStart(2, '0');
+                const min  = String(dt.getMinutes()).padStart(2, '0');
+
+                document.getElementById('1-weighing-date').value =
+                  `${yyyy}-${mm}-${dd}`;
+
+                document.getElementById('1-weighing-time').value =
+                  `${hh}:${min}`;
+              }
+
+              document.getElementById('1-weighing-operator').value =
+                mixing.performed_by || '';
+
+              document.getElementById('1-weighing-notes').value =
+                mixing.comments || '';
+            }
+
+            // --- END OF STEP RESTORATION ---
+            if (saveBtn) saveBtn.textContent = 'Сохранить изменения';
 
             showForm();
             
@@ -1424,10 +1648,31 @@
             form.elements['calc_mode'].value = t.calc_mode || 'from_active_mass';
             form.elements['target_mass_g'].value = t.target_mass_g || '';
 
-            // Trigger manual change to render recipe lines
             if (t.tape_recipe_id) {
+
+              isRestoringTape = true;
+
+              const actuals = await fetchTapeActuals(currentTapeId);
+
+              selectedInstanceByLineId = {};
+              window._restoringActuals = actuals;
+
+              actuals.forEach(a => {
+                if (a.material_instance_id) {
+                  selectedInstanceByLineId[a.recipe_line_id] =
+                    String(a.material_instance_id);
+                }
+              });
+
               recipeSelect.dispatchEvent(new Event('change'));
-            }          };
+
+              window._restoringActuals = null;
+
+              // restore actual values (mass/volume)
+
+              isRestoringTape = false;    
+            }
+          };
 
           const duplicateBtn = document.createElement('button');
           duplicateBtn.textContent = '📄';
@@ -1575,6 +1820,7 @@
       recipeSelect.addEventListener('focus', loadRecipesDropdown);
       tapeTypeSelect.addEventListener('change', loadRecipesDropdown);
 
+      // When recipe changes: load lines + reset instance selections + clear planned masses
       recipeSelect.addEventListener('change', async () => {
         const recipeId = recipeSelect.value;
 
@@ -1587,17 +1833,22 @@
         }
 
         try {
+          // capture restore payload BEFORE any await (so it survives window._restoringActuals being cleared)
+          const restoringActuals = Array.isArray(window._restoringActuals)
+            ? window._restoringActuals
+            : [];
+
           const lines = await fetchRecipeLines(recipeId);
           currentRecipeLines = lines;
 
-          selectedInstanceByLineId = {};   // reset instance selections for new recipe
-          instanceCacheByMaterialId = {};  // clear cache for clean reload
+          if (!isRestoringTape) {
+            selectedInstanceByLineId = {};   // reset only on manual recipe change
+          }
+          instanceCacheByMaterialId = {};    // cache must be cleared either way
 
-          renderRecipeLines(lines);
+          renderRecipeLines(lines, restoringActuals);
 
-          // trigger recalculation immediately if mass already entered
           recalculatePlannedMasses();
-
         } catch (err) {
           console.error(err);
         }
@@ -1607,6 +1858,7 @@
       const calcModeSelect  = document.getElementById('calc-mode');
       const activeMassLabel = document.querySelector('label[for="target-mass-g"]');
 
+      // Update label based on calculation mode
       calcModeSelect.addEventListener('change', () => {
         if (calcModeSelect.value === 'from_slurry_mass') {
           activeMassLabel.textContent = 'Общая масса суспензии, г';
@@ -1662,6 +1914,7 @@
         nameInput.hidden = true;
       });
 
+
       // -------- Buttons --------
 
       saveBtn.addEventListener('click', async () => {
@@ -1686,29 +1939,74 @@
           }
 
           if (mode === 'edit') {
+            // 1. Update tape general info
             await updateTape(currentId, data);
 
+            // 2. Save actuals for each recipe line
+            for (const line of currentRecipeLines) {
+
+              const recipeLineId = line.recipe_line_id;
+
+              const instanceId = selectedInstanceByLineId[recipeLineId];
+              if (!instanceId) continue;
+
+              const row = document.querySelector(
+                `#slurry-actuals-body tr[data-recipe-line-id="${recipeLineId}"]`
+              );          
+
+              if (!row) continue;
+
+              const modeSelect = row.querySelector('.actual-mode-select');
+              const valueInput = row.querySelector('.actual-value-input');
+
+              if (!modeSelect || !valueInput) continue;
+
+              const mode = modeSelect.value;
+              const value = Number(valueInput.value);
+
+              const payload = {
+                recipe_line_id: recipeLineId,
+                material_instance_id: Number(instanceId)
+              };
+
+              if (Number.isFinite(value) && value > 0) {
+                payload.measure_mode = mode;
+
+                if (mode === 'mass') {
+                  payload.actual_mass_g = value;
+                }
+
+                if (mode === 'volume') {
+                  payload.actual_volume_ml = value;
+                }
+              }
+
+              await fetch(`/api/tapes/${currentId}/actuals`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+            }
+
             await loadTapes();
-            resetForm();   // close + clear
+            resetForm();
             return;
           }
         } catch (err) {
           console.error(err);
         }
       });
-
       clearBtn.addEventListener('click', resetForm);
 
-      const dryingSaveBtn = document.getElementById('0-drying-save-btn');
-
+      const dryingSaveBtn = document.getElementById('0-drying_am-save-btn');
       dryingSaveBtn.addEventListener('click', async () => {
         if (!currentTapeId) {
           alert('Сначала создайте ленту');
           return;
         }
 
-        const date = document.getElementById('0-drying-date').value;
-        const time = document.getElementById('0-drying-time').value;
+        const date = document.getElementById('0-drying_am-date').value;
+        const time = document.getElementById('0-drying_am-time').value;
 
         let startedAt = null;
         if (date && time) {
@@ -1717,21 +2015,24 @@
 
         const payload = {
           operation_code: 'drying_am',
-          performed_by: Number(document.getElementById('tape-created-by').value) || null,
+          performed_by: Number(document.getElementById('0-drying_am-operator').value) || null,
           started_at: startedAt,
-          comments: document.getElementById('0-cathode-pre-prep-notes').value || null,
-          temperature_c: Number(document.getElementById('0-drying-temperature').value) || null,
-          atmosphere: null,
-          target_duration_min: null,
+          comments: document.getElementById('0-drying_am-notes').value || null,
+          temperature_c: Number(document.getElementById('0-drying_am-temperature').value) || null,
+          atmosphere: document.getElementById('0-drying_am-atmosphere').value || null,
+          target_duration_min: Number(document.getElementById('0-drying_am-target-duration').value) || null,
           other_parameters: null
         };
 
         try {
-          const res = await fetch(`/api/tapes/${currentTapeId}/steps/drying`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
+          const res = await fetch(
+            `/api/tapes/${currentTapeId}/steps/by-code/drying_am`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            }
+          );
 
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
@@ -1744,6 +2045,79 @@
         }
       });
 
+      const weighingSaveBtn = document.getElementById('1-weighing-save-btn');
+      weighingSaveBtn.addEventListener('click', async () => {
+
+        if (!currentTapeId) {
+          alert('Сначала создайте ленту');
+          return;
+        }
+
+        const date = document.getElementById('1-weighing-date').value;
+        const time = document.getElementById('1-weighing-time').value;
+
+        let startedAt = null;
+        if (date && time) {
+          startedAt = `${date}T${time}`;
+        }
+
+        const payload = {
+          performed_by: Number(document.getElementById('1-weighing-operator').value) || null,
+          started_at: startedAt,
+          comments: document.getElementById('1-weighing-notes').value || null
+        };
+
+        try {
+          const res = await fetch(
+            `/api/tapes/${currentTapeId}/steps/by-code/mixing`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            }
+          );
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Ошибка сохранения');
+          }
+
+          alert('I.1 сохранён');
+
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+
+
+      // ---- NOW buttons (scoped to their own fieldset) ----
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.date-time-now-button');
+        if (!btn) return;
+
+        const fieldset = btn.closest('fieldset');
+        if (!fieldset) return;
+
+        const dateInput = fieldset.querySelector('input[type="date"]');
+        const timeInput = fieldset.querySelector('input[type="time"]');
+
+        const now = new Date();
+
+        if (dateInput) {
+          const yyyy = now.getFullYear();
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const dd = String(now.getDate()).padStart(2, '0');
+          dateInput.value = `${yyyy}-${mm}-${dd}`;
+        }
+
+        if (timeInput) {
+          const hh = String(now.getHours()).padStart(2, '0');
+          const min = String(now.getMinutes()).padStart(2, '0');
+          timeInput.value = `${hh}:${min}`;
+        }
+      });
+
+
       // -------- Init --------
       
       hideForm();
@@ -1751,6 +2125,7 @@
       loadUsers();
       loadProjects();
       loadRecipesDropdown();
+      loadDryingAtmospheres(document.getElementById('0-drying_am-atmosphere')).catch(console.error);
       
     </script>
   </body>

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict H3cUOaxYFpOFba2JhKvK11c4gGaKyfzSTtliDDP57YLP1ZuMIvc6vNHmeiEc70u
+\restrict WPM0MfBFoEdtcAYg8mGxFLZ6atX7LK2yu8klrvQwF0hmrL6W93bd3LheL70Dgcr
 
 -- Dumped from database version 16.11 (Postgres.app)
 -- Dumped by pg_dump version 16.11 (Postgres.app)
@@ -140,6 +140,18 @@ CREATE TYPE public.separator_status AS ENUM (
 
 
 ALTER TYPE public.separator_status OWNER TO "Dalia";
+
+--
+-- Name: tape_calc_mode; Type: TYPE; Schema: public; Owner: Dalia
+--
+
+CREATE TYPE public.tape_calc_mode AS ENUM (
+    'from_active_mass',
+    'from_slurry_mass'
+);
+
+
+ALTER TYPE public.tape_calc_mode OWNER TO "Dalia";
 
 --
 -- Name: tape_status; Type: TYPE; Schema: public; Owner: Dalia
@@ -436,6 +448,43 @@ ALTER SEQUENCE public.dry_mixing_methods_dry_mixing_id_seq OWNER TO "Dalia";
 --
 
 ALTER SEQUENCE public.dry_mixing_methods_dry_mixing_id_seq OWNED BY public.dry_mixing_methods.dry_mixing_id;
+
+
+--
+-- Name: drying_atmospheres; Type: TABLE; Schema: public; Owner: Dalia
+--
+
+CREATE TABLE public.drying_atmospheres (
+    drying_atmosphere_id integer NOT NULL,
+    code text NOT NULL,
+    display text NOT NULL,
+    ui_order integer DEFAULT 0 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL
+);
+
+
+ALTER TABLE public.drying_atmospheres OWNER TO "Dalia";
+
+--
+-- Name: drying_atmospheres_drying_atmosphere_id_seq; Type: SEQUENCE; Schema: public; Owner: Dalia
+--
+
+CREATE SEQUENCE public.drying_atmospheres_drying_atmosphere_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.drying_atmospheres_drying_atmosphere_id_seq OWNER TO "Dalia";
+
+--
+-- Name: drying_atmospheres_drying_atmosphere_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: Dalia
+--
+
+ALTER SEQUENCE public.drying_atmospheres_drying_atmosphere_id_seq OWNED BY public.drying_atmospheres.drying_atmosphere_id;
 
 
 --
@@ -1095,12 +1144,12 @@ CREATE TABLE public.tape_recipe_line_actuals (
     actual_id integer NOT NULL,
     tape_id integer NOT NULL,
     recipe_line_id integer NOT NULL,
-    measure_mode public.measure_mode NOT NULL,
+    measure_mode public.measure_mode,
     actual_mass_g numeric,
     actual_volume_ml numeric,
     recorded_at timestamp with time zone DEFAULT now() NOT NULL,
     material_instance_id integer NOT NULL,
-    CONSTRAINT tape_recipe_line_actuals_check CHECK ((((measure_mode = 'mass'::public.measure_mode) AND (actual_mass_g IS NOT NULL) AND (actual_volume_ml IS NULL)) OR ((measure_mode = 'volume'::public.measure_mode) AND (actual_volume_ml IS NOT NULL) AND (actual_mass_g IS NULL))))
+    CONSTRAINT tape_recipe_line_actuals_check CHECK ((((measure_mode = 'mass'::public.measure_mode) AND (actual_mass_g IS NOT NULL) AND (actual_volume_ml IS NULL)) OR ((measure_mode = 'volume'::public.measure_mode) AND (actual_volume_ml IS NOT NULL) AND (actual_mass_g IS NULL)) OR ((measure_mode IS NULL) AND (actual_mass_g IS NULL) AND (actual_volume_ml IS NULL))))
 );
 
 
@@ -1288,7 +1337,9 @@ CREATE TABLE public.tapes (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     status public.tape_status,
     notes text,
-    name text DEFAULT 'Unnamed tape'::text NOT NULL
+    name text DEFAULT 'Unnamed tape'::text NOT NULL,
+    calc_mode public.tape_calc_mode,
+    target_mass_g numeric
 );
 
 
@@ -1419,6 +1470,13 @@ ALTER TABLE ONLY public.coating_methods ALTER COLUMN coating_id SET DEFAULT next
 --
 
 ALTER TABLE ONLY public.dry_mixing_methods ALTER COLUMN dry_mixing_id SET DEFAULT nextval('public.dry_mixing_methods_dry_mixing_id_seq'::regclass);
+
+
+--
+-- Name: drying_atmospheres drying_atmosphere_id; Type: DEFAULT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.drying_atmospheres ALTER COLUMN drying_atmosphere_id SET DEFAULT nextval('public.drying_atmospheres_drying_atmosphere_id_seq'::regclass);
 
 
 --
@@ -1671,6 +1729,19 @@ COPY public.dry_mixing_methods (dry_mixing_id, name, description) FROM stdin;
 
 
 --
+-- Data for Name: drying_atmospheres; Type: TABLE DATA; Schema: public; Owner: Dalia
+--
+
+COPY public.drying_atmospheres (drying_atmosphere_id, code, display, ui_order, is_active) FROM stdin;
+1	air	Воздух	0	t
+2	vacuum	Вакуум	1	t
+3	n2	Азот (N₂)	2	t
+4	ar	Аргон (Ar)	3	t
+5	dry_room	Сухая комната	4	t
+\.
+
+
+--
 -- Data for Name: electrode_circle; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
@@ -1897,6 +1968,12 @@ COPY public.separators (sep_id, supplier, name, brand, batch, structure_id, air_
 --
 
 COPY public.tape_process_steps (step_id, tape_id, operation_type_id, performed_by, started_at, comments) FROM stdin;
+1	4	1	33	2026-02-26 18:25:00+03	comments
+2	4	1	33	2026-02-26 16:25:00+03	comments
+3	4	1	33	2026-02-26 18:23:00+03	comments
+4	8	1	33	2026-02-27 15:31:00+03	comments comments
+5	8	1	33	2026-02-27 16:34:00+03	comments comments
+6	8	1	33	2026-02-18 16:34:00+03	hagljhasfjaj
 \.
 
 
@@ -1905,6 +1982,17 @@ COPY public.tape_process_steps (step_id, tape_id, operation_type_id, performed_b
 --
 
 COPY public.tape_recipe_line_actuals (actual_id, tape_id, recipe_line_id, measure_mode, actual_mass_g, actual_volume_ml, recorded_at, material_instance_id) FROM stdin;
+1	4	149	mass	200	\N	2026-02-27 13:23:39.466307+03	26
+2	4	150	mass	2.06	\N	2026-02-27 13:23:39.474619+03	10
+3	4	151	mass	102	\N	2026-02-27 13:23:39.477439+03	32
+4	4	152	mass	41	\N	2026-02-27 13:23:39.480945+03	7
+5	4	153	mass	10	\N	2026-02-27 13:23:39.483664+03	8
+21	8	96	mass	200	\N	2026-02-27 15:19:51.041453+03	27
+16	8	149	\N	\N	\N	2026-02-27 15:31:00.509552+03	26
+17	8	152	\N	\N	\N	2026-02-27 15:31:00.512918+03	7
+18	8	150	\N	\N	\N	2026-02-27 15:31:00.515397+03	10
+19	8	151	\N	\N	\N	2026-02-27 15:31:00.517628+03	32
+20	8	153	\N	\N	\N	2026-02-27 15:31:00.520045+03	8
 \.
 
 
@@ -1971,6 +2059,12 @@ COPY public.tape_step_coating (step_id, foil_id, coating_id) FROM stdin;
 --
 
 COPY public.tape_step_drying (step_id, temperature_c, atmosphere, target_duration_min, other_parameters) FROM stdin;
+1	60	\N	0	\N
+2	60	\N	0	\N
+3	60	\N	0	\N
+4	60	\N	0	\N
+5	60	\N	0	\N
+6	50	\N	0	\N
 \.
 
 
@@ -1986,8 +2080,9 @@ COPY public.tape_step_mixing (step_id, slurry_volume_ml, dry_mixing_id, dry_star
 -- Data for Name: tapes; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.tapes (tape_id, project_id, tape_recipe_id, created_by, created_at, status, notes, name) FROM stdin;
-1	3	39	33	2026-02-12 17:42:17.876583+03	\N	\N	Unnamed tape
+COPY public.tapes (tape_id, project_id, tape_recipe_id, created_by, created_at, status, notes, name, calc_mode, target_mass_g) FROM stdin;
+4	3	48	33	2026-02-26 17:47:40.460848+03	\N	notes notes notes	TEST Tape 1 - LFP S19	from_active_mass	200
+8	3	48	33	2026-02-27 13:33:42.269222+03	\N	c	Tape 2	from_active_mass	200
 \.
 
 
@@ -2005,9 +2100,15 @@ COPY public.users (user_id, name, active) FROM stdin;
 43	Viktor V. Shapovalov	t
 45	Roman Batalov	t
 47	Karlson	t
-33	Dalia	t
 48	Dima	t
 49	Julia	t
+50	Dalia 2	t
+33	Dalia 1	t
+51	Dalia 3	t
+52	Dalia 4	t
+53	Dalia 5	t
+54	Dalia 6	t
+55	Dalia 7	t
 \.
 
 
@@ -2055,6 +2156,13 @@ SELECT pg_catalog.setval('public.coating_methods_coating_id_seq', 2, true);
 --
 
 SELECT pg_catalog.setval('public.dry_mixing_methods_dry_mixing_id_seq', 4, true);
+
+
+--
+-- Name: drying_atmospheres_drying_atmosphere_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
+--
+
+SELECT pg_catalog.setval('public.drying_atmospheres_drying_atmosphere_id_seq', 5, true);
 
 
 --
@@ -2159,14 +2267,14 @@ SELECT pg_catalog.setval('public.separators_sep_id_seq', 12, true);
 -- Name: tape_process_steps_step_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_process_steps_step_id_seq', 1, false);
+SELECT pg_catalog.setval('public.tape_process_steps_step_id_seq', 6, true);
 
 
 --
 -- Name: tape_recipe_line_actuals_actual_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_recipe_line_actuals_actual_id_seq', 1, false);
+SELECT pg_catalog.setval('public.tape_recipe_line_actuals_actual_id_seq', 32, true);
 
 
 --
@@ -2187,14 +2295,14 @@ SELECT pg_catalog.setval('public.tape_recipes_tape_recipe_id_seq', 60, true);
 -- Name: tapes_tape_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tapes_tape_id_seq', 1, true);
+SELECT pg_catalog.setval('public.tapes_tape_id_seq', 8, true);
 
 
 --
 -- Name: users_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.users_user_id_seq', 49, true);
+SELECT pg_catalog.setval('public.users_user_id_seq', 55, true);
 
 
 --
@@ -2322,6 +2430,22 @@ ALTER TABLE ONLY public.dry_mixing_methods
 
 ALTER TABLE ONLY public.dry_mixing_methods
     ADD CONSTRAINT dry_mixing_methods_pkey PRIMARY KEY (dry_mixing_id);
+
+
+--
+-- Name: drying_atmospheres drying_atmospheres_code_key; Type: CONSTRAINT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.drying_atmospheres
+    ADD CONSTRAINT drying_atmospheres_code_key UNIQUE (code);
+
+
+--
+-- Name: drying_atmospheres drying_atmospheres_pkey; Type: CONSTRAINT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.drying_atmospheres
+    ADD CONSTRAINT drying_atmospheres_pkey PRIMARY KEY (drying_atmosphere_id);
 
 
 --
@@ -3165,5 +3289,5 @@ ALTER TABLE ONLY public.tapes
 -- PostgreSQL database dump complete
 --
 
-\unrestrict H3cUOaxYFpOFba2JhKvK11c4gGaKyfzSTtliDDP57YLP1ZuMIvc6vNHmeiEc70u
+\unrestrict WPM0MfBFoEdtcAYg8mGxFLZ6atX7LK2yu8klrvQwF0hmrL6W93bd3LheL70Dgcr
 
