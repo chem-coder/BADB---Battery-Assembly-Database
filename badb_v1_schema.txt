@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict WPM0MfBFoEdtcAYg8mGxFLZ6atX7LK2yu8klrvQwF0hmrL6W93bd3LheL70Dgcr
+\restrict fKVdham63D9F7qAH2DUhVOnwBazLHsywIPDAGUM69hJ03BPf5euWdT8qJ9WiUUT
 
 -- Dumped from database version 16.11 (Postgres.app)
 -- Dumped by pg_dump version 16.11 (Postgres.app)
@@ -1319,7 +1319,8 @@ CREATE TABLE public.tape_step_mixing (
     wet_mixing_id integer,
     wet_start_time timestamp with time zone,
     wet_duration_min integer,
-    wet_rpm text
+    wet_rpm text,
+    viscosity_cp numeric
 );
 
 
@@ -1968,12 +1969,26 @@ COPY public.separators (sep_id, supplier, name, brand, batch, structure_id, air_
 --
 
 COPY public.tape_process_steps (step_id, tape_id, operation_type_id, performed_by, started_at, comments) FROM stdin;
-1	4	1	33	2026-02-26 18:25:00+03	comments
-2	4	1	33	2026-02-26 16:25:00+03	comments
-3	4	1	33	2026-02-26 18:23:00+03	comments
-4	8	1	33	2026-02-27 15:31:00+03	comments comments
-5	8	1	33	2026-02-27 16:34:00+03	comments comments
 6	8	1	33	2026-02-18 16:34:00+03	hagljhasfjaj
+13	9	3	55	2026-03-01 11:07:00+03	new comment test
+9	9	1	35	2026-01-01 11:11:00+03	yesterday 2
+3	4	1	33	2026-02-26 18:23:00+03	comments
+7	8	3	33	2026-03-03 12:00:00+03	test mixing subtype
+21	4	2	33	2026-03-03 18:54:00+03	hello
+18	4	7	33	2026-03-03 14:30:00+03	hfhfhf
+31	4	6	33	2026-03-04 14:36:00+03	f,mm,sm,
+17	4	5	33	2026-03-03 14:32:00+03	oh no did we forget to add some comments here??? 
+27	4	4	33	2026-03-04 10:58:00+03	test coating
+41	11	1	33	2026-03-04 16:20:00+03	now
+42	11	2	33	2026-03-04 16:21:00+03	mix phase 1 comment
+43	11	3	33	2026-03-04 16:23:00+03	mix 1
+55	11	5	33	2026-03-04 16:27:00+03	come
+56	11	6	33	2026-03-04 16:27:00+03	com
+57	11	7	33	2026-03-04 16:28:00+03	d
+44	11	4	33	2026-03-04 16:25:00+03	now
+60	12	1	33	2026-03-04 16:49:00+03	\N
+64	12	2	33	2026-03-04 16:51:00+03	\N
+16	4	3	33	2026-03-03 11:29:00+03	new comment 34
 \.
 
 
@@ -1982,17 +1997,30 @@ COPY public.tape_process_steps (step_id, tape_id, operation_type_id, performed_b
 --
 
 COPY public.tape_recipe_line_actuals (actual_id, tape_id, recipe_line_id, measure_mode, actual_mass_g, actual_volume_ml, recorded_at, material_instance_id) FROM stdin;
-1	4	149	mass	200	\N	2026-02-27 13:23:39.466307+03	26
-2	4	150	mass	2.06	\N	2026-02-27 13:23:39.474619+03	10
-3	4	151	mass	102	\N	2026-02-27 13:23:39.477439+03	32
-4	4	152	mass	41	\N	2026-02-27 13:23:39.480945+03	7
-5	4	153	mass	10	\N	2026-02-27 13:23:39.483664+03	8
 21	8	96	mass	200	\N	2026-02-27 15:19:51.041453+03	27
 16	8	149	\N	\N	\N	2026-02-27 15:31:00.509552+03	26
 17	8	152	\N	\N	\N	2026-02-27 15:31:00.512918+03	7
 18	8	150	\N	\N	\N	2026-02-27 15:31:00.515397+03	10
 19	8	151	\N	\N	\N	2026-02-27 15:31:00.517628+03	32
 20	8	153	\N	\N	\N	2026-02-27 15:31:00.520045+03	8
+33	9	96	\N	\N	\N	2026-03-03 10:10:51.725471+03	27
+34	9	98	\N	\N	\N	2026-03-03 10:10:51.737802+03	7
+35	9	97	\N	\N	\N	2026-03-03 10:10:51.743035+03	10
+36	9	99	\N	\N	\N	2026-03-03 10:10:51.74809+03	8
+1	4	149	mass	200	\N	2026-03-04 14:58:32.920635+03	26
+4	4	152	mass	41	\N	2026-03-04 14:58:32.923769+03	7
+2	4	150	mass	2.06	\N	2026-03-04 14:58:32.926259+03	10
+3	4	151	mass	102	\N	2026-03-04 14:58:32.932417+03	32
+5	4	153	mass	10	\N	2026-03-04 14:58:32.935538+03	8
+57	11	149	\N	\N	\N	2026-03-04 16:40:15.307257+03	26
+58	11	152	\N	\N	\N	2026-03-04 16:40:15.313383+03	7
+59	11	150	\N	\N	\N	2026-03-04 16:40:15.315912+03	10
+60	11	151	\N	\N	\N	2026-03-04 16:40:15.318381+03	32
+61	11	153	\N	\N	\N	2026-03-04 16:40:15.320301+03	8
+62	12	129	\N	\N	\N	2026-03-04 17:03:17.749789+03	28
+63	12	131	\N	\N	\N	2026-03-04 17:03:17.753037+03	7
+64	12	130	\N	\N	\N	2026-03-04 17:03:17.756502+03	10
+65	12	132	\N	\N	\N	2026-03-04 17:03:17.759185+03	8
 \.
 
 
@@ -2043,6 +2071,8 @@ COPY public.tape_recipes (tape_recipe_id, role, name, variant_label, notes, crea
 --
 
 COPY public.tape_step_calendering (step_id, temp_c, pressure_value, pressure_units, draw_speed_m_min, other_params, init_thickness_microns, final_thickness_microns, no_passes, appearance) FROM stdin;
+31	105	45	bar	2	comments for calendering	120	80	5	Блеск; Закрутка; Точечки; Другое: other appearance
+56	150	1	bar	1	other params	130	90	5	Блеск; Точечки; Другое: other
 \.
 
 
@@ -2051,6 +2081,8 @@ COPY public.tape_step_calendering (step_id, temp_c, pressure_value, pressure_uni
 --
 
 COPY public.tape_step_coating (step_id, foil_id, coating_id) FROM stdin;
+27	1	2
+44	2	2
 \.
 
 
@@ -2059,12 +2091,15 @@ COPY public.tape_step_coating (step_id, foil_id, coating_id) FROM stdin;
 --
 
 COPY public.tape_step_drying (step_id, temperature_c, atmosphere, target_duration_min, other_parameters) FROM stdin;
-1	60	\N	0	\N
-2	60	\N	0	\N
-3	60	\N	0	\N
-4	60	\N	0	\N
-5	60	\N	0	\N
 6	50	\N	0	\N
+9	79	n2	111	addtnl param
+3	60	vacuum	122	new comments comments
+18	76	vacuum	119	hrllo moto
+17	89	vacuum	122	comments
+41	79	vacuum	120	dry comments
+55	91	air	120	fgh
+57	80	vacuum	120	d
+60	80	vacuum	120	\N
 \.
 
 
@@ -2072,7 +2107,10 @@ COPY public.tape_step_drying (step_id, temperature_c, atmosphere, target_duratio
 -- Data for Name: tape_step_mixing; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.tape_step_mixing (step_id, slurry_volume_ml, dry_mixing_id, dry_start_time, dry_duration_min, dry_rpm, wet_mixing_id, wet_start_time, wet_duration_min, wet_rpm) FROM stdin;
+COPY public.tape_step_mixing (step_id, slurry_volume_ml, dry_mixing_id, dry_start_time, dry_duration_min, dry_rpm, wet_mixing_id, wet_start_time, wet_duration_min, wet_rpm, viscosity_cp) FROM stdin;
+7	10	4	\N	15	60	2	\N	30	500	\N
+43	485	4	2026-03-04 16:23:00+03	70	30-60 rpm	3	2026-03-04 16:24:00+03	90	vacuum, T = 25C	\N
+16	250	2	2026-03-03 06:29:00+03	111	~122	2	2026-03-04 01:19:00+03	1	1	1100
 \.
 
 
@@ -2081,8 +2119,11 @@ COPY public.tape_step_mixing (step_id, slurry_volume_ml, dry_mixing_id, dry_star
 --
 
 COPY public.tapes (tape_id, project_id, tape_recipe_id, created_by, created_at, status, notes, name, calc_mode, target_mass_g) FROM stdin;
-4	3	48	33	2026-02-26 17:47:40.460848+03	\N	notes notes notes	TEST Tape 1 - LFP S19	from_active_mass	200
 8	3	48	33	2026-02-27 13:33:42.269222+03	\N	c	Tape 2	from_active_mass	200
+9	3	47	33	2026-03-03 10:09:22.888669+03	\N	comments for the NMC tape 3	TEST Tape 3 - NMC 811	from_active_mass	200
+4	3	48	33	2026-02-26 17:47:40.460848+03	\N	notes notes notes	TEST Tape 1 - LFP S19	from_active_mass	200
+11	3	48	33	2026-03-04 16:20:24.103314+03	\N	new test tape, filled in one go.	TEST Tape 4 - LFP S19	from_active_mass	250
+12	3	54	33	2026-03-04 16:47:10.480307+03	\N	\N	New tape	from_active_mass	300
 \.
 
 
@@ -2267,14 +2308,14 @@ SELECT pg_catalog.setval('public.separators_sep_id_seq', 12, true);
 -- Name: tape_process_steps_step_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_process_steps_step_id_seq', 6, true);
+SELECT pg_catalog.setval('public.tape_process_steps_step_id_seq', 66, true);
 
 
 --
 -- Name: tape_recipe_line_actuals_actual_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_recipe_line_actuals_actual_id_seq', 32, true);
+SELECT pg_catalog.setval('public.tape_recipe_line_actuals_actual_id_seq', 69, true);
 
 
 --
@@ -2295,7 +2336,7 @@ SELECT pg_catalog.setval('public.tape_recipes_tape_recipe_id_seq', 60, true);
 -- Name: tapes_tape_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tapes_tape_id_seq', 8, true);
+SELECT pg_catalog.setval('public.tapes_tape_id_seq', 12, true);
 
 
 --
@@ -2670,6 +2711,14 @@ ALTER TABLE ONLY public.separators
 
 ALTER TABLE ONLY public.tape_process_steps
     ADD CONSTRAINT tape_process_steps_pkey PRIMARY KEY (step_id);
+
+
+--
+-- Name: tape_process_steps tape_process_steps_tape_operation_unique; Type: CONSTRAINT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.tape_process_steps
+    ADD CONSTRAINT tape_process_steps_tape_operation_unique UNIQUE (tape_id, operation_type_id);
 
 
 --
@@ -3289,4 +3338,5 @@ ALTER TABLE ONLY public.tapes
 -- PostgreSQL database dump complete
 --
 
-\unrestrict WPM0MfBFoEdtcAYg8mGxFLZ6atX7LK2yu8klrvQwF0hmrL6W93bd3LheL70Dgcr
+\unrestrict fKVdham63D9F7qAH2DUhVOnwBazLHsywIPDAGUM69hJ03BPf5euWdT8qJ9WiUUT
+

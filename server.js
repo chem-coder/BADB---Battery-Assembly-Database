@@ -2124,7 +2124,8 @@ app.post('/api/tapes/:id/steps/by-code/:code', async (req, res) => {
       wet_mixing_id,
       wet_start_time,
       wet_duration_min,
-      wet_rpm
+      wet_rpm,
+      viscosity_cP
     } = req.body || {};
 
     const client = await pool.connect();
@@ -2170,9 +2171,10 @@ app.post('/api/tapes/:id/steps/by-code/:code', async (req, res) => {
         INSERT INTO tape_step_mixing
           (step_id, slurry_volume_ml,
           dry_mixing_id, dry_start_time, dry_duration_min, dry_rpm,
-          wet_mixing_id, wet_start_time, wet_duration_min, wet_rpm)
+          wet_mixing_id, wet_start_time, wet_duration_min, wet_rpm,
+          viscosity_cP)
         VALUES
-          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         ON CONFLICT (step_id)
         DO UPDATE SET
           slurry_volume_ml  = EXCLUDED.slurry_volume_ml,
@@ -2183,7 +2185,8 @@ app.post('/api/tapes/:id/steps/by-code/:code', async (req, res) => {
           wet_mixing_id     = EXCLUDED.wet_mixing_id,
           wet_start_time    = EXCLUDED.wet_start_time,
           wet_duration_min  = EXCLUDED.wet_duration_min,
-          wet_rpm           = EXCLUDED.wet_rpm
+          wet_rpm           = EXCLUDED.wet_rpm,
+          viscosity_cP      = EXCLUDED.viscosity_cP
         `,
         [
           stepId,
@@ -2197,7 +2200,9 @@ app.post('/api/tapes/:id/steps/by-code/:code', async (req, res) => {
           Number(wet_mixing_id) || null,
           wet_start_time || null,
           Number.isFinite(Number(wet_duration_min)) ? Number(wet_duration_min) : null,
-          wet_rpm || null
+          wet_rpm || null,
+
+          Number.isFinite(Number(viscosity_cP)) ? Number(viscosity_cP) : null
         ]
       );
 
@@ -2208,6 +2213,199 @@ app.post('/api/tapes/:id/steps/by-code/:code', async (req, res) => {
       await client.query('ROLLBACK');
       console.error(err);
       return res.status(500).json({ error: 'Failed to save mixing step' });
+    } finally {
+      client.release();
+    }
+  }
+
+  // COATING (header + tape_step_coating)
+  if (code === 'coating') {
+    const {
+      performed_by,
+      started_at,
+      comments,
+      foil_id,
+      coating_id
+    } = req.body || {};
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // 1) lookup operation_type_id
+      const ot = await client.query(
+        `SELECT operation_type_id FROM operation_types WHERE code = $1`,
+        [code]
+      );
+
+      if (ot.rows.length === 0) {
+        throw new Error(`Unknown operation code: ${code}`);
+      }
+
+      const operationTypeId = ot.rows[0].operation_type_id;
+
+      // 2) upsert base step
+      const step = await client.query(
+        `
+        INSERT INTO tape_process_steps
+          (tape_id, operation_type_id, performed_by, started_at, comments)
+        VALUES ($1,$2,$3,$4,$5)
+        ON CONFLICT (tape_id, operation_type_id)
+        DO UPDATE SET
+          performed_by = EXCLUDED.performed_by,
+          started_at   = EXCLUDED.started_at,
+          comments     = EXCLUDED.comments
+        RETURNING step_id
+        `,
+        [
+          tapeId,
+          operationTypeId,
+          Number(performed_by) || null,
+          started_at || null,
+          comments || null
+        ]
+      );
+
+      const stepId = step.rows[0].step_id;
+
+      // 3) upsert coating subtype
+      await client.query(
+        `
+        INSERT INTO tape_step_coating
+          (step_id, foil_id, coating_id)
+        VALUES ($1,$2,$3)
+        ON CONFLICT (step_id)
+        DO UPDATE SET
+          foil_id = EXCLUDED.foil_id,
+          coating_id = EXCLUDED.coating_id
+        `,
+        [
+          stepId,
+          Number(foil_id) || null,
+          Number(coating_id) || null
+        ]
+      );
+
+      await client.query('COMMIT');
+      return res.status(201).json({ step_id: stepId });
+
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error(err);
+      return res.status(500).json({ error: 'Failed to save coating step' });
+    } finally {
+      client.release();
+    }
+  }
+
+  // CALENDERING (header + tape_step_calendering)
+  if (code === 'calendering') {
+    const {
+      performed_by,
+      started_at,
+      comments,
+      temp_c,
+      pressure_value,
+      pressure_units,
+      draw_speed_m_min,
+      other_params,
+      init_thickness_microns,
+      final_thickness_microns,
+      no_passes,
+      appearance
+    } = req.body || {};
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // 1) lookup operation_type_id
+      const ot = await client.query(
+        `SELECT operation_type_id FROM operation_types WHERE code = $1`,
+        [code]
+      );
+
+      if (ot.rows.length === 0) {
+        throw new Error(`Unknown operation code: ${code}`);
+      }
+
+      const operationTypeId = ot.rows[0].operation_type_id;
+
+      // 2) upsert base step
+      const step = await client.query(
+        `
+        INSERT INTO tape_process_steps
+          (tape_id, operation_type_id, performed_by, started_at, comments)
+        VALUES ($1,$2,$3,$4,$5)
+        ON CONFLICT (tape_id, operation_type_id)
+        DO UPDATE SET
+          performed_by = EXCLUDED.performed_by,
+          started_at   = EXCLUDED.started_at,
+          comments     = EXCLUDED.comments
+        RETURNING step_id
+        `,
+        [
+          tapeId,
+          operationTypeId,
+          Number(performed_by) || null,
+          started_at || null,
+          comments || null
+        ]
+      );
+
+      const stepId = step.rows[0].step_id;
+
+      // 3) upsert calendering subtype
+      await client.query(
+        `
+        INSERT INTO tape_step_calendering (
+          step_id,
+          temp_c,
+          pressure_value,
+          pressure_units,
+          draw_speed_m_min,
+          other_params,
+          init_thickness_microns,
+          final_thickness_microns,
+          no_passes,
+          appearance
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        ON CONFLICT (step_id)
+        DO UPDATE SET
+          temp_c = EXCLUDED.temp_c,
+          pressure_value = EXCLUDED.pressure_value,
+          pressure_units = EXCLUDED.pressure_units,
+          draw_speed_m_min = EXCLUDED.draw_speed_m_min,
+          other_params = EXCLUDED.other_params,
+          init_thickness_microns = EXCLUDED.init_thickness_microns,
+          final_thickness_microns = EXCLUDED.final_thickness_microns,
+          no_passes = EXCLUDED.no_passes,
+          appearance = EXCLUDED.appearance
+        `,
+        [
+          stepId,
+          Number.isFinite(Number(temp_c)) ? Number(temp_c) : null,
+          Number.isFinite(Number(pressure_value)) ? Number(pressure_value) : null,
+          pressure_units || null,
+          Number.isFinite(Number(draw_speed_m_min)) ? Number(draw_speed_m_min) : null,
+          other_params || null,
+          Number.isFinite(Number(init_thickness_microns)) ? Number(init_thickness_microns) : null,
+          Number.isFinite(Number(final_thickness_microns)) ? Number(final_thickness_microns) : null,
+          Number.isFinite(Number(no_passes)) ? Number(no_passes) : null,
+          appearance || null
+        ]
+      );
+
+      await client.query('COMMIT');
+      return res.status(201).json({ step_id: stepId });
+
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error(err);
+      return res.status(500).json({ error: 'Failed to save calendering step' });
     } finally {
       client.release();
     }
@@ -2261,7 +2459,8 @@ app.get('/api/tapes/:id/steps/by-code/:code', async (req, res) => {
         m.wet_mixing_id,
         m.wet_start_time,
         m.wet_duration_min,
-        m.wet_rpm
+        m.wet_rpm,
+        m.viscosity_cP
       `;
     }
 
@@ -2390,18 +2589,7 @@ app.get('/api/drying-atmospheres', async (req, res) => {
 });
 
 // -------- TAPE PROCESS STEPS (WEIGHING) --------
-
-/*
-gets triggered when the tape_recipe_line_actuals are saved
-*/
-
-// CREATE
-
-// READ
-
-// UPDATE
-
-// DELETE (cascade when the tape is deleted)
+/* This gets triggered via the tape_recipe_line_actuals routes */
 
 
 // -------- TAPE PROCESS STEPS (MIXING) --------
@@ -2418,6 +2606,7 @@ wet_mixing_id
 wet_start_time
 wet_duration_min
 wet_rpm
+viscosity_cP
 */
 
 // CREATE
@@ -2537,6 +2726,26 @@ app.get('/api/coating-methods', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка загрузки методов намазки' });
+  }
+});
+
+// -------- FOILS (REFERENCE) --------
+
+// READ
+app.get('/api/foils', async (req, res) => {
+  try {
+
+    const { rows } = await pool.query(`
+      SELECT foil_id, type
+      FROM foils
+      ORDER BY type
+    `);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error('Error loading foils:', err);
+    res.status(500).json({ error: 'Failed to load foils' });
   }
 });
 

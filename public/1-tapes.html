@@ -88,8 +88,6 @@
         <summary>Общая информация о ленте</summary>
       
         <fieldset id="tapes-general-info">
-          <legend>Общая информация о ленте</legend>
-
           <input
             type="text"
             name="name"
@@ -104,7 +102,8 @@
           </select>
           <a href="reference/users.html" target="_blank" class="ref-link">
             Управление пользователями
-          </a><br>
+          </a>
+          <br>
 
           <label for="project_id">Проект</label>
           <select id="project_id" name="project_id" required>
@@ -127,8 +126,6 @@
         <summary>Рецепт ленты</summary>
 
         <fieldset id="tape-recipe-and-materials">
-          <legend>Рецепт ленты</legend>
-        
           <label for="tape-recipe-id">Рецепт</label>
           <select id="tape-recipe-id" name="tape_recipe_id" required>
             <option value="">— выбрать рецепт —</option>
@@ -157,7 +154,7 @@
           
           <hr class="section-divider">
           <details id="calculations-expanded">
-            <summary>Расчёт состава (расширенный вид)</summary><br>
+            <summary><strong>Расчёт состава (расширенный вид)</strong></summary><br>
             <div id="expanded-calculation-container"></div>
           </details>
         </fieldset>
@@ -173,10 +170,7 @@
           <label for="0-drying_am-operator">Оператор: </label>
           <select id="0-drying_am-operator" name="0-drying_am-operator">
             <option value="">— выбрать пользователя —</option>
-          </select>
-          <a href="reference/users.html" target="_blank" class="ref-link">
-            Управление пользователями
-          </a><br>
+          </select><br>
 
           <label for="0-drying_am-date">Дата/время: </label>
           <input id="0-drying_am-date" type="date" name="0-drying_am-date" placeholder="Дата начала сушки">
@@ -186,6 +180,8 @@
 
           <label for="0-drying_am-notes">Примечания: </label>
           <textarea id="0-drying_am-notes" name="0-drying_am-notes" placeholder="Примечания к этапу сушки активного материала"></textarea><br>
+
+          <hr class="section-divider">
 
           <label for="0-drying_am-temperature">Температура, °C: </label>
           <input id="0-drying_am-temperature" type="number" step="1" min="-273" name="0-drying_am-temperature" value="80"><br>
@@ -207,138 +203,140 @@
 
       <details id="1-slurry">
         <summary>I. Приготовление электродной пасты</summary>
-        <fieldset id="1-slurry-f">
-          <legend class="visually-hidden">I. Приготовление электродной пасты</legend>
+        <fieldset id="1-weighing">
+          <legend>I.1. Замес пасты</legend>
 
-          <fieldset id="1-weighing">
-            <legend>I.1. Замес пасты</legend>
+          <!-- кто/когда -->
+          <label for="1-weighing-operator">Оператор: </label>
+          <select id="1-weighing-operator" name="1-weighing-operator">
+            <option value="">— выбрать пользователя —</option>
+          </select>
+          <br>
 
-            <!-- кто/когда -->
-            <label for="1-weighing-operator">Оператор: </label>
-            <select id="1-weighing-operator" name="1-weighing-operator">
-              <option value="">— выбрать пользователя —</option>
-            </select>
-            <a href="reference/users.html" target="_blank" class="ref-link">
-              Управление пользователями
-            </a><br>
+          <label for="1-weighing-date">Дата/время: </label>
+          <input id="1-weighing-date" type="date" name="1-weighing-date" placeholder="Дата начала сушки">
+          <input id="1-weighing-time" type="time" name="1-weighing-time" placeholder="Время начала сушки">
 
-            <label for="1-weighing-date">Дата/время: </label>
-            <input id="1-weighing-date" type="date" name="1-weighing-date" placeholder="Дата начала сушки">
-            <input id="1-weighing-time" type="time" name="1-weighing-time" placeholder="Время начала сушки">
+          <button type="button" class="date-time-now-button" id="1-weighing-now-button">Сейчас</button><br>
 
-            <button type="button" class="date-time-now-button" id="1-weighing-now-button">Сейчас</button><br>
-
-            <label for="1-weighing-notes">Примечания: </label>
-            <textarea id="1-weighing-notes" name="1-weighing-notes" placeholder="Примечания к этапу подготовки пасты"></textarea><br>
+          <label for="1-weighing-notes">Примечания: </label>
+          <textarea id="1-weighing-notes" name="1-weighing-notes" placeholder="Примечания к этапу подготовки пасты"></textarea><br>
           
-            <fieldset id="1-slurry-mix-quantities">
-              <legend>Компоненты и фактические значения</legend>
+          <hr class="section-divider">
 
-              <table class="slurry-actuals-table">
-                <thead>
-                  <tr>
-                    <th>Роль</th>
-                    <th>Экземпляр материала</th>
-                    <th>К добавлению</th>
-                    <th>Фактическое значение</th>
-                  </tr>
-                </thead>
-                <tbody id="slurry-actuals-body">
-                  <!-- строки будут генерироваться из recipe lines -->
-                </tbody>
-              </table>
-            </fieldset>
+          <table class="slurry-actuals-table">
+            <thead>
+              <tr>
+                <th>Роль</th>
+                <th>Экземпляр материала</th>
+                <th>К добавлению</th>
+                <th>Фактическое значение</th>
+              </tr>
+            </thead>
+            <tbody id="slurry-actuals-body">
+              <!-- строки будут генерироваться из recipe lines -->
+            </tbody>
+          </table>
 
-            <button type="button" id="1-weighing-save-btn">Сохранить этап замеса</button>
+          <button type="button" id="1-weighing-save-btn">Сохранить этап замеса</button>
 
-          </fieldset>
+        </fieldset>
 
-          <fieldset id="1-mixing">
-            <legend>I.2. Перемешивание пасты</legend>
+        <fieldset id="1-mixing">
+          <legend>I.2. Перемешивание пасты</legend>
 
-            <!-- кто/когда -->
-            <label for="1-mixing-operator">Оператор: </label>
-            <select id="1-mixing-operator" name="performed_by">
-              <option value="">— выбрать пользователя —</option>
-            </select>
-            <a href="reference/users.html" target="_blank" class="ref-link">
-              Управление пользователями
-            </a><br>
+          <!-- кто/когда -->
+          <label for="1-mixing-operator">Оператор: </label>
+          <select id="1-mixing-operator" name="performed_by">
+            <option value="">— выбрать пользователя —</option>
+          </select>
+          <br>
 
-            <label for="1-mixing-started_at-date">Дата/время начала: </label>
-            <input id="1-mixing-started_at-date" type="date" name="started_at_date" placeholder="Дата начала перемешивания">
-            <input id="1-mixing-started_at-time" type="time" name="started_at_time" placeholder="Время начала перемешивания">
+          <label for="1-mixing-started_at-date">Дата/время начала: </label>
+          <input id="1-mixing-started_at-date" type="date" name="started_at_date" placeholder="Дата начала перемешивания">
+          <input id="1-mixing-started_at-time" type="time" name="started_at_time" placeholder="Время начала перемешивания">
 
-            <button type="button" class="date-time-now-button" id="1-mixing-now-button">Сейчас</button><br>
+          <button type="button" class="date-time-now-button" id="1-mixing-now-button">Сейчас</button><br>
 
-            <label for="1-mixing-comments">Примечания: </label>
-            <textarea id="1-mixing-comments" name="comments" placeholder="Примечания к этапу перемешивания"></textarea><br>
+          <label for="1-mixing-comments">Примечания: </label>
+          <textarea id="1-mixing-comments" name="comments" placeholder="Примечания к этапу перемешивания"></textarea><br>
 
-            <!-- Объём пасты: просто записываем, ничего не блокирует -->
-            <label for="1-mixing-slurry_volume_ml">Объём пасты, мл: </label>
-            <input id="1-mixing-slurry_volume_ml"
-                  name="slurry_volume_ml"
+          <hr class="section-divider">
+
+          <h4>Параметры перемешивания</h4>
+          <!-- Объём пасты: просто записываем, ничего не блокирует -->
+          <label for="1-mixing-slurry_volume_ml">Объём пасты, мл: </label>
+          <input id="1-mixing-slurry_volume_ml"
+                name="slurry_volume_ml"
+                type="number"
+                inputmode="decimal"
+                min="0"
+                step="0.1"
+                placeholder="Например, 250"><br>
+
+          <!-- Сухое перемешивание -->
+          <h5>Параметры сухого перемешивания</h5>
+          <label for="1-mixing-dry_mixing_id">Сухая смесь - метод перемешивания: </label>
+          <select id="1-mixing-dry_mixing_id" name="dry_mixing_id">
+            <option value="">— не выбрано —</option>
+          </select><br>
+
+          <!-- Параметры сухого перемешивания (универсальные) -->
+          <div class="mix-params" id="mix-dry-params" hidden>
+
+            <label for="dry-start-date">Дата/время запуска: </label>
+            <input id="dry-start-date" type="date" name="dry_start_date">
+            <input id="dry-start-time" type="time" name="dry_start_time_clock">
+
+            <button type="button" class="date-time-now-button" id="dry-start-now-button">Сейчас</button><br>
+
+            <label for="dry-duration-min">Длительность, мин: </label>
+            <input id="dry-duration-min" type="number" name="dry_duration_min" min="0" step="1"><br>
+
+            <label for="dry-rpm">Скорость / режим (RPM, комментарий): </label>
+            <input id="dry-rpm"
+                  type="text"
+                  name="dry_rpm"
+                  placeholder="Например: ~60 об/мин, режим 2"><br>
+          </div>
+          
+          <!-- Мокрое перемешивание -->
+          <h4>Параметры мокрого перемешивания</h4>
+          <label for="1-mixing-wet_mixing_id">Электродная паста - метод перемешивания: </label>
+          <select id="1-mixing-wet_mixing_id" name="wet_mixing_id">
+            <option value="">— не выбрано —</option>
+          </select><br>
+
+          <!-- Параметры мокрого перемешивания (универсальные) -->
+          <div class="mix-params" id="mix-wet-params" hidden>
+
+            <label for="wet-start-date">Дата/время запуска: </label>
+            <input id="wet-start-date" type="date" name="wet_start_date">
+            <input id="wet-start-time" type="time" name="wet_start_time_clock">
+
+            <button type="button" class="date-time-now-button" id="wet-start-now-button">Сейчас</button><br>
+
+            <label for="wet-duration-min">Длительность, мин: </label>
+            <input id="wet-duration-min" type="number" name="wet_duration_min" min="0" step="1"><br>
+
+            <label for="wet-rpm">Скорость / режим (RPM, комментарий): </label>
+            <input id="wet-rpm"
+                  type="text"
+                  name="wet_rpm"
+                  placeholder="Например: 500–800 об/мин"><br>
+            </div>
+            
+            <label for="wet-viscosity_cP">Вязкость, cP: </label>
+            <input id="wet-viscosity_cP"
+                  name="viscosity_cP"
                   type="number"
                   inputmode="decimal"
                   min="0"
                   step="0.1"
-                  placeholder="Например, 250"><br>
+                  placeholder="Например: 1200"><br>
+                  
+          <button type="button" id="1-mixing-save-btn">Сохранить этап перемешивания</button>
 
-            <!-- Сухое перемешивание -->
-            <label for="1-mixing-dry_mixing_id">Сухая смесь - метод перемешивания: </label>
-            <select id="1-mixing-dry_mixing_id" name="dry_mixing_id">
-              <option value="">— не выбрано —</option>
-            </select><br>
-
-            <!-- Параметры сухого перемешивания (универсальные) -->
-            <div class="mix-params" id="mix-dry-params" hidden>
-              <h4>Параметры сухого перемешивания</h4>
-
-              <label for="dry-start-date">Дата/время запуска: </label>
-              <input id="dry-start-date" type="date" name="dry_start_date">
-              <input id="dry-start-time" type="time" name="dry_start_time_clock">
-
-              <button type="button" class="date-time-now-button" id="dry-start-now-button">Сейчас</button><br>
-
-              <label for="dry-duration-min">Длительность, мин: </label>
-              <input id="dry-duration-min" type="number" name="dry_duration_min" min="0" step="1"><br>
-
-              <label for="dry-rpm">Скорость / режим (RPM, комментарий): </label>
-              <input id="dry-rpm"
-                    type="text"
-                    name="dry_rpm"
-                    placeholder="Например: ~60 об/мин, режим 2"><br>
-            </div>
-            
-            <!-- Мокрое перемешивание -->
-            <label for="1-mixing-wet_mixing_id">Электродная паста - метод перемешивания: </label>
-            <select id="1-mixing-wet_mixing_id" name="wet_mixing_id">
-              <option value="">— не выбрано —</option>
-            </select><br>
-
-            <!-- Параметры мокрого перемешивания (универсальные) -->
-            <div class="mix-params" id="mix-wet-params" hidden>
-              <h4>Параметры мокрого перемешивания</h4>
-
-              <label for="wet-start-date">Дата/время запуска: </label>
-              <input id="wet-start-date" type="date" name="wet_start_date">
-              <input id="wet-start-time" type="time" name="wet_start_time_clock">
-
-              <button type="button" class="date-time-now-button" id="wet-start-now-button">Сейчас</button><br>
-
-              <label for="wet-duration-min">Длительность, мин: </label>
-              <input id="wet-duration-min" type="number" name="wet_duration_min" min="0" step="1"><br>
-
-              <label for="wet-rpm">Скорость / режим (RPM, комментарий): </label>
-              <input id="wet-rpm"
-                    type="text"
-                    name="wet_rpm"
-                    placeholder="Например: 500–800 об/мин"><br>
-            </div>
-
-            <button type="button" id="1-mixing-save-btn">Сохранить этап перемешивания</button>
-
-          </fieldset>
         </fieldset>
       </details>
 
@@ -355,9 +353,7 @@
             <select id="2-coating-operator" name="2-coating-operator">
               <option value="">— выбрать пользователя —</option>
             </select>
-            <a href="reference/users.html" target="_blank" class="ref-link">
-              Управление пользователями
-            </a><br>
+            <br>
 
             <label for="2-coating-date">Дата/время:</label>
             <input id="2-coating-date" type="date" name="2-coating-date" placeholder="Дата начала сушки">
@@ -367,77 +363,38 @@
 
             <label for="2-cathode-tape-notes">Примечания: </label>
             <textarea id="2-cathode-tape-notes" name="2-cathode-tape-notes" placeholder="Комментарии к подготовке ленты"></textarea>
-
-            <h4>Фольга</h4>
-            <label><input type="radio" id="foil-Al" name="foil" value="Al" checked/>Al</label>
-            <label><input type="radio" id="foil-other" name="foil" value="other"/>Другое </label>
-            <!-- text box tied to the "other" radio above -->
-            <input 
-              type="text" 
-              name="foil-other" 
-              class="other-input" 
-              id="foil-other-box"
-              placeholder="Specify other"
-              hidden
-            ><br><br>
-
-            <label for="foil-batch">Марка: <input type="text" id="foil-batch" name="foil-batch" value=""/></label><br>
             
-            <h4>Способ нанесения</h4>
-            <label><input type="radio" id="application-method-dr-blade" name="application-method" value="dr-blade" data-params-target="dr-blade-params"/>Ракель / Dr. Blade / Film Coater GN-VC-15H</label>
-            <label><input type="radio" id="application-method-coating-machine" name="application-method" value="coating-machine" data-params-target="coating-machine-params" />Mашина для намазки (большая)</label>
-            <label><input type="radio" id="application-method-other" name="application-method" value="other" data-params-target="other-params" />Другое </label>
-            <!-- text box tied to the "other" radio above -->
-            <input 
-              type="text" 
-              name="application-method-other" 
-              class="other-input" 
-              id="application-method-other-box"
-              placeholder="Specify other"
-              hidden
-            ><br>
+            <hr class="section-divider">
 
-            <h4>Параметры нанесения пасты: </h4>
-            <label for="blade-gap">Зазор ракеля: </label>
-            <input id="blade-gap" type="number" step="1" min="0" name="blade-gap" placeholder="150">, мкм
+            <h4>Параметры нанесения:</h4>
 
-            <!-- Параметры для Dr. Blade -->
-            <div class="application-method-params" id="dr-blade-params" hidden>                
-              <label for="dr-blade-temp">Температура сушки: </label>
-              <input id="dr-blade-temp" type="number" step="1" min="-273" name="dr-blade-temp" placeholder="Дата начала сушки"><br>
+            <!-- What gets written into tape_step_coating -->
+            <label for="2-coating-foil_id">Фольга: </label>
+            <select id="2-coating-foil_id" name="foil_id">
+              <option value="">— выбрать фольгу —</option>
+            </select><br>
 
-              <label for="dr-blade-dry-time">Длительность сушки: </label>
-              <input id="dr-blade-dry-time" type="number" min="0" step="1" name="dr-blade-dry-time" placeholder="Длительность сушки"><br>
-            </div>
+            <label for="2-coating-coating_id">Метод нанесения: </label>
+            <select id="2-coating-coating_id" name="coating_id">
+              <option value="">— выбрать метод —</option>
+            </select>
+            <br>
 
-            <!-- Параметры для Coating Machine -->
-            <div class="application-method-params" id="coating-machine-params" hidden>
-              <label for="coating-machine-temp">Температура сушки: </label>
-              <input id="coating-machine-temp" type="number" step="1" min="-273" name="coating-machine-temp" placeholder="Дата начала сушки"><br>
+            <!-- Read-only preview from coating_methods (not stored in tape_step_coating) -->
+            <div class="mix-params" id="2-coating-method-preview" hidden>
+              <h4>Параметры выбранного метода нанесения (справочник)</h4>
 
-              <label for="coating-machine-dry-time">Длительность сушки (?????): </label>
-              <input id="coating-machine-dry-time" type="number" min="0" step="1" name="coating-machine-dry-time" placeholder="Длительность сушки"><br>
+              <label for="2-coating-gap-um">Зазор, мкм: </label>
+              <input id="2-coating-gap-um" type="number" readonly><br>
 
-              <label for="coating-machine-speed">Скорость прокатки (??): </label>
-              <input id="coating-machine-speed" type="number" min="0" step="1" name="coating-machine-speed"><br>
+              <label for="2-coating-temp-c">Температура, °C: </label>
+              <input id="2-coating-temp-c" type="number" readonly><br>
 
-              <label for="coating-machine-param1">Параметр - шаблон1: </label>
-              <input id="coating-machine-param1" type="number" min="0" step="1" name="coating-machine-param1"><br>
+              <label for="2-coating-time-min">Время, мин: </label>
+              <input id="2-coating-time-min" type="number" readonly><br>
 
-              <label for="coating-machine-param2">Параметр - шаблон2: </label>
-              <input id="coating-machine-param2" type="text" name="coating-machine-param2"><br>
-            </div>
-
-            <!-- Параметры для Other -->
-            <div class="application-method-params" id="other-params" hidden>
-              <label for="other-method-comments">Параметр - comment: </label>
-              <textarea id="other-method-comments" name="other-method-comments"></textarea><br>
-
-              <label for="other-method-param1">Параметр - шаблон1: </label>
-              <input id="other-method-param1" type="number" min="0" step="1" name="other-method-param1"><br>
-
-              <label for="other-method-param2">Параметр - шаблон2: </label>
-              <input id="other-method-param2" type="text" name="other-method-param2"><br>
+              <label for="2-coating-method-comments">Комментарий: </label>
+              <textarea id="2-coating-method-comments" readonly></textarea><br>
             </div>
 
             <button type="button" id="2-coating-save-btn">Сохранить этап нанесения</button>
@@ -451,19 +408,22 @@
             <select id="2a-drying_tape-operator" name="2a-drying_tape-operator">
               <option value="">— выбрать пользователя —</option>
             </select>
-            <a href="reference/users.html" target="_blank" class="ref-link">
-              Управление пользователями
-            </a><br>
+            <br>
 
             <label for="2a-drying_tape-date">Дата/время: </label>
             <input id="2a-drying_tape-date" type="date" name="2a-drying_tape-date" placeholder="Дата начала сушки">
             <input id="2a-drying_tape-time" type="time" name="2a-drying_tape-time" placeholder="Время начала сушки">
 
             <button type="button" class="date-time-now-button" id="2a-drying_tape-now-button">Сейчас</button><br>
+            
+            <label for="2a-drying_tape-notes">Примечания: </label>
+            <textarea id="2a-drying_tape-notes" name="2a-drying_tape-notes" placeholder="Примечания к этапу сушки"></textarea><br>
+            
+            <hr class="section-divider">
 
             <label for="2a-drying_tape-temperature">Температура, °C: </label>
             <input id="2a-drying_tape-temperature" type="number" step="1" min="-273" name="2a-drying_tape-temperature" value="80"><br>
-
+            
             <label for="2a-drying_tape-atmosphere">Атмосфера: </label>
             <select id="2a-drying_tape-atmosphere" name="2a-drying_tape-atmosphere">
               <option value="">— не выбрано —</option>
@@ -486,9 +446,7 @@
             <select id="2-calendering-operator" name="2-calendering-operator">
               <option value="">— выбрать пользователя —</option>
             </select>
-            <a href="reference/users.html" target="_blank" class="ref-link">
-              Управление пользователями
-            </a><br>
+            <br>
 
             <label for="2-calendering-date">Дата/время: </label>
             <input id="2-calendering-date" type="date" name="2-calendering-date" placeholder="Дата начала сушки">
@@ -499,55 +457,64 @@
             <label for="2-calendering-notes">Примечания: </label>
             <textarea id="2-calendering-notes" name="2-calendering-notes" placeholder="Примечания к этапу каландрирования"></textarea><br>
 
+            <hr class="section-divider">
+
+            <!-- DB-mapped fields -->
             <!-- параметры процесса -->
             <h4>Параметры каландрирования:</h4>
-            <label for="2-calendering-temp">Температура валов, °C: </label>
-            <input id="2-calendering-temp" type="number" step="1" min="-273" name="2-calendering-temp"><br>
 
-            <label for="2-calendering-pressure">Давление, кН/см или МПа: </label>
-            <input id="2-calendering-pressure" type="number" step="0.01" min="0" name="2-calendering-pressure"><br>
+            <label for="2-calendering-temp_c">Температура валков, °C: </label>
+            <input id="2-calendering-temp_c" type="number" step="0.1"><br>
 
-            <label for="2-calendering-speed">Скорость протяжки, м/мин: </label>
-            <input id="2-calendering-speed" type="number" step="0.01" min="0" name="2-calendering-speed"><br>
+            <label for="2-calendering-pressure_value">Давление: </label>
+            <input id="2-calendering-pressure_value" type="number" step="0.1">
 
-            <label for="2-calendering-other">Другие параметры (комментарии): </label>
-            <input id="2-calendering-other" type="text" name="2-calendering-other"><br>
+            <select id="2-calendering-pressure_units">
+              <option value="">— единицы —</option>
+              <option value="bar">bar</option>
+              <option value="MPa">MPa</option>
+              <option value="kN">kN</option>
+            </select><br>
 
-            <h4>Толщина ленты</h4>
-            <label for="initial-thickness">Начальная толщина: </label>
-            <input id="initial-thickness" type="number" step="1" min="0" name="initial-thickness" placeholder="100">, мкм<br>
+            <label for="2-calendering-draw_speed_m_min">Скорость протяжки, м/мин: </label>
+            <input id="2-calendering-draw_speed_m_min" type="number" step="0.01"><br>
 
-            <label for="final-thickness">Конечная толщина: </label>
-            <input id="final-thickness" type="number" step="1" min="0" name="final-thickness" placeholder="70">, мкм<br>
+            <label for="2-calendering-init_thickness_microns">
+              Начальная толщина, мкм:
+            </label>
+            <input id="2-calendering-init_thickness_microns" type="number" step="0.1"><br>
 
-            <label for="passes-number">Количество прокаток: </label>
-            <input id="passes-number" type="number" step="1" min="0" name="passes-number" placeholder="5"><br>
-            
-            <h4>Внешний вид после каландрирования</h4>
-            <input type="checkbox" id="etrode-shine" name="etrode-look" value="shine">
-            <label for="etrode-shine">Блеск</label><br>
+            <label for="2-calendering-final_thickness_microns">
+              Конечная толщина, мкм:
+            </label>
+            <input id="2-calendering-final_thickness_microns" type="number" step="0.1"><br>
 
-            <input type="checkbox" id="etrode-curl" name="etrode-look" value="curl">
-            <label for="etrode-curl">Закрутка</label><br>
-            
-            <input type="checkbox" id="etrode-dots" name="etrode-look" value="dots">
-            <label for="etrode-dots">Точечки</label><br>
-            
-            <input type="checkbox" id="etrode-look-other" name="etrode-look" value="other">
-            <label for="etrode-look-other">Другое</label>
-            
-            <!-- text box tied to the "other" checkbox above -->
-            <input 
-              type="text" 
-              name="etrode-look-other" 
-              class="other-input" 
-              id="etrode-look-other-box"
-              placeholder="Specify other"
-              hidden
-            ><br><br>
+            <label for="2-calendering-no_passes">Количество проходов: </label>
+            <input id="2-calendering-no_passes" type="number"><br>
+
+            <label for="2-calendering-other_params">Дополнительные параметры: </label>
+            <textarea id="2-calendering-other_params"></textarea><br>
+
+            <label>Внешний вид:</label><br>
+
+            <input type="checkbox" id="2-cal-shine" value="Блеск">
+            <label for="2-cal-shine">Блеск</label><br>
+
+            <input type="checkbox" id="2-cal-curl" value="Закрутка">
+            <label for="2-cal-curl">Закрутка</label><br>
+
+            <input type="checkbox" id="2-cal-dots" value="Точечки">
+            <label for="2-cal-dots">Точечки</label><br>
+
+            <input type="checkbox" id="2-cal-other-check">
+            <label for="2-cal-other-check">Другое:</label>
+
+            <input type="text"
+                  id="2-cal-other-text"
+                  placeholder="Указать другое"
+                  disabled><br>
 
             <button type="button" id="2-calendering-save-btn">Сохранить этап каландрирования</button>
-
           </fieldset>
 
           <fieldset id="2b-drying_pressed_tape">
@@ -558,9 +525,7 @@
             <select id="2b-drying_pressed_tape-operator" name="2b-drying_pressed_tape-operator">
               <option value="">— выбрать пользователя —</option>
             </select>
-            <a href="reference/users.html" target="_blank" class="ref-link">
-              Управление пользователями
-            </a><br>
+            <br>
 
             <label for="2b-drying_pressed_tape-date">Дата/время: </label>
             <input id="2b-drying_pressed_tape-date" type="date" name="2b-drying_pressed_tape-date" placeholder="Дата начала сушки">
@@ -570,7 +535,9 @@
 
             <label for="2b-drying_pressed_tape-notes">Примечания: </label>
             <textarea id="2b-drying_pressed_tape-notes" name="2b-drying_pressed_tape-notes" placeholder="Примечания к этапу сушки"></textarea>
-
+            
+            <hr class="section-divider">
+            
             <label for="2b-drying_pressed_tape-temperature">Температура, °C: </label>
             <input id="2b-drying_pressed_tape-temperature" type="number" step="1" min="-273" name="2b-drying_pressed_tape-temperature" value="80"><br>
 
@@ -849,6 +816,7 @@
         items.forEach(item => {
           const opt = document.createElement('option');
           opt.value = String(item.dry_mixing_id);
+          opt.dataset.code = item.name || '';  
           opt.textContent = item.description || item.name;
           selectEl.appendChild(opt);
         });
@@ -869,6 +837,7 @@
         items.forEach(item => {
           const opt = document.createElement('option');
           opt.value = String(item.wet_mixing_id);
+          opt.dataset.code = item.name || '';    
           opt.textContent = item.description || item.name;
           selectEl.appendChild(opt);
         });
@@ -1593,12 +1562,7 @@
             }
 
             // --- RESTORE MIXING STEP ---
-            console.log('Fetching mixing step...');
-            const res = await fetch(
-              `/api/tapes/${currentTapeId}/steps/by-code/mixing`
-            );
-            console.log('Fetch response status:', res.status);
-
+            const res = await fetch(`/api/tapes/${currentTapeId}/steps/by-code/mixing`);
             if (!res.ok) throw new Error('Mixing load failed');
 
             const mixing = await res.json();
@@ -1623,8 +1587,8 @@
               }
 
               // performed_by, comments
-              document.getElementById('1-mixing-operator').value = mixing.performed_by || '';
-              document.getElementById('1-mixing-comments').value     = mixing.comments || '';
+              document.getElementById('1-mixing-operator').value  = mixing.performed_by || '';
+              document.getElementById('1-mixing-comments').value  = mixing.comments || '';
 
               // slurry volume + method ids
               document.getElementById('1-mixing-slurry_volume_ml').value = mixing.slurry_volume_ml ?? '';
@@ -1654,6 +1618,196 @@
               }
               document.getElementById('wet-duration-min').value = mixing.wet_duration_min ?? '';
               document.getElementById('wet-rpm').value          = mixing.wet_rpm ?? '';
+              document.getElementById('wet-viscosity_cP').value = mixing.viscosity_cp ?? '';
+
+              // IMPORTANT: run once, after method ids are set
+              updateMixParamsVisibility();
+
+            } else {
+
+              // clear fields if no mixing step exists
+              document.getElementById('1-mixing-started_at-date').value = '';
+              document.getElementById('1-mixing-started_at-time').value = '';
+              document.getElementById('1-mixing-operator').value = '';
+              document.getElementById('1-mixing-comments').value = '';
+              document.getElementById('1-mixing-slurry_volume_ml').value = '';
+              document.getElementById('1-mixing-dry_mixing_id').value = '';
+              document.getElementById('1-mixing-wet_mixing_id').value = '';
+              document.getElementById('dry-start-date').value = '';
+              document.getElementById('dry-start-time').value = '';
+              document.getElementById('dry-duration-min').value = '';
+              document.getElementById('dry-rpm').value = '';
+              document.getElementById('wet-start-date').value = '';
+              document.getElementById('wet-start-time').value = '';
+              document.getElementById('wet-duration-min').value = '';
+              document.getElementById('wet-rpm').value = '';
+              document.getElementById('wet-viscosity_cP').value = '';
+
+              updateMixParamsVisibility(); // will hide blocks because selects are blank
+            }
+
+            // --- RESTORE COATING STEP ---
+            const resCoating = await fetch(
+              `/api/tapes/${currentTapeId}/steps/by-code/coating`
+            );
+
+            if (!resCoating.ok) throw new Error('Coating load failed');
+
+            const coating = await resCoating.json();
+
+            if (coating) {
+
+              // ----- header -----
+
+              document.getElementById('2-coating-operator').value =
+                coating.performed_by || '';
+
+              document.getElementById('2-cathode-tape-notes').value =
+                coating.comments || '';
+
+              if (coating.started_at) {
+
+                const dt = new Date(coating.started_at);
+
+                const yyyy = dt.getFullYear();
+                const mm = String(dt.getMonth() + 1).padStart(2,'0');
+                const dd = String(dt.getDate()).padStart(2,'0');
+                const hh = String(dt.getHours()).padStart(2,'0');
+                const min = String(dt.getMinutes()).padStart(2,'0');
+
+                document.getElementById('2-coating-date').value =
+                  `${yyyy}-${mm}-${dd}`;
+
+                document.getElementById('2-coating-time').value =
+                  `${hh}:${min}`;
+
+              } else {
+
+                document.getElementById('2-coating-date').value = '';
+                document.getElementById('2-coating-time').value = '';
+
+              }
+
+              // ----- subtype fields (tape_step_coating) -----
+
+              document.getElementById('2-coating-foil_id').value =
+                coating.foil_id ?? '';
+
+              document.getElementById('2-coating-coating_id').value =
+                coating.coating_id ?? '';
+              
+              updateCoatingParamsVisibility();
+
+              // ----- trigger method preview -----
+
+              if (coating.coating_id) {
+
+                const methodSelect = document.getElementById('2-coating-coating_id');
+
+                const event = new Event('change');
+                methodSelect.dispatchEvent(event);
+
+              }
+
+            }
+
+            // --- RESTORE CALENDERING STEP ---
+            const resCal = await fetch(
+              `/api/tapes/${currentTapeId}/steps/by-code/calendering`
+            );
+
+            if (!resCal.ok) throw new Error('Calendering load failed');
+
+            const cal = await resCal.json();
+
+            if (cal) {
+
+              // ----- header -----
+
+              document.getElementById('2-calendering-operator').value =
+                cal.performed_by || '';
+
+              document.getElementById('2-calendering-notes').value =
+                cal.comments || '';
+
+              if (cal.started_at) {
+                const dt = new Date(cal.started_at);
+
+                const yyyy = dt.getFullYear();
+                const mm = String(dt.getMonth() + 1).padStart(2,'0');
+                const dd = String(dt.getDate()).padStart(2,'0');
+                const hh = String(dt.getHours()).padStart(2,'0');
+                const min = String(dt.getMinutes()).padStart(2,'0');
+
+                document.getElementById('2-calendering-date').value =
+                  `${yyyy}-${mm}-${dd}`;
+
+                document.getElementById('2-calendering-time').value =
+                  `${hh}:${min}`;
+              } else {
+                document.getElementById('2-calendering-date').value = '';
+                document.getElementById('2-calendering-time').value = '';
+              }
+
+
+              // ----- parameters -----
+
+              document.getElementById('2-calendering-temp_c').value =
+                cal.temp_c ?? '';
+
+              document.getElementById('2-calendering-pressure_value').value =
+                cal.pressure_value ?? '';
+
+              document.getElementById('2-calendering-pressure_units').value =
+                cal.pressure_units ?? '';
+
+              document.getElementById('2-calendering-draw_speed_m_min').value =
+                cal.draw_speed_m_min ?? '';
+
+              document.getElementById('2-calendering-init_thickness_microns').value =
+                cal.init_thickness_microns ?? '';
+
+              document.getElementById('2-calendering-final_thickness_microns').value =
+                cal.final_thickness_microns ?? '';
+
+              document.getElementById('2-calendering-no_passes').value =
+                cal.no_passes ?? '';
+
+              document.getElementById('2-calendering-other_params').value =
+                cal.other_params ?? '';
+
+
+              // ----- appearance parsing -----
+
+              const appearance = cal.appearance || '';
+
+              document.getElementById('2-cal-shine').checked =
+                appearance.includes('Блеск');
+
+              document.getElementById('2-cal-curl').checked =
+                appearance.includes('Закрутка');
+
+              document.getElementById('2-cal-dots').checked =
+                appearance.includes('Точечки');
+
+              if (appearance.includes('Другое:')) {
+
+                document.getElementById('2-cal-other-check').checked = true;
+                document.getElementById('2-cal-other-text').disabled = false;
+
+                const otherText =
+                  appearance.split('Другое:')[1]?.split(';')[0]?.trim() || '';
+
+                document.getElementById('2-cal-other-text').value = otherText;
+
+              } else {
+
+                document.getElementById('2-cal-other-check').checked = false;
+                document.getElementById('2-cal-other-text').disabled = true;
+                document.getElementById('2-cal-other-text').value = '';
+
+              }
+
             }
 
             // --- END OF STEP RESTORATION ---
@@ -1707,11 +1861,9 @@
 
               recipeSelect.dispatchEvent(new Event('change'));
 
-              window._restoringActuals = null;
-
-              // restore actual values (mass/volume)
-
-              isRestoringTape = false;    
+              // NOTE: do NOT clear isRestoringTape / _restoringActuals here.
+              // They are cleared at the end of the recipe change handler
+              // after fetchRecipeLines/render completes.
             }
           };
 
@@ -1852,6 +2004,46 @@
         }
       }
 
+      async function loadFoils() {
+
+        const res = await fetch('/api/foils');
+
+        if (!res.ok) {
+          throw new Error(`Failed to load foils: ${res.status}`);
+        }
+
+        const foils = await res.json();
+
+        const select = document.getElementById('2-coating-foil_id');
+
+        select.innerHTML = '<option value="">— выбрать фольгу —</option>';
+
+        foils.forEach(f => {
+          const opt = document.createElement('option');
+          opt.value = f.foil_id;
+          opt.textContent = f.type;
+          select.appendChild(opt);
+        });
+      }
+
+      async function loadCoatingMethods() {
+
+        const res = await fetch('/api/coating-methods');
+        const methods = await res.json();
+
+        const select = document.getElementById('2-coating-coating_id');
+
+        select.innerHTML =
+          '<option value="">— выбрать метод —</option>';
+
+        methods.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m.coating_id;
+          opt.textContent = m.comments || m.name;
+          select.appendChild(opt);
+        });
+      }
+
       // -------- Events --------
 
       // refresh reference dropdowns on focus (same pattern as reference pages)
@@ -1889,6 +2081,13 @@
           renderRecipeLines(lines, restoringActuals);
 
           recalculatePlannedMasses();
+
+          // finish restore AFTER lines have been fetched + rendered
+          if (isRestoringTape) {
+            window._restoringActuals = null;
+            isRestoringTape = false;
+          }
+
         } catch (err) {
           console.error(err);
         }
@@ -1930,98 +2129,6 @@
         addInput.value = '';
       });
 
-      // -------- I.2. Save mixing --------
-
-      document.getElementById('1-mixing-save-btn').onclick = async () => {
-
-        if (!currentTapeId) {
-          alert('Сначала сохраните ленту.');
-          return;
-        }
-
-        // ---- Top-level step fields ----
-        const performed_by = document.getElementById('1-mixing-operator').value || null;
-        const comments     = document.getElementById('1-mixing-comments').value || null;
-
-        const date = document.getElementById('1-mixing-started_at-date').value;
-        const time = document.getElementById('1-mixing-started_at-time').value;
-
-        let started_at = null;
-        if (date && time) {
-          started_at = new Date(`${date}T${time}`);
-        }
-
-        const slurry_volume_ml =
-          document.getElementById('1-mixing-slurry_volume_ml').value || null;
-
-        const dry_mixing_id =
-          document.getElementById('1-mixing-dry_mixing_id').value || null;
-
-        const wet_mixing_id =
-          document.getElementById('1-mixing-wet_mixing_id').value || null;
-
-        // ---- Dry params ----
-        const dryDate = document.getElementById('dry-start-date').value;
-        const dryTime = document.getElementById('dry-start-time').value;
-
-        let dry_start_time = null;
-        if (dryDate && dryTime) {
-          dry_start_time = new Date(`${dryDate}T${dryTime}`);
-        }
-
-        const dry_duration_min =
-          document.getElementById('dry-duration-min').value || null;
-
-        const dry_rpm =
-          document.getElementById('dry-rpm').value || null;
-
-        // ---- Wet params ----
-        const wetDate = document.getElementById('wet-start-date').value;
-        const wetTime = document.getElementById('wet-start-time').value;
-
-        let wet_start_time = null;
-        if (wetDate && wetTime) {
-          wet_start_time = new Date(`${wetDate}T${wetTime}`);
-        }
-
-        const wet_duration_min =
-          document.getElementById('wet-duration-min').value || null;
-
-        const wet_rpm =
-          document.getElementById('wet-rpm').value || null;
-
-        // ---- Build payload ----
-        const payload = {
-          performed_by,
-          started_at,
-          comments,
-          slurry_volume_ml,
-          dry_mixing_id,
-          dry_start_time,
-          dry_duration_min,
-          dry_rpm,
-          wet_mixing_id,
-          wet_start_time,
-          wet_duration_min,
-          wet_rpm
-        };
-
-        const res = await fetch(
-          `/api/tapes/${currentTapeId}/steps/by-code/mixing`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          }
-        );
-
-        if (!res.ok) {
-          alert('Ошибка сохранения этапа перемешивания');
-          return;
-        }
-
-        alert('Этап перемешивания сохранён');
-      };
 
       /* ------ name: editable ------ */
 
@@ -2048,7 +2155,7 @@
       });
 
 
-      // -------- Buttons --------
+      // -------- Top General Tape Buttons --------
 
       saveBtn.addEventListener('click', async () => {
         if (!mode) return;
@@ -2175,7 +2282,7 @@
         }
       }
 
-      // Wire all drying save buttons
+      // Wire all drying save buttons 
       [
         { code: 'drying_am',           prefix: '0-drying_am',            btnId: '0-drying_am-save-btn' },
         { code: 'drying_tape',         prefix: '2a-drying_tape',         btnId: '2a-drying_tape-save-btn' },
@@ -2239,6 +2346,270 @@
         }
       });
 
+      // -------- I.2. Save mixing --------
+
+      function updateMixParamsVisibility() {
+        const drySelect = document.getElementById('1-mixing-dry_mixing_id');
+        const wetSelect = document.getElementById('1-mixing-wet_mixing_id');
+
+        const dryParams = document.getElementById('mix-dry-params');
+        const wetParams = document.getElementById('mix-wet-params');
+
+        const dryCode =
+          drySelect?.selectedOptions?.[0]?.dataset?.code || '';
+
+        const wetCode =
+          wetSelect?.selectedOptions?.[0]?.dataset?.code || '';
+
+        const hideDry =
+          !dryCode ||
+          dryCode === 'none' ||
+          dryCode === 'hand';
+
+        const hideWet =
+          !wetCode ||
+          wetCode === 'none' ||
+          wetCode === 'hand';
+
+        dryParams.hidden = hideDry;
+        wetParams.hidden = hideWet;
+      }
+
+      // ---- Mixing params show/hide (empty method => hide params) ----
+      const dryMixSelect = document.getElementById('1-mixing-dry_mixing_id');
+      const wetMixSelect = document.getElementById('1-mixing-wet_mixing_id');
+      const dryParamsBox = document.getElementById('mix-dry-params');
+      const wetParamsBox = document.getElementById('mix-wet-params');
+      updateMixParamsVisibility();
+
+      if (dryMixSelect) dryMixSelect.addEventListener('change', updateMixParamsVisibility);
+      if (wetMixSelect) wetMixSelect.addEventListener('change', updateMixParamsVisibility);
+
+      document.getElementById('1-mixing-save-btn').onclick = async () => {
+
+        if (!currentTapeId) {
+          alert('Сначала сохраните ленту.');
+          return;
+        }
+
+        // ---- Top-level step fields ----
+        const performed_by = document.getElementById('1-mixing-operator').value || null;
+        const comments     = document.getElementById('1-mixing-comments').value || null;
+
+        const date = document.getElementById('1-mixing-started_at-date').value;
+        const time = document.getElementById('1-mixing-started_at-time').value;
+
+        let started_at = null;
+        if (date && time) {
+          started_at = new Date(`${date}T${time}`);
+        }
+
+        const slurry_volume_ml =
+          document.getElementById('1-mixing-slurry_volume_ml').value || null;
+
+        const dry_mixing_id =
+          document.getElementById('1-mixing-dry_mixing_id').value || null;
+
+        const wet_mixing_id =
+          document.getElementById('1-mixing-wet_mixing_id').value || null;
+
+        // ---- Dry params ----
+        const dryDate = document.getElementById('dry-start-date').value;
+        const dryTime = document.getElementById('dry-start-time').value;
+
+        let dry_start_time = null;
+        if (dryDate && dryTime) {
+          dry_start_time = new Date(`${dryDate}T${dryTime}`);
+        }
+
+        const dry_duration_min =
+          document.getElementById('dry-duration-min').value || null;
+
+        const dry_rpm =
+          document.getElementById('dry-rpm').value || null;
+
+        // ---- Wet params ----
+        const wetDate = document.getElementById('wet-start-date').value;
+        const wetTime = document.getElementById('wet-start-time').value;
+
+        let wet_start_time = null;
+        if (wetDate && wetTime) {
+          wet_start_time = new Date(`${wetDate}T${wetTime}`);
+        }
+
+        const wet_duration_min = document.getElementById('wet-duration-min').value || null;
+        const wet_rpm = document.getElementById('wet-rpm').value || null;
+        const viscosity_cP = document.getElementById('wet-viscosity_cP').value || null;
+
+        // ---- Build payload ----
+        const payload = {
+          performed_by,
+          started_at,
+          comments,
+          slurry_volume_ml,
+          dry_mixing_id,
+          dry_start_time,
+          dry_duration_min,
+          dry_rpm,
+          wet_mixing_id,
+          wet_start_time,
+          wet_duration_min,
+          wet_rpm,
+          viscosity_cP
+        };
+
+        const res = await fetch(
+          `/api/tapes/${currentTapeId}/steps/by-code/mixing`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }
+        );
+
+        if (!res.ok) {
+          alert('Ошибка сохранения этапа перемешивания');
+          return;
+        }
+
+        alert('Этап перемешивания сохранён');
+      };
+
+      // -------- II.1. Save coating --------
+
+      function updateCoatingParamsVisibility() {
+
+        const select = document.getElementById('2-coating-coating_id');
+        const params = document.getElementById('coating-params');
+
+        if (!select || !params) return;
+
+        params.hidden = !select.value;
+
+      }
+
+      document.getElementById('2-coating-save-btn').onclick = async () => {
+
+        const tapeId = currentTapeId;
+
+        const date = document.getElementById('2-coating-date').value;
+        const time = document.getElementById('2-coating-time').value;
+
+        let started_at = null;
+        if (date && time) started_at = `${date}T${time}`;
+
+        const payload = {
+          performed_by: document.getElementById('2-coating-operator').value || null,
+          started_at,
+          comments: document.getElementById('2-cathode-tape-notes').value || null,
+          foil_id: document.getElementById('2-coating-foil_id').value || null,
+          coating_id: document.getElementById('2-coating-coating_id').value || null
+        };
+
+        await fetch(`/api/tapes/${tapeId}/steps/by-code/coating`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+  
+        if (!res.ok) {
+          alert('Ошибка сохранения этапа нанесения');
+          return;
+        }
+
+        alert('Этап нанесения сохранён');
+      };
+
+      document
+        .getElementById('2-coating-coating_id')
+        .addEventListener('change', updateCoatingParamsVisibility);
+        
+      // -------- II.2. Save calendering --------
+
+      function buildCalAppearance() {
+        const values = [];
+
+        if (document.getElementById('2-cal-shine').checked)
+          values.push('Блеск');
+
+        if (document.getElementById('2-cal-curl').checked)
+          values.push('Закрутка');
+
+        if (document.getElementById('2-cal-dots').checked)
+          values.push('Точечки');
+
+        if (document.getElementById('2-cal-other-check').checked) {
+          const other = document.getElementById('2-cal-other-text').value.trim();
+          if (other) values.push('Другое: ' + other);
+        }
+
+        return values.join('; ');
+      }
+
+      document.getElementById('2-calendering-save-btn').onclick = async () => {
+
+        const tapeId = currentTapeId;
+
+        const date = document.getElementById('2-calendering-date').value;
+        const time = document.getElementById('2-calendering-time').value;
+
+        let started_at = null;
+        if (date && time) started_at = `${date}T${time}`;
+
+        const payload = {
+
+          performed_by: document.getElementById('2-calendering-operator').value || null,
+          started_at: started_at,
+          comments: document.getElementById('2-calendering-notes').value || null,
+
+          temp_c: document.getElementById('2-calendering-temp_c').value || null,
+
+          pressure_value:
+            document.getElementById('2-calendering-pressure_value').value || null,
+
+          pressure_units:
+            document.getElementById('2-calendering-pressure_units').value || null,
+
+          draw_speed_m_min:
+            document.getElementById('2-calendering-draw_speed_m_min').value || null,
+
+          init_thickness_microns:
+            document.getElementById('2-calendering-init_thickness_microns').value || null,
+
+          final_thickness_microns:
+            document.getElementById('2-calendering-final_thickness_microns').value || null,
+
+          no_passes:
+            document.getElementById('2-calendering-no_passes').value || null,
+
+          other_params:
+            document.getElementById('2-calendering-other_params').value || null,
+
+          appearance: buildCalAppearance()
+        };
+
+        const res = await fetch(
+          `/api/tapes/${tapeId}/steps/by-code/calendering`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }
+        );
+
+        if (!res.ok) {
+          const text = await res.text();
+          alert(text);
+          return;
+        }
+
+        console.log(await res.json());
+      };
+
+      document.getElementById('2-cal-other-check').addEventListener('change', e => {
+        document.getElementById('2-cal-other-text').disabled = !e.target.checked;
+      });
+
       // ---- NOW buttons (scoped to their own fieldset) ----
       document.addEventListener('click', (e) => {
         const btn = e.target.closest('.date-time-now-button');
@@ -2266,20 +2637,7 @@
         }
       });
 
-      // ---- Mixing params show/hide (empty method => hide params) ----
-      const dryMixSelect = document.getElementById('1-mixing-dry_mixing_id');
-      const wetMixSelect = document.getElementById('1-mixing-wet_mixing_id');
-      const dryParamsBox = document.getElementById('mix-dry-params');
-      const wetParamsBox = document.getElementById('mix-wet-params');
-      updateMixParamsVisibility();
 
-      function updateMixParamsVisibility() {
-        if (dryParamsBox) dryParamsBox.hidden = !(dryMixSelect && dryMixSelect.value);
-        if (wetParamsBox) wetParamsBox.hidden = !(wetMixSelect && wetMixSelect.value);
-      }
-
-      if (dryMixSelect) dryMixSelect.addEventListener('change', updateMixParamsVisibility);
-      if (wetMixSelect) wetMixSelect.addEventListener('change', updateMixParamsVisibility);
 
       // -------- Init --------
       
@@ -2308,6 +2666,12 @@
 
       loadWetMixingMethods(document.getElementById('1-mixing-wet_mixing_id'))
         .then(updateMixParamsVisibility)
+        .catch(console.error);
+
+      loadFoils(document.getElementById('2-coating-foil_id'))
+        .catch(console.error);
+      
+      loadCoatingMethods(document.getElementById('2-coating-coating_id'))
         .catch(console.error);
 
       updateMixParamsVisibility();
