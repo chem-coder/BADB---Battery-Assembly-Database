@@ -95,6 +95,8 @@
             hidden
           />
           <h2></h2>
+          <div id="live-since-last-step" aria-live="polite"></div>
+
 
           <label for="tape-created-by">Кто добавил</label>
           <select id="tape-created-by" name="created_by" required>
@@ -205,6 +207,7 @@
         <summary>I. Приготовление электродной пасты</summary>
         <fieldset id="1-weighing">
           <legend>I.1. Замес пасты</legend>
+          <div class="time-since" id="1-weighing-delay" aria-live="polite"></div>
 
           <!-- кто/когда -->
           <label for="1-weighing-operator">Оператор: </label>
@@ -244,6 +247,7 @@
 
         <fieldset id="1-mixing">
           <legend>I.2. Перемешивание пасты</legend>
+          <div class="time-since" id="1-mixing-delay" aria-live="polite"></div>
 
           <!-- кто/когда -->
           <label for="1-mixing-operator">Оператор: </label>
@@ -347,6 +351,7 @@
 
           <fieldset id="2-coating">
             <legend>II.1. Нанесение</legend>
+            <div class="time-since" id="2-coating-delay" aria-live="polite"></div>
 
             <!-- кто/когда -->
             <label for="2-coating-operator">Оператор: </label>
@@ -402,6 +407,7 @@
 
           <fieldset id="2a-drying_tape">
             <legend>II.2. Сушка ленты в шкафу (до каландрирования)</legend>
+            <div class="time-since" id="2a-drying_tape-delay" aria-live="polite"></div>
 
             <!-- кто/когда -->
             <label for="2a-drying_tape-operator">Оператор: </label>
@@ -440,6 +446,7 @@
 
           <fieldset id="2-calendering">
             <legend>II.3. Каландрирование</legend>
+            <div class="time-since" id="2-calendering-delay" aria-live="polite"></div>
 
             <!-- кто/когда -->
             <label for="2-calendering-operator">Оператор: </label>
@@ -519,6 +526,7 @@
 
           <fieldset id="2b-drying_pressed_tape">
             <legend>II.4. Сушка готовой ленты в шкафу (после каландрирования)</legend>
+            <div class="time-since" id="2b-drying_pressed_tape-delay" aria-live="polite"></div>
 
             <!-- кто/когда -->
             <label for="2b-drying_pressed_tape-operator">Оператор: </label>
@@ -590,11 +598,13 @@
       function showForm() {
         form.hidden = false;
         addInput.disabled = true;
+        startLiveSinceLastStepTimer();
       }
 
       function hideForm() {
         form.hidden = true;
         addInput.disabled = false;
+        stopLiveSinceLastStepTimer();
       }
 
       function resetForm() {
@@ -846,6 +856,7 @@
       }
 
       // -------- Rendering --------
+
       function recipeRoleLabel(recipeRole) {
         const map = {
           cathode_active: 'Aктивный материал: ',
@@ -1522,7 +1533,6 @@
             });
           }
 
-
           editBtn.onclick = async() => {
             mode = 'edit';
             currentTapeId = t.tape_id;
@@ -1533,7 +1543,7 @@
               restoreDryingStep({ code: 'drying_tape',         prefix: '2a-drying_tape' }),
               restoreDryingStep({ code: 'drying_pressed_tape', prefix: '2b-drying_pressed_tape' })
             ]);
-
+            
             // --- RESTORE WEIGHING STEP (I.1 header) ---
             {
               const resWeigh = await fetch(`/api/tapes/${currentTapeId}/steps/by-code/weighing`);
@@ -1809,8 +1819,17 @@
               }
 
             }
+            
+            // --- Refresh all step delays (after all restore assignments are done) ---
+            refreshWeighingDelay();
+            refreshMixingDelay();
+            refreshCoatingDelay();
+            refreshDryingTapeDelay();
+            refreshCalenderingDelay();
+            refreshDryingPressedTapeDelay();
 
             // --- END OF STEP RESTORATION ---
+
             if (saveBtn) saveBtn.textContent = 'Сохранить изменения';
 
             showForm();
@@ -1910,9 +1929,166 @@
       }
 
       // -------- Status helper --------
-      // (kept minimal on this page for now)
+      
       function logLoadError(err) {
         console.error(err);
+      }
+
+      // -------- Time since previous step (helpers) --------
+
+      function readDateTimeFromInputs(dateId, timeId) {
+        const d = document.getElementById(dateId)?.value || '';
+        const t = document.getElementById(timeId)?.value || '';
+        if (!d || !t) return null;
+
+        const dt = new Date(`${d}T${t}`);
+        return Number.isFinite(dt.getTime()) ? dt : null;
+      }
+
+      function formatDurationMs(ms) {
+        if (!Number.isFinite(ms) || ms < 0) return '';
+
+        const totalMin = Math.floor(ms / 60000);
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+
+        if (h <= 0) return `${m} мин`;
+        return `${h} ч ${m} мин`;
+      }
+
+      function setDelayText(outId, prevDateId, prevTimeId, curDateId, curTimeId) {
+        const out = document.getElementById(outId);
+        if (!out) return;
+
+        const prev = readDateTimeFromInputs(prevDateId, prevTimeId);
+        const cur  = readDateTimeFromInputs(curDateId, curTimeId);
+
+        if (!prev || !cur) {
+          out.textContent = '';
+          return;
+        }
+
+        const ms = cur.getTime() - prev.getTime();
+        const text = formatDurationMs(ms);
+
+        out.textContent = text ? `Время с прошлого этапа: ${text}` : '';
+      }
+
+      // -------- Live timer since last step --------
+
+      let liveSinceTimerId = null;
+
+      const stepStartInputPairs = [
+        ['0-drying_am-date', '0-drying_am-time'],
+        ['1-weighing-date', '1-weighing-time'],
+        ['1-mixing-started_at-date', '1-mixing-started_at-time'],
+        ['2-coating-date', '2-coating-time'],
+        ['2a-drying_tape-date', '2a-drying_tape-time'],
+        ['2-calendering-date', '2-calendering-time'],
+        ['2b-drying_pressed_tape-date', '2b-drying_pressed_tape-time']
+      ];
+
+      function getLatestStepStart() {
+        let latest = null;
+
+        stepStartInputPairs.forEach(([dateId, timeId]) => {
+          const dt = readDateTimeFromInputs(dateId, timeId);
+          if (!dt) return;
+          if (!latest || dt.getTime() > latest.getTime()) latest = dt;
+        });
+
+        return latest;
+      }
+
+      function updateLiveSinceLastStep() {
+        const out = document.getElementById('live-since-last-step');
+        if (!out) return;
+
+        const latest = getLatestStepStart();
+        if (!latest) {
+          out.textContent = '';
+          return;
+        }
+
+        const ms = Date.now() - latest.getTime();
+        const text = formatDurationMs(ms);
+
+        out.textContent = text ? `С момента последнего этапа: ${text}` : '';
+      }
+
+      function startLiveSinceLastStepTimer() {
+        stopLiveSinceLastStepTimer();
+        updateLiveSinceLastStep();
+        liveSinceTimerId = setInterval(updateLiveSinceLastStep, 1000);
+      }
+
+      function stopLiveSinceLastStepTimer() {
+        if (liveSinceTimerId) {
+          clearInterval(liveSinceTimerId);
+          liveSinceTimerId = null;
+        }
+      }
+
+// -------- Time since previous step (mixing) --------
+
+      function refreshWeighingDelay() {
+        setDelayText(
+          '1-weighing-delay',
+          '0-drying_am-date',
+          '0-drying_am-time',
+          '1-weighing-date',
+          '1-weighing-time'
+        );
+      }
+
+      function refreshMixingDelay() {
+        setDelayText(
+          '1-mixing-delay',
+          '1-weighing-date',
+          '1-weighing-time',
+          '1-mixing-started_at-date',
+          '1-mixing-started_at-time'
+        );
+      }
+
+      function refreshCoatingDelay() {
+        setDelayText(
+          '2-coating-delay',
+          '1-mixing-started_at-date',
+          '1-mixing-started_at-time',
+          '2-coating-date',
+          '2-coating-time'
+        );
+      }
+
+      function refreshDryingTapeDelay() {
+        setDelayText(
+          '2a-drying_tape-delay',
+          '2-coating-date',
+          '2-coating-time',
+          '2a-drying_tape-date',
+          '2a-drying_tape-time'
+        );
+      }
+
+      function refreshCalenderingDelay() {
+        setDelayText(
+          '2-calendering-delay',
+          '2a-drying_tape-date',
+          '2a-drying_tape-time',
+          '2-calendering-date',
+          '2-calendering-time'
+        );
+      }
+
+      function refreshDryingPressedTapeDelay() {
+        setDelayText(
+          '2b-drying_pressed_tape-delay',
+          '2-calendering-date',
+          '2-calendering-time',
+          '2b-drying_pressed_tape-date',
+          '2b-drying_pressed_tape-time'
+        );
       }
 
       // -------- Reference dropdowns --------
@@ -2236,6 +2412,7 @@
           console.error(err);
         }
       });
+      
       clearBtn.addEventListener('click', resetForm);
 
       // -------- Drying step helpers (generic for all drying blocks) --------
@@ -2675,6 +2852,54 @@
         .catch(console.error);
 
       updateMixParamsVisibility();
+
+      ['0-drying_am-date', '0-drying_am-time', '1-weighing-date', '1-weighing-time']
+        .forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', refreshWeighingDelay);
+          el.addEventListener('change', refreshWeighingDelay);
+        });
+      
+      ['1-weighing-date', '1-weighing-time', '1-mixing-started_at-date', '1-mixing-started_at-time']
+        .forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', refreshMixingDelay);
+          el.addEventListener('change', refreshMixingDelay);
+        });
+      
+      ['1-mixing-started_at-date', '1-mixing-started_at-time', '2-coating-date', '2-coating-time']
+        .forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', refreshCoatingDelay);
+          el.addEventListener('change', refreshCoatingDelay);
+        });
+
+      ['2-coating-date', '2-coating-time', '2a-drying_tape-date', '2a-drying_tape-time']
+        .forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', refreshDryingTapeDelay);
+          el.addEventListener('change', refreshDryingTapeDelay);
+        });
+
+      ['2a-drying_tape-date', '2a-drying_tape-time', '2-calendering-date', '2-calendering-time']
+        .forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', refreshCalenderingDelay);
+          el.addEventListener('change', refreshCalenderingDelay);
+        });
+
+      ['2-calendering-date', '2-calendering-time', '2b-drying_pressed_tape-date', '2b-drying_pressed_tape-time']
+        .forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.addEventListener('input', refreshDryingPressedTapeDelay);
+          el.addEventListener('change', refreshDryingPressedTapeDelay);
+        });      
 
     </script>
   </body>
