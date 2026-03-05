@@ -5,7 +5,7 @@
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0" />
-    <title>Протокол приготовления катодов</title>
+    <title>Вырезание электродов</title>
     <link rel="stylesheet" type="text/css" href="styles.css">
     <script type="text/javascript" src="script.js" defer></script>
   </head>
@@ -13,7 +13,7 @@
   <body data-page="cathode">
     <div class="container">
       <header>
-        <h1>Протокол приготовления катодов</h1>
+        <h1>Вырезание электродов</h1>
         <!-- Navigation button without text -->
         <a href="/index.html" ><svg viewBox="0 0 24 24" width="24" height="24">
           <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"
@@ -21,45 +21,33 @@
         </svg></a>
       </header>
 
-      <fieldset id="electrodes-role-block">
-        <legend>Тип электрода</legend>
+      <label for="electrode-role">Тип электрода: </label>
+      <select id="electrode-role" required>
+        <option value="">— выбрать —</option>
+        <option value="cathode">Катоды</option>
+        <option value="anode">Аноды</option>
+      </select><br>
 
-        <label for="electrode-role">Что вырезаем?</label>
-        <select id="electrode-role" required>
-          <option value="">— выбрать —</option>
-          <option value="cathode">Катоды</option>
-          <option value="anode">Аноды</option>
-        </select>
-      </fieldset>
+      <label for="electrodes-project-id">Проект: </label>
+      <select id="electrodes-project-id" required>
+        <option value="">— выбрать проект —</option>
+      </select>
+      <a href="/reference/projects.html" target="_blank" class="ref-link">
+        Управление проектами
+      </a><br>
+      
+      <label for="electrodes-tape-id">Лента: </label>
+      <select id="electrodes-tape-id" data-source="tapes" required>
+        <option value="">— выбрать ленту —</option>
+      </select><br>
 
-      <fieldset id="electrodes-tape-block" hidden>
-        <legend>Выбор ленты</legend>
-
-        <label for="electrodes-tape-id">Лента</label>
-        <select id="electrodes-tape-id" required>
-          <option value="">— выбрать ленту —</option>
-        </select>
-      </fieldset>
-
-      <fieldset id="electrodes-meta-block" hidden>
-        <legend>Метаданные партии</legend>
-
-        <label for="electrodes-project-id">Проект</label>
-        <select id="electrodes-project-id" required>
-          <option value="">— выбрать проект —</option>
-        </select>
-        <a href="/reference/projects.html" target="_blank" class="ref-link">
-          Управление проектами
-        </a><br>
-
-        <label for="electrodes-created-by">Оператор</label>
-        <select id="electrodes-created-by" required>
-          <option value="">— выбрать пользователя —</option>
-        </select>
-        <a href="/reference/users.html" target="_blank" class="ref-link">
-          Управление пользователями
-        </a>
-      </fieldset>
+      <label for="electrodes-created-by">Оператор</label>
+      <select id="electrodes-created-by" required>
+        <option value="">— выбрать пользователя —</option>
+      </select>
+      <a href="/reference/users.html" target="_blank" class="ref-link">
+        Управление пользователями
+      </a><br>
 
       <div id="cutting-workflow" hidden>
 
@@ -172,32 +160,21 @@
   
     <script>
       const roleSelect = document.getElementById('electrode-role');
-      const tapeBlock = document.getElementById('electrodes-tape-block');
-
-      roleSelect.addEventListener('change', async () => {
-        if (roleSelect.value) {
-          tapeBlock.hidden = false;
-          await loadTapesByRole(roleSelect.value);
-        } else {
-          tapeBlock.hidden = true;
-        }
-      });
-
       const tapeSelect = document.getElementById('electrodes-tape-id');
-      const metaBlock = document.getElementById('electrodes-meta-block');
+      const tapeBlock = document.getElementById('electrodes-tape-block');
       const workflow = document.getElementById('cutting-workflow');
+
+      let tapes = [];
+
+      roleSelect.addEventListener('change', () => {
+        renderTapeOptions();
+      });
 
       tapeSelect.addEventListener('change', async () => {
         if (!tapeSelect.value) {
-          metaBlock.hidden = true;
           workflow.hidden = true;
           return;
         }
-
-        metaBlock.hidden = false;
-
-        const res = await fetch(`/api/tapes`);
-        const tapes = await res.json();
 
         const selectedTape = tapes.find(
           t => t.tape_id === Number(tapeSelect.value)
@@ -205,9 +182,30 @@
 
         if (selectedTape) {
           const projectSelect = document.getElementById('electrodes-project-id');
+
+          // bottom-up inference: tape -> (role + project)
+          roleSelect.value = selectedTape.role;
           projectSelect.value = selectedTape.project_id;
+
+          // keep tape list consistent with the now-selected filters
+          renderTapeOptions();
+          tapeSelect.value = String(selectedTape.tape_id);
         }
       });
+
+      document.getElementById('electrodes-project-id')
+        .addEventListener('change', () => {
+          
+          renderTapeOptions();
+
+          if (
+            tapeSelect.value &&
+            document.getElementById('electrodes-project-id').value &&
+            document.getElementById('electrodes-created-by').value
+          ) {
+            workflow.hidden = false;
+          }
+        });
 
       document.getElementById('electrodes-created-by')
         .addEventListener('change', () => {
@@ -220,33 +218,53 @@
           }
         });
 
-      document.getElementById('electrodes-project-id')
-        .addEventListener('change', () => {
-          if (
-            tapeSelect.value &&
-            document.getElementById('electrodes-project-id').value &&
-            document.getElementById('electrodes-created-by').value
-          ) {
-            workflow.hidden = false;
-          }
-        });
-
-
         // -------- Reference dropdowns --------
-        async function loadTapesByRole(role) {
+
+        async function loadTapes() {
+
+          const res = await fetch('/api/tapes');
+          tapes = await res.json();
+
+          renderTapeOptions();
+        }
+
+        function renderTapeOptions() {
+
           const select = document.getElementById('electrodes-tape-id');
 
-          const res = await fetch(`/api/tapes?role=${role}`);
-          const data = await res.json();
+          const role = roleSelect.value;
+          const project = document.getElementById('electrodes-project-id').value;
+
+          const filtered = tapes.filter(t =>
+            (!role || t.role === role) &&
+            (!project || t.project_id == project)
+          );
 
           select.innerHTML = '<option value="">— выбрать ленту —</option>';
 
-          data.forEach(t => {
+          const cathodeGroup = document.createElement('optgroup');
+          cathodeGroup.label = 'Катоды';
+
+          const anodeGroup = document.createElement('optgroup');
+          anodeGroup.label = 'Аноды';
+
+          filtered.forEach(t => {
+
             const option = document.createElement('option');
             option.value = t.tape_id;
             option.textContent = `${t.recipe_name} (#${t.tape_id})`;
-            select.appendChild(option);
+
+            if (t.role === 'cathode') {
+              cathodeGroup.appendChild(option);
+            } else if (t.role === 'anode') {
+              anodeGroup.appendChild(option);
+            }
+
           });
+
+          if (cathodeGroup.children.length) select.appendChild(cathodeGroup);
+          if (anodeGroup.children.length) select.appendChild(anodeGroup);
+
         }
 
         async function loadProjects() {
@@ -280,10 +298,12 @@
         }
 
         // -------- Events --------
+
+        // -------- Init --------
         
         loadProjects();
         loadUsers();
-
+        loadTapes();
 
     </script>
 
