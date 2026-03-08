@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict fKVdham63D9F7qAH2DUhVOnwBazLHsywIPDAGUM69hJ03BPf5euWdT8qJ9WiUUT
+\restrict X7B2LsNXVyJgOcnaFO5eZ9lEYPYPn3QPq93WI65fmGpPTC9tEqougVMisg7gEpe
 
 -- Dumped from database version 16.11 (Postgres.app)
 -- Dumped by pg_dump version 16.11 (Postgres.app)
@@ -52,7 +52,7 @@ ALTER TYPE public.electrode_role OWNER TO "Dalia";
 CREATE TYPE public.electrolyte_status AS ENUM (
     'active',
     'archived',
-    'deprecated'
+    'inactive'
 );
 
 
@@ -64,7 +64,8 @@ ALTER TYPE public.electrolyte_status OWNER TO "Dalia";
 
 CREATE TYPE public.electrolyte_type AS ENUM (
     'liquid',
-    'solid'
+    'solid',
+    'gel'
 );
 
 
@@ -488,18 +489,6 @@ ALTER SEQUENCE public.drying_atmospheres_drying_atmosphere_id_seq OWNED BY publi
 
 
 --
--- Name: electrode_circle; Type: TABLE; Schema: public; Owner: Dalia
---
-
-CREATE TABLE public.electrode_circle (
-    electrode_id integer NOT NULL,
-    diameter_mm numeric NOT NULL
-);
-
-
-ALTER TABLE public.electrode_circle OWNER TO "Dalia";
-
---
 -- Name: electrode_cut_batches; Type: TABLE; Schema: public; Owner: Dalia
 --
 
@@ -576,19 +565,6 @@ ALTER SEQUENCE public.electrode_drying_drying_id_seq OWNED BY public.electrode_d
 
 
 --
--- Name: electrode_rectangle; Type: TABLE; Schema: public; Owner: Dalia
---
-
-CREATE TABLE public.electrode_rectangle (
-    electrode_id integer NOT NULL,
-    length_mm numeric NOT NULL,
-    width_mm numeric NOT NULL
-);
-
-
-ALTER TABLE public.electrode_rectangle OWNER TO "Dalia";
-
---
 -- Name: electrode_status; Type: TABLE; Schema: public; Owner: Dalia
 --
 
@@ -611,7 +587,7 @@ CREATE TABLE public.electrodes (
     diameter_mm numeric,
     length_mm numeric,
     width_mm numeric,
-    total_mass_g numeric NOT NULL,
+    electrode_mass_g numeric NOT NULL,
     cup_number integer,
     scrapped_reason text,
     comments text,
@@ -1743,14 +1719,6 @@ COPY public.drying_atmospheres (drying_atmosphere_id, code, display, ui_order, i
 
 
 --
--- Data for Name: electrode_circle; Type: TABLE DATA; Schema: public; Owner: Dalia
---
-
-COPY public.electrode_circle (electrode_id, diameter_mm) FROM stdin;
-\.
-
-
---
 -- Data for Name: electrode_cut_batches; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
@@ -1763,14 +1731,6 @@ COPY public.electrode_cut_batches (cut_batch_id, tape_id, created_by, created_at
 --
 
 COPY public.electrode_drying (drying_id, cut_batch_id, start_time, end_time, temperature_c, other_parameters, comments) FROM stdin;
-\.
-
-
---
--- Data for Name: electrode_rectangle; Type: TABLE DATA; Schema: public; Owner: Dalia
---
-
-COPY public.electrode_rectangle (electrode_id, length_mm, width_mm) FROM stdin;
 \.
 
 
@@ -1789,7 +1749,7 @@ COPY public.electrode_status (status_code, name) FROM stdin;
 -- Data for Name: electrodes; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.electrodes (electrode_id, cut_batch_id, shape, diameter_mm, length_mm, width_mm, total_mass_g, cup_number, scrapped_reason, comments, status_code, used_in_battery_id) FROM stdin;
+COPY public.electrodes (electrode_id, cut_batch_id, shape, diameter_mm, length_mm, width_mm, electrode_mass_g, cup_number, scrapped_reason, comments, status_code, used_in_battery_id) FROM stdin;
 \.
 
 
@@ -1969,16 +1929,10 @@ COPY public.separators (sep_id, supplier, name, brand, batch, structure_id, air_
 --
 
 COPY public.tape_process_steps (step_id, tape_id, operation_type_id, performed_by, started_at, comments) FROM stdin;
-6	8	1	33	2026-02-18 16:34:00+03	hagljhasfjaj
 13	9	3	55	2026-03-01 11:07:00+03	new comment test
 9	9	1	35	2026-01-01 11:11:00+03	yesterday 2
 3	4	1	33	2026-02-26 18:23:00+03	comments
-7	8	3	33	2026-03-03 12:00:00+03	test mixing subtype
 21	4	2	33	2026-03-03 18:54:00+03	hello
-18	4	7	33	2026-03-03 14:30:00+03	hfhfhf
-31	4	6	33	2026-03-04 14:36:00+03	f,mm,sm,
-17	4	5	33	2026-03-03 14:32:00+03	oh no did we forget to add some comments here??? 
-27	4	4	33	2026-03-04 10:58:00+03	test coating
 41	11	1	33	2026-03-04 16:20:00+03	now
 42	11	2	33	2026-03-04 16:21:00+03	mix phase 1 comment
 43	11	3	33	2026-03-04 16:23:00+03	mix 1
@@ -1986,9 +1940,11 @@ COPY public.tape_process_steps (step_id, tape_id, operation_type_id, performed_b
 56	11	6	33	2026-03-04 16:27:00+03	com
 57	11	7	33	2026-03-04 16:28:00+03	d
 44	11	4	33	2026-03-04 16:25:00+03	now
-60	12	1	33	2026-03-04 16:49:00+03	\N
-64	12	2	33	2026-03-04 16:51:00+03	\N
-16	4	3	33	2026-03-03 11:29:00+03	new comment 34
+16	4	3	33	2026-03-04 11:29:00+03	new comment 34
+27	4	4	33	2026-02-05 10:58:00+03	test coating
+17	4	5	33	2026-02-06 14:32:00+03	oh no did we forget to add some comments here??? 
+31	4	6	33	2026-02-07 14:36:00+03	f,mm,sm,
+18	4	7	33	2026-02-08 14:30:00+03	hfhfhf
 \.
 
 
@@ -1997,30 +1953,20 @@ COPY public.tape_process_steps (step_id, tape_id, operation_type_id, performed_b
 --
 
 COPY public.tape_recipe_line_actuals (actual_id, tape_id, recipe_line_id, measure_mode, actual_mass_g, actual_volume_ml, recorded_at, material_instance_id) FROM stdin;
-21	8	96	mass	200	\N	2026-02-27 15:19:51.041453+03	27
-16	8	149	\N	\N	\N	2026-02-27 15:31:00.509552+03	26
-17	8	152	\N	\N	\N	2026-02-27 15:31:00.512918+03	7
-18	8	150	\N	\N	\N	2026-02-27 15:31:00.515397+03	10
-19	8	151	\N	\N	\N	2026-02-27 15:31:00.517628+03	32
-20	8	153	\N	\N	\N	2026-02-27 15:31:00.520045+03	8
 33	9	96	\N	\N	\N	2026-03-03 10:10:51.725471+03	27
 34	9	98	\N	\N	\N	2026-03-03 10:10:51.737802+03	7
 35	9	97	\N	\N	\N	2026-03-03 10:10:51.743035+03	10
 36	9	99	\N	\N	\N	2026-03-03 10:10:51.74809+03	8
-1	4	149	mass	200	\N	2026-03-04 14:58:32.920635+03	26
-4	4	152	mass	41	\N	2026-03-04 14:58:32.923769+03	7
-2	4	150	mass	2.06	\N	2026-03-04 14:58:32.926259+03	10
-3	4	151	mass	102	\N	2026-03-04 14:58:32.932417+03	32
-5	4	153	mass	10	\N	2026-03-04 14:58:32.935538+03	8
-57	11	149	\N	\N	\N	2026-03-04 16:40:15.307257+03	26
-58	11	152	\N	\N	\N	2026-03-04 16:40:15.313383+03	7
-59	11	150	\N	\N	\N	2026-03-04 16:40:15.315912+03	10
-60	11	151	\N	\N	\N	2026-03-04 16:40:15.318381+03	32
-61	11	153	\N	\N	\N	2026-03-04 16:40:15.320301+03	8
-62	12	129	\N	\N	\N	2026-03-04 17:03:17.749789+03	28
-63	12	131	\N	\N	\N	2026-03-04 17:03:17.753037+03	7
-64	12	130	\N	\N	\N	2026-03-04 17:03:17.756502+03	10
-65	12	132	\N	\N	\N	2026-03-04 17:03:17.759185+03	8
+57	11	149	\N	\N	\N	2026-03-05 13:53:48.237351+03	26
+58	11	152	\N	\N	\N	2026-03-05 13:53:48.244049+03	7
+59	11	150	\N	\N	\N	2026-03-05 13:53:48.24744+03	10
+60	11	151	\N	\N	\N	2026-03-05 13:53:48.250802+03	32
+61	11	153	\N	\N	\N	2026-03-05 13:53:48.256126+03	8
+1	4	149	mass	200	\N	2026-03-04 21:13:16.355147+03	26
+4	4	152	mass	41	\N	2026-03-04 21:13:16.359617+03	7
+2	4	150	mass	2.06	\N	2026-03-04 21:13:16.362488+03	10
+3	4	151	mass	102	\N	2026-03-04 21:13:16.365463+03	32
+5	4	153	mass	10	\N	2026-03-04 21:13:16.368088+03	8
 \.
 
 
@@ -2071,8 +2017,8 @@ COPY public.tape_recipes (tape_recipe_id, role, name, variant_label, notes, crea
 --
 
 COPY public.tape_step_calendering (step_id, temp_c, pressure_value, pressure_units, draw_speed_m_min, other_params, init_thickness_microns, final_thickness_microns, no_passes, appearance) FROM stdin;
-31	105	45	bar	2	comments for calendering	120	80	5	Блеск; Закрутка; Точечки; Другое: other appearance
 56	150	1	bar	1	other params	130	90	5	Блеск; Точечки; Другое: other
+31	105	45	bar	2	comments for calendering	120	80	5	Блеск; Закрутка; Точечки; Другое: other appearance
 \.
 
 
@@ -2081,8 +2027,8 @@ COPY public.tape_step_calendering (step_id, temp_c, pressure_value, pressure_uni
 --
 
 COPY public.tape_step_coating (step_id, foil_id, coating_id) FROM stdin;
-27	1	2
 44	2	2
+27	1	2
 \.
 
 
@@ -2091,15 +2037,13 @@ COPY public.tape_step_coating (step_id, foil_id, coating_id) FROM stdin;
 --
 
 COPY public.tape_step_drying (step_id, temperature_c, atmosphere, target_duration_min, other_parameters) FROM stdin;
-6	50	\N	0	\N
 9	79	n2	111	addtnl param
 3	60	vacuum	122	new comments comments
-18	76	vacuum	119	hrllo moto
-17	89	vacuum	122	comments
 41	79	vacuum	120	dry comments
 55	91	air	120	fgh
 57	80	vacuum	120	d
-60	80	vacuum	120	\N
+17	89	vacuum	122	comments
+18	76	vacuum	119	hrllo moto
 \.
 
 
@@ -2108,9 +2052,8 @@ COPY public.tape_step_drying (step_id, temperature_c, atmosphere, target_duratio
 --
 
 COPY public.tape_step_mixing (step_id, slurry_volume_ml, dry_mixing_id, dry_start_time, dry_duration_min, dry_rpm, wet_mixing_id, wet_start_time, wet_duration_min, wet_rpm, viscosity_cp) FROM stdin;
-7	10	4	\N	15	60	2	\N	30	500	\N
 43	485	4	2026-03-04 16:23:00+03	70	30-60 rpm	3	2026-03-04 16:24:00+03	90	vacuum, T = 25C	\N
-16	250	2	2026-03-03 06:29:00+03	111	~122	2	2026-03-04 01:19:00+03	1	1	1100
+16	250	2	2026-03-03 03:29:00+03	111	~122	2	2026-03-03 22:19:00+03	1	1	1100
 \.
 
 
@@ -2119,11 +2062,9 @@ COPY public.tape_step_mixing (step_id, slurry_volume_ml, dry_mixing_id, dry_star
 --
 
 COPY public.tapes (tape_id, project_id, tape_recipe_id, created_by, created_at, status, notes, name, calc_mode, target_mass_g) FROM stdin;
-8	3	48	33	2026-02-27 13:33:42.269222+03	\N	c	Tape 2	from_active_mass	200
 9	3	47	33	2026-03-03 10:09:22.888669+03	\N	comments for the NMC tape 3	TEST Tape 3 - NMC 811	from_active_mass	200
 4	3	48	33	2026-02-26 17:47:40.460848+03	\N	notes notes notes	TEST Tape 1 - LFP S19	from_active_mass	200
 11	3	48	33	2026-03-04 16:20:24.103314+03	\N	new test tape, filled in one go.	TEST Tape 4 - LFP S19	from_active_mass	250
-12	3	54	33	2026-03-04 16:47:10.480307+03	\N	\N	New tape	from_active_mass	300
 \.
 
 
@@ -2308,14 +2249,14 @@ SELECT pg_catalog.setval('public.separators_sep_id_seq', 12, true);
 -- Name: tape_process_steps_step_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_process_steps_step_id_seq', 66, true);
+SELECT pg_catalog.setval('public.tape_process_steps_step_id_seq', 76, true);
 
 
 --
 -- Name: tape_recipe_line_actuals_actual_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_recipe_line_actuals_actual_id_seq', 69, true);
+SELECT pg_catalog.setval('public.tape_recipe_line_actuals_actual_id_seq', 104, true);
 
 
 --
@@ -2336,7 +2277,7 @@ SELECT pg_catalog.setval('public.tape_recipes_tape_recipe_id_seq', 60, true);
 -- Name: tapes_tape_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tapes_tape_id_seq', 12, true);
+SELECT pg_catalog.setval('public.tapes_tape_id_seq', 14, true);
 
 
 --
@@ -2490,14 +2431,6 @@ ALTER TABLE ONLY public.drying_atmospheres
 
 
 --
--- Name: electrode_circle electrode_circle_pkey; Type: CONSTRAINT; Schema: public; Owner: Dalia
---
-
-ALTER TABLE ONLY public.electrode_circle
-    ADD CONSTRAINT electrode_circle_pkey PRIMARY KEY (electrode_id);
-
-
---
 -- Name: electrode_cut_batches electrode_cut_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: Dalia
 --
 
@@ -2511,14 +2444,6 @@ ALTER TABLE ONLY public.electrode_cut_batches
 
 ALTER TABLE ONLY public.electrode_drying
     ADD CONSTRAINT electrode_drying_pkey PRIMARY KEY (drying_id);
-
-
---
--- Name: electrode_rectangle electrode_rectangle_pkey; Type: CONSTRAINT; Schema: public; Owner: Dalia
---
-
-ALTER TABLE ONLY public.electrode_rectangle
-    ADD CONSTRAINT electrode_rectangle_pkey PRIMARY KEY (electrode_id);
 
 
 --
@@ -3015,14 +2940,6 @@ ALTER TABLE ONLY public.battery_sep_config
 
 
 --
--- Name: electrode_circle electrode_circle_fk; Type: FK CONSTRAINT; Schema: public; Owner: Dalia
---
-
-ALTER TABLE ONLY public.electrode_circle
-    ADD CONSTRAINT electrode_circle_fk FOREIGN KEY (electrode_id) REFERENCES public.electrodes(electrode_id) ON DELETE CASCADE;
-
-
---
 -- Name: electrode_cut_batches electrode_cut_batches_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: Dalia
 --
 
@@ -3044,14 +2961,6 @@ ALTER TABLE ONLY public.electrode_cut_batches
 
 ALTER TABLE ONLY public.electrode_drying
     ADD CONSTRAINT electrode_drying_cut_batch_fk FOREIGN KEY (cut_batch_id) REFERENCES public.electrode_cut_batches(cut_batch_id) ON DELETE CASCADE;
-
-
---
--- Name: electrode_rectangle electrode_rectangle_fk; Type: FK CONSTRAINT; Schema: public; Owner: Dalia
---
-
-ALTER TABLE ONLY public.electrode_rectangle
-    ADD CONSTRAINT electrode_rectangle_fk FOREIGN KEY (electrode_id) REFERENCES public.electrodes(electrode_id) ON DELETE CASCADE;
 
 
 --
@@ -3338,5 +3247,5 @@ ALTER TABLE ONLY public.tapes
 -- PostgreSQL database dump complete
 --
 
-\unrestrict fKVdham63D9F7qAH2DUhVOnwBazLHsywIPDAGUM69hJ03BPf5euWdT8qJ9WiUUT
+\unrestrict X7B2LsNXVyJgOcnaFO5eZ9lEYPYPn3QPq93WI65fmGpPTC9tEqougVMisg7gEpe
 
