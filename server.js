@@ -2755,41 +2755,19 @@ app.get('/api/foils', async (req, res) => {
 });
 
 
-// -------- TAPE PROCESS STEPS (CALENDERING) --------
-
-/* tape_step_calendering
-step_id
-temp_c
-pressure_value
-pressure_units
-draw_speed_m_min
-other_params
-init_thickness_microns
-final_thickness_microns
-no_passes
-appearance
-*/
-
-// CREATE
-// POST /api/tapes/:id/steps/calendering
-// (later; upsert/join tape_step_calendering)
-
-// READ
-// GET /api/tapes/:id/steps/calendering
-// (later; upsert/join tape_step_calendering)
-
-// UPDATE (user may add values gradually as they run the process and collect data) 
-// DELETE (cascade when the tape is deleted)
-
-
-
-
 
 // -------- ELECTRODE CUT BATCHES --------
-
 // CREATE cut batch
 app.post('/api/electrode-cut-batches', async (req, res) => {
-  const { tape_id, created_by, comments } = req.body;
+    const {
+    tape_id,
+    created_by,
+    shape,
+    diameter_mm,
+    length_mm,
+    width_mm,
+    comments
+  } = req.body;
 
   if (!Number.isInteger(tape_id) || !Number.isInteger(created_by)) {
     return res.status(400).json({ error: 'Некорректные данные' });
@@ -2798,14 +2776,78 @@ app.post('/api/electrode-cut-batches', async (req, res) => {
   try {
     const result = await pool.query(
       `
-      INSERT INTO electrode_cut_batches (tape_id, created_by, comments)
-      VALUES ($1, $2, $3)
+      INSERT INTO electrode_cut_batches (
+        tape_id,
+        created_by,
+        shape,
+        diameter_mm,
+        length_mm,
+        width_mm,
+        comments
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *
       `,
-      [tape_id, created_by, comments || null]
+      [
+        tape_id,
+        created_by,
+        shape || null,
+        diameter_mm || null,
+        length_mm || null,
+        width_mm || null,
+        comments || null
+      ]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// UPDATE
+app.put('/api/electrode-cut-batches/:id', async (req, res) => {
+  const cutBatchId = Number(req.params.id);
+  const {
+    shape,
+    diameter_mm,
+    length_mm,
+    width_mm,
+    comments
+  } = req.body;
+
+  if (!Number.isInteger(cutBatchId)) {
+    return res.status(400).json({ error: 'Некорректный ID' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE electrode_cut_batches
+      SET
+        shape = $1,
+        diameter_mm = $2,
+        length_mm = $3,
+        width_mm = $4,
+        comments = $5
+      WHERE cut_batch_id = $6
+      RETURNING *
+      `,
+      [
+        shape || null,
+        diameter_mm || null,
+        length_mm || null,
+        width_mm || null,
+        comments || null,
+        cutBatchId
+      ]
     );
 
-    res.status(201).json(result.rows[0]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Партия не найдена' });
+    }
+
+    res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -2867,6 +2909,7 @@ app.get('/api/electrode-cut-batches/:id', async (req, res) => {
   }
 });
 
+
 // UPDATE cut batch comments
 app.put('/api/electrode-cut-batches/:id/comments', async (req, res) => {
   const cutBatchId = Number(req.params.id);
@@ -2920,14 +2963,16 @@ app.delete('/api/electrode-cut-batches/:id', async (req, res) => {
 });
 
 
+
 // -------- FOIL MASS MEASUREMENTS --------
 
 // ADD measurement
 app.post('/api/electrode-cut-batches/:id/foil-masses', async (req, res) => {
   const cutBatchId = Number(req.params.id);
   const { mass_g } = req.body;
+  const mass = Number(mass_g);
 
-  if (!Number.isInteger(cutBatchId) || !mass_g || Number(mass_g) <= 0) {
+  if (!Number.isInteger(cutBatchId) || !Number.isFinite(mass) || mass <= 0) {
     return res.status(400).json({ error: 'Некорректные данные' });
   }
 
@@ -2938,7 +2983,7 @@ app.post('/api/electrode-cut-batches/:id/foil-masses', async (req, res) => {
       VALUES ($1, $2)
       RETURNING *
       `,
-      [cutBatchId, mass_g]
+      [cutBatchId, mass]
     );
 
     res.status(201).json(result.rows[0]);
@@ -2968,6 +3013,30 @@ app.get('/api/electrode-cut-batches/:id/foil-masses', async (req, res) => {
     );
 
     res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// DELETE all measurements for a batch
+app.delete('/api/electrode-cut-batches/:id/foil-masses', async (req, res) => {
+  const cutBatchId = Number(req.params.id);
+
+  if (!Number.isInteger(cutBatchId)) {
+    return res.status(400).json({ error: 'Некорректный ID' });
+  }
+
+  try {
+    await pool.query(
+      `
+      DELETE FROM foil_mass_measurements
+      WHERE cut_batch_id = $1
+      `,
+      [cutBatchId]
+    );
+
+    res.json({ success: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -3027,16 +3096,13 @@ app.delete('/api/foil-measurements/:id', async (req, res) => {
 });
 
 
+
 // -------- ELECTRODES --------
 
 // CREATE electrode
 app.post('/api/electrodes', async (req, res) => {
   const {
     cut_batch_id,
-    shape,
-    diameter_mm,
-    length_mm,
-    width_mm,
     electrode_mass_g,
     cup_number,
     comments
@@ -3044,7 +3110,6 @@ app.post('/api/electrodes', async (req, res) => {
 
   if (
     !Number.isInteger(cut_batch_id) ||
-    !['circle', 'rectangle'].includes(shape) ||
     Number(electrode_mass_g) <= 0
   ) {
     return res.status(400).json({ error: 'Некорректные данные' });
@@ -3055,23 +3120,15 @@ app.post('/api/electrodes', async (req, res) => {
       `
       INSERT INTO electrodes (
         cut_batch_id,
-        shape,
-        diameter_mm,
-        length_mm,
-        width_mm,
         electrode_mass_g,
         cup_number,
         comments
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      VALUES ($1,$2,$3,$4)
       RETURNING *
       `,
       [
         cut_batch_id,
-        shape,
-        diameter_mm || null,
-        length_mm || null,
-        width_mm || null,
         electrode_mass_g,
         cup_number || null,
         comments || null
@@ -3079,10 +3136,42 @@ app.post('/api/electrodes', async (req, res) => {
     );
 
     res.status(201).json(result.rows[0]);
+
   } catch (err) {
+
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
+
   }
+});
+
+app.delete('/api/electrode-cut-batches/:id/electrodes', async (req, res) => {
+
+  const cutBatchId = Number(req.params.id);
+
+  if (!Number.isInteger(cutBatchId) || cutBatchId <= 0) {
+    return res.status(400).json({ error: 'Некорректный ID' });
+  }
+
+  try {
+
+    await pool.query(
+      `
+      DELETE FROM electrodes
+      WHERE cut_batch_id = $1
+      `,
+      [cutBatchId]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+
+  }
+
 });
 
 // GET electrodes by batch
@@ -3120,6 +3209,10 @@ app.put('/api/electrodes/:id/status', async (req, res) => {
     return res.status(400).json({ error: 'Некорректные данные' });
   }
 
+  if (![1,2,3].includes(status_code)) {
+    return res.status(400).json({ error: 'Некорректный статус' });
+  }
+  
   try {
     const result = await pool.query(
       `
@@ -3155,25 +3248,89 @@ app.put('/api/electrodes/:id/status', async (req, res) => {
 
 // CREATE drying record
 app.post('/api/electrode-cut-batches/:id/drying', async (req, res) => {
-  const cutBatchId = Number(req.params.id);
-  const { temperature_c, comments } = req.body;
 
-  if (!Number.isInteger(cutBatchId) || !temperature_c) {
+  const cutBatchId = Number(req.params.id);
+
+  const {
+    start_time,
+    end_time,
+    temperature_c,
+    other_parameters,
+    comments
+  } = req.body;
+
+  if (!Number.isInteger(cutBatchId)) {
     return res.status(400).json({ error: 'Некорректные данные' });
   }
 
   try {
-    const result = await pool.query(
+
+    /* check if drying already exists */
+
+    const existing = await pool.query(
       `
-      INSERT INTO electrode_drying (cut_batch_id, temperature_c, comments)
-      VALUES ($1, $2, $3)
-      RETURNING *
+      SELECT drying_id
+      FROM electrode_drying
+      WHERE cut_batch_id = $1
       `,
-      [cutBatchId, temperature_c, comments || null]
+      [cutBatchId]
     );
 
-    res.status(201).json(result.rows[0]);
+    let result;
+
+    if (existing.rows.length > 0) {
+
+      /* update existing drying */
+
+      result = await pool.query(
+        `
+        UPDATE electrode_drying
+        SET
+          start_time = $1,
+          end_time = $2,
+          temperature_c = $3,
+          other_parameters = $4,
+          comments = $5
+        WHERE cut_batch_id = $6
+        RETURNING *
+        `,
+        [
+          start_time || null,
+          end_time || null,
+          temperature_c || null,
+          other_parameters || null,
+          comments || null,
+          cutBatchId
+        ]
+      );
+
+    } else {
+
+      /* insert new drying */
+
+      result = await pool.query(
+        `
+        INSERT INTO electrode_drying
+        (cut_batch_id, start_time, end_time, temperature_c, other_parameters, comments)
+        VALUES ($1,$2,$3,$4,$5,$6)
+        RETURNING *
+        `,
+        [
+          cutBatchId,
+          start_time || null,
+          end_time || null,
+          temperature_c || null,
+          other_parameters || null,
+          comments || null
+        ]
+      );
+
+    }
+
+    res.json(result.rows[0]);
+
   } catch (err) {
+
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
@@ -3193,12 +3350,12 @@ app.get('/api/electrode-cut-batches/:id/drying', async (req, res) => {
       SELECT *
       FROM electrode_drying
       WHERE cut_batch_id = $1
-      ORDER BY drying_id
+      LIMIT 1
       `,
       [cutBatchId]
     );
 
-    res.json(result.rows);
+    res.json(result.rows[0] || null);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
