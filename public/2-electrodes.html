@@ -136,8 +136,9 @@
                   <tr>
                     <th>#</th>
                     <th>Масса, г</th>
-                    <th>Cup</th>
+                    <th>Стаканчик №</th>
                     <th>Комментарии</th>
+                    <th>Статус</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -260,11 +261,18 @@
       let hasChanges = false;
       let tapes = [];
 
+      const roleRu = {
+        cathode: 'катод',
+        anode: 'анод'
+      };
+
       roleSelect.addEventListener('change', () => {
+        if (currentCutBatchId) return;
         renderTapeOptions();
       });
 
       tapeSelect.addEventListener('change', async () => {
+        if (currentCutBatchId) return;
         const projectSelect = document.getElementById('electrodes-project_id');
         const list = document.getElementById('cut-batches-list');
         const msg = document.getElementById('no-batches-msg');
@@ -278,16 +286,14 @@
           return;
         }
 
-        const selectedTape = tapes.find(
-          t => t.tape_id === Number(tapeSelect.value)
-        );
+        const selectedOption = tapeSelect.selectedOptions[0];
 
-        if (selectedTape) {
-          roleSelect.value = selectedTape.role;
-          projectSelect.value = selectedTape.project_id;
+        if (selectedOption && selectedOption.value) {
+          roleSelect.value = selectedOption.dataset.role || '';
+          projectSelect.value = selectedOption.dataset.projectId || '';
 
           renderTapeOptions();
-          tapeSelect.value = String(selectedTape.tape_id);
+          tapeSelect.value = selectedOption.value;
         }
 
         if (tapeSelect.value && projectSelect.value) {
@@ -304,6 +310,8 @@
 
       document.getElementById('electrodes-project_id')
       .addEventListener('change', async () => {
+        if (currentCutBatchId) return;
+
         renderTapeOptions();
 
         if (tapeSelect.value && document.getElementById('electrodes-project_id').value) {
@@ -320,6 +328,8 @@
 
       document.getElementById('electrodes-created_by')
       .addEventListener('change', () => {
+        if (currentCutBatchId) return;
+
         const projectSelect = document.getElementById('electrodes-project_id');
 
         if (tapeSelect.value && projectSelect.value) {
@@ -337,7 +347,7 @@
 
       async function loadTapes() {
 
-        const res = await fetch('/api/tapes');
+        const res = await fetch('/api/tapes/for-electrodes');
         tapes = await res.json();
 
         renderTapeOptions();
@@ -366,8 +376,15 @@
         filtered.forEach(t => {
 
           const option = document.createElement('option');
-          option.value = t.tape_id;
-          option.textContent = `${t.recipe_name} (#${t.tape_id})`;
+          option.value = String(t.tape_id);
+          option.dataset.role = t.role;
+          option.dataset.projectId = String(t.project_id);
+          console.log("role");
+
+          const date = t.finished_at || '—';          
+          const roleLabel = roleRu[t.role] || t.role;
+
+          option.textContent = `#${t.tape_id} | ${t.name} (${roleLabel}) | ${date} | ${t.created_by}`;
 
           if (t.role === 'cathode') {
             cathodeGroup.appendChild(option);
@@ -555,34 +572,95 @@
         electrodes.forEach(e => {
 
           const tr = document.createElement('tr');
+          tr.dataset.electrodeId = e.electrode_id;
 
           const numberCell = document.createElement('td');
           numberCell.textContent = e.electrode_id;
 
           const massCell = document.createElement('td');
-          massCell.textContent = e.electrode_mass_g;
+          const massInput = document.createElement('input');
+          massInput.type = 'number';
+          massInput.step = '0.0001';
+          massInput.min = '0';
+          massInput.className = 'electrode-mass';
+          massInput.value = e.electrode_mass_g ?? '';
+          massInput.addEventListener('change', async () => {
+            await updateElectrode(e.electrode_id, {
+              electrode_mass_g: massInput.value || null
+            });
+            await loadElectrodes(currentCutBatchId);
+          });
+          massCell.appendChild(massInput);
 
           const cupCell = document.createElement('td');
-          cupCell.textContent = e.cup_number || '';
+          const cupInput = document.createElement('input');
+          cupInput.type = 'number';
+          cupInput.step = '1';
+          cupInput.min = '0';
+          cupInput.className = 'electrode-cup';
+          cupInput.value = e.cup_number ?? '';
+          cupInput.addEventListener('change', async () => {
+            await updateElectrode(e.electrode_id, {
+              cup_number: cupInput.value || null
+            });
+            await loadElectrodes(currentCutBatchId);
+          });
+          cupCell.appendChild(cupInput);
+
+          const commentCell = document.createElement('td');
+          const commentInput = document.createElement('input');
+          commentInput.type = 'text';
+          commentInput.className = 'electrode-comments';
+          commentInput.value = e.comments || '';
+          commentInput.addEventListener('change', async () => {
+            await updateElectrode(e.electrode_id, {
+              comments: commentInput.value || null
+            });
+            await loadElectrodes(currentCutBatchId);
+          });
+          commentCell.appendChild(commentInput);
 
           const statusCell = document.createElement('td');
-          statusCell.innerHTML = renderStatus(e);
+          statusCell.textContent = renderStatus(e);
 
           const actionCell = document.createElement('td');
 
+          /* SCRAP button (only if available) */
+
           if (e.status_code === 1) {
             const scrapBtn = document.createElement('button');
+            scrapBtn.type = 'button';
             scrapBtn.textContent = '❌';
             scrapBtn.title = 'Списать';
 
-            scrapBtn.onclick = () => scrapElectrode(e);
+            scrapBtn.onclick = async () => {
+              await scrapElectrode(e);
+            };
 
             actionCell.appendChild(scrapBtn);
           }
 
+          /* DELETE button */
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.textContent = '🗑️';
+          deleteBtn.title = 'Удалить';
+
+          deleteBtn.onclick = async () => {
+            const ok = confirm(`Удалить электрод ${e.electrode_id}?`);
+            if (!ok) return;
+
+            await deleteElectrode(e.electrode_id);
+            await loadElectrodes(currentCutBatchId);
+          };
+
+          actionCell.appendChild(deleteBtn);
+
           tr.appendChild(numberCell);
           tr.appendChild(massCell);
           tr.appendChild(cupCell);
+          tr.appendChild(commentCell);
           tr.appendChild(statusCell);
           tr.appendChild(actionCell);
 
@@ -591,31 +669,61 @@
         });
 
       }
-      
+
       function renderStatus(e) {
 
         if (e.status_code === 1) {
-          return '✅ available';
+          return '✅ доступен';
         }
 
         if (e.status_code === 2) {
-          return `🔋 used in battery ${e.used_in_battery_id}`;
+          return `🔋 использован в батарее ${e.used_in_battery_id}`;
         }
 
         if (e.status_code === 3) {
-          return `❌ scrapped: ${e.scrapped_reason}`;
+          return `❌ списан: ${e.scrapped_reason}`;
         }
 
+        return '';
       }
-      
+
+      async function updateElectrode(electrodeId, payload) {
+        const res = await fetch(`/api/electrodes/${electrodeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.error || 'Ошибка обновления электрода');
+          throw new Error(err.error || 'Ошибка обновления электрода');
+        }
+
+        return res.json();
+      }
+
+      async function deleteElectrode(electrodeId) {
+        const res = await fetch(`/api/electrodes/${electrodeId}`, {
+          method: 'DELETE'
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.error || 'Ошибка удаления электрода');
+          throw new Error(err.error || 'Ошибка удаления электрода');
+        }
+
+        return res.json();
+      }
+
       async function scrapElectrode(electrode) {
 
         const reason = prompt('Причина списания');
 
         if (!reason) return;
-        
-        // existing batch: update batch, then delete old electrodes, then insert current electrodes
-        await fetch(`/api/electrodes/${electrode.electrode_id}/status`, {
+
+        const res = await fetch(`/api/electrodes/${electrode.electrode_id}/status`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -624,6 +732,12 @@
             used_in_battery_id: null
           })
         });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.error || 'Ошибка списания электрода');
+          return;
+        }
 
         await loadElectrodes(electrode.cut_batch_id);
 
@@ -776,7 +890,7 @@
         const actionTd = document.createElement('td');
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
-        removeBtn.textContent = '×';
+        removeBtn.textContent = '🗑️';
 
         actionTd.appendChild(removeBtn);
 
@@ -871,112 +985,79 @@
 
         const tr = document.createElement('tr');
 
-        /* number column */
-
         const numTd = document.createElement('td');
         numTd.className = 'electrode-row-number';
 
-        /* mass */
-
         const massTd = document.createElement('td');
-
         const massInput = document.createElement('input');
         massInput.type = 'number';
         massInput.step = '0.0001';
         massInput.min = '0';
         massInput.required = true;
         massInput.className = 'electrode-mass';
-
         if (data.electrode_mass_g) {
           massInput.value = data.electrode_mass_g;
         }
-
         massTd.appendChild(massInput);
 
-        /* cup */
-
         const cupTd = document.createElement('td');
-
         const cupInput = document.createElement('input');
         cupInput.type = 'number';
         cupInput.step = '1';
         cupInput.min = '0';
         cupInput.className = 'electrode-cup';
-
         if (data.cup_number) {
           cupInput.value = data.cup_number;
         }
-
         cupTd.appendChild(cupInput);
 
-        /* comments */
-
         const commentTd = document.createElement('td');
-
         const commentInput = document.createElement('input');
         commentInput.type = 'text';
         commentInput.className = 'electrode-comments';
-
         if (data.comments) {
           commentInput.value = data.comments;
         }
-
         commentTd.appendChild(commentInput);
 
-        /* remove */
+        const statusTd = document.createElement('td');
+        statusTd.textContent = 'новый';
 
         const actionTd = document.createElement('td');
-
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
-        removeBtn.textContent = '×';
-
+        removeBtn.textContent = '🗑️';
         actionTd.appendChild(removeBtn);
 
         tr.appendChild(numTd);
         tr.appendChild(massTd);
         tr.appendChild(cupTd);
         tr.appendChild(commentTd);
+        tr.appendChild(statusTd);
         tr.appendChild(actionTd);
 
         electrodesBody.appendChild(tr);
 
         renumberElectrodeRows();
 
-        /* ENTER adds row */
-
         massInput.addEventListener('keydown', (e) => {
-
           if (e.key === 'Enter') {
-
             e.preventDefault();
-
             appendElectrodeRow();
-
             const inputs = electrodesBody.querySelectorAll('.electrode-mass');
-
             inputs[inputs.length - 1].focus();
-
           }
-
         });
 
-        /* remove */
-
         removeBtn.addEventListener('click', () => {
-
           tr.remove();
 
           if (!electrodesBody.querySelector('tr')) {
-
             appendElectrodeRow();
-
             return;
-
           }
 
           renumberElectrodeRows();
-
         });
 
       }
@@ -1204,17 +1285,15 @@
           });
         }
 
-        if (currentCutBatchId) {
-          await fetch(`/api/electrode-cut-batches/${currentCutBatchId}/electrodes`, {
-            method: 'DELETE'
-          });
-        }
-
-        /* ---------- SAVE ELECTRODES ---------- */
+        /* ---------- SAVE NEW ELECTRODES ONLY ---------- */
 
         const rows = document.querySelectorAll('#electrodes-body tr');
 
         for (const row of rows) {
+
+          if (row.dataset.electrodeId) {
+            continue;
+          }
 
           const mass = row.querySelector('.electrode-mass')?.value;
 
@@ -1223,8 +1302,7 @@
           const cup = row.querySelector('.electrode-cup')?.value || null;
           const comments = row.querySelector('.electrode-comments')?.value || null;
 
-          // New batch: create batch, then insert electrodes
-          await fetch('/api/electrodes', {
+          const res = await fetch('/api/electrodes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1234,6 +1312,12 @@
               comments
             })
           });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Ошибка создания электрода');
+            return;
+          }
 
         }
 
@@ -1278,6 +1362,7 @@
         alert('Партия сохранена');
         
         await loadCutBatches(tapeId);
+        await loadElectrodes(currentCutBatchId);
       });
       
       

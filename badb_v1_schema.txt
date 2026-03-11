@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict X7B2LsNXVyJgOcnaFO5eZ9lEYPYPn3QPq93WI65fmGpPTC9tEqougVMisg7gEpe
+\restrict YlSlflkiBhgDDderQsdofhZJS83pfAATrfr4zOtT3XWU78tgR94qHpUD2otaHcK
 
 -- Dumped from database version 16.11 (Postgres.app)
 -- Dumped by pg_dump version 16.11 (Postgres.app)
@@ -497,7 +497,12 @@ CREATE TABLE public.electrode_cut_batches (
     tape_id integer NOT NULL,
     created_by integer NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    comments text
+    comments text,
+    shape text,
+    diameter_mm numeric,
+    length_mm numeric,
+    width_mm numeric,
+    CONSTRAINT electrode_shape_check CHECK (((shape = ANY (ARRAY['circle'::text, 'rectangle'::text])) OR (shape IS NULL)))
 );
 
 
@@ -583,18 +588,12 @@ ALTER TABLE public.electrode_status OWNER TO "Dalia";
 CREATE TABLE public.electrodes (
     electrode_id integer NOT NULL,
     cut_batch_id integer NOT NULL,
-    shape text NOT NULL,
-    diameter_mm numeric,
-    length_mm numeric,
-    width_mm numeric,
     electrode_mass_g numeric NOT NULL,
     cup_number integer,
     scrapped_reason text,
     comments text,
     status_code integer DEFAULT 1 NOT NULL,
     used_in_battery_id integer,
-    CONSTRAINT electrodes_geometry_check CHECK ((((shape = 'circle'::text) AND (diameter_mm IS NOT NULL) AND (length_mm IS NULL) AND (width_mm IS NULL)) OR ((shape = 'rectangle'::text) AND (diameter_mm IS NULL) AND (length_mm IS NOT NULL) AND (width_mm IS NOT NULL)))),
-    CONSTRAINT electrodes_shape_check CHECK ((shape = ANY (ARRAY['circle'::text, 'rectangle'::text]))),
     CONSTRAINT electrodes_status_logic_check CHECK ((((status_code = 1) AND (used_in_battery_id IS NULL) AND (scrapped_reason IS NULL)) OR ((status_code = 2) AND (used_in_battery_id IS NOT NULL) AND (scrapped_reason IS NULL)) OR ((status_code = 3) AND (used_in_battery_id IS NULL) AND (scrapped_reason IS NOT NULL))))
 );
 
@@ -1722,7 +1721,7 @@ COPY public.drying_atmospheres (drying_atmosphere_id, code, display, ui_order, i
 -- Data for Name: electrode_cut_batches; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.electrode_cut_batches (cut_batch_id, tape_id, created_by, created_at, comments) FROM stdin;
+COPY public.electrode_cut_batches (cut_batch_id, tape_id, created_by, created_at, comments, shape, diameter_mm, length_mm, width_mm) FROM stdin;
 \.
 
 
@@ -1749,7 +1748,7 @@ COPY public.electrode_status (status_code, name) FROM stdin;
 -- Data for Name: electrodes; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.electrodes (electrode_id, cut_batch_id, shape, diameter_mm, length_mm, width_mm, electrode_mass_g, cup_number, scrapped_reason, comments, status_code, used_in_battery_id) FROM stdin;
+COPY public.electrodes (electrode_id, cut_batch_id, electrode_mass_g, cup_number, scrapped_reason, comments, status_code, used_in_battery_id) FROM stdin;
 \.
 
 
@@ -2567,6 +2566,14 @@ ALTER TABLE ONLY public.modules
 
 
 --
+-- Name: electrode_drying one_drying_per_batch; Type: CONSTRAINT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.electrode_drying
+    ADD CONSTRAINT one_drying_per_batch UNIQUE (cut_batch_id);
+
+
+--
 -- Name: operation_types operation_types_code_key; Type: CONSTRAINT; Schema: public; Owner: Dalia
 --
 
@@ -3247,4 +3254,5 @@ ALTER TABLE ONLY public.tapes
 -- PostgreSQL database dump complete
 --
 
-\unrestrict X7B2LsNXVyJgOcnaFO5eZ9lEYPYPn3QPq93WI65fmGpPTC9tEqougVMisg7gEpe
+\unrestrict YlSlflkiBhgDDderQsdofhZJS83pfAATrfr4zOtT3XWU78tgR94qHpUD2otaHcK
+
