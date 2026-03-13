@@ -397,6 +397,23 @@
               <option value="">— выбрать фольгу —</option>
             </select><br>
 
+            <!---BUGS-->
+            <!--The "save changes" and "Exit" buttons are not easily located and for some reason are in different spots - not great design -->
+            
+            <!--Mixing:-->
+            <!--Need to add solvents to the recipe. Required amount is 0 but must be able to ad solvent in the tape-actuals.-->
+            <!--After that, need to calculate content of solids in the final mixture - around the same place as the viscosity input.-->
+            <!--Этап I: Приготовление электродной пасты ● не сохранено - thats a bug. THe flag is falsely suggesting "changes not saved" - they have been saved multiple times... -->
+            
+            <!--Coating-->
+            <!--for graphite anodes, Cu foil should be default-->
+            <!--for coating foil, parameters must be visible. I don't know why they did not show-->
+            <!--CLicking "Сохранить этап нанесения" did not seem to do anything - usually there is an alert saying "Saved",
+            which makes me think it did not save, which would make sense with the other bug - coating params not showing-->
+            
+            <!--Calendering-->
+            <!--Сохранить этап каландрирования - does not save either - at least no message-->
+
             <label for="2-coating-coating_id">Метод нанесения: </label>
             <select id="2-coating-coating_id" name="coating_id">
               <option value="">— выбрать метод —</option>

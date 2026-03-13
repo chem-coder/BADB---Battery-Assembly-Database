@@ -2932,15 +2932,24 @@ app.get('/api/tapes/:id/electrode-cut-batches', async (req, res) => {
       SELECT
         b.*,
         d.start_time AS drying_start,
-        d.end_time AS drying_end
+        d.end_time AS drying_end,
+        COALESCE(ec.electrode_count, 0) AS electrode_count
       FROM electrode_cut_batches b
       LEFT JOIN electrode_drying d
         ON d.cut_batch_id = b.cut_batch_id
+      LEFT JOIN (
+        SELECT
+          cut_batch_id,
+          COUNT(*) AS electrode_count
+        FROM electrodes
+        GROUP BY cut_batch_id
+      ) ec
+        ON ec.cut_batch_id = b.cut_batch_id
       WHERE b.tape_id = $1
-      ORDER BY b.created_at DESC
+      ORDER BY b.created_at DESC, b.cut_batch_id DESC
       `,
       [tapeId]
-    );
+      );
 
     res.json(result.rows);
   } catch (err) {
@@ -3160,11 +3169,22 @@ app.post('/api/electrodes', async (req, res) => {
       `
       INSERT INTO electrodes (
         cut_batch_id,
+        number_in_batch,
         electrode_mass_g,
         cup_number,
         comments
       )
-      VALUES ($1,$2,$3,$4)
+      VALUES (
+        $1,
+        (
+          SELECT COALESCE(MAX(number_in_batch),0) + 1
+          FROM electrodes
+          WHERE cut_batch_id = $1
+        ),
+        $2,
+        $3,
+        $4
+      )
       RETURNING *
       `,
       [
@@ -3201,7 +3221,7 @@ app.get('/api/electrode-cut-batches/:id/electrodes', async (req, res) => {
       WHERE cut_batch_id = $1
       ORDER BY
         status_code ASC,
-        electrode_mass_g ASC,
+        electrode_mass_g DESC,
         electrode_id ASC
       `,
       [cutBatchId]

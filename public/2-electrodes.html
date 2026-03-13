@@ -7,6 +7,21 @@
       content="width=device-width, initial-scale=1.0" />
     <title>Вырезание электродов</title>
     <link rel="stylesheet" type="text/css" href="reference/reference-styles.css">
+    <style>
+      .electrodes-table-wrapper {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
+      .row-index {
+        color: #999;
+        text-align: right;
+        padding-right: 8px;
+        user-select: none;
+        width: 32px;
+      }
+    </style>
   </head>
 
   <body data-page="electrodes">
@@ -128,24 +143,33 @@
               <button type="button" id="add-foil-mass-row-btn">+</button>
             </fieldset>
 
+            <!--BUGS-->
+            <!--Add an "are you sure?" on the trashcan - I accidentally deleted an electrode -->
+            
             <!-- electrodes table -->
             <fieldset id="electrodes-table-block">
               <legend> Масса электродов </legend>
-              <table id="electrodes-table" border="1" cellpadding="6">
-                <thead>
-                  <tr>
-                    <th>№</th>
-                    <th>ID №</th>
-                    <th>Масса, г</th>
-                    <th>Стаканчик №</th>
-                    <th>Комментарии</th>
-                    <th>Статус</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="electrodes-body"></tbody>
-              </table>
+
+              
+              <div class="electrodes-table-wrapper">
+                <table id="electrodes-table" border="1" cellpadding="6">
+                  <thead>
+                    <tr>
+                      <th class="row-index"></th>
+                      <th>№</th>
+                      <th>Масса, г</th>
+                      <th>Стаканчик №</th>
+                      <th>Комментарии</th>
+                      <th>Статус</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="electrodes-body"></tbody>
+                </table>
+              </div>
+
               <button type="button" id="add-electrode-row-btn">+</button>
+            
             </fieldset>
 
             <!-- drying the batch -->
@@ -252,7 +276,6 @@
     <script>
       const roleSelect = document.getElementById('electrode-role');
       const tapeSelect = document.getElementById('electrodes-tape_id');
-      const tapeBlock = document.getElementById('electrodes-tape-block');
       const workflow = document.getElementById('cutting-workflow');
       const addCutBatchBtn = document.getElementById('add-cut-batch-btn');
       const workspace = document.getElementById('electrode-workspace');
@@ -380,7 +403,6 @@
           option.value = String(t.tape_id);
           option.dataset.role = t.role;
           option.dataset.projectId = String(t.project_id);
-          console.log("role");
 
           const date = t.finished_at || '—';          
           const roleLabel = roleRu[t.role] || t.role;
@@ -536,18 +558,31 @@
 
           const btn = document.createElement('button');
           btn.type = 'button';
+          btn.style.textAlign = 'left';
+          btn.style.width = '100%';
 
-          let status = '🟡 cutting';
+          let status = '🟡 в работе';
 
           if (batch.drying_start && !batch.drying_end) {
-            status = '🟠 drying';
+            status = '🟠 сушится';
           }
 
           if (batch.drying_end) {
-            status = '🟢 finished';
+            status = '🟢 готово';
           }
 
-          btn.textContent = `Batch ${batch.cut_batch_id} ${status}`;
+          const dateText = batch.created_at
+            ? new Date(batch.created_at).toLocaleDateString('ru-RU')
+            : '—';
+
+          const count = Number(batch.electrode_count) || 0;
+          const electrodeWord =
+            count % 10 === 1 && count % 100 !== 11 ? 'электрод' :
+            [2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100) ? 'электрода' :
+            'электродов';
+
+          btn.textContent =
+            `Партия ${batch.cut_batch_id} — ${dateText} — ${count} ${electrodeWord} — ${status}`;
 
           btn.onclick = () => selectBatch(batch);
 
@@ -576,15 +611,13 @@
 
           /* row number */
 
+          const indexCell = document.createElement('td');
+          indexCell.className = 'row-index';
+          indexCell.textContent = index + 1;
+          tr.appendChild(indexCell);
+
           const rowCell = document.createElement('td');
-          rowCell.textContent = index + 1;
-          tr.appendChild(rowCell);
-
-          /* electrode id */
-
-          const idCell = document.createElement('td');
-          idCell.textContent = e.electrode_id;
-          tr.appendChild(idCell);
+          rowCell.textContent = e.number_in_batch ?? '';
 
           tr.dataset.electrodeId = e.electrode_id;
 
@@ -668,7 +701,7 @@
 
           actionCell.appendChild(deleteBtn);
 
-          tr.appendChild(idCell);
+          tr.appendChild(rowCell);
           tr.appendChild(massCell);
           tr.appendChild(cupCell);
           tr.appendChild(commentCell);
@@ -982,10 +1015,9 @@
 
         rows.forEach((row, index) => {
 
-          const num = row.querySelector('.electrode-row-number');
-
-          if (num) {
-            num.textContent = index + 1;
+          const indexCell = row.querySelector('.row-index');
+          if (indexCell) {
+            indexCell.textContent = index + 1;
           }
 
         });
@@ -995,6 +1027,14 @@
       function appendElectrodeRow(data = {}) {
 
         const tr = document.createElement('tr');
+
+        const indexCell = document.createElement('td');
+        indexCell.className = 'row-index';
+        tr.appendChild(indexCell);
+
+        tr.dataset.mass = data.electrode_mass_g || '';
+        tr.dataset.cup = data.cup_number || '';
+        tr.dataset.comments = data.comments || '';
 
         const numTd = document.createElement('td');
         numTd.className = 'electrode-row-number';
@@ -1009,7 +1049,11 @@
         if (data.electrode_mass_g) {
           massInput.value = data.electrode_mass_g;
         }
+  
         massTd.appendChild(massInput);
+        massInput.addEventListener('input', () => {
+          tr.dataset.mass = massInput.value;
+        });
 
         const cupTd = document.createElement('td');
         const cupInput = document.createElement('input');
@@ -1020,7 +1064,11 @@
         if (data.cup_number) {
           cupInput.value = data.cup_number;
         }
+
         cupTd.appendChild(cupInput);
+        cupInput.addEventListener('input', () => {
+          tr.dataset.cup = cupInput.value;
+        });
 
         const commentTd = document.createElement('td');
         const commentInput = document.createElement('input');
@@ -1029,7 +1077,11 @@
         if (data.comments) {
           commentInput.value = data.comments;
         }
+        
         commentTd.appendChild(commentInput);
+        commentInput.addEventListener('input', () => {
+          tr.dataset.comments = commentInput.value;
+        });
 
         const statusTd = document.createElement('td');
         statusTd.textContent = 'новый';
@@ -1306,12 +1358,12 @@
             continue;
           }
 
-          const mass = row.querySelector('.electrode-mass')?.value;
+          const mass = row.dataset.mass;
 
           if (!mass) continue;
 
-          const cup = row.querySelector('.electrode-cup')?.value || null;
-          const comments = row.querySelector('.electrode-comments')?.value || null;
+          const cup = row.dataset.cup || null;
+          const comments = row.dataset.comments || null;
 
           const res = await fetch('/api/electrodes', {
             method: 'POST',
