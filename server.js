@@ -3537,12 +3537,700 @@ app.delete('/api/electrode-drying/:id', async (req, res) => {
 });
 
 
-// -------- BATTERY --------
 
-// CREATE
-// READ
-// UPDATE
+// ---------- BATTERIES ----------
+
+// CREATE a new battery - header only
+app.post('/api/batteries', async (req, res) => {
+  const {
+    project_id,
+    form_factor,
+    created_by,
+    notes
+  } = req.body;
+
+  const projectId = Number(project_id);
+  const createdBy = Number(created_by);
+
+  if (
+    !Number.isInteger(projectId) ||
+    !Number.isInteger(createdBy) ||
+    !form_factor
+  ) {
+    return res.status(400).json({ error: 'Некорректные данные' });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      INSERT INTO batteries (
+        project_id,
+        form_factor,
+        created_by,
+        notes
+      )
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+      `,
+      [
+        projectId,
+        form_factor,
+        createdBy,
+        notes || null
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка создания аккумулятора' });
+  }
+});
+
+// READ - get a list of batteries
+app.get('/api/batteries', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        b.battery_id,
+        b.project_id,
+        p.name AS project_name,
+        b.form_factor,
+        b.created_by,
+        u.name AS created_by_name,
+        b.notes,
+        b.created_at
+      FROM batteries b
+      LEFT JOIN projects p
+        ON p.project_id = b.project_id
+      LEFT JOIN users u
+        ON u.user_id = b.created_by
+      ORDER BY b.battery_id DESC
+      `
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки аккумуляторов' });
+  }
+});
+
+// UPDATE battery header only
+app.patch('/api/batteries/:id', async (req, res) => {
+
+  const batteryId = Number(req.params.id);
+
+  const {
+    project_id,
+    form_factor,
+    created_by,
+    notes
+  } = req.body;
+
+  if (!Number.isInteger(batteryId)) {
+    return res.status(400).json({ error: 'Некорректный ID батареи' });
+  }
+
+  try {
+
+    const result = await pool.query(
+      `
+      UPDATE batteries
+      SET
+        project_id = $1,
+        form_factor = $2,
+        created_by = $3,
+        notes = $4
+      WHERE battery_id = $5
+      RETURNING *
+      `,
+      [
+        project_id || null,
+        form_factor || null,
+        created_by || null,
+        notes || null,
+        batteryId
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Батарея не найдена' });
+    }
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка обновления батареи' });
+  }
+
+});
+
+
+// -------- BATTERY ASSEMBLY SAVE --------
+// UPDATE entire assembly configuration.
+app.patch('/api/batteries/:id/assembly', async (req, res) => {
+
+  const batteryId = Number(req.params.id);
+
+  const {
+
+    coin_cell_mode,
+    coin_size_code,
+    half_cell_type,
+    li_foil_notes,
+    
+    pouch_param_1,
+    pouch_param_2,
+
+    cyl_param_1,
+    cyl_param_2,
+
+    cathode_tape_id,
+    cathode_cut_batch_id,
+    cathode_notes,
+
+    anode_tape_id,
+    anode_cut_batch_id,
+    anode_notes,
+
+    separator_id,
+    separator_layout,
+    
+    spacer_thickness_mm,
+    spacer_count,
+    separator_notes,
+
+    electrolyte_id,
+    electrolyte_notes,
+    drop_count,
+    drop_volume,
+    electrolyte_total_ul,
+    electrolyte_assembly_notes,
+
+    ocv_v,
+    esr_mohm,
+
+    stack
+  } = req.body;
+
+  if (!Number.isInteger(batteryId)) {
+    return res.status(400).json({ error: 'Некорректный battery_id' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // ---------- read battery header to know form factor ----------
+    const batteryResult = await client.query(
+      `
+      SELECT battery_id, form_factor
+      FROM batteries
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    if (batteryResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Батарея не найдена' });
+    }
+
+    const formFactor = batteryResult.rows[0].form_factor;
+
+    // ---------- clear previous config ----------
+    await client.query(
+      `DELETE FROM battery_coin_config WHERE battery_id = $1`,
+      [batteryId]
+    );
+
+    await client.query(
+      `DELETE FROM battery_pouch_config WHERE battery_id = $1`,
+      [batteryId]
+    );
+
+    await client.query(
+      `DELETE FROM battery_cyl_config WHERE battery_id = $1`,
+      [batteryId]
+    );
+
+    // ---------- save config ----------
+    if (formFactor === 'coin') {
+      await client.query(
+        `
+        INSERT INTO battery_coin_config (
+          battery_id,
+          coin_cell_mode,
+          coin_size_code,
+          half_cell_type,
+          li_foil_notes
+        )
+        VALUES ($1,$2,$3,$4,$5)
+        `,
+        [
+          batteryId,
+          coin_cell_mode || null,
+          coin_size_code || null,
+          coin_cell_mode === 'half_cell' ? (half_cell_type || null) : null,
+          li_foil_notes || null
+        ]
+      );
+    }
+
+    if (formFactor === 'pouch') {
+      await client.query(
+        `
+        INSERT INTO battery_pouch_config (
+          battery_id,
+          pouch_param_1,
+          pouch_param_2,
+          pouch_format_code
+        )
+        VALUES ($1,$2,$3,$4)
+        `,
+        [
+          batteryId,
+          pouch_param_1 || null,
+          pouch_param_2 || null,
+          pouch_format_code || null
+        ]
+      );
+    }
+
+    if (formFactor === 'cylindrical') {
+      await client.query(
+        `
+        INSERT INTO battery_cyl_config (
+          battery_id,
+          cyl_param_1,
+          cyl_param_2,
+          cyl_size_code
+        )
+        VALUES ($1,$2,$3,$4)
+        `,
+        [
+          batteryId,
+          cyl_param_1 || null,
+          cyl_param_2 || null,
+          cyl_size_code || null
+        ]
+      );
+    }
+
+    // ---------- separator ----------
+    await client.query(
+      `
+      DELETE FROM battery_sep_config
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    if (
+      separator_id ||
+      separator_layout ||
+      spacer_thickness_mm ||
+      spacer_count ||
+      separator_notes
+    ) {
+      await client.query(
+        `
+        INSERT INTO battery_sep_config (
+          battery_id,
+          separator_id,
+          separator_layout,
+          spacer_thickness_mm,
+          spacer_count,
+          separator_notes
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          batteryId,
+          separator_id || null,
+          separator_layout || null,
+          spacer_thickness_mm === '' || spacer_thickness_mm === null || spacer_thickness_mm === undefined
+            ? null
+            : Number(spacer_thickness_mm),
+          spacer_count === '' || spacer_count === null || spacer_count === undefined
+            ? null
+            : Number(spacer_count),
+          separator_notes || null
+        ]
+      );
+    }
+
+    // ---------- electrolyte ----------
+    await client.query(
+      `
+      DELETE FROM battery_electrolyte
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    let batteryElectrolyteId = null;
+
+    if (electrolyte_id) {
+
+      const electrolyteResult = await client.query(
+        `
+        INSERT INTO battery_electrolyte (
+          battery_id,
+          electrolyte_id,
+          electrolyte_notes
+        )
+        VALUES ($1, $2, $3)
+        RETURNING battery_electrolyte_id
+        `,
+        [
+          batteryId,
+          Number(electrolyte_id),
+          electrolyte_notes || null
+        ]
+      );
+
+      batteryElectrolyteId =
+        electrolyteResult.rows[0].battery_electrolyte_id;
+
+    }
+
+    if (
+      batteryElectrolyteId &&
+      (
+        drop_count !== null ||
+        drop_volume !== null ||
+        electrolyte_total_ul !== null ||
+        electrolyte_assembly_notes
+      )
+    ) {
+
+      await client.query(
+        `
+        INSERT INTO battery_electrolyte_parameters (
+          battery_electrolyte_id,
+          drop_count,
+          drop_volume,
+          electrolyte_total_ul,
+          assembly_notes
+        )
+        VALUES ($1,$2,$3,$4,$5)
+        ON CONFLICT (battery_electrolyte_id)
+        DO UPDATE SET
+          drop_count = EXCLUDED.drop_count,
+          drop_volume = EXCLUDED.drop_volume,
+          electrolyte_total_ul = EXCLUDED.electrolyte_total_ul,
+          assembly_notes = EXCLUDED.assembly_notes
+        `,
+        [
+          batteryElectrolyteId,
+          drop_count === '' || drop_count === undefined ? null : Number(drop_count),
+          drop_volume === '' || drop_volume === undefined ? null : Number(drop_volume),
+          electrolyte_total_ul === '' || electrolyte_total_ul === undefined ? null : Number(electrolyte_total_ul),
+          electrolyte_assembly_notes || null
+        ]
+      );
+
+    }
+
+    // ---------- QC ----------
+    await client.query(
+      `
+      DELETE FROM battery_qc
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    if (
+      ocv_v !== '' && ocv_v !== null && ocv_v !== undefined ||
+      esr_mohm !== '' && esr_mohm !== null && esr_mohm !== undefined
+    ) {
+      await client.query(
+        `
+        INSERT INTO battery_qc (
+          battery_id,
+          ocv_v,
+          esr_mohm,
+          qc_notes
+        )
+        VALUES ($1, $2, $3, $4)
+        `,
+        [
+          batteryId,
+          ocv_v === '' || ocv_v === null || ocv_v === undefined ? null : Number(ocv_v),
+          esr_mohm === '' || esr_mohm === null || esr_mohm === undefined ? null : Number(esr_mohm),
+          qc_notes || null
+        ]
+      );
+    }
+
+    // ---------- restore old electrode statuses for this battery ----------
+    await client.query(
+      `
+      UPDATE electrodes
+      SET
+        status_code = 1,
+        used_in_battery_id = NULL
+      WHERE used_in_battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    await client.query(
+      `
+      DELETE FROM battery_electrodes
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    await client.query(
+      `
+      DELETE FROM battery_electrode_sources
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    // ---------- save new stack ----------
+    if (Array.isArray(stack) && stack.length > 0) {
+
+      for (const row of stack) {
+
+        const electrodeId = Number(row.electrode_id);
+        const positionIndex = Number(row.position_index);
+        const role = row.role;
+
+        if (
+          !Number.isInteger(electrodeId) ||
+          !Number.isInteger(positionIndex) ||
+          !['cathode', 'anode'].includes(role)
+        ) {
+          throw new Error('Некорректные данные стека');
+        }
+
+        await client.query(
+          `
+          INSERT INTO battery_electrodes
+            (battery_id, electrode_id, role, position_index)
+          VALUES ($1, $2, $3, $4)
+          `,
+          [batteryId, electrodeId, role, positionIndex]
+        );
+
+        await client.query(
+          `
+          UPDATE electrodes
+          SET
+            status_code = 2,
+            used_in_battery_id = $1
+          WHERE electrode_id = $2
+          `,
+          [batteryId, electrodeId]
+        );
+
+      }
+    }
+
+        if (cathode_tape_id || cathode_cut_batch_id || cathode_notes) {
+      await client.query(
+        `
+        INSERT INTO battery_electrode_sources (
+          battery_id,
+          role,
+          tape_id,
+          cut_batch_id,
+          source_notes
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [
+          batteryId,
+          'cathode',
+          cathode_tape_id || null,
+          cathode_cut_batch_id || null,
+          cathode_notes || null
+        ]
+      );
+    }
+
+    if (anode_tape_id || anode_cut_batch_id || anode_notes) {
+      await client.query(
+        `
+        INSERT INTO battery_electrode_sources (
+          battery_id,
+          role,
+          tape_id,
+          cut_batch_id,
+          notes
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [
+          batteryId,
+          'anode',
+          anode_tape_id || null,
+          anode_cut_batch_id || null,
+          anode_notes || null
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    res.json({ success: true, battery_id: batteryId });
+
+  } catch (err) {
+
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сохранения сборки' });
+
+  } finally {
+
+    client.release();
+
+  }
+
+});
+
+
+// -------- GET BATTERY ASSEMBLY --------
+// READ the entire record for a battery as a single SQL query
+app.get('/api/batteries/:id/assembly', async (req, res) => {
+
+  const batteryId = Number(req.params.id);
+
+  if (!Number.isInteger(batteryId)) {
+    return res.status(400).json({ error: 'Некорректный battery_id' });
+  }
+
+  try {
+
+    const battery = await pool.query(
+      `
+      SELECT *
+      FROM batteries
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    if (battery.rowCount === 0) {
+      return res.status(404).json({ error: 'Батарея не найдена' });
+    }
+
+    const coinConfig = await pool.query(
+      `
+      SELECT *
+      FROM battery_coin_config
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    const pouchConfig = await pool.query(
+      `
+      SELECT *
+      FROM battery_pouch_config
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    const cylConfig = await pool.query(
+      `
+      SELECT *
+      FROM battery_cyl_config
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    const separator = await pool.query(
+      `
+      SELECT *
+      FROM battery_sep_config
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    const electrolyte = await pool.query(
+      `
+      SELECT
+        e.*,
+        p.drop_count,
+        p.drop_volume,
+        p.electrolyte_total_ul,
+        p.assembly_notes
+      FROM battery_electrolyte e
+      LEFT JOIN battery_electrolyte_parameters p
+      ON p.battery_electrolyte_id = e.battery_electrolyte_id
+      WHERE e.battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    const qc = await pool.query(
+      `
+      SELECT *
+      FROM battery_qc
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    const electrodes = await pool.query(
+      `
+      SELECT *
+      FROM battery_electrodes
+      WHERE battery_id = $1
+      ORDER BY position_index
+      `,
+      [batteryId]
+    );
+
+    const electrodeSources = await pool.query(
+      `
+      SELECT *
+      FROM battery_electrode_sources
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    res.json({
+      battery: battery.rows[0],
+      coin_config: coinConfig.rows[0] || null,
+      pouch_config: pouchConfig.rows[0] || null,
+      cyl_config: cylConfig.rows[0] || null,
+      separator: separator.rows[0] || null,
+      electrolyte: electrolyte.rows[0] || null,
+      qc: qc.rows[0] || null,
+      electrodes: electrodes.rows,
+      electrode_sources: electrodeSources.rows
+    });
+
+  } catch (err) {
+
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки сборки батареи' });
+
+  }
+
+});
+
 // DELETE
+
+
+
+
 
 
 

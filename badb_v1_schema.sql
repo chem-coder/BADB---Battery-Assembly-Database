@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict YlSlflkiBhgDDderQsdofhZJS83pfAATrfr4zOtT3XWU78tgR94qHpUD2otaHcK
+\restrict vgtXuuZWqfWVypZyjbUsEn3KWXjMnNg4otwkhrtn7yxgsofZA01gRz9nFbVkJQ0
 
 -- Dumped from database version 16.11 (Postgres.app)
 -- Dumped by pg_dump version 16.11 (Postgres.app)
@@ -220,7 +220,8 @@ CREATE TABLE public.batteries (
     created_by integer NOT NULL,
     created_at timestamp with time zone DEFAULT now(),
     status public.battery_status DEFAULT 'assembled'::public.battery_status,
-    notes text
+    notes text,
+    CONSTRAINT batteries_form_factor_check CHECK ((form_factor = ANY (ARRAY['coin'::text, 'pouch'::text, 'cylindrical'::text])))
 );
 
 
@@ -254,7 +255,10 @@ ALTER SEQUENCE public.batteries_battery_id_seq OWNED BY public.batteries.battery
 
 CREATE TABLE public.battery_coin_config (
     battery_id integer NOT NULL,
-    half_cell_type text
+    half_cell_type text,
+    coin_cell_mode text,
+    coin_size_code text,
+    li_foil_notes text
 );
 
 
@@ -266,12 +270,28 @@ ALTER TABLE public.battery_coin_config OWNER TO "Dalia";
 
 CREATE TABLE public.battery_cyl_config (
     battery_id integer NOT NULL,
-    param_1 text,
-    param_2 text
+    cyl_param_1 text,
+    cyl_param_2 text,
+    cyl_size_code text
 );
 
 
 ALTER TABLE public.battery_cyl_config OWNER TO "Dalia";
+
+--
+-- Name: battery_electrode_sources; Type: TABLE; Schema: public; Owner: Dalia
+--
+
+CREATE TABLE public.battery_electrode_sources (
+    battery_id integer NOT NULL,
+    role public.electrode_role NOT NULL,
+    tape_id integer,
+    cut_batch_id integer,
+    notes text
+);
+
+
+ALTER TABLE public.battery_electrode_sources OWNER TO "Dalia";
 
 --
 -- Name: battery_electrodes; Type: TABLE; Schema: public; Owner: Dalia
@@ -294,7 +314,8 @@ ALTER TABLE public.battery_electrodes OWNER TO "Dalia";
 CREATE TABLE public.battery_electrolyte (
     battery_electrolyte_id integer NOT NULL,
     battery_id integer NOT NULL,
-    electrolyte_id integer NOT NULL
+    electrolyte_id integer NOT NULL,
+    notes text
 );
 
 
@@ -328,9 +349,10 @@ ALTER SEQUENCE public.battery_electrolyte_battery_electrolyte_id_seq OWNED BY pu
 
 CREATE TABLE public.battery_electrolyte_parameters (
     battery_electrolyte_id integer NOT NULL,
-    parameter_name text NOT NULL,
-    value numeric,
-    unit text
+    drop_count integer,
+    drop_volume numeric,
+    assembly_notes text,
+    electrolyte_total_ul numeric
 );
 
 
@@ -342,8 +364,9 @@ ALTER TABLE public.battery_electrolyte_parameters OWNER TO "Dalia";
 
 CREATE TABLE public.battery_pouch_config (
     battery_id integer NOT NULL,
-    param_1 text,
-    param_2 text
+    pouch_param_1 text,
+    pouch_param_2 text,
+    pouch_format_code text
 );
 
 
@@ -356,7 +379,8 @@ ALTER TABLE public.battery_pouch_config OWNER TO "Dalia";
 CREATE TABLE public.battery_qc (
     battery_id integer NOT NULL,
     ocv_v numeric,
-    esr_mohm numeric
+    esr_mohm numeric,
+    notes text
 );
 
 
@@ -594,6 +618,7 @@ CREATE TABLE public.electrodes (
     comments text,
     status_code integer DEFAULT 1 NOT NULL,
     used_in_battery_id integer,
+    number_in_batch integer NOT NULL,
     CONSTRAINT electrodes_status_logic_check CHECK ((((status_code = 1) AND (used_in_battery_id IS NULL) AND (scrapped_reason IS NULL)) OR ((status_code = 2) AND (used_in_battery_id IS NOT NULL) AND (scrapped_reason IS NULL)) OR ((status_code = 3) AND (used_in_battery_id IS NULL) AND (scrapped_reason IS NOT NULL))))
 );
 
@@ -1615,6 +1640,8 @@ COPY public.active_materials (active_material_id, role, th_capacity_mah, th_capa
 --
 
 COPY public.batteries (battery_id, project_id, form_factor, created_by, created_at, status, notes) FROM stdin;
+1	3	coin	33	2026-03-16 10:32:08.963639+03	assembled	comments
+2	4	coin	50	2026-03-17 10:21:53.781916+03	assembled	\N
 \.
 
 
@@ -1622,7 +1649,8 @@ COPY public.batteries (battery_id, project_id, form_factor, created_by, created_
 -- Data for Name: battery_coin_config; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_coin_config (battery_id, half_cell_type) FROM stdin;
+COPY public.battery_coin_config (battery_id, half_cell_type, coin_cell_mode, coin_size_code, li_foil_notes) FROM stdin;
+1	cathode_vs_li	\N	\N	\N
 \.
 
 
@@ -1630,7 +1658,15 @@ COPY public.battery_coin_config (battery_id, half_cell_type) FROM stdin;
 -- Data for Name: battery_cyl_config; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_cyl_config (battery_id, param_1, param_2) FROM stdin;
+COPY public.battery_cyl_config (battery_id, cyl_param_1, cyl_param_2, cyl_size_code) FROM stdin;
+\.
+
+
+--
+-- Data for Name: battery_electrode_sources; Type: TABLE DATA; Schema: public; Owner: Dalia
+--
+
+COPY public.battery_electrode_sources (battery_id, role, tape_id, cut_batch_id, notes) FROM stdin;
 \.
 
 
@@ -1639,6 +1675,7 @@ COPY public.battery_cyl_config (battery_id, param_1, param_2) FROM stdin;
 --
 
 COPY public.battery_electrodes (battery_id, electrode_id, role, position_index) FROM stdin;
+1	2	cathode	1
 \.
 
 
@@ -1646,7 +1683,8 @@ COPY public.battery_electrodes (battery_id, electrode_id, role, position_index) 
 -- Data for Name: battery_electrolyte; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_electrolyte (battery_electrolyte_id, battery_id, electrolyte_id) FROM stdin;
+COPY public.battery_electrolyte (battery_electrolyte_id, battery_id, electrolyte_id, notes) FROM stdin;
+2	1	8	\N
 \.
 
 
@@ -1654,7 +1692,8 @@ COPY public.battery_electrolyte (battery_electrolyte_id, battery_id, electrolyte
 -- Data for Name: battery_electrolyte_parameters; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_electrolyte_parameters (battery_electrolyte_id, parameter_name, value, unit) FROM stdin;
+COPY public.battery_electrolyte_parameters (battery_electrolyte_id, drop_count, drop_volume, assembly_notes, electrolyte_total_ul) FROM stdin;
+2	2	5	\N	10
 \.
 
 
@@ -1662,7 +1701,7 @@ COPY public.battery_electrolyte_parameters (battery_electrolyte_id, parameter_na
 -- Data for Name: battery_pouch_config; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_pouch_config (battery_id, param_1, param_2) FROM stdin;
+COPY public.battery_pouch_config (battery_id, pouch_param_1, pouch_param_2, pouch_format_code) FROM stdin;
 \.
 
 
@@ -1670,7 +1709,7 @@ COPY public.battery_pouch_config (battery_id, param_1, param_2) FROM stdin;
 -- Data for Name: battery_qc; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_qc (battery_id, ocv_v, esr_mohm) FROM stdin;
+COPY public.battery_qc (battery_id, ocv_v, esr_mohm, notes) FROM stdin;
 \.
 
 
@@ -1679,6 +1718,7 @@ COPY public.battery_qc (battery_id, ocv_v, esr_mohm) FROM stdin;
 --
 
 COPY public.battery_sep_config (battery_id, separator_id, separator_layout, spacer_thickness_mm, spacer_count, notes) FROM stdin;
+1	13	\N	0.02	2	\N
 \.
 
 
@@ -1722,6 +1762,8 @@ COPY public.drying_atmospheres (drying_atmosphere_id, code, display, ui_order, i
 --
 
 COPY public.electrode_cut_batches (cut_batch_id, tape_id, created_by, created_at, comments, shape, diameter_mm, length_mm, width_mm) FROM stdin;
+1	11	50	2026-03-11 16:19:02.756627+03	comments	circle	20	\N	\N
+2	15	33	2026-03-13 11:26:07.209625+03	\N	circle	20	\N	\N
 \.
 
 
@@ -1730,6 +1772,8 @@ COPY public.electrode_cut_batches (cut_batch_id, tape_id, created_by, created_at
 --
 
 COPY public.electrode_drying (drying_id, cut_batch_id, start_time, end_time, temperature_c, other_parameters, comments) FROM stdin;
+1	1	2026-03-11 16:26:00+03	2026-03-11 16:28:00+03	70	\N	\N
+7	2	2026-03-13 11:25:00+03	2026-03-13 13:25:00+03	80	\N	\N
 \.
 
 
@@ -1748,7 +1792,32 @@ COPY public.electrode_status (status_code, name) FROM stdin;
 -- Data for Name: electrodes; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.electrodes (electrode_id, cut_batch_id, electrode_mass_g, cup_number, scrapped_reason, comments, status_code, used_in_battery_id) FROM stdin;
+COPY public.electrodes (electrode_id, cut_batch_id, electrode_mass_g, cup_number, scrapped_reason, comments, status_code, used_in_battery_id, number_in_batch) FROM stdin;
+1	1	0.25	1	\N	electrode 1	1	\N	1
+4	1	0.18	4	\N	\N	1	\N	4
+6	1	0.14	6	too light	\N	3	\N	5
+7	2	1.915	1	\N	\N	1	\N	1
+8	2	2.042	2	\N	\N	1	\N	2
+9	2	2.022	3	\N	\N	1	\N	3
+10	2	1.85	4	\N	\N	1	\N	4
+11	2	1.979	\N	\N	\N	1	\N	5
+12	2	1.857	\N	\N	\N	1	\N	6
+13	2	2.058	\N	\N	\N	1	\N	7
+14	2	1.845	\N	\N	\N	1	\N	8
+15	2	1.998	\N	\N	\N	1	\N	9
+16	2	1.946	\N	\N	\N	1	\N	10
+17	2	1.841	\N	\N	\N	1	\N	11
+18	2	2.057	\N	\N	\N	1	\N	12
+19	2	2.035	\N	\N	\N	1	\N	13
+20	2	2.029	\N	\N	\N	1	\N	14
+21	2	1.866	\N	\N	\N	1	\N	15
+22	2	1.976	\N	\N	\N	1	\N	16
+23	2	1.921	\N	\N	\N	1	\N	17
+24	2	2.006	\N	\N	\N	1	\N	18
+25	2	2.043	\N	\N	\N	1	\N	19
+26	2	1.933	\N	\N	\N	1	\N	20
+3	1	0.27	3	\N	com 3	1	\N	3
+2	1	0.26	2	\N	com 2	2	1	2
 \.
 
 
@@ -1759,6 +1828,7 @@ COPY public.electrodes (electrode_id, cut_batch_id, electrode_mass_g, cup_number
 COPY public.electrolytes (electrolyte_id, name, electrolyte_type, solvent_system, salts, concentration, additives, notes, status, created_by, created_at) FROM stdin;
 1	TEST Elec 1	liquid	\N	\N	\N	\N	comment	active	33	2026-02-11 02:22:26.40737+03
 2	TEST Elec 1 (копия)	liquid	\N	\N	\N	\N	comment	active	34	2026-02-11 02:54:17.669943+03
+8	TEST El 3	liquid	\N	\N	\N	\N	\N	active	33	2026-03-16 13:38:42.17344+03
 \.
 
 
@@ -1767,6 +1837,10 @@ COPY public.electrolytes (electrolyte_id, name, electrolyte_type, solvent_system
 --
 
 COPY public.foil_mass_measurements (foil_measurement_id, cut_batch_id, mass_g, created_at) FROM stdin;
+19	1	0.1803	2026-03-11 16:57:36.004895+03
+20	1	0.1807	2026-03-11 16:57:36.009337+03
+21	1	0.1799	2026-03-11 16:57:36.012254+03
+24	2	0.4699	2026-03-13 17:32:57.941845+03
 \.
 
 
@@ -1810,20 +1884,20 @@ COPY public.material_instances (material_instance_id, material_id, notes, create
 40	22	\N	2026-02-24 12:54:39.94632+03	AML 403
 41	22	\N	2026-02-24 12:55:28.726871+03	SiC
 28	7	\N	2026-02-19 20:33:49.717437+03	NMC M2C2
-42	23	\N	2026-02-24 14:40:51.011599+03	NMC C85E dry
+23	10	\N	2026-02-19 20:31:47.905885+03	CMC сухое
+24	11	\N	2026-02-19 20:31:57.465104+03	SBR сухое
+29	11	\N	2026-02-19 20:35:39.567477+03	51.5% SBR в воде
+30	10	\N	2026-02-19 20:36:04.781038+03	1.5% CMC в воде
+42	23	\N	2026-02-24 14:40:51.011599+03	NMC C85E сухой
+25	5	\N	2026-02-19 20:32:06.618994+03	PVDF сухой
+33	13	\N	2026-02-19 21:14:31.315868+03	ОУНТ сухие
 5	5	PVDF powder test	2026-02-19 14:07:45.578558+03	7% PVDF in NMP
-23	10	\N	2026-02-19 20:31:47.905885+03	CMC dry
-24	11	\N	2026-02-19 20:31:57.465104+03	SBR dry
-25	5	\N	2026-02-19 20:32:06.618994+03	PVDF dry
 9	12	\N	2026-02-19 14:43:46.671379+03	DI H2O
 10	2	\N	2026-02-19 14:44:12.898832+03	Super P 5130
 26	8	\N	2026-02-19 20:33:31.275198+03	LFP S19 TEST
 27	4	\N	2026-02-19 20:33:38.894146+03	NMC 811 TEST
 8	3	NMP bulk solvent	2026-02-19 14:12:38.574079+03	NMP solvent (pure)
-30	10	\N	2026-02-19 20:36:04.781038+03	1.5% CMC in water
-29	11	\N	2026-02-19 20:35:39.567477+03	51.5% SBR in water
 32	13	\N	2026-02-19 20:37:17.300709+03	0.4% ОУНТ
-33	13	\N	2026-02-19 21:14:31.315868+03	ОУНТ dry
 34	19	\N	2026-02-19 21:16:09.793655+03	DMP solvent (pure)
 \.
 
@@ -1920,6 +1994,8 @@ COPY public.separators (sep_id, supplier, name, brand, batch, structure_id, air_
 10	Celgard	Celgard 2330	2320	A1 test	1	\N	\N	\N	\N	no comments	available	\N	39	\N	\N	2026-01-30 19:29:30.594069+03	2026-01-30 19:29:30.594069+03
 11	\N	Separator	\N	\N	6	\N	\N	\N	\N	\N	available	\N	42	\N	\N	2026-02-01 14:36:40.342922+03	2026-02-01 14:36:40.342922+03
 5	Celgard	Celgard 2320	2320	A1 test	7	\N	\N	\N	\N	no comments	available	\N	33	\N	\N	2026-01-30 15:02:58.964101+03	2026-01-30 15:02:58.964101+03
+13	NewLine	A new separator	123	321	4	\N	\N	\N	\N	\N	available	\N	33	\N	\N	2026-03-16 12:03:05.629856+03	2026-03-16 12:03:05.629856+03
+14	\N	another new one	\N	\N	6	\N	\N	\N	\N	\N	available	\N	33	\N	\N	2026-03-16 13:38:11.695409+03	2026-03-16 13:38:11.695409+03
 \.
 
 
@@ -1932,9 +2008,16 @@ COPY public.tape_process_steps (step_id, tape_id, operation_type_id, performed_b
 9	9	1	35	2026-01-01 11:11:00+03	yesterday 2
 3	4	1	33	2026-02-26 18:23:00+03	comments
 21	4	2	33	2026-03-03 18:54:00+03	hello
+98	15	7	33	2026-01-16 17:00:00+03	\N
+79	15	3	33	2026-01-16 10:53:00+03	\N
+77	15	1	33	2026-01-14 10:51:00+03	\N
 41	11	1	33	2026-03-04 16:20:00+03	now
 42	11	2	33	2026-03-04 16:21:00+03	mix phase 1 comment
 43	11	3	33	2026-03-04 16:23:00+03	mix 1
+78	15	2	33	2026-01-15 10:51:00+03	\N
+80	15	4	33	2026-01-16 11:00:00+03	\N
+95	15	5	33	2026-01-16 12:30:00+03	\N
+97	15	6	33	2026-01-16 15:00:00+03	\N
 55	11	5	33	2026-03-04 16:27:00+03	come
 56	11	6	33	2026-03-04 16:27:00+03	com
 57	11	7	33	2026-03-04 16:28:00+03	d
@@ -1961,6 +2044,10 @@ COPY public.tape_recipe_line_actuals (actual_id, tape_id, recipe_line_id, measur
 59	11	150	\N	\N	\N	2026-03-05 13:53:48.24744+03	10
 60	11	151	\N	\N	\N	2026-03-05 13:53:48.250802+03	32
 61	11	153	\N	\N	\N	2026-03-05 13:53:48.256126+03	8
+105	15	167	mass	150.011	\N	2026-03-13 11:09:50.272207+03	40
+106	15	169	mass	136.8	\N	2026-03-13 11:09:50.275613+03	30
+107	15	170	mass	5.2	\N	2026-03-13 11:09:50.277559+03	29
+108	15	168	mass	3.158	\N	2026-03-13 11:09:50.279557+03	10
 1	4	149	mass	200	\N	2026-03-04 21:13:16.355147+03	26
 4	4	152	mass	41	\N	2026-03-04 21:13:16.359617+03	7
 2	4	150	mass	2.06	\N	2026-03-04 21:13:16.362488+03	10
@@ -1995,6 +2082,10 @@ COPY public.tape_recipe_lines (recipe_line_id, tape_recipe_id, material_id, reci
 99	47	3	solvent	\N	\N	f
 153	48	3	solvent	\N	\N	f
 138	56	22	anode_active	\N	95	t
+167	61	22	anode_active	\N	95	t
+168	61	2	additive	\N	2	t
+169	61	10	binder	\N	1.3	t
+170	61	11	binder	\N	1.7	t
 \.
 
 
@@ -2008,6 +2099,7 @@ COPY public.tape_recipes (tape_recipe_id, role, name, variant_label, notes, crea
 54	cathode	NMC M2C2	\N	\N	33	2026-02-18 18:51:12.607111+03
 56	anode	S360	\N	\N	33	2026-02-18 18:54:44.505341+03
 48	cathode	LFP S19	\N	\N	33	2026-02-13 14:28:32.747597+03
+61	anode	AML 403	Расчет состава Gr от 14.01.2026	\N	33	2026-03-13 10:48:12.381848+03
 \.
 
 
@@ -2018,6 +2110,7 @@ COPY public.tape_recipes (tape_recipe_id, role, name, variant_label, notes, crea
 COPY public.tape_step_calendering (step_id, temp_c, pressure_value, pressure_units, draw_speed_m_min, other_params, init_thickness_microns, final_thickness_microns, no_passes, appearance) FROM stdin;
 56	150	1	bar	1	other params	130	90	5	Блеск; Точечки; Другое: other
 31	105	45	bar	2	comments for calendering	120	80	5	Блеск; Закрутка; Точечки; Другое: other appearance
+97	150	1	kN	1	\N	120	70	5	Блеск; Другое: other - test
 \.
 
 
@@ -2028,6 +2121,7 @@ COPY public.tape_step_calendering (step_id, temp_c, pressure_value, pressure_uni
 COPY public.tape_step_coating (step_id, foil_id, coating_id) FROM stdin;
 44	2	2
 27	1	2
+80	1	2
 \.
 
 
@@ -2043,6 +2137,9 @@ COPY public.tape_step_drying (step_id, temperature_c, atmosphere, target_duratio
 57	80	vacuum	120	d
 17	89	vacuum	122	comments
 18	76	vacuum	119	hrllo moto
+98	80	vacuum	120	\N
+77	80	vacuum	120	\N
+95	80	air	120	\N
 \.
 
 
@@ -2053,6 +2150,7 @@ COPY public.tape_step_drying (step_id, temperature_c, atmosphere, target_duratio
 COPY public.tape_step_mixing (step_id, slurry_volume_ml, dry_mixing_id, dry_start_time, dry_duration_min, dry_rpm, wet_mixing_id, wet_start_time, wet_duration_min, wet_rpm, viscosity_cp) FROM stdin;
 43	485	4	2026-03-04 16:23:00+03	70	30-60 rpm	3	2026-03-04 16:24:00+03	90	vacuum, T = 25C	\N
 16	250	2	2026-03-03 03:29:00+03	111	~122	2	2026-03-03 22:19:00+03	1	1	1100
+79	290	4	2026-01-16 07:53:00+03	70	\N	3	2026-01-15 21:30:00+03	90	\N	4363
 \.
 
 
@@ -2061,6 +2159,7 @@ COPY public.tape_step_mixing (step_id, slurry_volume_ml, dry_mixing_id, dry_star
 --
 
 COPY public.tapes (tape_id, project_id, tape_recipe_id, created_by, created_at, status, notes, name, calc_mode, target_mass_g) FROM stdin;
+15	3	61	33	2026-03-13 10:49:59.061717+03	\N	\N	TEST Anode Tape - AML 403	from_active_mass	150
 9	3	47	33	2026-03-03 10:09:22.888669+03	\N	comments for the NMC tape 3	TEST Tape 3 - NMC 811	from_active_mass	200
 4	3	48	33	2026-02-26 17:47:40.460848+03	\N	notes notes notes	TEST Tape 1 - LFP S19	from_active_mass	200
 11	3	48	33	2026-03-04 16:20:24.103314+03	\N	new test tape, filled in one go.	TEST Tape 4 - LFP S19	from_active_mass	250
@@ -2115,14 +2214,14 @@ SELECT pg_catalog.setval('public.active_materials_active_material_id_seq', 1, fa
 -- Name: batteries_battery_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.batteries_battery_id_seq', 1, false);
+SELECT pg_catalog.setval('public.batteries_battery_id_seq', 2, true);
 
 
 --
 -- Name: battery_electrolyte_battery_electrolyte_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.battery_electrolyte_battery_electrolyte_id_seq', 1, false);
+SELECT pg_catalog.setval('public.battery_electrolyte_battery_electrolyte_id_seq', 2, true);
 
 
 --
@@ -2150,35 +2249,35 @@ SELECT pg_catalog.setval('public.drying_atmospheres_drying_atmosphere_id_seq', 5
 -- Name: electrode_cut_batches_cut_batch_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.electrode_cut_batches_cut_batch_id_seq', 1, false);
+SELECT pg_catalog.setval('public.electrode_cut_batches_cut_batch_id_seq', 2, true);
 
 
 --
 -- Name: electrode_drying_drying_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.electrode_drying_drying_id_seq', 1, false);
+SELECT pg_catalog.setval('public.electrode_drying_drying_id_seq', 9, true);
 
 
 --
 -- Name: electrodes_electrode_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.electrodes_electrode_id_seq', 1, false);
+SELECT pg_catalog.setval('public.electrodes_electrode_id_seq', 26, true);
 
 
 --
 -- Name: electrolytes_electrolyte_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.electrolytes_electrolyte_id_seq', 7, true);
+SELECT pg_catalog.setval('public.electrolytes_electrolyte_id_seq', 8, true);
 
 
 --
 -- Name: foil_mass_measurements_foil_measurement_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.foil_mass_measurements_foil_measurement_id_seq', 1, false);
+SELECT pg_catalog.setval('public.foil_mass_measurements_foil_measurement_id_seq', 24, true);
 
 
 --
@@ -2241,42 +2340,42 @@ SELECT pg_catalog.setval('public.separator_structure_sep_str_id_seq', 7, true);
 -- Name: separators_sep_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.separators_sep_id_seq', 12, true);
+SELECT pg_catalog.setval('public.separators_sep_id_seq', 14, true);
 
 
 --
 -- Name: tape_process_steps_step_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_process_steps_step_id_seq', 76, true);
+SELECT pg_catalog.setval('public.tape_process_steps_step_id_seq', 105, true);
 
 
 --
 -- Name: tape_recipe_line_actuals_actual_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_recipe_line_actuals_actual_id_seq', 104, true);
+SELECT pg_catalog.setval('public.tape_recipe_line_actuals_actual_id_seq', 112, true);
 
 
 --
 -- Name: tape_recipe_lines_recipe_line_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_recipe_lines_recipe_line_id_seq', 166, true);
+SELECT pg_catalog.setval('public.tape_recipe_lines_recipe_line_id_seq', 170, true);
 
 
 --
 -- Name: tape_recipes_tape_recipe_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tape_recipes_tape_recipe_id_seq', 60, true);
+SELECT pg_catalog.setval('public.tape_recipes_tape_recipe_id_seq', 61, true);
 
 
 --
 -- Name: tapes_tape_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.tapes_tape_id_seq', 14, true);
+SELECT pg_catalog.setval('public.tapes_tape_id_seq', 15, true);
 
 
 --
@@ -2334,6 +2433,14 @@ ALTER TABLE ONLY public.battery_cyl_config
 
 
 --
+-- Name: battery_electrode_sources battery_electrode_sources_pkey; Type: CONSTRAINT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.battery_electrode_sources
+    ADD CONSTRAINT battery_electrode_sources_pkey PRIMARY KEY (battery_id, role);
+
+
+--
 -- Name: battery_electrodes battery_electrodes_pkey; Type: CONSTRAINT; Schema: public; Owner: Dalia
 --
 
@@ -2346,7 +2453,7 @@ ALTER TABLE ONLY public.battery_electrodes
 --
 
 ALTER TABLE ONLY public.battery_electrolyte_parameters
-    ADD CONSTRAINT battery_electrolyte_parameters_pkey PRIMARY KEY (battery_electrolyte_id, parameter_name);
+    ADD CONSTRAINT battery_electrolyte_parameters_pkey PRIMARY KEY (battery_electrolyte_id);
 
 
 --
@@ -2459,6 +2566,14 @@ ALTER TABLE ONLY public.electrode_status
 
 ALTER TABLE ONLY public.electrode_status
     ADD CONSTRAINT electrode_status_pkey PRIMARY KEY (status_code);
+
+
+--
+-- Name: electrodes electrodes_cut_batch_id_number_in_batch_key; Type: CONSTRAINT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.electrodes
+    ADD CONSTRAINT electrodes_cut_batch_id_number_in_batch_key UNIQUE (cut_batch_id, number_in_batch);
 
 
 --
@@ -2875,6 +2990,30 @@ ALTER TABLE ONLY public.battery_cyl_config
 
 
 --
+-- Name: battery_electrode_sources battery_electrode_sources_battery_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.battery_electrode_sources
+    ADD CONSTRAINT battery_electrode_sources_battery_id_fkey FOREIGN KEY (battery_id) REFERENCES public.batteries(battery_id) ON DELETE CASCADE;
+
+
+--
+-- Name: battery_electrode_sources battery_electrode_sources_cut_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.battery_electrode_sources
+    ADD CONSTRAINT battery_electrode_sources_cut_batch_id_fkey FOREIGN KEY (cut_batch_id) REFERENCES public.electrode_cut_batches(cut_batch_id);
+
+
+--
+-- Name: battery_electrode_sources battery_electrode_sources_tape_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: Dalia
+--
+
+ALTER TABLE ONLY public.battery_electrode_sources
+    ADD CONSTRAINT battery_electrode_sources_tape_id_fkey FOREIGN KEY (tape_id) REFERENCES public.tapes(tape_id);
+
+
+--
 -- Name: battery_electrodes battery_electrodes_battery_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: Dalia
 --
 
@@ -3254,5 +3393,5 @@ ALTER TABLE ONLY public.tapes
 -- PostgreSQL database dump complete
 --
 
-\unrestrict YlSlflkiBhgDDderQsdofhZJS83pfAATrfr4zOtT3XWU78tgR94qHpUD2otaHcK
+\unrestrict vgtXuuZWqfWVypZyjbUsEn3KWXjMnNg4otwkhrtn7yxgsofZA01gRz9nFbVkJQ0
 
