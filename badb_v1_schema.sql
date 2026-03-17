@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict vgtXuuZWqfWVypZyjbUsEn3KWXjMnNg4otwkhrtn7yxgsofZA01gRz9nFbVkJQ0
+\restrict HgthFYGMSXFswCb0YdQjYwm8LdU70og7QlrG8wFzlfvGvbcFs42ZPM4iruzxhVJ
 
 -- Dumped from database version 16.11 (Postgres.app)
 -- Dumped by pg_dump version 16.11 (Postgres.app)
@@ -220,7 +220,7 @@ CREATE TABLE public.batteries (
     created_by integer NOT NULL,
     created_at timestamp with time zone DEFAULT now(),
     status public.battery_status DEFAULT 'assembled'::public.battery_status,
-    notes text,
+    battery_notes text,
     CONSTRAINT batteries_form_factor_check CHECK ((form_factor = ANY (ARRAY['coin'::text, 'pouch'::text, 'cylindrical'::text])))
 );
 
@@ -258,7 +258,13 @@ CREATE TABLE public.battery_coin_config (
     half_cell_type text,
     coin_cell_mode text,
     coin_size_code text,
-    li_foil_notes text
+    li_foil_notes text,
+    spacer_thickness_mm numeric,
+    spacer_count integer,
+    coin_layout text,
+    electrolyte_drop_count integer,
+    electrolyte_drop_volume numeric,
+    coin_layout_notes text
 );
 
 
@@ -270,9 +276,8 @@ ALTER TABLE public.battery_coin_config OWNER TO "Dalia";
 
 CREATE TABLE public.battery_cyl_config (
     battery_id integer NOT NULL,
-    cyl_param_1 text,
-    cyl_param_2 text,
-    cyl_size_code text
+    cyl_size_code text,
+    cyl_notes text
 );
 
 
@@ -287,7 +292,7 @@ CREATE TABLE public.battery_electrode_sources (
     role public.electrode_role NOT NULL,
     tape_id integer,
     cut_batch_id integer,
-    notes text
+    source_notes text
 );
 
 
@@ -315,7 +320,8 @@ CREATE TABLE public.battery_electrolyte (
     battery_electrolyte_id integer NOT NULL,
     battery_id integer NOT NULL,
     electrolyte_id integer NOT NULL,
-    notes text
+    electrolyte_notes text,
+    electrolyte_total_ul numeric
 );
 
 
@@ -344,29 +350,13 @@ ALTER SEQUENCE public.battery_electrolyte_battery_electrolyte_id_seq OWNED BY pu
 
 
 --
--- Name: battery_electrolyte_parameters; Type: TABLE; Schema: public; Owner: Dalia
---
-
-CREATE TABLE public.battery_electrolyte_parameters (
-    battery_electrolyte_id integer NOT NULL,
-    drop_count integer,
-    drop_volume numeric,
-    assembly_notes text,
-    electrolyte_total_ul numeric
-);
-
-
-ALTER TABLE public.battery_electrolyte_parameters OWNER TO "Dalia";
-
---
 -- Name: battery_pouch_config; Type: TABLE; Schema: public; Owner: Dalia
 --
 
 CREATE TABLE public.battery_pouch_config (
     battery_id integer NOT NULL,
-    pouch_param_1 text,
-    pouch_param_2 text,
-    pouch_format_code text
+    pouch_format_code text,
+    pouch_notes text
 );
 
 
@@ -380,7 +370,7 @@ CREATE TABLE public.battery_qc (
     battery_id integer NOT NULL,
     ocv_v numeric,
     esr_mohm numeric,
-    notes text
+    qc_notes text
 );
 
 
@@ -393,10 +383,7 @@ ALTER TABLE public.battery_qc OWNER TO "Dalia";
 CREATE TABLE public.battery_sep_config (
     battery_id integer NOT NULL,
     separator_id integer,
-    separator_layout text,
-    spacer_thickness_mm numeric,
-    spacer_count integer,
-    notes text
+    separator_notes text
 );
 
 
@@ -1639,9 +1626,19 @@ COPY public.active_materials (active_material_id, role, th_capacity_mah, th_capa
 -- Data for Name: batteries; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.batteries (battery_id, project_id, form_factor, created_by, created_at, status, notes) FROM stdin;
+COPY public.batteries (battery_id, project_id, form_factor, created_by, created_at, status, battery_notes) FROM stdin;
 1	3	coin	33	2026-03-16 10:32:08.963639+03	assembled	comments
 2	4	coin	50	2026-03-17 10:21:53.781916+03	assembled	\N
+3	6	coin	51	2026-03-17 12:41:40.313676+03	assembled	\N
+4	3	coin	33	2026-03-17 12:44:54.25663+03	assembled	bat 4
+5	3	coin	33	2026-03-17 12:47:41.984423+03	assembled	bat 5
+6	3	coin	33	2026-03-17 13:02:54.720929+03	assembled	bat 6
+7	3	coin	33	2026-03-17 13:21:16.860793+03	assembled	bt 6
+8	3	coin	50	2026-03-17 13:29:26.992784+03	assembled	bat 8
+9	3	coin	33	2026-03-17 14:09:40.102309+03	assembled	HELLO battery
+10	3	pouch	50	2026-03-17 14:16:52.214948+03	assembled	\N
+11	3	coin	33	2026-03-17 14:29:48.5256+03	assembled	coin bat
+12	3	pouch	33	2026-03-17 17:01:31.991474+03	assembled	\N
 \.
 
 
@@ -1649,8 +1646,11 @@ COPY public.batteries (battery_id, project_id, form_factor, created_by, created_
 -- Data for Name: battery_coin_config; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_coin_config (battery_id, half_cell_type, coin_cell_mode, coin_size_code, li_foil_notes) FROM stdin;
-1	cathode_vs_li	\N	\N	\N
+COPY public.battery_coin_config (battery_id, half_cell_type, coin_cell_mode, coin_size_code, li_foil_notes, spacer_thickness_mm, spacer_count, coin_layout, electrolyte_drop_count, electrolyte_drop_volume, coin_layout_notes) FROM stdin;
+1	cathode_vs_li	\N	\N	\N	0.02	2	\N	\N	\N	\N
+8	\N	full_cell	\N	\N	0.15	2	hjk	\N	\N	elyte
+9	\N	full_cell	\N	\N	0.12	3	other other SEES	\N	\N	drops 222
+11	\N	full_cell	\N	\N	0.2	2	ESE	\N	\N	drops 
 \.
 
 
@@ -1658,7 +1658,7 @@ COPY public.battery_coin_config (battery_id, half_cell_type, coin_cell_mode, coi
 -- Data for Name: battery_cyl_config; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_cyl_config (battery_id, cyl_param_1, cyl_param_2, cyl_size_code) FROM stdin;
+COPY public.battery_cyl_config (battery_id, cyl_size_code, cyl_notes) FROM stdin;
 \.
 
 
@@ -1666,7 +1666,13 @@ COPY public.battery_cyl_config (battery_id, cyl_param_1, cyl_param_2, cyl_size_c
 -- Data for Name: battery_electrode_sources; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_electrode_sources (battery_id, role, tape_id, cut_batch_id, notes) FROM stdin;
+COPY public.battery_electrode_sources (battery_id, role, tape_id, cut_batch_id, source_notes) FROM stdin;
+8	cathode	11	1	cat 
+8	anode	15	2	an
+9	cathode	11	1	t
+9	anode	15	2	a
+11	cathode	11	1	cat 1
+11	anode	15	2	anode 1
 \.
 
 
@@ -1676,6 +1682,12 @@ COPY public.battery_electrode_sources (battery_id, role, tape_id, cut_batch_id, 
 
 COPY public.battery_electrodes (battery_id, electrode_id, role, position_index) FROM stdin;
 1	2	cathode	1
+8	17	anode	1
+8	4	cathode	2
+9	13	anode	1
+9	3	cathode	2
+11	19	anode	1
+11	1	cathode	2
 \.
 
 
@@ -1683,17 +1695,11 @@ COPY public.battery_electrodes (battery_id, electrode_id, role, position_index) 
 -- Data for Name: battery_electrolyte; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_electrolyte (battery_electrolyte_id, battery_id, electrolyte_id, notes) FROM stdin;
-2	1	8	\N
-\.
-
-
---
--- Data for Name: battery_electrolyte_parameters; Type: TABLE DATA; Schema: public; Owner: Dalia
---
-
-COPY public.battery_electrolyte_parameters (battery_electrolyte_id, drop_count, drop_volume, assembly_notes, electrolyte_total_ul) FROM stdin;
-2	2	5	\N	10
+COPY public.battery_electrolyte (battery_electrolyte_id, battery_id, electrolyte_id, electrolyte_notes, electrolyte_total_ul) FROM stdin;
+2	1	8	\N	10
+3	8	8	\N	50
+4	9	1	\N	60
+5	11	8	\N	42
 \.
 
 
@@ -1701,7 +1707,7 @@ COPY public.battery_electrolyte_parameters (battery_electrolyte_id, drop_count, 
 -- Data for Name: battery_pouch_config; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_pouch_config (battery_id, pouch_param_1, pouch_param_2, pouch_format_code) FROM stdin;
+COPY public.battery_pouch_config (battery_id, pouch_format_code, pouch_notes) FROM stdin;
 \.
 
 
@@ -1709,7 +1715,10 @@ COPY public.battery_pouch_config (battery_id, pouch_param_1, pouch_param_2, pouc
 -- Data for Name: battery_qc; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_qc (battery_id, ocv_v, esr_mohm, notes) FROM stdin;
+COPY public.battery_qc (battery_id, ocv_v, esr_mohm, qc_notes) FROM stdin;
+8	100	100	\N
+9	90	98	\N
+11	85	85	\N
 \.
 
 
@@ -1717,8 +1726,11 @@ COPY public.battery_qc (battery_id, ocv_v, esr_mohm, notes) FROM stdin;
 -- Data for Name: battery_sep_config; Type: TABLE DATA; Schema: public; Owner: Dalia
 --
 
-COPY public.battery_sep_config (battery_id, separator_id, separator_layout, spacer_thickness_mm, spacer_count, notes) FROM stdin;
-1	13	\N	0.02	2	\N
+COPY public.battery_sep_config (battery_id, separator_id, separator_notes) FROM stdin;
+1	13	\N
+8	13	Сепаратор: s\nСпэйсер: space spacers
+9	14	Сепаратор: s\nСпэйсер: space oh spaaaace
+11	13	Сепаратор: s 1\nСпэйсер: spacers
 \.
 
 
@@ -1793,8 +1805,6 @@ COPY public.electrode_status (status_code, name) FROM stdin;
 --
 
 COPY public.electrodes (electrode_id, cut_batch_id, electrode_mass_g, cup_number, scrapped_reason, comments, status_code, used_in_battery_id, number_in_batch) FROM stdin;
-1	1	0.25	1	\N	electrode 1	1	\N	1
-4	1	0.18	4	\N	\N	1	\N	4
 6	1	0.14	6	too light	\N	3	\N	5
 7	2	1.915	1	\N	\N	1	\N	1
 8	2	2.042	2	\N	\N	1	\N	2
@@ -1802,13 +1812,10 @@ COPY public.electrodes (electrode_id, cut_batch_id, electrode_mass_g, cup_number
 10	2	1.85	4	\N	\N	1	\N	4
 11	2	1.979	\N	\N	\N	1	\N	5
 12	2	1.857	\N	\N	\N	1	\N	6
-13	2	2.058	\N	\N	\N	1	\N	7
 14	2	1.845	\N	\N	\N	1	\N	8
 15	2	1.998	\N	\N	\N	1	\N	9
 16	2	1.946	\N	\N	\N	1	\N	10
-17	2	1.841	\N	\N	\N	1	\N	11
 18	2	2.057	\N	\N	\N	1	\N	12
-19	2	2.035	\N	\N	\N	1	\N	13
 20	2	2.029	\N	\N	\N	1	\N	14
 21	2	1.866	\N	\N	\N	1	\N	15
 22	2	1.976	\N	\N	\N	1	\N	16
@@ -1816,8 +1823,13 @@ COPY public.electrodes (electrode_id, cut_batch_id, electrode_mass_g, cup_number
 24	2	2.006	\N	\N	\N	1	\N	18
 25	2	2.043	\N	\N	\N	1	\N	19
 26	2	1.933	\N	\N	\N	1	\N	20
-3	1	0.27	3	\N	com 3	1	\N	3
 2	1	0.26	2	\N	com 2	2	1	2
+17	2	1.841	\N	\N	\N	2	8	11
+4	1	0.18	4	\N	\N	2	8	4
+13	2	2.058	\N	\N	\N	2	9	7
+3	1	0.27	3	\N	com 3	2	9	3
+19	2	2.035	\N	\N	\N	2	11	13
+1	1	0.25	1	\N	electrode 1	2	11	1
 \.
 
 
@@ -2180,14 +2192,12 @@ COPY public.users (user_id, name, active) FROM stdin;
 43	Viktor V. Shapovalov	t
 45	Roman Batalov	t
 47	Karlson	t
-48	Dima	t
 49	Julia	t
 50	Dalia 2	t
 33	Dalia 1	t
 51	Dalia 3	t
 52	Dalia 4	t
 53	Dalia 5	t
-54	Dalia 6	t
 55	Dalia 7	t
 \.
 
@@ -2214,14 +2224,14 @@ SELECT pg_catalog.setval('public.active_materials_active_material_id_seq', 1, fa
 -- Name: batteries_battery_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.batteries_battery_id_seq', 2, true);
+SELECT pg_catalog.setval('public.batteries_battery_id_seq', 12, true);
 
 
 --
 -- Name: battery_electrolyte_battery_electrolyte_id_seq; Type: SEQUENCE SET; Schema: public; Owner: Dalia
 --
 
-SELECT pg_catalog.setval('public.battery_electrolyte_battery_electrolyte_id_seq', 2, true);
+SELECT pg_catalog.setval('public.battery_electrolyte_battery_electrolyte_id_seq', 5, true);
 
 
 --
@@ -2446,14 +2456,6 @@ ALTER TABLE ONLY public.battery_electrode_sources
 
 ALTER TABLE ONLY public.battery_electrodes
     ADD CONSTRAINT battery_electrodes_pkey PRIMARY KEY (battery_id, electrode_id);
-
-
---
--- Name: battery_electrolyte_parameters battery_electrolyte_parameters_pkey; Type: CONSTRAINT; Schema: public; Owner: Dalia
---
-
-ALTER TABLE ONLY public.battery_electrolyte_parameters
-    ADD CONSTRAINT battery_electrolyte_parameters_pkey PRIMARY KEY (battery_electrolyte_id);
 
 
 --
@@ -3046,14 +3048,6 @@ ALTER TABLE ONLY public.battery_electrolyte
 
 
 --
--- Name: battery_electrolyte_parameters battery_electrolyte_parameters_battery_electrolyte_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: Dalia
---
-
-ALTER TABLE ONLY public.battery_electrolyte_parameters
-    ADD CONSTRAINT battery_electrolyte_parameters_battery_electrolyte_id_fkey FOREIGN KEY (battery_electrolyte_id) REFERENCES public.battery_electrolyte(battery_electrolyte_id) ON DELETE CASCADE;
-
-
---
 -- Name: battery_pouch_config battery_pouch_config_battery_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: Dalia
 --
 
@@ -3393,5 +3387,5 @@ ALTER TABLE ONLY public.tapes
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vgtXuuZWqfWVypZyjbUsEn3KWXjMnNg4otwkhrtn7yxgsofZA01gRz9nFbVkJQ0
+\unrestrict HgthFYGMSXFswCb0YdQjYwm8LdU70og7QlrG8wFzlfvGvbcFs42ZPM4iruzxhVJ
 

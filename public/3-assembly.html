@@ -77,7 +77,7 @@ Jan 28, 2026
     <header>
       <h1>Протокол сборки аккумуляторa</h1>
       <!-- Navigation button without text -->
-      <a href="index.html" ><svg viewBox="0 0 24 24" width="24" height="24">
+      <a href="index.html" aria-label="Главная"><svg viewBox="0 0 24 24" width="24" height="24">
         <path d="M3 11l9-8 9 8v9a2 2 0 01-2 2h-4v-6H9v6H5a2 2 0 01-2-2z"
         fill="currentColor"/>
       </svg></a>
@@ -115,7 +115,7 @@ Jan 28, 2026
         Электродная конфигурация сохранена — параметры батареи зафиксированы
       </div>
 
-      <fieldset id="battery-meta">
+      <fieldset id="battery-meta" data-table="batteries">
         <legend>1 Общая информация об аккумуляторе</legend>
 
         <label for="battery-project_id">Проект</label>
@@ -157,7 +157,7 @@ Jan 28, 2026
         <fieldset id="battery-config">
           <legend>2 Конфигурация элемента</legend>
 
-          <div id="coin-config-block" hidden>
+          <fieldset id="coin-config" data-table="battery_coin_config" hidden>
             <label for="coin-cell_mode">Тип элемента</label>
             <select id="coin-cell_mode" name="coin_cell_mode">
               <option value="">— выбрать —</option>
@@ -179,10 +179,22 @@ Jan 28, 2026
                 <option value="cathode_vs_li">Катод vs Li</option>
                 <option value="anode_vs_li">Анод vs Li</option>
               </select><br>
-            </div>
-          </div>
 
-          <div id="pouch-config-block" hidden>
+              <div id="li-foil-block">
+                <label for="li_foil_notes">
+                  Li-фольга (поставщик / партия / толщина / обработка)
+                </label>
+
+                <textarea
+                  id="li_foil_notes"
+                  name="li_foil_notes"
+                  rows="2"
+                ></textarea>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset id="pouch-config" data-table="battery_pouch_config" hidden>
             <label for="pouch-format_code">Тип пакетного элемента</label>
             <select id="pouch-format_code" name="pouch_format_code">
               <option value="">— выбрать —</option>
@@ -190,14 +202,15 @@ Jan 28, 2026
               <option value="multi_stack">Многостековый</option>
             </select><br>
 
-            <label for="pouch-param_1">Параметр 1</label>
-            <input id="pouch-param_1" name="pouch_param_1" type="text"><br>
+            <label for="pouch_notes">Заметки</label>
+            <textarea
+              id="pouch_notes"
+              name="pouch_notes"
+              placeholder="Комментарии по пакетному элементу"
+            ></textarea>
+          </fieldset>
 
-            <label for="pouch-param_2">Параметр 2</label>
-            <input id="pouch-param_2" name="pouch_param_2" type="text"><br>
-          </div>
-
-          <div id="cyl-config-block" hidden>
+          <fieldset id="cyl-config" data-table="battery_cyl_config" hidden>
             <label for="cyl-size_code">Типоразмер цилиндрического элемента</label>
             <select id="cyl-size_code" name="cyl_size_code">
               <option value="">— выбрать —</option>
@@ -205,23 +218,23 @@ Jan 28, 2026
               <option value="21700">21700</option>
             </select><br>
 
-            <label for="cyl-param_1">Параметр 1</label>
-            <input id="cyl-param_1" name="cyl_param_1" type="text"><br>
-
-            <label for="cyl-param_2">Параметр 2</label>
-            <input id="cyl-param_2" name="cyl_param_2" type="text"><br>
-          </div>
+            <label for="cyl_notes">Заметки</label>
+            <textarea
+              id="cyl_notes"
+              name="cyl_notes"
+              placeholder="Комментарии по цилиндрическому элементу"
+            ></textarea>
+          </fieldset>
         </fieldset>
         
-
         <fieldset id="battery-electrodes">
             <legend>3 Электроды</legend>
 
             <!-- Electrode source selection -->
-            <fieldset id="battery-electrode-sources">
+            <fieldset id="battery-electrode-sources" data-table="battery_electrode_sources">
               <legend>Источник электродов</legend>
 
-              <div id="cathode-source-block">
+              <div class="electrode-source" id="cathode-source-block" data-electrode-role="cathode">
                 <label for="cathode-tape_id">Катодная лента</label>
                 <select id="cathode-tape_id" name="cathode_tape_id">
                   <option value="">— выбрать ленту —</option>
@@ -232,15 +245,15 @@ Jan 28, 2026
                   <option value="">— выбрать партию —</option>
                 </select><br>
 
-                <label for="cathode-notes">Заметки</label>
+                <label for="cathode-source_notes">Заметки</label>
                 <textarea
-                  id="cathode-notes"
-                  name="cathode_notes"
+                  id="cathode-source_notes"
+                  name="cathode_source_notes"
                   placeholder="Комментарии по катодной партии"
                 ></textarea>
               </div>
 
-              <div id="anode-source-block">
+              <div class="electrode-source" id="anode-source-block" data-electrode-role="anode">
                 <label for="anode-tape_id">Анодная лента</label>
                 <select id="anode-tape_id" name="anode_tape_id">
                   <option value="">— выбрать ленту —</option>
@@ -251,10 +264,10 @@ Jan 28, 2026
                   <option value="">— выбрать партию —</option>
                 </select><br>
 
-                <label for="anode-notes">Заметки</label>
+                <label for="anode-source_notes">Заметки</label>
                 <textarea
-                  id="anode-notes"
-                  name="anode_notes"
+                  id="anode-source_notes"
+                  name="anode_source_notes"
                   placeholder="Комментарии по анодной партии"
                 ></textarea>
               </div>
@@ -279,7 +292,7 @@ Jan 28, 2026
                     </tr>
                   </thead>
 
-                  <tbody id="stack-cathode-table-body">
+                  <tbody id="stack-cathode-table-body" data-role="cathode">
                   </tbody>
                 </table>
               </div>
@@ -297,7 +310,7 @@ Jan 28, 2026
                     </tr>
                   </thead>
 
-                  <tbody id="stack-anode-table-body">
+                  <tbody id="stack-anode-table-body" data-role="anode">
                   </tbody>
                 </table>
               </div>
@@ -321,8 +334,7 @@ Jan 28, 2026
 
         </fieldset>
         
-
-        <fieldset id="battery-separator">
+        <fieldset id="battery-separator" data-table="battery_sep_config">
           <legend>4 Сепаратор</legend>
 
           <label for="separator_id">Сепаратор</label>
@@ -333,15 +345,15 @@ Jan 28, 2026
             Управление сепараторами
           </a><br>
 
-          <label for="separator-notes">Заметки</label>
+          <label for="separator_notes">Заметки</label>
           <textarea
-            id="separator-notes"
+            id="separator_notes"
             name="separator_notes"
             placeholder="Комментарии по сепаратору"
           ></textarea>
         </fieldset>
 
-        <fieldset id="battery-electrolyte">
+        <fieldset id="battery-electrolyte" data-table="battery_electrolyte">
           <legend>5 Электролит</legend>
 
           <label for="electrolyte_id">Электролит</label>
@@ -352,9 +364,9 @@ Jan 28, 2026
             Управление электролитами
           </a><br>
 
-          <label for="electrolyte-notes">Заметки</label>
+          <label for="electrolyte_notes">Заметки</label>
           <textarea
-            id="electrolyte-notes"
+            id="electrolyte_notes"
             name="electrolyte_notes"
             placeholder="Комментарии по электролиту"
           ></textarea>
@@ -363,59 +375,130 @@ Jan 28, 2026
         <fieldset id="battery-assembly">
           <legend>6 Параметры сборки</legend>
 
-          <fieldset>
-            <legend>Схема расположения сепаратора и электролита</legend>
+          <div id="coin-assembly" data-formfactor="coin">
 
-            <label>
-              <input type="radio" name="separator_layout" value="SEE">
-              S-E-E
-            </label><br>
+            <fieldset id="coin-layout">
+              <legend>Схема расположения сепаратора и электролита</legend>
 
-            <label>
-              <input type="radio" name="separator_layout" value="ESE">
-              E-S-E
-            </label><br>
+              <label>
+                <input type="radio" name="coin_layout" value="SEE">
+                S-E-E
+              </label><br>
 
-            <label>
-              <input type="radio" name="separator_layout" value="EES">
-              E-E-S
-            </label><br>
+              <label>
+                <input type="radio" name="coin_layout" value="ESE">
+                E-S-E
+              </label><br>
 
-            <label>
-              <input type="radio" name="separator_layout" value="ES">
-              E-S
-            </label><br>
+              <label>
+                <input type="radio" name="coin_layout" value="EES">
+                E-E-S
+              </label><br>
 
-            <label>
-              <input type="radio" name="separator_layout" value="SE">
-              S-E
-            </label><br>
+              <label>
+                <input type="radio" name="coin_layout" value="ES">
+                E-S
+              </label><br>
 
-            <label>
-              <input type="radio" name="separator_layout" value="other">
-              Другое
-            </label>
+              <label>
+                <input type="radio" name="coin_layout" value="SE">
+                S-E
+              </label><br>
 
-            <input
-              type="text"
-              id="separator_layout_other"
-              name="separator_layout_other"
-              placeholder="Введите схему"
-            >
-          </fieldset>
+              <label>
+                <input type="radio" name="coin_layout" value="other">
+                Другое
+              </label>
 
+              <input
+                type="text"
+                id="coin_layout_other"
+                name="coin_layout_other"
+                placeholder="Введите схему"
+              >
 
-          <fieldset>
-            <legend>Электролит</legend>
+              <br><br>
 
-            <div id="coin-electrolyte-block">
-              <label for="drop_count">Количество капель</label>
-              <input id="drop_count" name="drop_count" type="number" step="0.1" min="0"><br>
+              <label for="coin_layout_notes">Заметки по схеме</label>
+              <textarea
+                id="coin_layout_notes"
+                name="coin_layout_notes"
+                placeholder="Комментарии по расположению сепаратора и электродов"
+              ></textarea>
 
-              <label for="drop_volume">Объём одной капли</label>
-              <input id="drop_volume" name="drop_volume" type="number" step="0.1" min="0">
+            </fieldset>
+
+            <!--Дозирование электролита-->
+            <fieldset>
+              <legend>Дозирование электролита</legend>
+
+              <label for="electrolyte_drop_count">Количество капель</label>
+              <input
+                id="electrolyte_drop_count"
+                name="electrolyte_drop_count"
+                type="number"
+                step="1"
+                min="0"
+              ><br>
+
+              <label for="electrolyte_drop_volume">Объём одной капли</label>
+              <input
+                id="electrolyte_drop_volume"
+                name="electrolyte_drop_volume"
+                type="number"
+                step="0.1"
+                min="0"
+              >
               <span>, мкл</span><br>
-            </div>
+
+            </fieldset>
+
+            <!--Спэйсер-->
+            <fieldset>
+              <legend>Спэйсер</legend>
+
+              <label for="spacer_thickness_mm">Толщина спэйсера</label>
+              <input
+                id="spacer_thickness_mm"
+                name="spacer_thickness_mm"
+                type="number"
+                step="0.01"
+                min="0"
+              >
+              <span>, мм</span><br>
+
+              <label for="spacer_count">Количество спэйсеров</label>
+              <input
+                id="spacer_count"
+                name="spacer_count"
+                type="number"
+                min="0"
+              ><br>
+
+              <label for="spacer_notes">Заметки</label>
+              <textarea
+                id="spacer_notes"
+                name="spacer_notes"
+                placeholder="Комментарии по спэйсеру"
+              ></textarea>
+
+            </fieldset>
+
+          </div>
+
+          <div id="pouch-assembly" data-formfactor="pouch">
+            <p>Space for future pouch parameters</p>
+          </div>
+
+          <div id="cyl-assembly" data-formfactor="cylindrical">
+            <p>Space for future cylinder parameters</p>
+          </div>
+
+
+          <!-- ELECTROLYTE VOLUME (ALL FORM FACTORS) -->
+
+          <fieldset>
+            <legend>Общий объём электролита</legend>
 
             <label for="electrolyte_total_ul">Общий объём</label>
             <input
@@ -426,61 +509,11 @@ Jan 28, 2026
               min="0"
             >
             <span>, мкл</span><br>
-
-            <label for="electrolyte-assembly-notes">Заметки</label>
-            <textarea
-              id="electrolyte-assembly-notes"
-              name="electrolyte_assembly_notes"
-              placeholder="Комментарии по внесению электролита"
-            ></textarea>
           </fieldset>
-
-
-          <fieldset>
-            <legend>Спэйсер</legend>
-
-            <label for="spacer_thickness_mm">Толщина спэйсера</label>
-            <input
-              id="spacer_thickness_mm"
-              name="spacer_thickness_mm"
-              type="number"
-              step="0.01"
-              min="0"
-            ><span>, мм</span><br>
-
-            <label for="spacer_count">Количество спэйсеров</label>
-            <input
-              id="spacer_count"
-              name="spacer_count"
-              type="number"
-              min="0"
-            ><br>
-
-            <label for="spacer-notes">Заметки</label>
-            <textarea
-              id="spacer-notes"
-              name="spacer_notes"
-              placeholder="Комментарии по спэйсеру"
-            ></textarea>
-          </fieldset>
-
-
-          <div id="li-foil-block">
-            <label for="li_foil_notes">
-              Li-фольга (поставщик / партия / толщина / обработка)
-            </label>
-
-            <textarea
-              id="li_foil_notes"
-              name="li_foil_notes"
-              rows="2"
-            ></textarea>
-          </div>
 
         </fieldset>
-        
-        
-        <fieldset id="battery-qc">
+                
+        <fieldset id="battery-qc" data-table="battery_qc">
           <legend>7 Выходной контроль</legend>
 
           <label for="qc_ocv_v">НРЦ</label>
@@ -506,7 +539,6 @@ Jan 28, 2026
             placeholder="Комментарии по выходному контролю"
           ></textarea>
         </fieldset>
-
 
         <fieldset id="battery-electrochem">
           <legend>8 Электрохимия</legend>
@@ -570,6 +602,58 @@ Jan 28, 2026
     
     // -------- API helpers --------
     
+    // -------- FORM SERIALIZATION --------
+
+    function serializeFieldset(fieldset) {
+
+      const data = {};
+      const elements = fieldset.querySelectorAll('input, select, textarea');
+
+      elements.forEach(el => {
+
+        if (!el.name) return;
+
+        if (el.type === 'checkbox') {
+          data[el.name] = el.checked;
+        } else if (el.type === 'radio') {
+
+          if (el.checked) {
+            data[el.name] = el.value;
+          }
+
+        } else {
+
+          data[el.name] = el.value || null;
+
+        }
+
+      });
+
+      return data;
+
+    }
+
+
+    // -------- GENERIC API SAVE --------
+
+    async function saveSection(url, payload) {
+
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'API error');
+      }
+
+      return res.json();
+
+    }
+
+
 
     async function loadProjects() {
       
@@ -1293,143 +1377,6 @@ Jan 28, 2026
 
     }
 
-    async function updateBatteryAssembly() {
-
-      if (!currentBatteryId) {
-        console.error('Battery not created yet');
-        return;
-      }
-
-      if (!validateStackSelection()) {
-        return;
-      }
-
-      const payload = {
-
-        coin_cell_mode:
-          document.getElementById('coin-cell_mode').value,
-
-        half_cell_type:
-          document.getElementById('coin-half_cell_type').value,
-
-        pouch_param_1:
-          document.getElementById('pouch-param_1').value,
-
-        pouch_param_2:
-          document.getElementById('pouch-param_2').value,
-
-        cyl_param_1:
-          document.getElementById('cyl-param_1').value,
-
-        cyl_param_2:
-          document.getElementById('cyl-param_2').value,
-
-        separator_id:
-          document.getElementById('separator_id').value,
-
-        separator_layout: (() => {
-          const selected =
-            document.querySelector('input[name="separator_layout"]:checked')?.value;
-
-          if (selected === 'other') {
-            return document.getElementById('separator_layout_other')?.value || null;
-          }
-
-          return selected || null;
-        })(),
-
-        spacer_thickness_mm:
-          document.getElementById('spacer_thickness_mm').value,
-
-        spacer_count:
-          document.getElementById('spacer_count').value,
-
-        separator_notes: (() => {
-          const separatorNotes =
-            document.getElementById('separator-notes')?.value?.trim() || '';
-
-          const spacerNotes =
-            document.getElementById('spacer-notes')?.value?.trim() || '';
-
-          if (separatorNotes && spacerNotes) {
-            return `Сепаратор: ${separatorNotes}\nСпэйсер: ${spacerNotes}`;
-          }
-
-          if (separatorNotes) {
-            return `Сепаратор: ${separatorNotes}`;
-          }
-
-          if (spacerNotes) {
-            return `Спэйсер: ${spacerNotes}`;
-          }
-
-          return null;
-        })(),
-
-        electrolyte_id:
-          document.getElementById('electrolyte_id').value,
-
-        drop_count: 
-          Number(document.getElementById('drop_count')?.value) || null,
-
-        drop_volume: 
-          Number(document.getElementById('drop_volume')?.value) || null,
-
-        electrolyte_total_ul:  
-          Number(document.getElementById('electrolyte_total_ul')?.value) || null,
-
-        electrolyte_assembly_notes:
-          document.getElementById('electrolyte-assembly-notes')?.value || null,
-
-        ocv_v:
-          document.getElementById('qc_ocv_v').value,
-
-        esr_mohm:
-          document.getElementById('qc_esr_mohm').value,
-
-        stack: buildStackPayload(),
-
-        cathode_tape_id:
-          document.getElementById('cathode-tape_id').value || null,
-
-        cathode_cut_batch_id:
-          document.getElementById('cathode-cut_batch_id').value || null,
-
-        cathode_notes:
-          document.getElementById('cathode-notes')?.value || null,
-
-        anode_tape_id:
-          document.getElementById('anode-tape_id').value || null,
-
-        anode_cut_batch_id:
-          document.getElementById('anode-cut_batch_id').value || null,
-
-        anode_notes:
-          document.getElementById('anode-notes')?.value || null
-          
-      };
-
-      const res = await fetch(`/api/batteries/${currentBatteryId}/assembly`, {
-
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-
-      });
-
-      if (!res.ok) {
-
-        console.error('Assembly update failed');
-        alert('Ошибка обновления сборки');
-
-        return;
-
-      }
-
-      console.log('Battery assembly updated');
-
-    }
-
     function resetElectrodeSelection() {
 
       selectedCathodes = [];
@@ -1468,12 +1415,13 @@ Jan 28, 2026
         e.preventDefault();
       });
 
+
     document.getElementById('battery-create-btn').onclick = async () => {
 
       const projectId = document.getElementById('battery-project_id').value;
       const createdBy = document.getElementById('battery-created_by').value;
       const formFactor = document.getElementById('battery-form_factor').value;
-      const notes = document.getElementById('battery-notes').value;
+      const batteryNotes = document.getElementById('battery-notes').value;
 
       if (!projectId || !createdBy || !formFactor) {
         alert('Заполните проект, оператора и форм-фактор');
@@ -1482,17 +1430,13 @@ Jan 28, 2026
 
       try {
 
-        /* -----------------------------
-          MODE 1 — CREATE BATTERY
-        ------------------------------*/
-
         if (!currentBatteryId) {
 
           const payload = {
             project_id: Number(projectId),
             created_by: Number(createdBy),
             form_factor: formFactor,
-            notes: notes || null
+            battery_notes: batteryNotes || null
           };
 
           const res = await fetch('/api/batteries', {
@@ -1509,25 +1453,28 @@ Jan 28, 2026
 
           currentBatteryId = battery.battery_id;
 
-          unlockBatteryWorkspace(battery);
-          loadTapes();
+          unlockBatteryWorkspace({
+            battery_id: battery.battery_id,
+            project_id: battery.project_id,
+            created_by: battery.created_by,
+            form_factor: battery.form_factor,
+            notes: battery.battery_notes ?? null
+          });
 
-          /* change button label */
           document.getElementById('battery-create-btn').textContent =
-            'Сохранить изменения';
+            'Сохранить шапку';
+
+          await loadTapes();
+          await loadBatteries();
 
           return;
         }
-
-        /* -----------------------------
-          MODE 2 — UPDATE BATTERY HEADER + ASSEMBLY
-        ------------------------------*/
 
         const headerPayload = {
           project_id: Number(projectId),
           created_by: Number(createdBy),
           form_factor: formFactor,
-          notes: notes || null
+          battery_notes: batteryNotes || null
         };
 
         const updatedBattery = await updateBatteryMeta(
@@ -1535,9 +1482,11 @@ Jan 28, 2026
           headerPayload
         );
 
-        await updateBatteryAssembly();
+        unlockBatteryWorkspace(updatedBattery);
+        await loadTapes();
+        await loadBatteries();
 
-        alert('Данные аккумулятора сохранены');
+        alert('Шапка аккумулятора сохранена');
 
       } catch (err) {
 
@@ -1547,7 +1496,7 @@ Jan 28, 2026
       }
 
     };
-
+    
     async function populateBatteryForm(battery) {
 
       currentBatteryId = battery.battery_id;
@@ -1996,6 +1945,57 @@ Jan 28, 2026
     loadSeparators();
     loadElectrolytes();
     
+    initializeSectionSavers();
+    
+    // -------- UNIVERSAL FIELDSET SAVE PIPELINE --------
+
+    function initializeSectionSavers() {
+
+      const sections = document.querySelectorAll('fieldset[data-table]');
+
+      sections.forEach(section => {
+
+        const table = section.dataset.table;
+
+        const button = document.createElement('button');
+
+        button.type = 'button';
+        button.textContent = 'Сохранить';
+
+        button.style.marginTop = '8px';
+
+        section.appendChild(button);
+
+        button.addEventListener('click', async () => {
+
+          if (!currentBatteryId) {
+            alert('Сначала создайте аккумулятор');
+            return;
+          }
+
+          try {
+
+            const payload = serializeFieldset(section);
+
+            payload.battery_id = currentBatteryId;
+
+            await saveSection(`/api/${table}/${currentBatteryId}`, payload);
+
+            console.log(`${table} saved`);
+
+          } catch (err) {
+
+            console.error(err);
+            alert('Ошибка сохранения');
+
+          }
+
+        });
+
+      });
+
+    }
+
   </script>
 </body>
 </html>
