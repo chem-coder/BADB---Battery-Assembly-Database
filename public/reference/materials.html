@@ -238,7 +238,7 @@
       }
 
       async function updateInstance(id, data) {
-        const res = await fetch(`/api/material-instances/${id}`, {
+        const res = await fetch(`/api/materials/instances/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
@@ -253,7 +253,7 @@
       }
 
       async function deleteInstance(id) {
-        const res = await fetch(`/api/material-instances/${id}`, {
+        const res = await fetch(`/api/materials/instances/${id}`, {
           method: 'DELETE'
         });
 
@@ -397,7 +397,7 @@
                   if (instChildren.dataset.loaded === 'true') return;
 
                   try {
-                    const res = await fetch(`/api/material-instances/${inst.material_instance_id}/components`);
+                    const res = await fetch(`/api/materials/instances/${inst.material_instance_id}/components`);
                     if (!res.ok) throw new Error('Ошибка загрузки состава');
 
                     const components = await res.json();
@@ -465,7 +465,7 @@
                       materialSelect.style.marginRight = '0.5rem';
 
                       // load all material instances for dropdown
-                      fetch('/api/material-instances')
+                      fetch('/api/materials/instances')
                       .then(res => {
                         if (!res.ok) throw new Error('Ошибка загрузки экземпляров');
                         return res.json();
@@ -532,7 +532,7 @@
 
                         try {
                           const res = await fetch(
-                            `/api/material-instances/${inst.material_instance_id}/components`,
+                            `/api/materials/instances/${inst.material_instance_id}/components`,
                             {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
@@ -819,7 +819,7 @@
 
               const notesEl = summary.querySelector('textarea');
 
-              const res = await fetch(`/api/material-instance-components/${id}`, {
+              const res = await fetch(`/api/materials/instances/components/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -945,7 +945,7 @@
             }
 
             if (type === 'component') {
-              await fetch(`/api/material-instance-components/${id}`, {
+              await fetch(`/api/materials/instances/components/${id}`, {
                 method: 'DELETE'
               });
               row.remove();

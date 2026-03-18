@@ -593,7 +593,7 @@
 
       async function loadElectrodes(cutBatchId) {
 
-        const res = await fetch(`/api/electrode-cut-batches/${cutBatchId}/electrodes`);
+        const res = await fetch(`/api/electrodes/electrode-cut-batches/${cutBatchId}/electrodes`);
         const electrodes = await res.json();
 
         renderElectrodes(electrodes);
@@ -976,7 +976,7 @@
         foilMassBody.innerHTML = '';
         foilMassInput.value = '';
         
-        const res = await fetch(`/api/electrode-cut-batches/${cutBatchId}/foil-masses`);
+        const res = await fetch(`/api/electrodes/electrode-cut-batches/${cutBatchId}/foil-masses`);
 
         if (!res.ok) {
           appendFoilMassRow();
@@ -1221,7 +1221,7 @@
 
         clearDryingBlock();
 
-        const res = await fetch(`/api/electrode-cut-batches/${cutBatchId}/drying`);
+        const res = await fetch(`/api/electrodes/electrode-cut-batches/${cutBatchId}/drying`);
 
         if (!res.ok) return;
 
@@ -1324,7 +1324,7 @@
             width_mm: document.getElementById('electrodes-width').value || null
           };
 
-          const res = await fetch('/api/electrode-cut-batches', {
+          const res = await fetch('/api/electrodes/electrode-cut-batches', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -1335,7 +1335,7 @@
 
         } else {
 
-          await fetch(`/api/electrode-cut-batches/${currentCutBatchId}`, {
+          await fetch(`/api/electrodes/electrode-cut-batches/${currentCutBatchId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1386,7 +1386,7 @@
 
         /* ---------- SAVE FOIL MASSES ---------- */
 
-        await fetch(`/api/electrode-cut-batches/${currentCutBatchId}/foil-masses`, {
+        await fetch(`/api/electrodes/electrode-cut-batches/${currentCutBatchId}/foil-masses`, {
           method: 'DELETE'
         });
         const foilInputs = document.querySelectorAll('.foil-mass-value');
@@ -1397,7 +1397,7 @@
 
           if (!value) continue;
 
-          await fetch('/api/electrode-cut-batches/' + currentCutBatchId + '/foil-masses', {
+          await fetch('/api/electrodes/electrode-cut-batches/' + currentCutBatchId + '/foil-masses', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1413,7 +1413,7 @@
 
         if (dryingPayload.start_time || dryingPayload.end_time || dryingPayload.temperature_c) {
 
-          await fetch(`/api/electrode-cut-batches/${currentCutBatchId}/drying`, {
+          await fetch(`/api/electrodes/electrode-cut-batches/${currentCutBatchId}/drying`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dryingPayload)

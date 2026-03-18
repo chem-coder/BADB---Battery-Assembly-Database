@@ -630,10 +630,10 @@
       const tapeTypeSelect  = document.getElementById('tape_type');
       const recipeSelect    = document.getElementById('tape-recipe-id'); // already added in HTML
 
-      let currentRecipeLines = []; // full array from /api/recipes/:id/lines
-      let selectedInstanceByLineId = {}; // { [recipe_line_id]: material_instance_id }
-      let instanceCacheByMaterialId = {}; // { [material_id]: [instances...] }
-      let instanceComponentsCache = {}; // { [material_instance_id]: [ { component_material_id, component_name, mass_fraction } ] }
+      let currentRecipeLines = [];
+      let selectedInstanceByLineId = {};
+      let instanceCacheByMaterialId = {};
+      let instanceComponentsCache = {};
       let isRestoringTape = false;
 
       function showForm() {
@@ -745,7 +745,7 @@
       async function fetchInstanceComponents(instanceId) {
         if (!instanceId) return [];
 
-        const res = await fetch(`/api/material-instances/${instanceId}/components`);
+        const res = await fetch(`/api/materials/instances/${instanceId}/components`);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || 'Ошибка загрузки состава экземпляра');
@@ -835,7 +835,7 @@
       async function loadDryingAtmospheres(selectEl, selectedCode = '') {
         if (!selectEl) return;
 
-        const res = await fetch('/api/drying-atmospheres');
+        const res = await fetch('/api/reference/drying-atmospheres');
         if (!res.ok) throw new Error('Failed to load drying atmospheres');
 
         const items = await res.json();
@@ -857,7 +857,7 @@
       async function loadDryMixingMethods(selectEl, selectedId = '') {
         if (!selectEl) return;
 
-        const res = await fetch('/api/dry-mixing-methods');
+        const res = await fetch('/api/reference/dry-mixing-methods');
         if (!res.ok) throw new Error('Failed to load dry mixing methods');
 
         const items = await res.json();
@@ -878,7 +878,7 @@
       async function loadWetMixingMethods(selectEl, selectedId = '') {
         if (!selectEl) return;
 
-        const res = await fetch('/api/wet-mixing-methods');
+        const res = await fetch('/api/reference/wet-mixing-methods');
         if (!res.ok) throw new Error('Failed to load wet mixing methods');
 
         const items = await res.json();
@@ -2318,7 +2318,7 @@
 
       async function loadFoils() {
 
-        const res = await fetch('/api/foils');
+        const res = await fetch('/api/reference/foils');
 
         if (!res.ok) {
           throw new Error(`Failed to load foils: ${res.status}`);
@@ -2340,7 +2340,7 @@
 
       async function loadCoatingMethods() {
 
-        const res = await fetch('/api/coating-methods');
+        const res = await fetch('/api/reference/coating-methods');
         const methods = await res.json();
 
         const select = document.getElementById('2-coating-coating_id');
