@@ -151,17 +151,17 @@
 
             <legend>2 Конфигурация элемента</legend>
 
-            <fieldset id="coin_config" data-table="battery_coin_config" hidden>
+            <fieldset id="coin_config" data-formfactor="coin" hidden>
               <label for="coin_cell_mode">Тип элемента</label>
               <select id="coin_cell_mode" name="coin_cell_mode">
-                <option value="">— выбрать —</option>
+                <option value="" selected>— выбрать —</option>
                 <option value="half_cell">Полуячейка против Li</option>
                 <option value="full_cell">Полный элемент</option>
               </select><br>
 
               <label for="coin_size_code">Размер монетки</label>
               <select id="coin_size_code" name="coin_size_code">
-                <option value="2032">2032</option>
+                <option value="2032" selected>2032</option>
                 <option value="2025">2025</option>
                 <option value="2016">2016</option>
               </select><br>
@@ -169,7 +169,7 @@
               <div id="coin_half_cell_type_block" hidden>
                 <label for="coin_half_cell_type">Тип полуячейки</label>
                 <select id="coin_half_cell_type" name="half_cell_type">
-                  <option value="">— выбрать —</option>
+                  <option value="" selected>— выбрать —</option>
                   <option value="cathode_vs_li">Катод vs Li</option>
                   <option value="anode_vs_li">Анод vs Li</option>
                 </select><br>
@@ -188,14 +188,7 @@
               </div>
             </fieldset>
 
-            <fieldset id="pouch_config" data-table="battery_pouch_config" hidden>
-              <label for="pouch_format_code">Тип пакетного элемента</label>
-              <select id="pouch_format_code" name="pouch_format_code">
-                <option value="">— выбрать —</option>
-                <option value="single_stack">Одностековый</option>
-                <option value="multi_stack">Многостековый</option>
-              </select><br>
-
+            <fieldset id="pouch_config" data-formfactor="pouch" hidden>
               <label for="pouch_notes">Заметки</label>
               <textarea
                 id="pouch_notes"
@@ -204,7 +197,7 @@
               ></textarea>
             </fieldset>
 
-            <fieldset id="cyl_config" data-table="battery_cyl_config" hidden>
+            <fieldset id="cyl_config" data-formfactor="cylindrical" hidden>
               <label for="cyl_size_code">Типоразмер цилиндрического элемента</label>
               <select id="cyl_size_code" name="cyl_size_code">
                 <option value="">— выбрать —</option>
@@ -351,50 +344,52 @@
               </fieldset>
 
           </fieldset>
-          
-          <fieldset id="battery_separator" data-table="battery_sep_config">
-            <legend>4 Сепаратор</legend>
-
-            <label for="separator_id">Сепаратор</label>
-            <select id="separator_id" name="separator_id">
-              <option value="">— выбрать сепаратор —</option>
-            </select>
-            <a href="/reference/separators.html" target="_blank" class="ref-link">
-              Управление сепараторами
-            </a><br>
-
-            <label for="separator_notes">Заметки</label>
-            <textarea
-              id="separator_notes"
-              name="separator_notes"
-              placeholder="Комментарии по сепаратору"
-            ></textarea>
-          </fieldset>
-
-          <fieldset id="battery_electrolyte" data-table="battery_electrolyte">
-            <legend>5 Электролит</legend>
-
-            <label for="electrolyte_id">Электролит</label>
-            <select id="electrolyte_id" name="electrolyte_id">
-              <option value="">— выбрать электролит —</option>
-            </select>
-            <a href="/reference/electrolytes.html" target="_blank" class="ref-link">
-              Управление электролитами
-            </a><br>
-
-            <label for="electrolyte_notes">Заметки</label>
-            <textarea
-              id="electrolyte_notes"
-              name="electrolyte_notes"
-              placeholder="Комментарии по электролиту"
-            ></textarea>
-          </fieldset>
 
           <fieldset id="battery_assembly">
             <legend>6 Параметры сборки</legend>
 
-            <fieldset id="coin_assembly" data-formfactor="coin" data-table="battery_coin_config">
+            <fieldset id="coin_assembly" data-formfactor="coin">
               <legend>Параметры монеточного элемента</legend>
+              
+              <!--Separator-->
+              <fieldset>
+                <legend>Сепаратор</legend>
+              
+                <label for="coin_separator_id">Сепаратор</label>
+                <select id="coin_separator_id" name="separator_id">
+                  <option value="">— выбрать сепаратор —</option>
+                </select>
+                <a href="/reference/separators.html" target="_blank" class="ref-link">
+                  Управление сепараторами
+                </a><br>
+
+                <label for="coin_separator_notes">Заметки</label>
+                <textarea
+                  id="coin_separator_notes"
+                  name="separator_notes"
+                  placeholder="Комментарии по сепаратору"
+                ></textarea>
+              </fieldset>
+
+              <!--Electrolyte-->
+              <fieldset>
+                <legend>Электролит</legend>
+
+                <label for="coin_electrolyte_id">Электролит</label>
+                <select id="coin_electrolyte_id" name="electrolyte_id">
+                  <option value="">— выбрать электролит —</option>
+                </select>
+                <a href="/reference/electrolytes.html" target="_blank" class="ref-link">
+                  Управление электролитами
+                </a><br>
+
+                <label for="coin_electrolyte_notes">Заметки</label>
+                <textarea
+                  id="coin_electrolyte_notes"
+                  name="electrolyte_notes"
+                  placeholder="Комментарии по электролиту"
+                ></textarea>
+              </fieldset>
 
               <fieldset id="coin_layout">
                 <legend>Схема расположения сепаратора и электролита</legend>
@@ -476,9 +471,9 @@
               <fieldset>
                 <legend>Общий объём электролита</legend>
 
-                <label for="electrolyte_total_ul">Общий объём</label>
+                <label for="coin_electrolyte_total_ul">Общий объём</label>
                 <input
-                  id="electrolyte_total_ul"
+                  id="coin_electrolyte_total_ul"
                   name="electrolyte_total_ul"
                   type="number"
                   step="0.1"
@@ -518,17 +513,68 @@
 
               </fieldset>
 
+              <br>
+              <button
+                type="button"
+                class="btn_secondary"
+                onclick="saveAssemblyParams()"
+              >
+                Сохранить параметры сборки
+              </button>
+
             </fieldset>
 
-            <fieldset id="pouch_assembly" data-formfactor="pouch" data-table="battery_pouch_config">
+            <fieldset id="pouch_assembly" data-formfactor="pouch">
               <legend>Параметры сборки пауча</legend>
-              <p>Space for future pouch parameters</p>
+
+              <!--Separator-->
+              <fieldset>
+                <legend>Сепаратор</legend>
+              
+                <label for="pouch_separator_id">Сепаратор</label>
+                <select id="pouch_separator_id" name="separator_id">
+                  <option value="">— выбрать сепаратор —</option>
+                </select>
+                <a href="/reference/separators.html" target="_blank" class="ref-link">
+                  Управление сепараторами
+                </a><br>
+
+                <label for="pouch_separator_notes">Заметки</label>
+                <textarea
+                  id="pouch_separator_notes"
+                  name="separator_notes"
+                  placeholder="Комментарии по сепаратору"
+                ></textarea>
+              </fieldset>
+              
+              <!--Electrolyte-->
+              <fieldset>
+                <legend>Электролит</legend>
+
+                <label for="pouch_electrolyte_id">Электролит</label>
+                <select id="pouch_electrolyte_id" name="electrolyte_id">
+                  <option value="">— выбрать электролит —</option>
+                </select>
+                <a href="/reference/electrolytes.html" target="_blank" class="ref-link">
+                  Управление электролитами
+                </a><br>
+
+                <label for="pouch_electrolyte_notes">Заметки</label>
+                <textarea
+                  id="pouch_electrolyte_notes"
+                  name="electrolyte_notes"
+                  placeholder="Комментарии по электролиту"
+                ></textarea>
+              </fieldset>
+
+              <p>Можно добавить больше параметров</p>
+              
               <fieldset>
                 <legend>Общий объём электролита</legend>
 
-                <label for="electrolyte_total_ul">Общий объём</label>
+                <label for="pouch_electrolyte_total_ul">Общий объём</label>
                 <input
-                  id="electrolyte_total_ul"
+                  id="pouch_electrolyte_total_ul"
                   name="electrolyte_total_ul"
                   type="number"
                   step="0.1"
@@ -536,25 +582,88 @@
                 >
                 <span>, мкл</span><br>
               </fieldset>
-            </fieldset>
 
-            <fieldset id="cyl_assembly" data-formfactor="cylindrical" data-table="battery_cyl_config">
-              <legend>Параметры сборки цилиндра</legend>
-              <p>Space for future cylinder parameters</p>
-              <fieldset>
-              <legend>Общий объём электролита</legend>
-
-              <label for="electrolyte_total_ul">Общий объём</label>
-              <input
-                id="electrolyte_total_ul"
-                name="electrolyte_total_ul"
-                type="number"
-                step="0.1"
-                min="0"
+              <br>
+              <button
+                type="button"
+                class="btn_secondary"
+                onclick="saveAssemblyParams()"
               >
-              <span>, мкл</span><br>
+                Сохранить параметры сборки
+              </button>
+
             </fieldset>
-            </fieldset>          
+
+            <fieldset id="cyl_assembly" data-formfactor="cylindrical">
+              <legend>Параметры сборки цилиндра</legend>
+
+              <!--Separator-->
+              <fieldset>
+                <legend>Сепаратор</legend>
+              
+                <label for="cyl_separator_id">Сепаратор</label>
+                <select id="cyl_separator_id" name="separator_id">
+                  <option value="">— выбрать сепаратор —</option>
+                </select>
+                <a href="/reference/separators.html" target="_blank" class="ref-link">
+                  Управление сепараторами
+                </a><br>
+
+                <label for="cyl_separator_notes">Заметки</label>
+                <textarea
+                  id="cyl_separator_notes"
+                  name="separator_notes"
+                  placeholder="Комментарии по сепаратору"
+                ></textarea>
+              </fieldset>
+
+              <!--Electrolyte-->
+              <fieldset>
+                <legend>Электролит</legend>
+
+                <label for="cyl_electrolyte_id">Электролит</label>
+                <select id="cyl_electrolyte_id" name="electrolyte_id">
+                  <option value="">— выбрать электролит —</option>
+                </select>
+                <a href="/reference/electrolytes.html" target="_blank" class="ref-link">
+                  Управление электролитами
+                </a><br>
+
+                <label for="cyl_electrolyte_notes">Заметки</label>
+                <textarea
+                  id="cyl_electrolyte_notes"
+                  name="electrolyte_notes"
+                  placeholder="Комментарии по электролиту"
+                ></textarea>
+              </fieldset>
+
+              <p>Можно добавить больше параметров</p>
+              
+              <fieldset>
+                <legend>Общий объём электролита</legend>
+
+                <label for="cyl_electrolyte_total_ul">Общий объём</label>
+                <input
+                  id="cyl_electrolyte_total_ul"
+                  name="electrolyte_total_ul"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                >
+                <span>, мкл</span><br>
+              </fieldset>
+
+              <br>
+              <button
+                type="button"
+                class="btn_secondary"
+                onclick="saveAssemblyParams()"
+              >
+                Сохранить параметры сборки
+              </button>
+
+            </fieldset>
+            
           </fieldset>
                   
           <fieldset id="battery_qc" data-table="battery_qc">
@@ -581,14 +690,23 @@
               id="qc_notes"
               name="qc_notes"
               placeholder="Комментарии по выходному контролю"
-            ></textarea>
+            ></textarea><br>
+
+            <button
+              type="button"
+              class="btn_secondary"
+              onclick="saveBatteryQc()"
+            >
+              Сохранить результаты qc
+            </button>
+
           </fieldset>
 
           <fieldset id="battery_electrochem">
             <legend>8 Электрохимия</legend>
 
             <p class="tiny_note">
-              Здесь можно привязать файлы испытаний (циклирование, CV, EIS).
+              Здесь можно будет добавить внутреннюю ссылку на файлы испытаний (циклирование, CV, EIS).
             </p>
 
             <label for="electrochem_files">
@@ -606,13 +724,22 @@
               id="electrochem_notes"
               name="electrochem_notes"
               placeholder="Комментарии по электрохимическим испытаниям"
-            ></textarea>
+            ></textarea><br>
+
+            <button disabled
+              type="button"
+              class="btn_secondary"
+              onclick="saveBatteryConfig()"
+            >
+              Сохранить результаты электрохимических испытаний
+            </button>
 
           </fieldset>
         </div>
         
       </form>
 
+      <button type="button" id="exitBatteriesBtn">Выйти</button>
       <div class="save_message" aria-live="polite"></div>
 
       <fieldset id="batteries_list_block">

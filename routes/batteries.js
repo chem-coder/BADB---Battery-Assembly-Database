@@ -197,6 +197,26 @@ router.patch('/:id', async (req, res) => {
       }
     }
 
+    const currentRes = await pool.query(
+      `
+      SELECT
+        project_id,
+        form_factor,
+        created_by,
+        battery_notes,
+        status
+      FROM batteries
+      WHERE battery_id = $1
+      `,
+      [batteryId]
+    );
+
+    if (currentRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Батарея не найдена' });
+    }
+
+    const current = currentRes.rows[0];
+
     const result = await pool.query(
       `
       UPDATE batteries
@@ -217,11 +237,11 @@ router.patch('/:id', async (req, res) => {
         created_at
       `,
       [
-        project_id !== undefined ? Number(project_id) : result.rows[0]?.project_id,
-        form_factor !== undefined ? form_factor : result.rows[0]?.form_factor,
-        created_by !== undefined ? Number(created_by) : result.rows[0]?.created_by,
-        battery_notes !== undefined ? battery_notes : result.rows[0]?.notes,
-        status !== undefined ? status : result.rows[0]?.status,
+        project_id !== undefined ? Number(project_id) : current.project_id,
+        form_factor !== undefined ? form_factor : current.form_factor,
+        created_by !== undefined ? Number(created_by) : current.created_by,
+        battery_notes !== undefined ? battery_notes : current.battery_notes,
+        status !== undefined ? status : current.status,
         batteryId
       ]
     );
@@ -434,7 +454,6 @@ router.post('/battery_pouch_config', async (req, res) => {
 
   const {
     battery_id,
-    pouch_format_code,
     pouch_notes
   } = req.body;
 
@@ -450,19 +469,16 @@ router.post('/battery_pouch_config', async (req, res) => {
       `
       INSERT INTO battery_pouch_config (
         battery_id,
-        pouch_format_code,
         pouch_notes
       )
-      VALUES ($1, $2, $3)
+      VALUES ($1, $2)
       ON CONFLICT (battery_id)
       DO UPDATE SET
-        pouch_format_code = EXCLUDED.pouch_format_code,
         pouch_notes = EXCLUDED.pouch_notes
       RETURNING *
       `,
       [
         batteryId,
-        pouch_format_code || null,
         pouch_notes || null
       ]
     );
@@ -493,7 +509,6 @@ router.get('/battery_pouch_config/:battery_id', async (req, res) => {
       `
       SELECT
         battery_id,
-        pouch_format_code,
         pouch_notes
       FROM battery_pouch_config
       WHERE battery_id = $1
@@ -522,7 +537,6 @@ router.patch('/battery_pouch_config/:battery_id', async (req, res) => {
   const batteryId = Number(req.params.battery_id);
 
   const {
-    pouch_format_code,
     pouch_notes
   } = req.body;
 
@@ -536,16 +550,13 @@ router.patch('/battery_pouch_config/:battery_id', async (req, res) => {
       `
       UPDATE battery_pouch_config
       SET
-        pouch_format_code = $1,
-        pouch_notes = $2
-      WHERE battery_id = $3
+        pouch_notes = $1
+      WHERE battery_id = $2
       RETURNING
         battery_id,
-        pouch_format_code,
         pouch_notes
       `,
       [
-        pouch_format_code || null,
         pouch_notes || null,
         batteryId
       ]
@@ -708,8 +719,9 @@ router.patch('/battery_cyl_config/:battery_id', async (req, res) => {
 
 
 // Save electrode sources for a battery
-router.post('/battery_electrode_sources', async (req, res) => {
 
+router.post('/battery_electrode_sources', async (req, res) => {
+  
   const {
     battery_id,
     cathode_tape_id,
@@ -720,78 +732,157 @@ router.post('/battery_electrode_sources', async (req, res) => {
     anode_source_notes
   } = req.body;
 
+  console.log('REQ BODY:', req.body);
+
   const batteryId = Number(battery_id);
-
-  // validate that only one electrode was selected if half-cell
-  const modeResult = await pool.query(
-  `
-  SELECT coin_cell_mode
-  FROM battery_coin_config
-  WHERE battery_id = $1
-  `,
-  [batteryId]
-  );
-
-  if (modeResult.rows.length === 0) {
-    return res.status(400).json({ error: 'Конфигурация coin cell не найдена' });
-  }
-
-  const coinMode = modeResult.rows[0].coin_cell_mode;
-
-  if (coinMode === 'half_cell') {
-
-    const electrodeCount =
-      (cathode_tape_id ? 1 : 0) +
-      (anode_tape_id ? 1 : 0);
-
-    if (electrodeCount > 1) {
-      return res.status(400).json({
-        error: 'Half-cell может иметь только один электрод'
-      });
-    }
-
-  }
 
   if (!Number.isInteger(batteryId)) {
     return res.status(400).json({ error: 'Некорректный battery_id' });
   }
 
   try {
-
-    const result = await pool.query(
-      `
-      INSERT INTO battery_electrode_sources
-        (battery_id, role, tape_id, cut_batch_id, source_notes)
-      VALUES
-        ($1, 'cathode', $2, $3, $4),
-        ($1, 'anode',   $5, $6, $7)
-      ON CONFLICT (battery_id, role)
-      DO UPDATE SET
-        tape_id = EXCLUDED.tape_id,
-        cut_batch_id = EXCLUDED.cut_batch_id,
-        source_notes = EXCLUDED.source_notes
-      RETURNING *;
-      `,
-      [
-        batteryId,
-        cathode_tape_id || null,
-        cathode_cut_batch_id || null,
-        cathode_source_notes || null,
-        anode_tape_id || null,
-        anode_cut_batch_id || null,
-        anode_source_notes || null
-      ]
+    const batteryResult = await pool.query(
+      `SELECT form_factor FROM batteries WHERE battery_id = $1`,
+      [batteryId]
     );
 
-    res.status(201).json(result.rows);
+    if (batteryResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Некорректный ID батареи' });
+    }
+
+    const form = batteryResult.rows[0].form_factor;
+
+    let coinMode = null;
+
+    if (form === 'coin') {
+      const modeResult = await pool.query(
+        `
+        SELECT coin_cell_mode
+        FROM battery_coin_config
+        WHERE battery_id = $1
+        `,
+        [batteryId]
+      );
+
+      if (modeResult.rows.length === 0) {
+        return res.status(400).json({ error: 'Конфигурация coin cell не найдена' });
+      }
+
+      coinMode = modeResult.rows[0].coin_cell_mode;
+    }
+
+    const hasCathode = !!cathode_tape_id && !!cathode_cut_batch_id;
+    const hasAnode = !!anode_tape_id && !!anode_cut_batch_id;
+
+    if (form === 'coin' && coinMode === 'half_cell') {
+      if ((hasCathode ? 1 : 0) + (hasAnode ? 1 : 0) !== 1) {
+        return res.status(400).json({
+          error: 'Для монеточной полуячейки должен быть выбран ровно один источник электродов'
+        });
+      }
+    } else {
+      if (!hasCathode || !hasAnode) {
+        return res.status(400).json({
+          error: 'Для данного элемента должны быть выбраны и катодный, и анодный источники'
+        });
+      }
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      if (hasCathode) {
+        await client.query(
+          `
+          INSERT INTO battery_electrode_sources
+            (battery_id, role, tape_id, cut_batch_id, source_notes)
+          VALUES
+            ($1, 'cathode', $2, $3, $4)
+          ON CONFLICT (battery_id, role)
+          DO UPDATE SET
+            tape_id = EXCLUDED.tape_id,
+            cut_batch_id = EXCLUDED.cut_batch_id,
+            source_notes = EXCLUDED.source_notes
+          `,
+          [
+            batteryId,
+            Number(cathode_tape_id),
+            Number(cathode_cut_batch_id),
+            cathode_source_notes || null
+          ]
+        );
+      } else {
+        await client.query(
+          `
+          DELETE FROM battery_electrode_sources
+          WHERE battery_id = $1 AND role = 'cathode'
+          `,
+          [batteryId]
+        );
+      }
+
+      if (hasAnode) {
+        await client.query(
+          `
+          INSERT INTO battery_electrode_sources
+            (battery_id, role, tape_id, cut_batch_id, source_notes)
+          VALUES
+            ($1, 'anode', $2, $3, $4)
+          ON CONFLICT (battery_id, role)
+          DO UPDATE SET
+            tape_id = EXCLUDED.tape_id,
+            cut_batch_id = EXCLUDED.cut_batch_id,
+            source_notes = EXCLUDED.source_notes
+          `,
+          [
+            batteryId,
+            Number(anode_tape_id),
+            Number(anode_cut_batch_id),
+            anode_source_notes || null
+          ]
+        );
+      } else {
+        await client.query(
+          `
+          DELETE FROM battery_electrode_sources
+          WHERE battery_id = $1 AND role = 'anode'
+          `,
+          [batteryId]
+        );
+      }
+
+      const result = await client.query(
+        `
+        SELECT
+          battery_id,
+          role,
+          tape_id,
+          cut_batch_id,
+          source_notes
+        FROM battery_electrode_sources
+        WHERE battery_id = $1
+        ORDER BY role
+        `,
+        [batteryId]
+      );
+
+      await client.query('COMMIT');
+      res.status(200).json(result.rows);
+
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error(err);
+      res.status(500).json({ error: 'Ошибка сохранения источников электродов' });
+    } finally {
+      client.release();
+    }
 
   } catch (err) {
-
     console.error(err);
     res.status(500).json({ error: 'Ошибка сохранения источников электродов' });
-
   }
-
 });
 
 // Read electrode sources for a battery
@@ -1534,7 +1625,10 @@ router.get('/:id/assembly', async (req, res) => {
 
         'electrode_sources',
         (
-          SELECT row_to_json(es)
+          SELECT COALESCE(
+            jsonb_agg(to_jsonb(es)),
+            '[]'::jsonb
+          )
           FROM battery_electrode_sources es
           WHERE es.battery_id = $1
         ),
