@@ -2,6 +2,61 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import LoginPage from '@/pages/LoginPage.vue'
 import AppLayout from '@/layouts/AppLayout.vue'
+import {
+  workflowSections,
+  referenceSections,
+  adminSections,
+  referencePages,
+} from '@/config/navigation'
+
+// ── Build routes from navigation config ──────────────────────────
+const workflowRoutes = workflowSections.flatMap((s) => {
+  const routes = [
+    {
+      path: s.path.slice(1), // remove leading /
+      component: s.listPage,
+      meta: { title: s.label, crumbs: [] },
+    },
+  ]
+  if (s.formPage) {
+    routes.push(
+      {
+        path: s.path.slice(1) + '/new',
+        component: s.formPage,
+        meta: { title: s.formTitles.new, crumbs: [{ label: s.label, to: s.path }] },
+      },
+      {
+        path: s.path.slice(1) + '/:id',
+        component: s.formPage,
+        meta: { title: s.formTitles.edit, crumbs: [{ label: s.label, to: s.path }] },
+      },
+    )
+  }
+  return routes
+})
+
+const referenceRoutes = referenceSections.map((s) => ({
+  path: s.path.slice(1),
+  component: referencePages[s.key],
+  meta: { title: s.label, crumbs: [{ label: 'Справочники' }] },
+}))
+
+const adminRoutes = adminSections.map((s) => {
+  const page = s.key === 'users'
+    ? referencePages.users
+    : s.key === 'design'
+      ? () => import('@/pages/DesignSystemPage.vue')
+      : () => import('@/pages/PlaceholderPage.vue')
+  return {
+    path: s.path.slice(1),
+    component: page,
+    meta: {
+      title: s.label,
+      ...(s.role && { role: s.role }),
+      crumbs: [{ label: 'Администрирование' }],
+    },
+  }
+})
 
 const routes = [
   { path: '/login', component: LoginPage, meta: { public: true } },
@@ -13,55 +68,9 @@ const routes = [
       { path: '', component: () => import('@/pages/HomePage.vue'),
         meta: { title: 'Главная', crumbs: [] } },
 
-      // Производство
-      { path: 'tapes',     component: () => import('@/pages/TapesPage.vue'),
-        meta: { title: 'Подготовка лент', crumbs: [] } },
-      { path: 'tapes/new', component: () => import('@/pages/TapeFormPage.vue'),
-        meta: { title: 'Новая лента',     crumbs: [{ label: 'Подготовка лент', to: '/tapes' }] } },
-      { path: 'tapes/:id', component: () => import('@/pages/TapeFormPage.vue'),
-        meta: { title: 'Лента',           crumbs: [{ label: 'Подготовка лент', to: '/tapes' }] } },
-      { path: 'electrodes',     component: () => import('@/pages/ElectrodesPage.vue'),
-        meta: { title: 'Электроды', crumbs: [] } },
-      { path: 'electrodes/new', component: () => import('@/pages/ElectrodeFormPage.vue'),
-        meta: { title: 'Новая партия', crumbs: [{ label: 'Электроды', to: '/electrodes' }] } },
-      { path: 'electrodes/:id', component: () => import('@/pages/ElectrodeFormPage.vue'),
-        meta: { title: 'Партия',       crumbs: [{ label: 'Электроды', to: '/electrodes' }] } },
-      { path: 'assembly',       component: () => import('@/pages/AssemblyPage.vue'),
-        meta: { title: 'Аккумуляторы',    crumbs: [] } },
-      { path: 'assembly/new',   component: () => import('@/pages/AssemblyFormPage.vue'),
-        meta: { title: 'Новый аккумулятор', crumbs: [{ label: 'Аккумуляторы', to: '/assembly' }] } },
-      { path: 'assembly/:id',   component: () => import('@/pages/AssemblyFormPage.vue'),
-        meta: { title: 'Аккумулятор',      crumbs: [{ label: 'Аккумуляторы', to: '/assembly' }] } },
-      { path: 'modules',        component: () => import('@/pages/PlaceholderPage.vue'),
-        meta: { title: 'Модули',           crumbs: [] } },
-
-      // Справочники
-      { path: 'reference/materials', component: () => import('@/pages/reference/MaterialsPage.vue'),
-        meta: { title: 'Материалы', crumbs: [{ label: 'Справочники' }] } },
-      { path: 'reference/recipes',   component: () => import('@/pages/reference/RecipesPage.vue'),
-        meta: { title: 'Рецептуры', crumbs: [{ label: 'Справочники' }] } },
-      { path: 'reference/electrolytes', component: () => import('@/pages/reference/ElectrolytesPage.vue'),
-        meta: { title: 'Электролиты', crumbs: [{ label: 'Справочники' }] } },
-      { path: 'reference/separators', component: () => import('@/pages/reference/SeparatorsPage.vue'),
-        meta: { title: 'Сепараторы', crumbs: [{ label: 'Справочники' }] } },
-      { path: 'reference/separator-structures', component: () => import('@/pages/reference/SeparatorStructuresPage.vue'),
-        meta: { title: 'Структуры сепараторов', crumbs: [{ label: 'Справочники' }] } },
-      { path: 'reference/projects', component: () => import('@/pages/reference/ProjectsPage.vue'),
-        meta: { title: 'Проекты', crumbs: [{ label: 'Справочники' }] } },
-
-      // Администрирование
-      { path: 'reference/users', component: () => import('@/pages/reference/UsersPage.vue'),
-        meta: { title: 'Пользователи', role: 'admin', crumbs: [{ label: 'Администрирование' }] } },
-      { path: 'activity',   component: () => import('@/pages/PlaceholderPage.vue'),
-        meta: { title: 'Журнал действий', crumbs: [{ label: 'Администрирование' }] } },
-      { path: 'audit',      component: () => import('@/pages/PlaceholderPage.vue'),
-        meta: { title: 'Журнал входов',   crumbs: [{ label: 'Администрирование' }] } },
-      { path: 'submissions', component: () => import('@/pages/PlaceholderPage.vue'),
-        meta: { title: 'Журнал подач',    crumbs: [{ label: 'Администрирование' }] } },
-
-      // Дизайн код — admin only
-      { path: 'design-system', component: () => import('@/pages/DesignSystemPage.vue'),
-        meta: { title: 'Дизайн код', role: 'admin', crumbs: [] } },
+      ...workflowRoutes,
+      ...referenceRoutes,
+      ...adminRoutes,
 
       // Аккаунт
       { path: 'profile', component: () => import('@/pages/ProfilePage.vue'),

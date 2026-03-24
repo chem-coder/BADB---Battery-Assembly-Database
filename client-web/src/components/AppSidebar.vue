@@ -2,6 +2,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { workflowSections, referenceSections, adminSections } from '@/config/navigation'
 import tvelLogo from '@/assets/logo/TVEL_horizontal_light.svg'
 
 const router = useRouter()
@@ -48,46 +49,23 @@ function toggleSection(name) {
   }, 360)
 }
 
-// ── Menu definition ───────────────────────────────────────────────────────
+// ── Menu definition — built from config/navigation.js (single source of truth) ──
 const sections = computed(() => {
   const list = [
     {
       section: 'СОЗДАНИЕ',
-      items: [
-        { label: 'Подготовка лент',  to: '/tapes',      icon: 'pi pi-sliders-h'   },
-        { label: 'Электроды',        to: '/electrodes', icon: 'pi pi-stop-circle'  },
-        { label: 'Аккумуляторы',     to: '/assembly',   icon: 'pi pi-box'          },
-        { label: 'Модули',           to: '/modules',    icon: 'pi pi-objects-column' },
-      ],
+      items: workflowSections.map(s => ({ label: s.label, to: s.path, icon: s.icon })),
     },
     {
       section: 'СПРАВОЧНИКИ',
-      items: [
-        { label: 'Материалы',             to: '/reference/materials',            icon: 'pi pi-database'    },
-        { label: 'Рецептуры',             to: '/reference/recipes',              icon: 'pi pi-book'        },
-        { label: 'Электролиты',           to: '/reference/electrolytes',         icon: 'pi pi-info-circle' },
-        { label: 'Сепараторы',            to: '/reference/separators',           icon: 'pi pi-minus'       },
-        { label: 'Структуры сепараторов', to: '/reference/separator-structures', icon: 'pi pi-sitemap'     },
-        { label: 'Проекты',               to: '/reference/projects',             icon: 'pi pi-folder'      },
-      ],
+      items: referenceSections.map(s => ({ label: s.label, to: s.path, icon: s.icon })),
     },
   ]
 
   if (isLead.value) {
-    const adminItems = []
-    if (isAdmin.value) {
-      adminItems.push({ label: 'Пользователи', to: '/reference/users', icon: 'pi pi-users' })
-    }
-    adminItems.push(
-      { label: 'Журнал действий', to: '/activity',       icon: 'pi pi-history'    },
-      { label: 'Журнал входов',   to: '/audit',          icon: 'pi pi-sign-in'    },
-      { label: 'Журнал подач',    to: '/submissions',    icon: 'pi pi-upload'     },
-    )
-    if (isAdmin.value) {
-      adminItems.push(
-        { label: 'Дизайн код',    to: '/design-system',  icon: 'pi pi-palette'    },
-      )
-    }
+    const adminItems = adminSections
+      .filter(s => !s.role || authStore.user?.role === s.role)
+      .map(s => ({ label: s.label, to: s.path, icon: s.icon }))
     list.push({ section: 'АДМИНИСТРИРОВАНИЕ', items: adminItems })
   }
 
