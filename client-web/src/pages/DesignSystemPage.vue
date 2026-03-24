@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import Button from 'primevue/button'
@@ -61,27 +61,8 @@ const clearAutoComplete = () => {
   autoCompleteValue.value = null
 }
 
-// MultiSelect via AutoComplete multiple — keeps dropdown open after each pick
+// MultiSelect — native PrimeVue component (built-in toggle, filter, select all)
 const multiValue = ref([])
-const multiRef = ref(null)
-const multiSuggestions = ref([])
-const searchMulti = (event) => {
-  const query = (event.query || '').toLowerCase()
-  const selectedLabels = multiValue.value.map(v => v.label)
-  multiSuggestions.value = selectOptions.filter(
-    o => !selectedLabels.includes(o.label) && o.label.toLowerCase().includes(query)
-  )
-}
-const onMultiItemSelect = () => {
-  // Re-open dropdown after selection so user can keep picking
-  setTimeout(() => multiRef.value?.show(), 50)
-}
-const selectAllMulti = () => {
-  multiValue.value = [...selectOptions]
-}
-const clearAllMulti = () => {
-  multiValue.value = []
-}
 
 const statuses = ['draft', 'processing', 'accepted', 'rejected', 'active', 'inactive']
 
@@ -217,21 +198,14 @@ const roleLabels = { cathode: 'Катод', anode: 'Анод' }
         </div>
         <div class="ds-col">
           <span class="ds-label">MultiSelect (поиск в поле)</span>
-          <div class="multi-ac-wrap">
-            <AutoComplete ref="multiRef" v-model="multiValue"
-                          :suggestions="multiSuggestions" @complete="searchMulti"
-                          @item-select="onMultiItemSelect"
-                          optionLabel="label" multiple dropdown completeOnFocus
-                          :scrollHeight="'200px'"
-                          placeholder="Выберите несколько" style="min-width: 260px">
-              <template #footer>
-                <div class="multi-ac-footer">
-                  <button type="button" class="multi-ac-btn" @click="selectAllMulti">Выбрать все</button>
-                  <button type="button" class="multi-ac-btn multi-ac-btn--clear" @click="clearAllMulti">Сбросить</button>
-                </div>
-              </template>
-            </AutoComplete>
-          </div>
+          <MultiSelect v-model="multiValue"
+                       :options="selectOptions" optionLabel="label"
+                       filter :showToggleAll="true"
+                       :scrollHeight="'200px'"
+                       placeholder="Выберите несколько"
+                       :maxSelectedLabels="0"
+                       selectedItemsLabel="Выбрано: {0}"
+                       style="min-width: 260px; max-width: 400px" />
         </div>
         <div class="ds-col">
           <span class="ds-label">DatePicker</span>
@@ -567,5 +541,16 @@ const roleLabels = { cathode: 'Катод', anode: 'Анод' }
 .select-clear-btn:hover {
   color: #333;
   background: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Native MultiSelect — match height to Select/DatePicker ── */
+:deep(.p-multiselect) {
+  min-height: 40px;
+  height: 40px;
+  box-sizing: border-box;
+}
+:deep(.p-multiselect-dropdown) {
+  height: 100%;
+  align-self: stretch;
 }
 </style>

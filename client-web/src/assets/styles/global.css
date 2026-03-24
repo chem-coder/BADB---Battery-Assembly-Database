@@ -280,9 +280,20 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   font-size: 14px;
 }
 
-/* MultiSelect — fixed width, no stretch */
+/* MultiSelect — match Select structure exactly */
 .p-multiselect {
   max-width: 100%;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  overflow: hidden;
+}
+.p-multiselect .p-multiselect-label-container {
+  background: rgb(255, 255, 255);
+  border: 1px solid rgb(203, 213, 225);
+  border-right: 1px solid rgb(203, 213, 225);
+  border-radius: 6px 0 0 6px;
+  box-shadow: rgba(18, 18, 23, 0.05) 0px 1px 2px 0px;
 }
 .p-multiselect .p-multiselect-label {
   white-space: nowrap;
@@ -304,15 +315,28 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   font-size: 13px !important;
 }
 
-/* Dropdown arrow trigger — subtle grey background (like Select) */
+/* Dropdown arrow trigger — solid grey background, identical for all */
+.p-select-dropdown,
 .p-multiselect-dropdown,
 .p-autocomplete-dropdown {
-  background: rgba(0, 0, 0, 0.04) !important;
+  background: #E9EDF3 !important;
   border-left: 1px solid var(--p-surface-200) !important;
   border-radius: 0 var(--p-content-border-radius, 6px) var(--p-content-border-radius, 6px) 0 !important;
   color: #6B7280 !important;
   transition: background 0.15s;
 }
+/* MultiSelect dropdown arrow — match Select's dropdown button exactly */
+.p-multiselect-dropdown {
+  align-self: stretch !important;
+  padding: 1px 6px !important;
+  width: 40px !important;
+  box-sizing: border-box !important;
+  border: 1px solid rgb(203, 213, 225) !important;
+  border-left: 1px solid rgb(226, 232, 240) !important;
+  border-radius: 0 6px 6px 0 !important;
+  background: #E9EDF3 !important;
+}
+.p-select-dropdown:hover,
 .p-multiselect-dropdown:hover,
 .p-autocomplete-dropdown:hover {
   background: rgba(0, 0, 0, 0.08) !important;
