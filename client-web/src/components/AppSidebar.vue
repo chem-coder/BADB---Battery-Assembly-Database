@@ -222,8 +222,14 @@ function logout() {
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem 0 0.25rem;
+  padding: 0.5rem 6px 0.25rem 0;
 }
+/* Sidebar scrollbar — white, offset from edge */
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.35); border-radius: 2px; }
+.sidebar-nav::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.55); }
+.sidebar-nav { scrollbar-color: rgba(255, 255, 255, 0.35) transparent; }
 
 /* ── Section header — folder icon + label ─────────────────────────────── */
 .sidebar-section { margin-bottom: 0.15rem; }

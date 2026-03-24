@@ -623,3 +623,25 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
 .app-content > * {
   animation: fadeSlideIn 0.25s ease-out;
 }
+
+/* ── Global scrollbar — Основной light (#D9E0EA) ── */
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D9E0EA;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c0cad8;
+}
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #D9E0EA transparent;
+}
