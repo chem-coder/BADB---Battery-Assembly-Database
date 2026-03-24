@@ -181,7 +181,7 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
 .p-textarea:focus {
   border-width: 0.5px !important;
   border-color: var(--p-primary-color) !important;
-  box-shadow: 2px 3px 6px rgba(76, 175, 80, 0.18) !important;
+  box-shadow: 2px 3px 6px rgba(82, 201, 166, 0.18) !important;
 }
 
 /* ── Field pattern: label + input + error ── */
@@ -261,12 +261,12 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
 .p-multiselect:not(.p-disabled):not(:focus-within):hover,
 .p-autocomplete:not(.p-disabled):hover .p-autocomplete-input:not(:focus),
 .p-datepicker:not(.p-disabled):not(:focus):hover {
-  border-color: rgba(76, 175, 80, 0.45) !important;
-  box-shadow: 2px 3px 8px rgba(76, 175, 80, 0.18);
+  border-color: rgba(82, 201, 166, 0.45) !important;
+  box-shadow: 2px 3px 8px rgba(82, 201, 166, 0.18);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .p-datepicker:not(.p-disabled):not(:focus):hover {
-  box-shadow: 1px 1px 5px rgba(76, 175, 80, 0.10);
+  box-shadow: 1px 1px 5px rgba(82, 201, 166, 0.10);
 }
 
 /* Placeholder — always the same colour, even in invalid state */
@@ -301,10 +301,10 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
 }
 /* MultiSelect hover — green border on label, green shadow on wrapper */
 .p-multiselect:not(.p-disabled):hover {
-  box-shadow: 2px 3px 8px rgba(76, 175, 80, 0.18) !important;
+  box-shadow: 2px 3px 8px rgba(82, 201, 166, 0.18) !important;
 }
 .p-multiselect:not(.p-disabled):hover .p-multiselect-label-container {
-  border-color: rgba(76, 175, 80, 0.45) !important;
+  border-color: rgba(82, 201, 166, 0.45) !important;
 }
 .p-multiselect .p-multiselect-label {
   white-space: nowrap;
@@ -518,7 +518,7 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
 .p-select:focus,
 .p-textarea:focus,
 .p-dropdown:focus {
-  box-shadow: 2px 3px 6px rgba(76, 175, 80, 0.18) !important;
+  box-shadow: 2px 3px 6px rgba(82, 201, 166, 0.18) !important;
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
@@ -560,6 +560,39 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   backdrop-filter: blur(12px) saturate(1.4);
   -webkit-backdrop-filter: blur(12px) saturate(1.4);
 }
+
+/* ── Badges — 10 universal variants ── */
+/* Base badge style */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Filled badges (default) — text + light background */
+/* Порядок: тёплые → зелёные → сине-зелёные → синие → фиолетовые */
+.badge-1 { color: #CE7D4E; background: rgba(206, 125, 78,  0.12); } /* Терракот */
+.badge-2 { color: #D3A754; background: rgba(211, 167, 84,  0.12); } /* Охра     */
+.badge-3 { color: #649263; background: rgba(100, 146, 99,  0.12); } /* Хвойный  */
+.badge-4 { color: #2a9d78; background: rgba(82,  201, 166, 0.12); } /* Мятный   */
+.badge-5 { color: #025EA1; background: rgba(2,   94,  161, 0.12); } /* Синий     */
+.badge-6 { color: #003274; background: rgba(0,   50,  116, 0.12); } /* Основной  */
+.badge-7 { color: #6E3359; background: rgba(110, 51,  89,  0.12); } /* Слива    */
+.badge-8 { color: #E74C3C; background: rgba(231, 76,  60,  0.12); } /* Красный  */
+
+/* Outline badges — transparent background + border */
+.badge-outline.badge-1 { background: transparent; border: 1px solid rgba(206, 125, 78,  0.35); }
+.badge-outline.badge-2 { background: transparent; border: 1px solid rgba(211, 167, 84,  0.35); }
+.badge-outline.badge-3 { background: transparent; border: 1px solid rgba(100, 146, 99,  0.35); }
+.badge-outline.badge-4 { background: transparent; border: 1px solid rgba(82,  201, 166, 0.35); }
+.badge-outline.badge-5 { background: transparent; border: 1px solid rgba(2,   94,  161, 0.35); }
+.badge-outline.badge-6 { background: transparent; border: 1px solid rgba(0,   50,  116, 0.35); }
+.badge-outline.badge-7 { background: transparent; border: 1px solid rgba(110, 51,  89,  0.35); }
+.badge-outline.badge-8 { background: transparent; border: 1px solid rgba(231, 76,  60,  0.35); }
 
 /* ── Fade-in animation for page content ── */
 @keyframes fadeSlideIn {

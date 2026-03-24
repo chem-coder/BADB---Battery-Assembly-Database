@@ -17,13 +17,23 @@ import Column from 'primevue/column'
 
 // --- Static data ---
 
-const colours = [
+const coloursMain = [
   { name: 'Основной', hex: '#003274' },
   { name: 'Синий',    hex: '#025EA1' },
   { name: 'Голубой',  hex: '#6CACE4' },
   { name: 'Мятный',   hex: '#52C9A6' },
   { name: 'Текст',    hex: '#333333' },
   { name: 'Серый',    hex: '#6B7280' },
+]
+
+const coloursExtra = [
+  { name: 'Красный',  hex: '#E74C3C', light: '#FBE4E2' },
+  { name: 'Терракот', hex: '#CE7D4E', light: '#F8ECE4' },
+  { name: 'Охра',     hex: '#D3A754', light: '#F8F2E5' },
+  { name: 'Хвойный',  hex: '#649263', light: '#E8EFE8' },
+  { name: 'Синий',    hex: '#025EA1', light: '#D9E7F1' },
+  { name: 'Основной', hex: '#003274', light: '#D9E0EA' },
+  { name: 'Слива',    hex: '#6E3359', light: '#E9E0E6' },
 ]
 
 const typography = [
@@ -64,7 +74,6 @@ const clearAutoComplete = () => {
 // MultiSelect — native PrimeVue component (built-in toggle, filter, select all)
 const multiValue = ref([])
 
-const statuses = ['draft', 'processing', 'accepted', 'rejected', 'active', 'inactive']
 
 const paginatorFirst = ref(0)
 
@@ -86,11 +95,27 @@ const roleLabels = { cathode: 'Катод', anode: 'Анод' }
     <!-- Section 1 — Colour palette -->
     <section class="glass-card ds-section">
       <h3 class="ds-section-title">Цветовая палитра</h3>
-      <div class="ds-row">
-        <div v-for="c in colours" :key="c.hex" class="ds-swatch">
+      <div class="ds-label" style="margin-bottom: 0.5rem">Основные</div>
+      <div class="ds-row" style="margin-bottom: 1rem">
+        <div v-for="c in coloursMain" :key="c.hex" class="ds-swatch">
           <div class="ds-swatch-block" :style="{ background: c.hex }"></div>
           <div class="ds-swatch-hex">{{ c.hex }}</div>
           <div class="ds-swatch-name">{{ c.name }}</div>
+        </div>
+      </div>
+      <div class="ds-label" style="margin-bottom: 0.5rem">Дополнительные</div>
+      <div class="ds-row">
+        <div v-for="c in coloursExtra" :key="c.hex" class="ds-swatch-pair">
+          <div class="ds-swatch">
+            <div class="ds-swatch-block" :style="{ background: c.hex }"></div>
+            <div class="ds-swatch-hex">{{ c.hex }}</div>
+            <div class="ds-swatch-name">{{ c.name }}</div>
+          </div>
+          <div class="ds-swatch">
+            <div class="ds-swatch-block" :style="{ background: c.light }"></div>
+            <div class="ds-swatch-hex">{{ c.light }}</div>
+            <div class="ds-swatch-name">{{ c.name }} light</div>
+          </div>
         </div>
       </div>
     </section>
@@ -229,7 +254,7 @@ const roleLabels = { cathode: 'Катод', anode: 'Анод' }
         </div>
         <div class="ds-col">
           <span class="ds-label">Опасная</span>
-          <Button label="Удалить" severity="danger" />
+          <Button label="Удалить" severity="danger" text />
         </div>
         <div class="ds-col">
           <span class="ds-label">Ghost</span>
@@ -254,16 +279,16 @@ const roleLabels = { cathode: 'Катод', anode: 'Анод' }
       </div>
     </section>
 
-    <!-- Section 6 — Status badges -->
+    <!-- Section 6 — Badges (10 universal variants) -->
     <section class="glass-card ds-section">
-      <h3 class="ds-section-title">Статус-бейджи</h3>
-      <div class="ds-row" style="margin-bottom: 1rem">
-        <StatusBadge v-for="s in statuses" :key="s" :status="s" />
+      <h3 class="ds-section-title">Бейджи</h3>
+      <div class="ds-label" style="margin-bottom: 0.5rem">Статус-бейджи</div>
+      <div class="ds-row" style="margin-bottom: 1rem; flex-wrap: wrap; gap: 8px">
+        <span v-for="n in 8" :key="'s'+n" :class="['badge', `badge-${n}`]">Название_{{ n }}</span>
       </div>
       <div class="ds-label" style="margin-bottom: 0.5rem">Тип-бейджи</div>
-      <div class="ds-row">
-        <span class="type-badge type-badge--cathode">Катод</span>
-        <span class="type-badge type-badge--anode">Анод</span>
+      <div class="ds-row" style="flex-wrap: wrap; gap: 8px">
+        <span v-for="n in 8" :key="'t'+n" :class="['badge badge-outline', `badge-${n}`]">Название_{{ n }}</span>
       </div>
     </section>
 
@@ -404,7 +429,7 @@ const roleLabels = { cathode: 'Катод', anode: 'Анод' }
 }
 .ds-type-spec { font-size: 11px; color: #9CA3AF; white-space: nowrap; }
 
-/* Type badges */
+/* Type badges (legacy — used in table) */
 .type-badge {
   display: inline-block;
   padding: 2px 10px;
@@ -419,6 +444,12 @@ const roleLabels = { cathode: 'Катод', anode: 'Анод' }
 .type-badge--anode {
   background: rgba(82, 201, 166, 0.12);
   color: #2a9d78;
+}
+
+/* Colour swatch pairs */
+.ds-swatch-pair {
+  display: flex;
+  gap: 4px;
 }
 
 /* Card demos */
