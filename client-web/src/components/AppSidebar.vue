@@ -56,7 +56,8 @@ const sections = computed(() => {
       items: [
         { label: 'Подготовка лент',  to: '/tapes',      icon: 'pi pi-sliders-h'   },
         { label: 'Электроды',        to: '/electrodes', icon: 'pi pi-stop-circle'  },
-        { label: 'Сборка',           to: '/assembly',   icon: 'pi pi-box'          },
+        { label: 'Аккумуляторы',     to: '/assembly',   icon: 'pi pi-box'          },
+        { label: 'Модули',           to: '/modules',    icon: 'pi pi-objects-column' },
       ],
     },
     {

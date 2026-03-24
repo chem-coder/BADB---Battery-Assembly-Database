@@ -27,11 +27,13 @@ const routes = [
       { path: 'electrodes/:id', component: () => import('@/pages/ElectrodeFormPage.vue'),
         meta: { title: 'Партия',       crumbs: [{ label: 'Электроды', to: '/electrodes' }] } },
       { path: 'assembly',       component: () => import('@/pages/AssemblyPage.vue'),
-        meta: { title: 'Сборка',    crumbs: [] } },
+        meta: { title: 'Аккумуляторы',    crumbs: [] } },
       { path: 'assembly/new',   component: () => import('@/pages/AssemblyFormPage.vue'),
-        meta: { title: 'Новый аккумулятор', crumbs: [{ label: 'Сборка', to: '/assembly' }] } },
+        meta: { title: 'Новый аккумулятор', crumbs: [{ label: 'Аккумуляторы', to: '/assembly' }] } },
       { path: 'assembly/:id',   component: () => import('@/pages/AssemblyFormPage.vue'),
-        meta: { title: 'Аккумулятор',      crumbs: [{ label: 'Сборка', to: '/assembly' }] } },
+        meta: { title: 'Аккумулятор',      crumbs: [{ label: 'Аккумуляторы', to: '/assembly' }] } },
+      { path: 'modules',        component: () => import('@/pages/PlaceholderPage.vue'),
+        meta: { title: 'Модули',           crumbs: [] } },
 
       // Справочники
       { path: 'reference/materials', component: () => import('@/pages/reference/MaterialsPage.vue'),
