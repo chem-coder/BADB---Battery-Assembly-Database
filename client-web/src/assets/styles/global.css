@@ -262,8 +262,11 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
 .p-autocomplete:not(.p-disabled):hover .p-autocomplete-input:not(:focus),
 .p-datepicker:not(.p-disabled):not(:focus):hover {
   border-color: rgba(76, 175, 80, 0.45) !important;
-  box-shadow: 2px 3px 6px rgba(76, 175, 80, 0.10);
+  box-shadow: 2px 3px 8px rgba(76, 175, 80, 0.18);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.p-datepicker:not(.p-disabled):not(:focus):hover {
+  box-shadow: 1px 1px 5px rgba(76, 175, 80, 0.10);
 }
 
 /* Placeholder — always the same colour, even in invalid state */
@@ -286,7 +289,7 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   background: transparent !important;
   box-shadow: none !important;
   border: none !important;
-  overflow: hidden;
+  transition: box-shadow 0.2s ease;
 }
 .p-multiselect .p-multiselect-label-container {
   background: rgb(255, 255, 255);
@@ -294,12 +297,14 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   border-right: 1px solid rgb(203, 213, 225);
   border-radius: 6px 0 0 6px;
   box-shadow: rgba(18, 18, 23, 0.05) 0px 1px 2px 0px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease;
 }
-/* MultiSelect hover — green highlight on label only, like Select */
+/* MultiSelect hover — green border on label, green shadow on wrapper */
+.p-multiselect:not(.p-disabled):hover {
+  box-shadow: 2px 3px 8px rgba(76, 175, 80, 0.18) !important;
+}
 .p-multiselect:not(.p-disabled):hover .p-multiselect-label-container {
   border-color: rgba(76, 175, 80, 0.45) !important;
-  box-shadow: 2px 3px 6px rgba(76, 175, 80, 0.10);
 }
 .p-multiselect .p-multiselect-label {
   white-space: nowrap;
