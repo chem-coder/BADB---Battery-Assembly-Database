@@ -795,7 +795,7 @@ onUnmounted(() => {
 }
 /* Override PageHeader margin — gap handles spacing here */
 .design-system-page :deep(.page-header) {
-  margin-bottom: 2px !important;
+  margin-bottom: 3px !important;
 }
 
 .ds-section {
