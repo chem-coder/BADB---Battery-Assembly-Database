@@ -793,6 +793,10 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 1.25rem;
 }
+/* Override PageHeader margin — gap handles spacing here */
+.design-system-page :deep(.page-header) {
+  margin-bottom: 0 !important;
+}
 
 .ds-section {
   padding: 1.5rem;
