@@ -51,21 +51,23 @@ function toggleSection(name) {
 
 // ── Menu definition — built from config/navigation.js (single source of truth) ──
 const sections = computed(() => {
+  const mapItem = s => ({ label: s.label, to: s.path, icon: s.icon, customIcon: s.customIcon ?? null })
+
   const list = [
     {
       section: 'СОЗДАНИЕ',
-      items: workflowSections.map(s => ({ label: s.label, to: s.path, icon: s.icon })),
+      items: workflowSections.map(mapItem),
     },
     {
       section: 'СПРАВОЧНИКИ',
-      items: referenceSections.map(s => ({ label: s.label, to: s.path, icon: s.icon })),
+      items: referenceSections.map(mapItem),
     },
   ]
 
   if (isLead.value) {
     const adminItems = adminSections
       .filter(s => !s.role || authStore.user?.role === s.role)
-      .map(s => ({ label: s.label, to: s.path, icon: s.icon }))
+      .map(mapItem)
     list.push({ section: 'АДМИНИСТРИРОВАНИЕ', items: adminItems })
   }
 
@@ -90,7 +92,7 @@ function logout() {
 
       <!-- Главная — standalone at top -->
       <RouterLink to="/" class="sidebar-item" exact-active-class="active">
-        <i class="pi pi-th-large"></i>
+        <i class="pi pi-home"></i>
         <span class="sidebar-item-label">Главная</span>
       </RouterLink>
 
@@ -125,7 +127,14 @@ function logout() {
             class="sidebar-item sidebar-item--nested"
             active-class="active"
           >
-            <i :class="item.icon"></i>
+            <!-- Custom SVG: droplet -->
+            <svg v-if="item.customIcon === 'droplet'" class="sidebar-custom-icon" viewBox="0 0 18 18">
+              <path d="M9 1.5 C9 1.5, 3.5 8, 3.5 11.5 C3.5 14.8, 6 16.5, 9 16.5 C12 16.5, 14.5 14.8, 14.5 11.5 C14.5 8, 9 1.5, 9 1.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <!-- Custom: vertical line (separator) -->
+            <span v-else-if="item.customIcon === 'vline'" class="sidebar-icon-vline"></span>
+            <!-- Standard PrimeIcon -->
+            <i v-else :class="item.icon"></i>
             <span class="sidebar-item-label">{{ item.label }}</span>
           </RouterLink>
         </div>
@@ -355,6 +364,43 @@ function logout() {
 }
 .sidebar-item--nested.active {
   font-size: 0.83rem;
+}
+
+/* ── Custom icons ─────────────────────────────────────────────────────── */
+/* SVG droplet (Электролиты) */
+.sidebar-custom-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  /* Center within the same 1.1rem slot as <i> icons */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+.sidebar-item.active .sidebar-custom-icon {
+  color: #003274;
+}
+
+/* Vertical line (Сепараторы) */
+.sidebar-icon-vline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  flex-shrink: 0;
+}
+.sidebar-icon-vline::after {
+  content: '';
+  display: block;
+  width: 2px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 1px;
+}
+.sidebar-item.active .sidebar-icon-vline::after {
+  background: #003274;
 }
 
 /* ── User block ────────────────────────────────────────────────────────── */
