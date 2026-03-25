@@ -93,9 +93,11 @@ function getRowId(data) {
 }
 
 function onRowClick(event, data, index) {
+  // index from PrimeVue is relative to paginatedData; convert to filteredData index
+  const absIndex = tableFirst.value + index
   if (event.shiftKey && lastClickedIdx !== null) {
-    const from = Math.min(lastClickedIdx, index)
-    const to = Math.max(lastClickedIdx, index)
+    const from = Math.min(lastClickedIdx, absIndex)
+    const to = Math.max(lastClickedIdx, absIndex)
     for (let i = from; i <= to; i++) {
       selectedRows.value.add(getRowId(filteredData.value[i]))
     }
@@ -106,7 +108,7 @@ function onRowClick(event, data, index) {
   } else {
     selectedRows.value = new Set([getRowId(data)])
   }
-  lastClickedIdx = index
+  lastClickedIdx = absIndex
   selectedRows.value = new Set(selectedRows.value) // trigger reactivity
 
   if (props.rowClickable && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
@@ -116,10 +118,11 @@ function onRowClick(event, data, index) {
 
 function onRowContextMenu(event, data, index) {
   event.preventDefault()
+  const absIndex = tableFirst.value + index
   const id = getRowId(data)
   if (!selectedRows.value.has(id)) {
     selectedRows.value = new Set([id])
-    lastClickedIdx = index
+    lastClickedIdx = absIndex
   }
   ctxMenuPos.value = { x: event.clientX, y: event.clientY }
   ctxMenuVisible.value = true
@@ -395,7 +398,12 @@ onUnmounted(() => {
       :template="'FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink'"
     />
 
-    <!-- Excel-like column filter overlay (pixel-exact from DS) -->
+  </div>
+
+  <!-- Teleport overlays to body — they must escape overflow:clip of .ct-table-card -->
+
+  <!-- Excel-like column filter overlay (pixel-exact from DS) -->
+  <Teleport to="body">
     <div ref="filterOverlay" class="ct-filter-overlay" style="display: none" @click.stop>
       <div class="ct-filter-title">{{ filterFieldLabel }}</div>
       <div class="ct-filter-search">
@@ -418,8 +426,10 @@ onUnmounted(() => {
         <Button label="Сбросить" size="small" severity="secondary" text @click="resetFilter" />
       </div>
     </div>
+  </Teleport>
 
-    <!-- Context menu (glass-card, only "Удалить") -->
+  <!-- Context menu (glass-card, only "Удалить") -->
+  <Teleport to="body">
     <div v-if="ctxMenuVisible" class="ct-ctx-menu"
       :style="{ left: ctxMenuPos.x + 'px', top: ctxMenuPos.y + 'px' }" @click.stop>
       <button class="ct-ctx-menu-item ct-ctx-menu-danger" @click="deleteSelectedRows">
@@ -427,7 +437,7 @@ onUnmounted(() => {
         Удалить{{ selectedRows.size > 1 ? ` (${selectedRows.size})` : '' }}
       </button>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -649,6 +659,10 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
+</style>
+
+<!-- Unscoped styles for Teleport-ed overlays (rendered outside component DOM) -->
+<style>
 /* ── Column filter overlay (Excel-like) ── */
 .ct-filter-overlay {
   position: fixed;
