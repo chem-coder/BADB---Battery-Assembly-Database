@@ -59,7 +59,6 @@ async function confirmSave() {
     for (const item of pendingDelete.value) {
       await api.delete(`/api/batteries/${item.battery_id}`)
     }
-    toast.add({ severity: 'success', summary: 'Удалено', life: 3000 })
     pendingDelete.value = []
     saveState.value = 'saved'
     clearTimeout(saveTimer)
