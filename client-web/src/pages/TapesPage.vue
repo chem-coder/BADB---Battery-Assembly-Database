@@ -1,53 +1,25 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+/**
+ * TapesPage — "Подготовка лент"
+ * Uses CrudTable + SaveIndicator (from Design System).
+ * Only page-specific logic remains here: data loading, column config, custom cell renderers.
+ */
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
-import Button from 'primevue/button'
-import DataTable from 'primevue/datatable'
-import Column from 'primevue/column'
-import ContextMenu from 'primevue/contextmenu'
 import PageHeader from '@/components/PageHeader.vue'
+import SaveIndicator from '@/components/SaveIndicator.vue'
+import CrudTable from '@/components/CrudTable.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 
 const router = useRouter()
 const toast = useToast()
+const crudTable = ref(null)
 
+// ── Data ───────────────────────────────────────────────────────────────
 const tapes = ref([])
 const loading = ref(false)
-const selectedTape = ref(null)
-const firstRow = ref(0)  // tracks paginator offset for global row numbers
-const cm = ref(null)
-
-const contextMenuItems = [
-  {
-    label: 'Открыть',
-    icon: 'pi pi-folder-open',
-    command: () => router.push(`/tapes/${selectedTape.value?.tape_id}`),
-  },
-  { separator: true },
-  {
-    label: 'Удалить',
-    icon: 'pi pi-trash',
-    class: 'cm-danger',
-    command: () => confirmDelete(selectedTape.value),
-  },
-]
-
-function formatDate(dt) {
-  if (!dt) return '—'
-  return new Date(dt).toLocaleDateString('ru-RU')
-}
-
-function onRowContextMenu(event) {
-  selectedTape.value = event.data
-  cm.value.show(event.originalEvent)
-}
-
-function openDotsMenu(event, tape) {
-  selectedTape.value = tape
-  cm.value.show(event)
-}
 
 async function loadTapes() {
   loading.value = true
@@ -61,135 +33,119 @@ async function loadTapes() {
   }
 }
 
-async function confirmDelete(tape) {
-  if (!tape) return
-  if (!confirm(`Удалить ленту "${tape.name}"?`)) return
+onMounted(loadTapes)
+
+// ── Column config — the ONLY thing that varies per page ────────────────
+const columns = [
+  { field: 'name',        header: 'Название',  minWidth: '100px' },
+  { field: 'role',        header: 'Тип',       minWidth: '80px', width: '110px' },
+  { field: 'recipe_name', header: 'Рецепт',    minWidth: '80px' },
+  { field: 'created_at',  header: 'Создана',   minWidth: '80px', width: '110px' },
+  { field: 'updated_at',  header: 'Обновлена', minWidth: '80px', width: '110px' },
+  { field: 'operators',   header: 'Операторы', minWidth: '70px', width: '110px', sortable: false, filterable: false },
+  { field: 'status',      header: 'Статус',    minWidth: '80px', width: '115px' },
+]
+
+// ── Save indicator (delete flow) ──────────────────────────────────────
+const pendingDelete = ref([])
+const saveState = ref('idle')
+let saveTimer = null
+
+const showIndicator = pendingDelete.value?.length > 0 || saveState.value === 'saved'
+
+async function onDelete(items) {
+  pendingDelete.value = items
+  saveState.value = 'idle'
+}
+
+async function confirmSave() {
   try {
-    await api.delete(`/api/tapes/${tape.tape_id}`)
+    for (const item of pendingDelete.value) {
+      await api.delete(`/api/tapes/${item.tape_id}`)
+    }
     toast.add({ severity: 'success', summary: 'Удалено', life: 3000 })
+    pendingDelete.value = []
+    saveState.value = 'saved'
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
+    crudTable.value?.clearSelection()
     await loadTapes()
   } catch {
     toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось удалить', life: 3000 })
   }
 }
 
-onMounted(loadTapes)
+function discardChanges() {
+  pendingDelete.value = []
+  saveState.value = 'idle'
+  crudTable.value?.clearSelection()
+}
+
+onUnmounted(() => clearTimeout(saveTimer))
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function formatDate(dt) {
+  if (!dt) return '—'
+  return new Date(dt).toLocaleDateString('ru-RU')
+}
 </script>
 
 <template>
   <div class="tapes-page">
 
-    <PageHeader title="Подготовка лент" icon="pi pi-sliders-h" />
-
-    <!-- Right-click / dots context menu -->
-    <ContextMenu ref="cm" :model="contextMenuItems" />
-
-    <div class="glass-card table-card">
-
-      <!-- Toolbar inside card -->
-      <div class="table-toolbar">
-        <span class="table-section-label">Ленты</span>
-        <Button
-          label="Новая лента"
-          icon="pi pi-plus"
-          size="small"
-          @click="router.push('/tapes/new')"
-          class="btn-new"
+    <PageHeader title="Подготовка лент" icon="pi pi-bars">
+      <template #actions>
+        <SaveIndicator
+          :visible="pendingDelete.length > 0 || saveState === 'saved'"
+          :saved="saveState === 'saved'"
+          @save="confirmSave"
+          @cancel="discardChanges"
         />
-      </div>
+      </template>
+    </PageHeader>
 
-      <DataTable
-        :value="tapes"
-        :loading="loading"
-        sortMode="single"
-        removableSort
-        paginator
-        :rows="10"
-        :rowsPerPageOptions="[10, 100]"
-        v-model:first="firstRow"
-        stateStorage="session"
-        stateKey="tapes-list-state"
-        rowHover
-        contextMenu
-        v-model:contextMenuSelection="selectedTape"
-        @rowContextmenu="onRowContextMenu"
-        @rowClick="e => router.push(`/tapes/${e.data.tape_id}`)"
-        class="tvel-table"
-        style="cursor: pointer"
-      >
+    <CrudTable
+      ref="crudTable"
+      :columns="columns"
+      :data="tapes"
+      :loading="loading"
+      id-field="tape_id"
+      table-name="Ленты"
+      show-add
+      row-clickable
+      @add="router.push('/tapes/new')"
+      @delete="onDelete"
+      @row-click="(data) => router.push(`/tapes/${data.tape_id}`)"
+    >
+      <!-- Custom cell: Название (bold) -->
+      <template #col-name="{ data }">
+        <strong>{{ data.name || '— без названия —' }}</strong>
+      </template>
 
-        <!-- № global row number -->
-        <Column header="№" style="width: 48px">
-          <template #body="{ index }">
-            <span class="row-num">{{ firstRow + index + 1 }}</span>
-          </template>
-        </Column>
+      <!-- Custom cell: Тип (cathode/anode badge) -->
+      <template #col-role="{ data }">
+        <span v-if="data.role"
+          :class="['type-badge', data.role === 'cathode' ? 'type-badge--cathode' : 'type-badge--anode']">
+          {{ data.role === 'cathode' ? 'Катод' : data.role === 'anode' ? 'Анод' : data.role }}
+        </span>
+        <span v-else class="text-muted">—</span>
+      </template>
 
-        <!-- Название -->
-        <Column field="name" header="Название" sortable>
-          <template #body="{ data }">
-            <strong>{{ data.name || '— без названия —' }}</strong>
-          </template>
-        </Column>
+      <!-- Custom cell: Создана -->
+      <template #col-created_at="{ data }">{{ formatDate(data.created_at) }}</template>
 
-        <!-- Тип — colored badge -->
-        <Column field="role" header="Тип" sortable style="width: 110px">
-          <template #body="{ data }">
-            <span
-              v-if="data.role"
-              :class="['type-badge', data.role === 'cathode' ? 'type-badge--cathode' : 'type-badge--anode']"
-            >
-              {{ data.role === 'cathode' ? 'Катод' : data.role === 'anode' ? 'Анод' : data.role }}
-            </span>
-            <span v-else class="text-muted">—</span>
-          </template>
-        </Column>
+      <!-- Custom cell: Обновлена -->
+      <template #col-updated_at="{ data }">{{ formatDate(data.updated_at) }}</template>
 
-        <!-- Рецепт -->
-        <Column field="recipe_name" header="Рецепт" sortable />
+      <!-- Custom cell: Операторы (placeholder) -->
+      <template #col-operators><span class="text-muted">—</span></template>
 
-        <!-- Создана -->
-        <Column field="created_at" header="Создана" sortable style="width: 110px">
-          <template #body="{ data }">{{ formatDate(data.created_at) }}</template>
-        </Column>
+      <!-- Custom cell: Статус (StatusBadge component) -->
+      <template #col-status="{ data }">
+        <StatusBadge :status="data.status ?? 'draft'" />
+      </template>
+    </CrudTable>
 
-        <!-- Обновлена -->
-        <Column field="updated_at" header="Обновлена" sortable style="width: 110px">
-          <template #body="{ data }">{{ formatDate(data.updated_at) }}</template>
-        </Column>
-
-        <!-- Операторы — placeholder -->
-        <Column header="Операторы" style="width: 110px">
-          <template #body>
-            <span class="text-muted">—</span>
-          </template>
-        </Column>
-
-        <!-- Статус -->
-        <Column field="status" header="Статус" style="width: 115px">
-          <template #body="{ data }">
-            <StatusBadge :status="data.status ?? 'draft'" />
-          </template>
-        </Column>
-
-        <!-- Three-dots action menu -->
-        <Column header="" style="width: 44px">
-          <template #body="{ data }">
-            <Button
-              icon="pi pi-ellipsis-h"
-              text
-              rounded
-              size="small"
-              severity="secondary"
-              @click.stop="openDotsMenu($event, data)"
-              class="btn-dots"
-              title="Действия"
-            />
-          </template>
-        </Column>
-
-      </DataTable>
-    </div>
   </div>
 </template>
 
@@ -197,122 +153,16 @@ onMounted(loadTapes)
 .tapes-page {
   max-width: 1200px;
   margin: 0 auto;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
+}
+.tapes-page :deep(.page-header) {
+  margin-bottom: 3px !important;
 }
 
-/* glass-card wrapper */
-.table-card {
-  overflow: hidden;
-  padding: 0;
-}
-
-/* ── Toolbar ── */
-.table-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.875rem 1.25rem 0.75rem;
-  border-bottom: 1px solid rgba(180, 210, 255, 0.28);
-}
-
-.table-section-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(0, 50, 116, 0.45);
-}
-
-.btn-new {
-  background: #003274 !important;
-  border-color: #003274 !important;
-  color: #fff !important;
-  font-size: 13px;
-}
-.btn-new:hover {
-  background: #025EA1 !important;
-  border-color: #025EA1 !important;
-}
-
-/* ── DataTable — transparent base ── */
-.table-card :deep(.p-datatable-table-container),
-.table-card :deep(.p-datatable) {
-  background: transparent;
-}
-
-/* Header row */
-.table-card :deep(.p-datatable-thead > tr > th) {
-  background: rgba(0, 50, 116, 0.045);
-  color: #003274;
-  font-weight: 700;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid rgba(180, 210, 255, 0.35);
-  padding: 0.6rem 0.75rem;
-}
-
-/* Hide multiple-sort priority badge ("1") */
-.table-card :deep(.p-sortable-column-badge) {
-  display: none !important;
-}
-
-/* Body rows */
-.table-card :deep(.p-datatable-tbody > tr) {
-  background: transparent;
-  border-bottom: 1px solid rgba(180, 210, 255, 0.18);
-  transition: background 0.12s;
-}
-.table-card :deep(.p-datatable-tbody > tr:last-child) {
-  border-bottom: none;
-}
-.table-card :deep(.p-datatable-tbody > tr:hover) {
-  background: rgba(0, 50, 116, 0.04) !important;
-}
-.table-card :deep(.p-datatable-tbody > tr > td) {
-  padding: 0.55rem 0.75rem;
-}
-
-/* ── Paginator ── */
-.table-card :deep(.p-paginator) {
-  background: transparent;
-  border-top: 1px solid rgba(180, 210, 255, 0.25);
-  padding: 0.5rem 0.75rem;
-  font-size: 13px;
-}
-
-/* Active page button — subtle tint, same style as other UI selections */
-.table-card :deep(.p-paginator-page.p-highlight),
-.table-card :deep(.p-paginator .p-paginator-page[aria-current="page"]) {
-  background: rgba(0, 50, 116, 0.10) !important;
-  color: #003274 !important;
-  border-color: rgba(0, 50, 116, 0.22) !important;
-  border-radius: 6px;
-  font-weight: 600;
-}
-
-/* Page size selector — smaller, less prominent */
-.table-card :deep(.p-paginator .p-select),
-.table-card :deep(.p-paginator .p-inputnumber) {
-  font-size: 12px;
-  opacity: 0.7;
-  min-width: 3.5rem;
-}
-.table-card :deep(.p-paginator .p-select .p-select-label) {
-  padding: 0.25rem 0.5rem;
-  font-size: 12px;
-}
-
-/* ── Row number ── */
-.row-num {
-  font-size: 12px;
-  color: rgba(0, 50, 116, 0.4);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── Type badges ── */
+/* ── Page-specific cell styles only ── */
 .type-badge {
   display: inline-flex;
   align-items: center;
@@ -332,20 +182,8 @@ onMounted(loadTapes)
   color: #1d7a5f;
   border: 0.5px solid rgba(82, 201, 166, 0.35);
 }
-
-/* ── Muted placeholder text ── */
 .text-muted {
   color: rgba(0, 50, 116, 0.28);
   font-size: 13px;
-}
-
-/* ── Three-dots button — only visible on row hover ── */
-.btn-dots {
-  opacity: 0;
-  transition: opacity 0.12s;
-  color: rgba(0, 50, 116, 0.55) !important;
-}
-.table-card :deep(.p-datatable-tbody > tr:hover) .btn-dots {
-  opacity: 1;
 }
 </style>

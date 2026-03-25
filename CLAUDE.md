@@ -35,7 +35,18 @@ BADB-Battery-Assembly-Database/
 │   └── schemas/        — versioned schemas (v1)
 ├── client/             — Excel VBA client
 │   └── src/            — .bas/.cls/.frm modules
-└── client-web/         — Vue 3 frontend (planned)
+└── client-web/         — Vue 3 frontend
+    └── src/
+        ├── components/
+        │   ├── AppHeader.vue      — top header bar
+        │   ├── AppSidebar.vue     — sidebar nav (from navigation.js)
+        │   ├── PageHeader.vue     — sticky page header (glass-card, #actions slot)
+        │   ├── StatusBadge.vue    — status badge component
+        │   ├── CrudTable.vue      — ★ universal CRUD table (from Design System)
+        │   └── SaveIndicator.vue  — ★ save/unsave indicator for PageHeader
+        ├── config/
+        │   └── navigation.js      — ★ single source of truth (sidebar, router, pages)
+        └── pages/                 — one page per route
 ```
 
 ## Key commands
@@ -80,6 +91,44 @@ Axios `baseURL` MUST be empty string `''` in dev. Direct cross-origin requests
 5. Do NOT modify public/ — Dalia's HTML files
 6. LAN-only system — no external API calls
 7. Optimistic locking — WHERE version = $expected, 409 on mismatch
+
+## Frontend component architecture
+
+All CRUD pages follow the **constructor pattern** — reusable components from Design System, pages only define data + custom cells.
+
+### CrudTable.vue (universal table component)
+Extracted 1-to-1 from DesignSystemPage Section 9. Includes ALL features:
+- Sticky toolbar (name editing, CSV export, rows-per-page, column count)
+- Excel-like column filters (overlay with search, checkboxes, apply/reset)
+- Row selection (click, Shift+range, Ctrl+toggle) with visual highlight
+- Custom context menu (glass-card, "Удалить" with multi-select count)
+- Auto-fit column width on resizer double-click
+- Pagination with filter reset
+
+**Usage in a page:**
+```vue
+<CrudTable :columns="columns" :data="items" id-field="item_id"
+  table-name="Название" show-add @add="..." @delete="..." @row-click="...">
+  <template #col-fieldName="{ data }">custom render</template>
+</CrudTable>
+```
+
+### SaveIndicator.vue (save/unsave indicator)
+Goes into PageHeader `#actions` slot. Two states: unsaved (ochre) / saved (green with checkmark animation, fades after 2s).
+
+```vue
+<PageHeader title="..." icon="...">
+  <template #actions>
+    <SaveIndicator :visible="..." :saved="..." @save="..." @cancel="..." />
+  </template>
+</PageHeader>
+```
+
+### Adding a new CRUD page
+1. Define `columns` array (field, header, width, sortable, filterable)
+2. Load data from API
+3. Use `<CrudTable>` + `<SaveIndicator>` — zero table CSS needed
+4. Add custom `#col-{field}` slots only for non-standard cells (badges, dates, etc.)
 
 ## Remotes
 
