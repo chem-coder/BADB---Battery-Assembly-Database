@@ -1,0 +1,29 @@
+const auth         = require('./auth');
+const submit       = require('./submit');
+const users        = require('./users');
+const separators   = require('./separators');
+const structures   = require('./structures');
+const projects     = require('./projects');
+const materials    = require('./materials');
+const recipes      = require('./recipes');
+const electrolytes = require('./electrolytes');
+const tapes        = require('./tapes');
+const reference    = require('./reference');
+const batteries    = require('./batteries');
+const electrodes   = require('./electrodes');
+
+module.exports = function registerRoutes(app) {
+  app.use('/api/auth',         auth);
+  app.use('/api/submit',       submit);
+  app.use('/api/users',        users);
+  app.use('/api/separators',   separators);
+  app.use('/api/structures',   structures);
+  app.use('/api/projects',     projects);
+  app.use('/api/materials',    materials);
+  app.use('/api/recipes',      recipes);
+  app.use('/api/electrolytes', electrolytes);
+  app.use('/api/tapes',        tapes);
+  app.use('/api/reference',    reference);
+  app.use('/api/batteries',    batteries);
+  app.use('/api/electrodes',   electrodes);
+};

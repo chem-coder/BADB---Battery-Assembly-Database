@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "battery_assembly.v1",
+  "type": "object",
+  "required": ["contract_version", "submission_type", "submission_id", "created_at", "payload"],
+  "properties": {
+    "contract_version": { "type": "string", "const": "battery_assembly.v1" },
+    "submission_type": { "type": "string", "const": "battery_assembly" },
+    "submission_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "user": { "type": "string" },
+    "machine": { "type": "string" },
+    "checksum": { "type": "string" },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": false
+}

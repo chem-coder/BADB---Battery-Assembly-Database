@@ -1,11 +1,7 @@
-const express = require('express');
-const router = express.Router();
-const pool = require('../db');
+const { Router } = require('express');
+const pool = require('../db/pool');
+const router = Router();
 
-router.get('/test', async (req, res) => {
-  const result = await pool.query('SELECT 1 as ok');
-  res.json(result.rows);
-});
 
 // -------- USERS --------
 
@@ -22,7 +18,7 @@ router.post('/', async (req, res) => {
       'INSERT INTO users (name) VALUES ($1) RETURNING *',
       [name]
     );
-    
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     // UNIQUE violation
@@ -89,5 +85,6 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
+
 
 module.exports = router;

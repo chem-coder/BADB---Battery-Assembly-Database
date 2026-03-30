@@ -1,0 +1,3 @@
+*.vue linguist-language=Vue
+client-web/src/** linguist-vendored=false
+client-web/src/** linguist-detectable=true

@@ -1,0 +1,58 @@
+/* tvel-theme.css — ТVEL/РЭНЕРА corporate theme for PrimeVue */
+/* Official brand colors per РЭНЕРА Brand Book (Pantone certified) */
+
+:root {
+  /* === Primary — TVEL Dark Blue, Pantone 7687C === */
+  --p-primary-color:          #003274;
+  --p-primary-contrast-color: #ffffff;
+  --p-primary-hover-color:    #025EA1;   /* TVEL Blue, Pantone 660C */
+  --p-primary-active-color:   #002660;
+
+  /* Primary scale */
+  --p-primary-50:  #E6EFF8;
+  --p-primary-100: #C0D5EC;
+  --p-primary-200: #99BBDF;
+  --p-primary-300: #6CACE4;              /* TVEL Light Blue, Pantone 284C */
+  --p-primary-400: #025EA1;              /* TVEL Blue, Pantone 660C */
+  --p-primary-500: #003274;              /* TVEL Dark Blue, Pantone 7687C */
+  --p-primary-600: #002A60;
+  --p-primary-700: #00204A;
+  --p-primary-800: #001633;
+  --p-primary-900: #000D1E;
+
+  /* === Surfaces (neutral blue-grey) === */
+  --p-surface-0:   #ffffff;
+  --p-surface-50:  #F4F6F8;
+  --p-surface-100: #E8ECF0;
+  --p-surface-200: #D1D7DE;
+  --p-surface-300: #B8C0C8;
+  --p-surface-400: #A8B0B8;
+  --p-surface-500: #8A939D;
+  --p-surface-600: #6B7280;
+  --p-surface-700: #4B5563;
+  --p-surface-800: #374151;
+  --p-surface-900: #333333;              /* TVEL 90% Black — main text */
+
+  /* === Semantic colors === */
+  --p-green-500:  #52C9A6;              /* TVEL Mint, Pantone 346C — accent only */
+  --p-green-600:  #3BAE8D;
+  --p-blue-300:   #6CACE4;              /* TVEL Light Blue, Pantone 284C */
+  --p-blue-500:   #025EA1;              /* TVEL Blue, Pantone 660C */
+  --p-red-500:    #E74C3C;
+  --p-red-600:    #C0392B;
+  --p-yellow-500: #F39C12;
+  --p-yellow-600: #D68910;
+
+  /* === Typography === */
+  --p-font-family: 'Rosatom', 'Graphik Condensed', system-ui, -apple-system, sans-serif;
+  --p-font-size: 14px;
+
+  /* === Shape === */
+  --p-border-radius:         10px;       /* buttons & input fields */
+  --p-content-border-radius: 12px;       /* cards, panels, dialogs */
+
+  /* === Focus ring === */
+  --p-focus-ring-color:  #6CACE4;        /* TVEL Light Blue */
+  --p-focus-ring-width:  2px;
+  --p-focus-ring-offset: 2px;
+}

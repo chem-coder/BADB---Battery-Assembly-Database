@@ -1,0 +1,647 @@
+@font-face {
+  font-family: 'Rosatom';
+  src: url('/fonts/RST45.ttf') format('truetype');
+  font-weight: 300;
+}
+@font-face {
+  font-family: 'Rosatom';
+  src: url('/fonts/RST55.ttf') format('truetype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Rosatom';
+  src: url('/fonts/RST56.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: 'Rosatom';
+  src: url('/fonts/RST75.ttf') format('truetype');
+  font-weight: 700;
+}
+@font-face {
+  font-family: 'Graphik Condensed';
+  src: url('/fonts/GraphikCondensed-Medium.otf') format('opentype');
+  font-weight: 500;
+}
+
+/* Light theme only — never follow OS dark mode */
+html {
+  color-scheme: light only;
+  overscroll-behavior-x: none;   /* prevent swipe-back browser navigation */
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Rosatom', 'Graphik Condensed', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  /* Sidebar blue — app-main has its own gradient for Arc border effect */
+  background: #003274;
+  color: #333333; /* TVEL 90% Black */
+}
+/* РЭНЕРА pattern lives in AppLayout.vue .app-main::before */
+
+h1 { font-size: 28px; font-weight: 700; line-height: 1.3; }
+h2 { font-size: 22px; font-weight: 700; line-height: 1.3; }
+h3 { font-size: 18px; font-weight: 700; line-height: 1.4; }
+h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
+
+/* ── Reference page styles (from Dalia's reference-styles.css) ── */
+
+.add-input {
+  width: 100%;
+  font-size: 1rem;
+  padding: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.add-input:disabled {
+  background-color: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.items-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+}
+
+.item-info {
+  flex: 1;
+}
+
+.item-status {
+  margin-left: 0.5rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.item-status.inactive {
+  color: #aaa;
+}
+
+.status-feedback {
+  margin: 0.5rem 0 1rem;
+  min-height: 1.2em;
+  font-size: 0.9rem;
+}
+
+.actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  margin-left: 0.5rem;
+}
+
+.edit-row input,
+.edit-row select {
+  font-size: 0.9rem;
+  margin-right: 0.5rem;
+}
+
+.edit-row textarea {
+  font-size: 0.9rem;
+  width: 100%;
+  margin-top: 0.25rem;
+  resize: vertical;
+}
+
+.required-missing {
+  border: 2px solid #b00020 !important;
+  background-color: #fff5f5;
+}
+
+.ref-link {
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+}
+
+/* ── Force white cards — override PrimeVue Aura dark surface defaults ── */
+.p-panel,
+.p-panel .p-panel-content,
+.p-card,
+.p-card .p-card-body,
+.p-card .p-card-content {
+  background: #ffffff !important;
+  color: var(--p-surface-900) !important;
+}
+
+.p-panel .p-panel-header {
+  background: var(--p-primary-color) !important;
+  color: #ffffff !important;
+  border-radius: var(--p-content-border-radius) var(--p-content-border-radius) 0 0;
+  font-weight: 700;
+}
+
+.p-panel .p-panel-content {
+  border: 1px solid var(--p-surface-200);
+  border-top: none;
+  border-radius: 0 0 var(--p-border-radius) var(--p-border-radius);
+}
+
+/* ── Typography override — force all PrimeVue components to inherit Rosatom ── */
+.p-component,
+.p-inputtext,
+.p-select,
+.p-multiselect,
+.p-textarea,
+.p-dropdown,
+.p-datepicker,
+.p-button,
+.p-paginator,
+.p-datatable {
+  font-family: inherit !important;
+}
+
+/* Input and select fields — always light */
+.p-inputtext,
+.p-select,
+.p-textarea,
+.p-dropdown {
+  background: #ffffff !important;
+  color: #333333 !important;
+  font-size: 14px !important;
+  border: 1px solid var(--p-surface-300) !important;
+}
+
+.p-inputtext:focus,
+.p-select:focus,
+.p-textarea:focus {
+  border-width: 0.5px !important;
+  border-color: var(--p-primary-color) !important;
+  box-shadow: 2px 3px 6px rgba(82, 201, 166, 0.18) !important;
+}
+
+/* ── Field pattern: label + input + error ── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 1rem;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4B5563;
+}
+
+.field-label .required-mark {
+  color: #E74C3C;
+  margin-left: 3px;
+}
+
+/* Inline error — shown under the field, never at top of form */
+.field-error {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #E74C3C;
+  margin-top: 2px;
+}
+
+.field-error::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23E74C3C'/%3E%3Ctext x='8' y='12' text-anchor='middle' fill='white' font-size='10' font-family='sans-serif'%3E!%3C/text%3E%3C/svg%3E") center/contain no-repeat;
+  flex-shrink: 0;
+}
+
+/* Field in error state — soft border, text colour unchanged */
+.p-inputtext.p-invalid,
+.p-select.p-invalid,
+.p-textarea.p-invalid,
+.p-inputtext.p-invalid.p-component,
+.p-textarea.p-invalid.p-component {
+  border-color: rgba(200, 80, 70, 0.45) !important;
+  background: #FFF5F5 !important;
+  color: #333333 !important;
+}
+
+/* Disabled fields — grey background + diagonal hatching */
+.p-inputtext:disabled,
+.p-textarea:disabled,
+.p-select.p-disabled,
+.p-multiselect.p-disabled,
+.p-datepicker.p-disabled,
+.p-password:has(.p-inputtext:disabled) .p-inputtext {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 4px,
+      rgba(0, 50, 116, 0.04) 4px,
+      rgba(0, 50, 116, 0.04) 5px
+    ),
+    #F3F4F6 !important;
+  color: #9CA3AF !important;
+  cursor: not-allowed;
+  border-color: var(--p-surface-200) !important;
+}
+
+/* Interactive fields — hover highlight */
+.p-inputtext:not(:disabled):not(:focus):hover,
+.p-textarea:not(:disabled):not(:focus):hover,
+.p-select:not(.p-disabled):not(:focus):hover,
+.p-multiselect:not(.p-disabled):not(:focus-within):hover,
+.p-autocomplete:not(.p-disabled):hover .p-autocomplete-input:not(:focus),
+.p-datepicker:not(.p-disabled):not(:focus):hover {
+  border-color: rgba(82, 201, 166, 0.45) !important;
+  box-shadow: 2px 3px 8px rgba(82, 201, 166, 0.18);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.p-datepicker:not(.p-disabled):not(:focus):hover {
+  box-shadow: 1px 1px 5px rgba(82, 201, 166, 0.10);
+}
+
+/* Placeholder — always the same colour, even in invalid state */
+.p-inputtext::placeholder,
+.p-textarea::placeholder {
+  color: #9CA3AF !important;
+}
+
+/* Select / MultiSelect placeholder — match input placeholder */
+.p-select-label.p-placeholder,
+.p-multiselect-label.p-placeholder {
+  color: #9CA3AF !important;
+  font-style: normal;
+  font-size: 14px;
+}
+
+/* MultiSelect — match Select structure exactly */
+.p-multiselect {
+  max-width: 100%;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  transition: box-shadow 0.2s ease;
+}
+.p-multiselect .p-multiselect-label-container {
+  background: rgb(255, 255, 255);
+  border: 1px solid rgb(203, 213, 225);
+  border-right: 1px solid rgb(203, 213, 225);
+  border-radius: 6px 0 0 6px;
+  box-shadow: rgba(18, 18, 23, 0.05) 0px 1px 2px 0px;
+  transition: border-color 0.2s ease;
+}
+/* MultiSelect hover — green border on label, green shadow on wrapper */
+.p-multiselect:not(.p-disabled):hover {
+  box-shadow: 2px 3px 8px rgba(82, 201, 166, 0.18) !important;
+}
+.p-multiselect:not(.p-disabled):hover .p-multiselect-label-container {
+  border-color: rgba(82, 201, 166, 0.45) !important;
+}
+.p-multiselect .p-multiselect-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* MultiSelect chips — prevent field growth */
+.p-multiselect.p-multiselect-chip .p-multiselect-label {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  gap: 4px;
+  align-items: center;
+}
+
+/* MultiSelect filter inside panel */
+.p-multiselect-filter-container .p-inputtext {
+  font-size: 13px !important;
+}
+
+/* Dropdown arrow trigger — solid grey background, identical for all */
+.p-select-dropdown,
+.p-multiselect-dropdown,
+.p-autocomplete-dropdown {
+  background: #E9EDF3 !important;
+  border-left: 1px solid var(--p-surface-200) !important;
+  border-radius: 0 var(--p-content-border-radius, 6px) var(--p-content-border-radius, 6px) 0 !important;
+  color: #6B7280 !important;
+  transition: background 0.15s;
+}
+/* MultiSelect dropdown arrow — match Select's dropdown button exactly */
+.p-multiselect-dropdown {
+  align-self: stretch !important;
+  padding: 1px 6px !important;
+  width: 40px !important;
+  box-sizing: border-box !important;
+  border: 1px solid rgb(203, 213, 225) !important;
+  border-left: 1px solid rgb(226, 232, 240) !important;
+  border-radius: 0 6px 6px 0 !important;
+  background: #E9EDF3 !important;
+}
+.p-select-dropdown:hover,
+.p-multiselect-dropdown:hover,
+.p-autocomplete-dropdown:hover {
+  background: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* MultiSelect chip remove buttons (крестики) */
+.p-multiselect-chip-item .p-chip-remove-icon {
+  font-size: 10px;
+  color: #9CA3AF;
+  cursor: pointer;
+}
+.p-multiselect-chip-item .p-chip-remove-icon:hover {
+  color: #333;
+}
+
+/* Selected item highlight in dropdown list */
+.p-select-option-selected,
+.p-multiselect-option-selected,
+.p-autocomplete-option-selected {
+  background: rgba(0, 50, 116, 0.06) !important;
+  font-weight: 600;
+}
+
+/* Uniform height for all interactive fields */
+.p-inputtext,
+.p-select,
+.p-multiselect,
+.p-datepicker-input {
+  min-height: 40px !important;
+  height: 40px !important;
+  box-sizing: border-box;
+}
+.p-textarea {
+  min-height: 40px !important;
+  height: auto !important;
+}
+
+/* ── Form width constraints ── */
+.form-body {
+  max-width: 720px;
+}
+
+.field-short  { max-width: 180px; }
+.field-medium { max-width: 360px; }
+.field-wide   { max-width: 600px; }
+.field-full   { width: 100%; }
+
+/* ── Form actions (right-aligned save/cancel) ── */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--p-surface-200);
+}
+
+/* ── PrimeVue Password — eye icon inside input ── */
+.p-password {
+  position: relative;
+  width: 100%;
+}
+
+.p-password .p-password-input {
+  width: 100%;
+  padding-right: 2.5rem !important;
+}
+
+.p-password .p-password-toggle-mask-icon {
+  position: absolute !important;
+  right: 0.75rem;
+  top: 0;
+  bottom: 0;
+  margin: auto;
+  color: #6B7280;
+  cursor: pointer;
+  z-index: 1;
+  transform: none !important;
+}
+
+/* ══════════════════════════════════════════════
+   F2.6 — Glassmorphism, depth & micro-animations
+   Approved parameters (glass-playground.html, Subtle preset):
+     blur 12px · bgAlpha 0.33 · border 0.5px rgba(180,210,255,0.29)
+     shadow rgba(0,50,116,0.03) · inner glow rgba(255,255,255,0.75)
+     card-radius 12px · button-radius 10px
+   ══════════════════════════════════════════════ */
+
+/* ── Glass card ── */
+.glass-card {
+  background: rgba(255, 255, 255, 0.62);
+  border: 0.5px solid rgba(180, 210, 255, 0.55);
+  border-radius: var(--p-content-border-radius, 12px);
+  box-shadow:
+    0 4px 11px rgba(0, 50, 116, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+}
+
+/* ── Elevation helpers ── */
+.elevation-1 { box-shadow: 0 1px 3px rgba(0, 50, 116, 0.06); }
+.elevation-2 { box-shadow: 0 2px 8px rgba(0, 50, 116, 0.08), 0 0 1px rgba(0, 50, 116, 0.04); }
+.elevation-3 { box-shadow: 0 6px 20px rgba(0, 50, 116, 0.10), 0 0 1px rgba(0, 50, 116, 0.06); }
+
+/* ── PrimeVue panels → glass ── */
+.p-panel {
+  background: rgba(255, 255, 255, 0.62) !important;
+  border: 0.5px solid rgba(180, 210, 255, 0.55) !important;
+  border-radius: var(--p-content-border-radius, 12px) !important;
+  box-shadow:
+    0 4px 11px rgba(0, 50, 116, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+}
+.p-panel .p-panel-content {
+  background: transparent !important;
+  border-color: rgba(180, 210, 255, 0.20) !important;
+}
+
+/* ── PrimeVue cards → glass ── */
+.p-card {
+  background: rgba(255, 255, 255, 0.62) !important;
+  border: 0.5px solid rgba(180, 210, 255, 0.55) !important;
+  border-radius: var(--p-content-border-radius, 12px) !important;
+  box-shadow:
+    0 4px 11px rgba(0, 50, 116, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+}
+.p-card .p-card-body,
+.p-card .p-card-content {
+  background: transparent !important;
+}
+
+/* ── Button micro-interactions ── */
+.p-button {
+  font-size: 14px !important;
+  transition: transform 0.12s ease, box-shadow 0.18s ease, background 0.18s ease !important;
+}
+.p-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 50, 116, 0.18);
+}
+.p-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 1px 4px rgba(0, 50, 116, 0.12);
+}
+
+/* ── Card / Panel hover lift ── */
+.p-panel,
+.p-card,
+.glass-card {
+  transition: box-shadow 0.22s ease, transform 0.22s ease;
+}
+.p-panel:hover,
+.p-card:hover,
+.glass-card:hover {
+  box-shadow:
+    0 6px 18px rgba(0, 50, 116, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+/* ── Input focus glow ── */
+.p-inputtext:focus,
+.p-select:focus,
+.p-textarea:focus,
+.p-dropdown:focus {
+  box-shadow: 2px 3px 6px rgba(82, 201, 166, 0.18) !important;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+/* ── DataTable row hover ── */
+.p-datatable .p-datatable-tbody > tr {
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+.p-datatable .p-datatable-tbody > tr:hover {
+  background: rgba(0, 50, 116, 0.04) !important;
+}
+
+/* ── Toast glass ── */
+.p-toast-message {
+  background: rgba(248, 252, 255, 0.88) !important;
+  border: 0.5px solid rgba(180, 210, 255, 0.35) !important;
+  box-shadow: 0 4px 16px rgba(0, 50, 116, 0.10) !important;
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+}
+
+/* ── Dialog glass ── */
+.p-dialog {
+  background: rgba(248, 252, 255, 0.92) !important;
+  border: 0.5px solid rgba(180, 210, 255, 0.35) !important;
+  border-radius: var(--p-content-border-radius, 12px) !important;
+  box-shadow: 0 8px 32px rgba(0, 50, 116, 0.15) !important;
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+
+/* ── Stepper glass ── */
+.p-stepper {
+  background: rgba(255, 255, 255, 0.62) !important;
+  border: 0.5px solid rgba(180, 210, 255, 0.55) !important;
+  border-radius: var(--p-content-border-radius, 12px) !important;
+  box-shadow:
+    0 4px 11px rgba(0, 50, 116, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+}
+
+/* ── Paginator — compact select, transparent background ── */
+.p-paginator .p-select {
+  min-height: 2rem !important;
+  height: 2rem !important;
+  min-width: auto !important;
+  background: transparent !important;
+  border: 1px solid rgba(203, 213, 225, 0.5) !important;
+  border-radius: 6px !important;
+}
+.p-paginator .p-select .p-select-label {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 13px;
+}
+.p-paginator .p-select .p-select-dropdown {
+  width: 28px !important;
+  padding: 0 4px !important;
+  background: transparent !important;
+  border-left: 1px solid rgba(203, 213, 225, 0.5) !important;
+}
+
+/* ── Badges — 10 universal variants ── */
+/* Base badge style */
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Filled badges (default) — text + light background */
+/* Порядок: тёплые → зелёные → сине-зелёные → синие → фиолетовые */
+.badge-1 { color: #CE7D4E; background: rgba(206, 125, 78,  0.12); } /* Терракот */
+.badge-2 { color: #D3A754; background: rgba(211, 167, 84,  0.12); } /* Охра     */
+.badge-3 { color: #649263; background: rgba(100, 146, 99,  0.12); } /* Хвойный  */
+.badge-4 { color: #2a9d78; background: rgba(82,  201, 166, 0.12); } /* Мятный   */
+.badge-5 { color: #025EA1; background: rgba(2,   94,  161, 0.12); } /* Синий     */
+.badge-6 { color: #003274; background: rgba(0,   50,  116, 0.12); } /* Основной  */
+.badge-7 { color: #6E3359; background: rgba(110, 51,  89,  0.12); } /* Слива    */
+.badge-8 { color: #E74C3C; background: rgba(231, 76,  60,  0.12); } /* Красный  */
+
+/* Outline badges — transparent background + border */
+.badge-outline.badge-1 { background: transparent; border: 1px solid rgba(206, 125, 78,  0.35); }
+.badge-outline.badge-2 { background: transparent; border: 1px solid rgba(211, 167, 84,  0.35); }
+.badge-outline.badge-3 { background: transparent; border: 1px solid rgba(100, 146, 99,  0.35); }
+.badge-outline.badge-4 { background: transparent; border: 1px solid rgba(82,  201, 166, 0.35); }
+.badge-outline.badge-5 { background: transparent; border: 1px solid rgba(2,   94,  161, 0.35); }
+.badge-outline.badge-6 { background: transparent; border: 1px solid rgba(0,   50,  116, 0.35); }
+.badge-outline.badge-7 { background: transparent; border: 1px solid rgba(110, 51,  89,  0.35); }
+.badge-outline.badge-8 { background: transparent; border: 1px solid rgba(231, 76,  60,  0.35); }
+
+/* ── Fade-in animation for page content ── */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.app-content > * {
+  animation: fadeSlideIn 0.25s ease-out;
+}
+
+/* ── Global scrollbar — Основной light (#D9E0EA) ── */
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D9E0EA;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c0cad8;
+}
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #D9E0EA transparent;
+}
