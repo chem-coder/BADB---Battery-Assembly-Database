@@ -10,7 +10,7 @@ module.exports = {
   // --- Database ---
   db: {
     user: process.env.DB_USER || 'Dalia',
-    database: process.env.DB_NAME || 'badb_v1',
+    database: process.env.DB_NAME || 'badb_app_v1',
   },
 
   // --- JWT Authentication ---
