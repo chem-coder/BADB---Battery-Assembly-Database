@@ -1,7 +1,16 @@
 node_modules/
 .env
+.env.*
 *.db
+*.log
+*.tmp
+~$*.xl*
 .DS_Store
-"pg_dump workflow.txt"
+Thumbs.db
+dist/
+build/
+.claude/
+public-vue/
+pg_dump workflow.txt
 sql_backups/0330-badb_app_v1_reconcile-before-mergeback.sql
-sql_backups/0330-badb_app_v1-current-before-reconcile-fix.sql
+sql_backups/0330-badb_app_v1-current-before-reconcile-fix.sql.local/

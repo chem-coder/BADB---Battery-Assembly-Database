@@ -492,7 +492,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       }
 
       // restore all steps
-      await Promise.all([
+      await Promise.allSettled([
         restoreDryingStep('drying_am'),
         restoreDryingStep('drying_tape'),
         restoreDryingStep('drying_pressed_tape'),
@@ -679,5 +679,12 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     fetchInstances,
     fetchComponents,
     loadInstancesForLine,
+
+    // Cleanup (call from onUnmounted)
+    cleanup() {
+      for (const code of Object.keys(_saveTimers)) {
+        clearTimeout(_saveTimers[code])
+      }
+    },
   }
 }

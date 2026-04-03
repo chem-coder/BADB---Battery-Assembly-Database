@@ -3,8 +3,13 @@ const router = express.Router();
 const pool = require('../db');
 
 router.get('/test', async (req, res) => {
-  const result = await pool.query('SELECT 1 as ok');
-  res.json(result.rows);
+  try {
+    const result = await pool.query('SELECT 1 as ok');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database connection failed' });
+  }
 });
 
 
@@ -149,9 +154,9 @@ router.post('/', async (req, res) => {
         projectId,
         recipeId,
         createdBy,
-        notes || null,
-        calc_mode || null,
-        target_mass_g || null
+        notes ?? null,
+        calc_mode ?? null,
+        target_mass_g ?? null
       ]
     );
 
@@ -256,13 +261,16 @@ router.put('/:id', async (req, res) => {
         projectId,
         recipeId,
         createdBy,
-        notes || null,
-        calc_mode || null,
-        target_mass_g || null,
+        notes ?? null,
+        calc_mode ?? null,
+        target_mass_g ?? null,
         id
       ]
     );
 
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Лента не найдена' });
+    }
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);

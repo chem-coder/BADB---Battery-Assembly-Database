@@ -23,8 +23,8 @@ router.post('/login', async (req, res) => {
     const lockoutCheck = await pool.query(
       `SELECT COUNT(*) AS cnt FROM auth_log
        WHERE login = $1 AND event = 'login_failed'
-       AND created_at > now() - interval '${config.rateLimit.lockoutWindowMinutes} minutes'`,
-      [login]
+       AND created_at > now() - make_interval(mins => $2)`,
+      [login, config.rateLimit.lockoutWindowMinutes]
     );
 
     if (parseInt(lockoutCheck.rows[0].cnt, 10) >= config.rateLimit.maxFailedAttempts) {

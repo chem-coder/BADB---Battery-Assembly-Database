@@ -211,6 +211,7 @@ function logout() {
   flex: 1;
   overflow-y: scroll;            /* always show — disables macOS overlay mode */
   padding: 0.5rem 6px 0.25rem 0;
+}
 /* Sidebar scrollbar — white, offset from edge */
 .sidebar-nav::-webkit-scrollbar { width: 4px; }
 .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
