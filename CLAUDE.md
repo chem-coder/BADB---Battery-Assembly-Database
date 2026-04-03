@@ -230,3 +230,47 @@ echo "Pre-commit check: PASSED"
 4. Confirm public/ untouched
 5. Confirm no secrets (.env, passwords, tokens) in diff
 6. `node -e "require('./app')"` — syntax check passes
+
+## Code audit procedure
+
+When running a code audit (bug search), follow this two-phase process.
+
+### Phase 1 — Discovery (agents)
+
+Launch parallel agents to scan for bug candidates by category (security, data integrity, frontend state, error handling, etc.). Agents are good at broad coverage — they can quickly flag suspicious patterns across many files.
+
+**Agent output = hypotheses, not facts.** Agents match patterns (e.g. "CRUD route without rowCount check") but frequently do not read surrounding code carefully enough to confirm the issue is real.
+
+### Phase 2 — Verification (manual, MANDATORY)
+
+Every candidate from Phase 1 MUST be verified before it goes into a report, a fix, or a commit:
+
+| Check | How |
+|-------|-----|
+| "File X has no Y" | Open file, read the relevant function — does it actually lack Y? |
+| "SQL injection in Z" | Grep for string interpolation in the actual query — are values parameterized? |
+| "Missing validation" | Read the handler — is validation present but in a different form? |
+| "Hardcoded value" | Grep for the literal — does it actually exist in the file? |
+
+**Rules:**
+1. **No unverified bugs in reports or commits.** If you can't confirm it by reading the code, drop it.
+2. **Read the actual code, not a summary.** Agent descriptions of what a file "probably does" are unreliable.
+3. **Check for false patterns.** A file named `users.js` does not necessarily handle passwords. A CRUD route may already have the check the agent claims is missing.
+4. **Verify fixes too.** After applying a fix, re-read the changed code to confirm it's correct and doesn't break existing logic.
+
+### Common false positive patterns
+
+These were observed in practice (April 2026 audit) and should be watched for:
+
+- **"No password hashing"** — agent assumed a users endpoint handles passwords when it only handles names
+- **"SQL injection"** — agent flagged template literals but all values were parameterized (`$1, $2`)
+- **"Missing 404 check"** — agent didn't read far enough to see the existing `rowCount === 0` check
+- **"Hardcoded URL/port"** — agent assumed a common anti-pattern without grepping the actual files
+- **"No input validation"** — agent missed validation done in a different style (e.g. `Number.isInteger()` instead of `if (!field)`)
+
+### Audit output format
+
+After verification, split findings into:
+- **Confirmed bugs in our code** → fix directly in the current branch
+- **Confirmed bugs in Dalia's code** → document in a report file, but only after verification
+- **Unconfirmed / stylistic** → drop silently
