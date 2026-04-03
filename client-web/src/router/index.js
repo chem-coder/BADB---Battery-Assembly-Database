@@ -99,6 +99,11 @@ router.beforeEach(async (to, from, next) => {
     await auth.initBypass()
   }
 
+  // Restore session from localStorage on page refresh
+  if (auth.isAuthenticated && !auth.user) {
+    await auth.tryRestoreSession()
+  }
+
   if (!auth.isAuthenticated) return next('/login')
   if (to.meta.role && auth.user?.role !== to.meta.role) return next('/')
   next()

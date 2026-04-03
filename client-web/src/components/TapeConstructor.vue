@@ -32,7 +32,8 @@ const toast = useToast()
 const tapeStates = reactive({})
 const activeTapeId = ref(null)
 const activeStage = ref('general_info')
-const loadingTapes = ref(false)
+const _loadingCount = ref(0)
+const loadingTapes = computed(() => _loadingCount.value > 0)
 
 // Order of tabs (first = target tape)
 const tabOrder = ref([])
@@ -95,7 +96,7 @@ watch(
 
 async function loadTape(id) {
   const tid = String(id)
-  loadingTapes.value = true
+  _loadingCount.value++
   try {
     const ts = useTapeState({ tapeId: id, refs: props.refs, authStore: props.authStore })
     tapeStates[tid] = ts
@@ -104,7 +105,7 @@ async function loadTape(id) {
     toast.add({ severity: 'error', summary: 'Ошибка', detail: `Не удалось загрузить ленту #${id}`, life: 3000 })
     delete tapeStates[tid]
   } finally {
-    loadingTapes.value = false
+    _loadingCount.value--
   }
 }
 
@@ -159,6 +160,10 @@ const canRedo = computed(() => {
 
 // ── Keyboard shortcuts: Ctrl+Z / Ctrl+Y ──
 function onKeydown(e) {
+  // Don't intercept when user is typing in a text field
+  const tag = document.activeElement?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
+
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
     e.preventDefault()
     undo()

@@ -147,19 +147,36 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     redoStack.value = [] // new edit clears redo
   }
 
+  // Debounced version — snapshots only after 400ms idle (not per keystroke)
+  let _historyTimer = null
+  function pushHistoryDebounced() {
+    if (_skipHistory) return
+    if (!_historyTimer) {
+      // Take "before" snapshot immediately on first change in burst
+      pushHistory()
+    }
+    clearTimeout(_historyTimer)
+    _historyTimer = setTimeout(() => { _historyTimer = null }, 400)
+  }
+
   // ── Auto-save (debounced per step) ──
   const _saveTimers = {}
+  const _savingNow = {}   // per-step lock to prevent concurrent saves
   const AUTO_SAVE_DELAY = 800 // ms
 
   function _scheduleAutoSave(stageCode) {
     clearTimeout(_saveTimers[stageCode])
     _saveTimers[stageCode] = setTimeout(async () => {
       if (!dirtySteps[stageCode]) return
+      if (_savingNow[stageCode]) return          // already saving — skip, next edit will re-schedule
+      _savingNow[stageCode] = true
       try {
         await saveStep(stageCode)
         setDirty(stageCode, false)
       } catch (e) {
         console.error(`Auto-save failed for ${stageCode}:`, e)
+      } finally {
+        _savingNow[stageCode] = false
       }
     }, AUTO_SAVE_DELAY)
   }
@@ -437,7 +454,9 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
   // ── Unified step save ──
   async function saveStep(code) {
     switch (code) {
-      case 'general_info': return saveGeneral()
+      case 'general_info':
+      case 'recipe_materials':
+        return saveGeneral()
       case 'drying_am':
       case 'drying_tape':
       case 'drying_pressed_tape':
@@ -594,7 +613,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
 
   // ── Set field value (for comparison view) ──
   function setFieldValue(stageCode, fieldKey, value) {
-    pushHistory() // snapshot before change
+    pushHistoryDebounced() // snapshot on first change, debounce subsequent keystrokes
     if (stageCode === 'general_info') {
       general[fieldKey] = value
       setDirty('general_info')
@@ -685,6 +704,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       for (const code of Object.keys(_saveTimers)) {
         clearTimeout(_saveTimers[code])
       }
+      clearTimeout(_historyTimer)
     },
   }
 }

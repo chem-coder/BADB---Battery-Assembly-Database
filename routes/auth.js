@@ -257,12 +257,31 @@ router.post('/change-password-public', async (req, res) => {
   const userAgent = req.headers['user-agent'] || '';
 
   try {
+    // Brute-force protection (same as /login)
+    const lockoutCheck = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM auth_log
+       WHERE login = $1 AND event = 'login_failed'
+       AND created_at > now() - make_interval(mins => $2)`,
+      [login, config.rateLimit.lockoutWindowMinutes]
+    );
+    if (parseInt(lockoutCheck.rows[0].cnt, 10) >= config.rateLimit.maxFailedAttempts) {
+      return res.status(429).json({
+        error: 'Too many failed attempts',
+        retryAfter: config.rateLimit.lockoutWindowMinutes * 60
+      });
+    }
+
     const userResult = await pool.query(
       'SELECT user_id, login, password_hash FROM users WHERE lower(login) = lower($1)',
       [login]
     );
 
     if (userResult.rowCount === 0) {
+      await pool.query(
+        `INSERT INTO auth_log (login, event, ip_address, user_agent, details)
+         VALUES ($1, 'login_failed', $2, $3, $4)`,
+        [login, ip, userAgent, JSON.stringify({ reason: 'user_not_found', via: 'change-password-public' })]
+      );
       return res.status(401).json({ error: 'Неверный логин или пароль' });
     }
 
@@ -270,6 +289,11 @@ router.post('/change-password-public', async (req, res) => {
 
     const valid = await bcrypt.compare(current_password, user.password_hash || '');
     if (!valid) {
+      await pool.query(
+        `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent, details)
+         VALUES ($1, $2, 'login_failed', $3, $4, $5)`,
+        [user.user_id, login, ip, userAgent, JSON.stringify({ reason: 'wrong_password', via: 'change-password-public' })]
+      );
       return res.status(401).json({ error: 'Неверный логин или пароль' });
     }
 

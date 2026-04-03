@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import api from '@/services/api'
 
+const STORAGE_KEY = 'badb_auth_token'
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    token: null,
+    token: localStorage.getItem(STORAGE_KEY) || null,
     user: null,
     projects: [],
   }),
@@ -21,6 +23,7 @@ export const useAuthStore = defineStore('auth', {
       this.token = data.token
       this.user = data.user
       this.projects = data.projects || []
+      localStorage.setItem(STORAGE_KEY, data.token)
     },
 
     async fetchMe() {
@@ -39,6 +42,7 @@ export const useAuthStore = defineStore('auth', {
       this.token = null
       this.user = null
       this.projects = []
+      localStorage.removeItem(STORAGE_KEY)
     },
 
     // Dev bypass: set fake token, then load real user from API
@@ -50,6 +54,18 @@ export const useAuthStore = defineStore('auth', {
         // Fallback if /api/auth/me fails
         this.user = { userId: 1, login: 'dev', name: 'Dev Bypass', role: 'admin' }
         this.projects = []
+      }
+    },
+
+    // Restore session on app start (called from App.vue or router guard)
+    async tryRestoreSession() {
+      if (!this.token || this.token === 'bypass') return false
+      try {
+        await this.fetchMe()
+        return true
+      } catch {
+        this.logout()
+        return false
       }
     },
   },

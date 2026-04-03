@@ -148,14 +148,16 @@ const refData = reactive({
 })
 
 async function loadRefData() {
-  try { refData.users = (await api.get('/api/users')).data } catch {}
-  try { refData.projects = (await api.get('/api/projects')).data } catch {}
-  try { refData.recipes = (await api.get('/api/recipes')).data } catch {}
-  try { refData.atmospheres = (await api.get('/api/reference/drying-atmospheres')).data } catch {}
-  try { refData.dryMixingMethods = (await api.get('/api/reference/dry-mixing-methods')).data } catch {}
-  try { refData.wetMixingMethods = (await api.get('/api/reference/wet-mixing-methods')).data } catch {}
-  try { refData.foils = (await api.get('/api/reference/foils')).data } catch {}
-  try { refData.coatingMethods = (await api.get('/api/reference/coating-methods')).data } catch {}
+  const keys = ['users', 'projects', 'recipes', 'atmospheres', 'dryMixingMethods', 'wetMixingMethods', 'foils', 'coatingMethods']
+  const urls = [
+    '/api/users', '/api/projects', '/api/recipes',
+    '/api/reference/drying-atmospheres', '/api/reference/dry-mixing-methods',
+    '/api/reference/wet-mixing-methods', '/api/reference/foils', '/api/reference/coating-methods',
+  ]
+  const results = await Promise.allSettled(urls.map(u => api.get(u)))
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') refData[keys[i]] = r.value.data
+  })
 }
 
 // (Undo/redo now handled inside TapeConstructor with Ctrl+Z/Y)
