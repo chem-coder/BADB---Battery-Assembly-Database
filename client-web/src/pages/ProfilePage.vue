@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
 import Password from 'primevue/password'
@@ -11,6 +11,33 @@ const { statusMsg, statusError, showStatus } = useStatus()
 
 // --- Section 1: User info ---
 const user = computed(() => authStore.user || {})
+
+// --- Department & colleagues ---
+const department = ref(null)
+const colleagues = ref([])
+const accessibleProjects = ref([])
+
+async function loadDepartment() {
+  const deptId = user.value.department?.id
+  if (!deptId) return
+  try {
+    const { data } = await api.get(`/api/departments/${deptId}`)
+    department.value = data
+    colleagues.value = data.members || []
+  } catch {}
+}
+
+async function loadProjects() {
+  try {
+    const { data } = await api.get('/api/projects')
+    accessibleProjects.value = data
+  } catch {}
+}
+
+onMounted(() => {
+  loadDepartment()
+  loadProjects()
+})
 
 const roleBadge = computed(() => {
   const map = {
@@ -102,13 +129,55 @@ async function onSubmit() {
         </tr>
         <tr>
           <td class="info-label">Роль:</td>
-          <td>{{ roleBadge.label }}</td>
+          <td><span :class="['role-badge', roleBadge.cls]">{{ roleBadge.label }}</span></td>
         </tr>
         <tr>
           <td class="info-label">Должность:</td>
           <td>{{ user.position || '—' }}</td>
         </tr>
+        <tr>
+          <td class="info-label">Отдел:</td>
+          <td>
+            <span v-if="user.department">{{ user.department.name }}</span>
+            <span v-else-if="user.isDirector" class="director-tag">Директор (все отделы)</span>
+            <span v-else>—</span>
+            <span v-if="user.isDepartmentHead" class="head-tag">Начальник отдела</span>
+          </td>
+        </tr>
       </table>
+    </div>
+
+    <!-- Section: Department & colleagues -->
+    <div v-if="department" class="profile-card">
+      <h3 class="card-title"><i class="pi pi-users"></i> {{ department.name }}</h3>
+      <div class="dept-head">
+        <span class="info-label">Руководитель:</span>
+        <span>{{ department.head_name }} — {{ department.head_position }}</span>
+      </div>
+      <div class="colleagues-list">
+        <div v-for="c in colleagues" :key="c.user_id" class="colleague-row" :class="{ 'colleague-row--me': c.user_id === user.userId }">
+          <span class="colleague-name">{{ c.name }}</span>
+          <span class="colleague-position">{{ c.position || '' }}</span>
+          <span :class="['role-badge-sm', c.role === 'admin' ? 'badge-danger' : c.role === 'lead' ? 'badge-warning' : 'badge-info']">
+            {{ c.role === 'admin' ? 'Админ' : c.role === 'lead' ? 'Лид' : '' }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: Accessible projects -->
+    <div class="profile-card">
+      <h3 class="card-title"><i class="pi pi-folder"></i> Проекты</h3>
+      <div v-if="!accessibleProjects.length" class="empty-text">Нет доступных проектов</div>
+      <div v-else class="projects-list">
+        <div v-for="p in accessibleProjects" :key="p.project_id" class="project-row">
+          <span class="project-name">{{ p.name }}</span>
+          <span :class="['conf-badge', `conf-badge--${p.confidentiality_level || 'public'}`]">
+            {{ p.confidentiality_level === 'confidential' ? 'Конф.' : p.confidentiality_level === 'department' ? 'Отдел' : 'Откр.' }}
+          </span>
+          <span class="project-status">{{ p.status || '' }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Section 2: Change password -->
@@ -363,4 +432,86 @@ details.profile-card[open] > .card-title .chevron {
   font-size: 13px;
   margin: 0;
 }
+
+/* ── Role badges ── */
+.role-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge-danger { background: rgba(176, 0, 32, 0.1); color: #b00020; }
+.badge-warning { background: rgba(211, 167, 84, 0.15); color: #9a7030; }
+.badge-info { background: rgba(0, 50, 116, 0.08); color: #003274; }
+
+.director-tag {
+  color: #b00020;
+  font-weight: 600;
+  font-size: 13px;
+}
+.head-tag {
+  margin-left: 0.5rem;
+  font-size: 11px;
+  font-weight: 600;
+  color: #52C9A6;
+}
+
+/* ── Department section ── */
+.dept-head {
+  margin-bottom: 0.75rem;
+  font-size: 13px;
+}
+.colleagues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.colleague-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.06);
+  font-size: 13px;
+}
+.colleague-row:last-child { border-bottom: none; }
+.colleague-row--me { background: rgba(82, 201, 166, 0.06); }
+.colleague-name { font-weight: 600; color: #003274; min-width: 200px; }
+.colleague-position { color: #6B7280; flex: 1; }
+.role-badge-sm {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+/* ── Projects section ── */
+.projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.project-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.06);
+  font-size: 13px;
+}
+.project-row:last-child { border-bottom: none; }
+.project-name { font-weight: 600; color: #003274; flex: 1; }
+.project-status { color: #6B7280; font-size: 12px; }
+.conf-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.conf-badge--public { background: rgba(82, 201, 166, 0.12); color: #1a8a64; }
+.conf-badge--department { background: rgba(211, 167, 84, 0.12); color: #9a7030; }
+.conf-badge--confidential { background: rgba(176, 0, 32, 0.1); color: #b00020; }
+.empty-text { color: #6B7280; font-size: 13px; }
 </style>

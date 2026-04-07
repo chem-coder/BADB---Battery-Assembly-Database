@@ -35,7 +35,11 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT user_id, name, active FROM users ORDER BY name');
+      `SELECT u.user_id, u.name, u.active, u.role, u.position,
+              u.department_id, d.name AS department_name
+       FROM users u
+       LEFT JOIN departments d ON d.department_id = u.department_id
+       ORDER BY u.name`);
 
     res.json(result.rows);
   } catch (err) {

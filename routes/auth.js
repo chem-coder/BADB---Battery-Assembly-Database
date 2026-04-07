@@ -159,7 +159,11 @@ router.post('/register', auth, requireRole('admin'), async (req, res) => {
 router.get('/me', auth, async (req, res) => {
   try {
     const userResult = await pool.query(
-      'SELECT user_id, name, login, role, position FROM users WHERE user_id = $1',
+      `SELECT u.user_id, u.name, u.login, u.role, u.position, u.department_id,
+              d.name AS department_name, d.head_user_id
+       FROM users u
+       LEFT JOIN departments d ON d.department_id = u.department_id
+       WHERE u.user_id = $1`,
       [req.user.userId]
     );
 
@@ -170,10 +174,15 @@ router.get('/me', auth, async (req, res) => {
     const user = userResult.rows[0];
 
     const projectsResult = await pool.query(
-      'SELECT project_id FROM user_project_access WHERE user_id = $1',
+      `SELECT upa.project_id, upa.access_level
+       FROM user_project_access upa
+       WHERE upa.user_id = $1`,
       [user.user_id]
     );
-    const projects = projectsResult.rows.map(r => r.project_id);
+
+    // Director = user_id 20 (position contains 'Директор')
+    const isDirector = (user.position || '').toLowerCase().includes('директор');
+    const isDepartmentHead = user.head_user_id === user.user_id;
 
     res.json({
       userId: user.user_id,
@@ -181,7 +190,13 @@ router.get('/me', auth, async (req, res) => {
       login: user.login,
       role: user.role,
       position: user.position || null,
-      projects
+      department: user.department_id ? {
+        id: user.department_id,
+        name: user.department_name,
+      } : null,
+      isDepartmentHead,
+      isDirector,
+      projects: projectsResult.rows,
     });
   } catch (err) {
     console.error(err);
