@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { auth } = require('../middleware/auth');
 
 router.get('/test', async (req, res) => {
   const result = await pool.query('SELECT 1 as ok');
@@ -67,25 +68,55 @@ router.post('/', async (req, res) => {
   }
 });
 
-// READ
-router.get('/', async (req, res) => {
+// READ — filtered by user access + confidentiality
+router.get('/', auth, async (req, res) => {
   try {
+    // Get user's department
+    const userRow = await pool.query(
+      `SELECT u.department_id, u.role, u.position,
+              (d.head_user_id = u.user_id) AS is_department_head
+       FROM users u
+       LEFT JOIN departments d ON d.department_id = u.department_id
+       WHERE u.user_id = $1`,
+      [req.user.userId]
+    );
+    const me = userRow.rows[0] || {};
+    const isDirector = (me.position || '').toLowerCase().includes('директор');
+    const isAdmin = me.role === 'admin';
+
+    // Director and admin see everything
+    if (isDirector || isAdmin) {
+      const result = await pool.query(`
+        SELECT p.project_id, p.name, p.created_by, p.lead_id,
+               u.name AS lead_name, p.start_date, p.due_date,
+               p.status, p.description, p.confidentiality_level, p.department_id,
+               d.name AS department_name
+        FROM projects p
+        LEFT JOIN users u ON p.lead_id = u.user_id
+        LEFT JOIN departments d ON d.department_id = p.department_id
+        ORDER BY p.name
+      `);
+      return res.json(result.rows);
+    }
+
+    // Everyone else: public + own department + explicit access
     const result = await pool.query(`
-      SELECT
-        p.project_id,
-        p.name,
-        p.created_by,
-        p.lead_id,
-        u.name AS lead_name,
-        p.start_date,
-        p.due_date,
-        p.status,
-        p.description
+      SELECT DISTINCT p.project_id, p.name, p.created_by, p.lead_id,
+             u.name AS lead_name, p.start_date, p.due_date,
+             p.status, p.description, p.confidentiality_level, p.department_id,
+             d.name AS department_name
       FROM projects p
-      LEFT JOIN users u
-        ON p.lead_id = u.user_id
-      ORDER BY p.name;
-    `);
+      LEFT JOIN users u ON p.lead_id = u.user_id
+      LEFT JOIN departments d ON d.department_id = p.department_id
+      WHERE
+        p.confidentiality_level = 'public'
+        OR (p.confidentiality_level = 'department' AND p.department_id = $1)
+        OR EXISTS (
+          SELECT 1 FROM user_project_access upa
+          WHERE upa.project_id = p.project_id AND upa.user_id = $2
+        )
+      ORDER BY p.name
+    `, [me.department_id, req.user.userId]);
 
     res.json(result.rows);
   } catch (err) {
