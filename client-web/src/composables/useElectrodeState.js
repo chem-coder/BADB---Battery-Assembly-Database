@@ -195,6 +195,15 @@ export function useElectrodeState({ batchId }) {
     }
   }
 
+  // ── Stage status (used by StageNavigator) ──
+  function stageStatus(code) {
+    if (code === 'cutting') return currentBatchId.value ? 'done' : 'pending'
+    if (code === 'drying') {
+      return steps.drying.start_time ? 'done' : 'pending'
+    }
+    return 'pending'
+  }
+
   // ── Cleanup ──
   function cleanup() {
     for (const code of Object.keys(_saveTimers)) clearTimeout(_saveTimers[code])
@@ -207,6 +216,7 @@ export function useElectrodeState({ batchId }) {
     steps,
     dirtySteps,
     loading,
+    stageStatus,
     saving,
     anyDirty,
     getFieldValue,

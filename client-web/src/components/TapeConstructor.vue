@@ -40,7 +40,7 @@ const toast = useToast()
 // ── State ──
 const tapeStates = reactive({})
 const activeTapeId = ref(null)
-const activeStage = ref('general_info')
+const activeStage = ref(props.stageConfigs[0]?.code || 'general_info')
 const _loadingCount = ref(0)
 const loadingTapes = computed(() => _loadingCount.value > 0)
 
@@ -187,12 +187,7 @@ function onKeydown(e) {
   }
 }
 
-onMounted(() => {
-  window.addEventListener('keydown', onKeydown)
-  if (!activeStage.value && props.stageConfigs.length) {
-    activeStage.value = props.stageConfigs[0].code
-  }
-})
+onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   for (const ts of Object.values(tapeStates)) {
