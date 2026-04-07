@@ -131,6 +131,7 @@ function openEdit(proj) {
     status: proj.status || 'active',
   }
   formVisible.value = true
+  loadAccess(proj.project_id)
 }
 
 async function saveProject() {
@@ -166,6 +167,56 @@ function formatDate(dt) {
 function statusLabel(status) {
   const map = { active: 'активный', paused: 'приостановлен', completed: 'завершён', archived: 'архивирован' }
   return map[status] || status || '—'
+}
+
+function confLabel(level) {
+  const map = { public: 'Открытый', department: 'Отдельский', confidential: 'Конфиденциальный' }
+  return map[level] || level || 'Открытый'
+}
+
+// ── Access management ──
+const accessList = ref([])
+const accessLoading = ref(false)
+const grantUserId = ref('')
+const grantLevel = ref('view')
+
+async function loadAccess(projectId) {
+  accessLoading.value = true
+  try {
+    const { data } = await api.get(`/api/projects/${projectId}/access`)
+    accessList.value = data
+  } catch {
+    accessList.value = []
+  } finally {
+    accessLoading.value = false
+  }
+}
+
+async function grantAccess() {
+  if (!grantUserId.value || !currentId.value) return
+  try {
+    await api.post(`/api/projects/${currentId.value}/access`, {
+      user_id: Number(grantUserId.value),
+      access_level: grantLevel.value,
+    })
+    grantUserId.value = ''
+    grantLevel.value = 'view'
+    await loadAccess(currentId.value)
+    toast.add({ severity: 'success', summary: 'Доступ выдан', life: 2000 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Не удалось выдать доступ', life: 3000 })
+  }
+}
+
+async function revokeAccess(userId) {
+  if (!currentId.value) return
+  try {
+    await api.delete(`/api/projects/${currentId.value}/access/${userId}`)
+    await loadAccess(currentId.value)
+    toast.add({ severity: 'success', summary: 'Доступ отозван', life: 2000 })
+  } catch {
+    toast.add({ severity: 'error', summary: 'Ошибка', life: 3000 })
+  }
 }
 </script>
 
@@ -262,6 +313,42 @@ function statusLabel(status) {
         </select>
       </div>
 
+      <!-- Access management (edit mode only) -->
+      <div v-if="mode === 'edit'" class="access-section">
+        <div class="access-header">
+          <span class="section-label">Доступ к проекту</span>
+        </div>
+
+        <!-- Grant form -->
+        <div class="grant-row">
+          <select v-model="grantUserId" class="pv-select grant-user">
+            <option value="">— сотрудник —</option>
+            <option v-for="u in activeUsers" :key="u.user_id" :value="u.user_id">{{ u.name }}</option>
+          </select>
+          <select v-model="grantLevel" class="pv-select grant-level">
+            <option value="view">Просмотр</option>
+            <option value="edit">Редактирование</option>
+            <option value="admin">Администратор</option>
+          </select>
+          <Button icon="pi pi-plus" size="small" @click="grantAccess" :disabled="!grantUserId" />
+        </div>
+
+        <!-- Access list -->
+        <div class="access-list">
+          <div v-for="a in accessList" :key="a.user_id" class="access-row">
+            <span class="access-name">{{ a.name }}</span>
+            <span class="access-dept">{{ a.department_name || '' }}</span>
+            <span :class="['access-level', `access-level--${a.access_level}`]">
+              {{ a.access_level === 'view' ? 'Просмотр' : a.access_level === 'edit' ? 'Ред.' : 'Админ' }}
+            </span>
+            <button class="btn-revoke" @click="revokeAccess(a.user_id)" title="Отозвать доступ">
+              <i class="pi pi-times"></i>
+            </button>
+          </div>
+          <div v-if="!accessList.length && !accessLoading" class="access-empty">Нет явных допусков</div>
+        </div>
+      </div>
+
       <template #footer>
         <Button label="Отмена" severity="secondary" outlined @click="resetForm" />
         <Button :label="mode === 'create' ? 'Создать' : 'Сохранить'" @click="saveProject" />
@@ -344,4 +431,58 @@ function statusLabel(status) {
   color: rgba(0, 50, 116, 0.45);
   border: 0.5px solid rgba(0, 50, 116, 0.12);
 }
+
+/* ── Access section ── */
+.access-section {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 50, 116, 0.08);
+}
+.access-header { margin-bottom: 0.5rem; }
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(0, 50, 116, 0.5);
+}
+.grant-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+.grant-user { flex: 1; }
+.grant-level { width: 150px; }
+.access-list { display: flex; flex-direction: column; gap: 0; }
+.access-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.25rem;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.06);
+  font-size: 13px;
+}
+.access-row:last-child { border-bottom: none; }
+.access-name { font-weight: 600; color: #003274; flex: 1; }
+.access-dept { color: #6B7280; font-size: 12px; min-width: 80px; }
+.access-level {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+.access-level--view { background: rgba(0, 50, 116, 0.08); color: #003274; }
+.access-level--edit { background: rgba(82, 201, 166, 0.12); color: #1a8a64; }
+.access-level--admin { background: rgba(176, 0, 32, 0.1); color: #b00020; }
+.btn-revoke {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #6B7280;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.btn-revoke:hover { color: #b00020; background: rgba(176, 0, 32, 0.06); }
+.access-empty { color: #6B7280; font-size: 12px; padding: 0.5rem 0; }
 </style>

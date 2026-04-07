@@ -37,8 +37,11 @@ onMounted(loadUsers)
 
 // ── Column config ──────────────────────────────────────────────────────
 const columns = [
-  { field: 'name',   header: 'Имя',    minWidth: '150px' },
-  { field: 'active', header: 'Статус',  minWidth: '80px', width: '120px' },
+  { field: 'name',            header: 'Имя',        minWidth: '150px' },
+  { field: 'position',        header: 'Должность',  minWidth: '120px', width: '200px' },
+  { field: 'department_name', header: 'Отдел',       minWidth: '80px',  width: '120px' },
+  { field: 'role',            header: 'Роль',        minWidth: '70px',  width: '100px' },
+  { field: 'active',          header: 'Статус',      minWidth: '70px',  width: '100px' },
 ]
 
 // ── Save indicator (delete flow) ──────────────────────────────────────
@@ -161,12 +164,20 @@ async function saveUser() {
       @delete="onDelete"
       @row-click="(data) => openEdit(data)"
     >
-      <!-- Custom cell: Имя (bold) -->
       <template #col-name="{ data }">
         <strong>{{ data.name }}</strong>
       </template>
-
-      <!-- Custom cell: Статус -->
+      <template #col-position="{ data }">
+        <span class="position-text">{{ data.position || '—' }}</span>
+      </template>
+      <template #col-department_name="{ data }">
+        {{ data.department_name || '—' }}
+      </template>
+      <template #col-role="{ data }">
+        <span :class="['role-badge', data.role === 'admin' ? 'role-badge--admin' : data.role === 'lead' ? 'role-badge--lead' : 'role-badge--employee']">
+          {{ data.role === 'admin' ? 'Админ' : data.role === 'lead' ? 'Лид' : 'Сотр.' }}
+        </span>
+      </template>
       <template #col-active="{ data }">
         <span :class="['status-pill', data.active ? 'status-pill--active' : 'status-pill--inactive']">
           {{ data.active ? 'активен' : 'неактивен' }}
@@ -258,4 +269,15 @@ async function saveUser() {
   color: #b00020;
   border: 0.5px solid rgba(176, 0, 32, 0.15);
 }
+.position-text { color: #6B7280; font-size: 13px; }
+.role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.role-badge--admin { background: rgba(176, 0, 32, 0.1); color: #b00020; }
+.role-badge--lead { background: rgba(211, 167, 84, 0.15); color: #9a7030; }
+.role-badge--employee { background: rgba(0, 50, 116, 0.08); color: #003274; }
 </style>

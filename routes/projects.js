@@ -201,4 +201,80 @@ router.delete('/:id', async (req, res) => {
 
 
 
+// -------- PROJECT ACCESS MANAGEMENT --------
+
+// GET /api/projects/:id/access — list users with access to project
+router.get('/:id/access', auth, async (req, res) => {
+  const projectId = Number(req.params.id);
+  if (!Number.isInteger(projectId)) return res.status(400).json({ error: 'Некорректный ID' });
+
+  try {
+    const result = await pool.query(`
+      SELECT upa.user_id, u.name, u.role, u.position, u.department_id,
+             d.name AS department_name, upa.access_level, upa.granted_at,
+             g.name AS granted_by_name
+      FROM user_project_access upa
+      JOIN users u ON u.user_id = upa.user_id
+      LEFT JOIN departments d ON d.department_id = u.department_id
+      LEFT JOIN users g ON g.user_id = upa.granted_by
+      WHERE upa.project_id = $1
+      ORDER BY u.name
+    `, [projectId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// POST /api/projects/:id/access — grant access to user
+router.post('/:id/access', auth, async (req, res) => {
+  const projectId = Number(req.params.id);
+  const { user_id, access_level = 'view' } = req.body;
+  const userId = Number(user_id);
+
+  if (!Number.isInteger(projectId) || !Number.isInteger(userId)) {
+    return res.status(400).json({ error: 'Некорректные данные' });
+  }
+  if (!['view', 'edit', 'admin'].includes(access_level)) {
+    return res.status(400).json({ error: 'Некорректный уровень доступа' });
+  }
+
+  try {
+    await pool.query(`
+      INSERT INTO user_project_access (user_id, project_id, granted_by, access_level)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (user_id, project_id) DO UPDATE SET
+        access_level = EXCLUDED.access_level,
+        granted_by = EXCLUDED.granted_by,
+        granted_at = now()
+    `, [userId, projectId, req.user.userId, access_level]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// DELETE /api/projects/:id/access/:userId — revoke access
+router.delete('/:id/access/:userId', auth, async (req, res) => {
+  const projectId = Number(req.params.id);
+  const userId = Number(req.params.userId);
+
+  if (!Number.isInteger(projectId) || !Number.isInteger(userId)) {
+    return res.status(400).json({ error: 'Некорректные данные' });
+  }
+
+  try {
+    await pool.query(
+      'DELETE FROM user_project_access WHERE user_id = $1 AND project_id = $2',
+      [userId, projectId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 module.exports = router;
