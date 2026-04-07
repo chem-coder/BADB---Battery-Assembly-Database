@@ -46,7 +46,11 @@ const adminRoutes = adminSections.map((s) => {
     ? referencePages.users
     : s.key === 'design'
       ? () => import('@/pages/DesignSystemPage.vue')
-      : () => import('@/pages/PlaceholderPage.vue')
+      : s.key === 'activity'
+        ? () => import('@/pages/ActivityPage.vue')
+        : s.key === 'audit'
+          ? () => import('@/pages/AuditPage.vue')
+          : () => import('@/pages/PlaceholderPage.vue')
   return {
     path: s.path.slice(1),
     component: page,

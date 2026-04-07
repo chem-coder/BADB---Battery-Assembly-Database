@@ -352,4 +352,33 @@ router.post('/change-password-public', async (req, res) => {
   }
 });
 
+// GET /api/auth/log — login journal (admin/lead only)
+router.get('/log', auth, requireRole('admin', 'lead'), async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 100, 500);
+  const offset = Number(req.query.offset) || 0;
+
+  try {
+    const result = await pool.query(`
+      SELECT al.id, al.user_id, al.login, al.event, al.ip_address,
+             al.user_agent, al.details, al.created_at,
+             u.name AS user_name, d.name AS department_name
+      FROM auth_log al
+      LEFT JOIN users u ON u.user_id = al.user_id
+      LEFT JOIN departments d ON d.department_id = u.department_id
+      ORDER BY al.created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    const countResult = await pool.query('SELECT COUNT(*) AS total FROM auth_log');
+
+    res.json({
+      rows: result.rows,
+      total: parseInt(countResult.rows[0].total, 10),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

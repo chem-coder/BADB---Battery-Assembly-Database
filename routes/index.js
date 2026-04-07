@@ -12,6 +12,7 @@ const reference    = require('./reference');
 const batteries    = require('./batteries');
 const electrodes   = require('./electrodes');
 const departments  = require('./departments');
+const activity     = require('./activity');
 
 module.exports = function registerRoutes(app) {
   app.use('/api/auth',         auth);
@@ -28,4 +29,5 @@ module.exports = function registerRoutes(app) {
   app.use('/api/batteries',    batteries);
   app.use('/api/electrodes',   electrodes);
   app.use('/api/departments',  departments);
+  app.use('/api/activity',     activity);
 };
