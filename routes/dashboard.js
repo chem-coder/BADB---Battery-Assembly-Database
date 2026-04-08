@@ -228,7 +228,7 @@ router.get('/graph', auth, async (req, res) => {
         ${projectFilter ? 'WHERE bt.project_id = $1' : ''}
       `, projectFilter ? [projectFilter] : []),
       pool.query(`SELECT sep_id, name, structure_id, created_by FROM separators`),
-      pool.query(`SELECT sep_str_id, name FROM separator_structures`),
+      pool.query(`SELECT sep_str_id, name FROM separator_structure`),
       pool.query(`SELECT electrolyte_id, name, electrolyte_type, created_by FROM electrolytes`),
     ])
 

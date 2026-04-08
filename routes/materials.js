@@ -86,12 +86,10 @@ router.get('/', auth, async (req, res) => {
     const result = await pool.query(
       `
       SELECT m.material_id, m.name, m.role,
-             u_created.name AS created_by_name,
              m.updated_by,
              m.updated_at,
              u_updated.name AS updated_by_name
       FROM materials m
-      LEFT JOIN users u_created ON u_created.user_id = m.created_by
       LEFT JOIN users u_updated ON u_updated.user_id = m.updated_by
       ORDER BY m.name
       `
