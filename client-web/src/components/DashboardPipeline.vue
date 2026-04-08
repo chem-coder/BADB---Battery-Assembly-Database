@@ -52,7 +52,7 @@ function formatTime(ts) {
 }
 
 function goToTape(t) {
-  router.push('/tapes')
+  router.push(`/tapes?select=${t.tape_id}`)
 }
 </script>
 
