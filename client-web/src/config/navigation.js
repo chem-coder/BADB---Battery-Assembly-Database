@@ -33,10 +33,10 @@ export const workflowSections = [
     label: 'Электроды',                 // Дали: "Электроды | Вырезание электродов"
     shortLabel: 'Электроды',
     path: '/electrodes',
-    apiPath: '/api/electrodes',
+    apiPath: '/api/electrodes/electrode-cut-batches',
     idField: 'cut_batch_id',
     nameField: 'cut_batch_id',
-    nameFormat: (row) => `Партия #${row.cut_batch_id}${row.shape ? ` (${row.shape})` : ''}`,
+    nameFormat: (row) => `#${row.cut_batch_id} ${row.tape_name || ''}`.trim(),
     icon: 'pi pi-clone',
     listPage: () => import('@/pages/ElectrodesPage.vue'),
     formPage: () => import('@/pages/ElectrodeFormPage.vue'),

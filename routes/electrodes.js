@@ -8,7 +8,7 @@ router.get('/test', async (req, res) => {
   res.json(result.rows);
 });
 
-router.get('/electrode-cut-batches', async (req, res) => {
+router.get('/electrode-cut-batches', auth, async (req, res) => {
   try {
     const result = await pool.query(
       `
