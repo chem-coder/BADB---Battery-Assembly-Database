@@ -5,6 +5,7 @@ function normalizeMassFraction(value) {
   return Number(value.toFixed(8));
 }
 const pool = require('../db');
+const { auth } = require('../middleware/auth');
 
 router.get('/test', async (req, res) => {
   const result = await pool.query('SELECT 1 as ok');
@@ -21,7 +22,7 @@ router.get('/test', async (req, res) => {
 // -------- MATERIALS --------
 
 // CREATE
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   const { name, role } = req.body;
   const cleanName = typeof name === 'string' ? name.trim() : '';
 
@@ -79,7 +80,7 @@ router.post('/', async (req, res) => {
 });
 
 // READ
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const result = await pool.query(
       `
@@ -96,7 +97,7 @@ router.get('/', async (req, res) => {
 });
 
 // UPDATE
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
   const { name, role } = req.body;
 
@@ -138,7 +139,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -171,7 +172,7 @@ router.delete('/:id', async (req, res) => {
 // -------- MATERIAL INSTANCES --------
 
 // CREATE instance for material
-router.post('/:id/instances', async (req, res) => {
+router.post('/:id/instances', auth, async (req, res) => {
   const materialId = Number(req.params.id);
 
   if (!Number.isInteger(materialId)) {
@@ -209,7 +210,7 @@ router.post('/:id/instances', async (req, res) => {
 });
 
 // READ all instances for composition dropdowns
-router.get('/instances', async (req, res) => {
+router.get('/instances', auth, async (req, res) => {
   try {
     const result = await pool.query(
       `
@@ -236,7 +237,7 @@ router.get('/instances', async (req, res) => {
 });
 
 // READ instances for a material
-router.get('/:id/instances', async (req, res) => {
+router.get('/:id/instances', auth, async (req, res) => {
   const materialId = Number(req.params.id);
 
   if (!Number.isInteger(materialId)) {
@@ -270,7 +271,7 @@ router.get('/:id/instances', async (req, res) => {
 
 // UPDATE instance
 // OLD ROUTE: .put('/api/material-instances/:id'
-router.put('/instances/:id', async (req, res) => {
+router.put('/instances/:id', auth, async (req, res) => {
   const instanceId = Number(req.params.id);
 
   if (!Number.isInteger(instanceId)) {
@@ -314,7 +315,7 @@ router.put('/instances/:id', async (req, res) => {
 
 // DELETE instance
 // OLD ROUTE: .delete('/api/material-instances/:id'
-router.delete('/instances/:id', async (req, res) => {
+router.delete('/instances/:id', auth, async (req, res) => {
   const instanceId = Number(req.params.id);
 
   if (!Number.isInteger(instanceId)) {
@@ -343,71 +344,77 @@ router.delete('/instances/:id', async (req, res) => {
 // -------- MATERIAL INSTANCE COMPONENTS --------
 
 // --- GET components for a material instance ---
-router.get('/instances/:id/components', async (req, res) => {
+router.get('/instances/:id/components', auth, async (req, res) => {
   const id = Number(req.params.id);
-
-  const result = await pool.query(
-    `
-    SELECT
-      mic.material_instance_component_id,
-      mic.parent_material_instance_id,
-      mic.component_material_instance_id,
-      mic.mass_fraction,
-      mi.name AS component_name,
-      mi.material_id,
-      m.name AS material_name,
-      m.role AS material_role,
-      mic.notes
-    FROM material_instance_components mic
-    JOIN material_instances mi
-      ON mic.component_material_instance_id = mi.material_instance_id
-    JOIN materials m
-      ON mi.material_id = m.material_id
-    WHERE mic.parent_material_instance_id = $1
-    ORDER BY mi.name;
-    `,
-    [id]
-  );
-
-  res.json(result.rows);
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        mic.material_instance_component_id,
+        mic.parent_material_instance_id,
+        mic.component_material_instance_id,
+        mic.mass_fraction,
+        mi.name AS component_name,
+        mi.material_id,
+        m.name AS material_name,
+        m.role AS material_role,
+        mic.notes
+      FROM material_instance_components mic
+      JOIN material_instances mi
+        ON mic.component_material_instance_id = mi.material_instance_id
+      JOIN materials m
+        ON mi.material_id = m.material_id
+      WHERE mic.parent_material_instance_id = $1
+      ORDER BY mi.name;
+      `,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки компонентов' });
+  }
 });
 
 // --- ADD component to instance ---
-router.post('/instances/:id/components', async (req, res) => {
+router.post('/instances/:id/components', auth, async (req, res) => {
   const parentId = Number(req.params.id);
   const { component_material_instance_id, mass_fraction } = req.body;
-
-  const result = await pool.query(
-    `
-    WITH ins AS (
-      INSERT INTO material_instance_components
-        (parent_material_instance_id, component_material_instance_id, mass_fraction)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    )
-    SELECT
-      ins.material_instance_component_id,
-      ins.parent_material_instance_id,
-      ins.component_material_instance_id,
-      ins.mass_fraction,
-      mi.name AS component_name,
-      mi.material_id,
-      m.name AS material_name,
-      ins.notes
-    FROM ins
-    JOIN material_instances mi
-      ON ins.component_material_instance_id = mi.material_instance_id
-    JOIN materials m
-      ON mi.material_id = m.material_id;
-    `,
-    [parentId, component_material_instance_id, mass_fraction]
-  );
-
-  res.json(result.rows[0]);
+  try {
+    const result = await pool.query(
+      `
+      WITH ins AS (
+        INSERT INTO material_instance_components
+          (parent_material_instance_id, component_material_instance_id, mass_fraction)
+        VALUES ($1, $2, $3)
+        RETURNING *
+      )
+      SELECT
+        ins.material_instance_component_id,
+        ins.parent_material_instance_id,
+        ins.component_material_instance_id,
+        ins.mass_fraction,
+        mi.name AS component_name,
+        mi.material_id,
+        m.name AS material_name,
+        ins.notes
+      FROM ins
+      JOIN material_instances mi
+        ON ins.component_material_instance_id = mi.material_instance_id
+      JOIN materials m
+        ON mi.material_id = m.material_id;
+      `,
+      [parentId, component_material_instance_id, mass_fraction]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка добавления компонента' });
+  }
 });
 
 // --- REPLACE full composition for an instance ---
-router.put('/instances/:id/components', async (req, res) => {
+router.put('/instances/:id/components', auth, async (req, res) => {
   const parentId = Number(req.params.id);
   const components = Array.isArray(req.body.components) ? req.body.components : null;
 
@@ -528,7 +535,7 @@ router.put('/instances/:id/components', async (req, res) => {
 
 
 // --- UPDATE component ---
-router.put('/instances/components/:id', async (req, res) => {
+router.put('/instances/components/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -571,18 +578,21 @@ router.put('/instances/components/:id', async (req, res) => {
 });
 
 // --- DELETE component ---
-router.delete('/instances/components/:id', async (req, res) => {
+router.delete('/instances/components/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
-
-  await pool.query(
-    `
-    DELETE FROM material_instance_components
-    WHERE material_instance_component_id = $1;
-    `,
-    [id]
-  );
-
-  res.json({ success: true });
+  try {
+    await pool.query(
+      `
+      DELETE FROM material_instance_components
+      WHERE material_instance_component_id = $1;
+      `,
+      [id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка удаления компонента' });
+  }
 });
 
 

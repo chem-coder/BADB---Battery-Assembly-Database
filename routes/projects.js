@@ -12,7 +12,7 @@ router.get('/test', async (req, res) => {
 // -------- PROJECTS --------
 
 // CREATE
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   const {
     name,
     created_by,
@@ -126,7 +126,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // UPDATE
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   const { id } = req.params;
   const {
     name,
@@ -179,7 +179,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   const { id } = req.params;
 
   try {

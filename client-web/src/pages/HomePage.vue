@@ -177,7 +177,7 @@ function goTo(path) {
           style="cursor: pointer"
         >
           <Column :field="sec.nameField" header="Название">
-            <template #body="{ data: row }">{{ row[sec.nameField] || '— без названия —' }}</template>
+            <template #body="{ data: row }">{{ sec.nameFormat ? sec.nameFormat(row) : (row[sec.nameField] || '— без названия —') }}</template>
           </Column>
           <Column field="status" header="Статус" style="width: 120px">
             <template #body="{ data: row }"><StatusBadge :status="row.status ?? 'draft'" /></template>

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { auth } = require('../middleware/auth');
 
 const WORKFLOW_STATUS_ORDER = [
   { code: 'recipe_materials', label: 'Выбор экземпляров' },
@@ -178,7 +179,7 @@ router.get('/test', async (req, res) => {
 // --------  RECIPE LINE ACTUALS -------- 
 
 // CREATE
-router.post('/:id/actuals', async (req, res) => {
+router.post('/:id/actuals', auth, async (req, res) => {
   const tapeId = Number(req.params.id);
 
   if (!Number.isInteger(tapeId)) {
@@ -250,7 +251,7 @@ router.post('/:id/actuals', async (req, res) => {
 });
 
 // READ
-router.get('/:id/actuals', async (req, res) => {
+router.get('/:id/actuals', auth, async (req, res) => {
   const tapeId = Number(req.params.id);
 
   if (!Number.isInteger(tapeId)) {
@@ -288,7 +289,7 @@ router.get('/:id/actuals', async (req, res) => {
 // -------- TAPES --------
 
 // CREATE tape
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   const {
     name,
     project_id,
@@ -348,7 +349,7 @@ router.post('/', async (req, res) => {
 });
 
 // READ
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   const { role } = req.query;
 
   const baseQuery = `
@@ -408,7 +409,7 @@ router.get('/', async (req, res) => {
 });
 
 // EDIT
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Некорректный ID' });
@@ -470,7 +471,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
 
   try {
@@ -491,7 +492,7 @@ router.delete('/:id', async (req, res) => {
 // --------- GENERAL/GENERIC STEP READING (for any operation type) --------
 
 // WRITE (dispatcher): POST /:id/steps/by-code/:code
-router.post('/:id/steps/by-code/:code', async (req, res) => {
+router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
   const tapeId = Number(req.params.id);
   const code = String(req.params.code || '').trim();
 
@@ -954,7 +955,7 @@ router.post('/:id/steps/by-code/:code', async (req, res) => {
 });
 
 // READ
-router.get('/:id/steps/by-code/:code', async (req, res) => {
+router.get('/:id/steps/by-code/:code', auth, async (req, res) => {
   const tapeId = Number(req.params.id);
   const code = String(req.params.code || '').trim();
 
@@ -1068,7 +1069,7 @@ router.get('/:id/steps/by-code/:code', async (req, res) => {
 
 // -------- TAPES FOR ELECTRODE CUTTING DROPDOWN --------
 
-router.get('/for-electrodes', async (req, res) => {
+router.get('/for-electrodes', auth, async (req, res) => {
 
   try {
 
@@ -1125,7 +1126,7 @@ router.get('/for-electrodes', async (req, res) => {
 // -------- ELECTRODE CUT BATCHES BY TAPE --------
 
 // GET cut batches by tape
-router.get('/:id/electrode-cut-batches', async (req, res) => {
+router.get('/:id/electrode-cut-batches', auth, async (req, res) => {
   const tapeId = Number(req.params.id);
 
   if (!Number.isInteger(tapeId)) {
@@ -1167,7 +1168,7 @@ router.get('/:id/electrode-cut-batches', async (req, res) => {
 
 
 // READ ONE — must be after /for-electrodes to avoid /:id catching "for-electrodes"
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Некорректный ID' });

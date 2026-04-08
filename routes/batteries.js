@@ -3,6 +3,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const router = express.Router();
 const pool = require('../db');
+const { auth } = require('../middleware/auth');
 
 const ALLOWED_COIN_LAYOUTS = new Set(['SE', 'ES', 'ESE']);
 
@@ -54,7 +55,7 @@ router.get('/test', async (req, res) => {
 // ---------- BATTERIES ----------
 
 // Create a new battery header
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
 
   const {
     project_id,
@@ -107,7 +108,7 @@ router.post('/', async (req, res) => {
 });
 
 // List batteries
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
 
     const result = await pool.query(
@@ -141,7 +142,7 @@ router.get('/', async (req, res) => {
 });
 
 // Read battery header
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.id);
 
@@ -188,7 +189,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Update battery header
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.id);
 
@@ -306,7 +307,7 @@ router.patch('/:id', async (req, res) => {
 
 
 // Save coin-cell configuration
-router.post('/battery_coin_config', async (req, res) => {
+router.post('/battery_coin_config', auth, async (req, res) => {
 
   const {
     battery_id,
@@ -340,6 +341,15 @@ router.post('/battery_coin_config', async (req, res) => {
         coin_layout
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      ON CONFLICT (battery_id) DO UPDATE SET
+        coin_cell_mode = EXCLUDED.coin_cell_mode,
+        coin_size_code = EXCLUDED.coin_size_code,
+        half_cell_type = EXCLUDED.half_cell_type,
+        li_foil_notes = EXCLUDED.li_foil_notes,
+        spacer_thickness_mm = EXCLUDED.spacer_thickness_mm,
+        spacer_count = EXCLUDED.spacer_count,
+        spacer_notes = EXCLUDED.spacer_notes,
+        coin_layout = EXCLUDED.coin_layout
       RETURNING *
       `,
       [
@@ -367,7 +377,7 @@ router.post('/battery_coin_config', async (req, res) => {
 });
 
 // Read coin-cell configuration
-router.get('/battery_coin_config/:battery_id', async (req, res) => {
+router.get('/battery_coin_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -411,7 +421,7 @@ router.get('/battery_coin_config/:battery_id', async (req, res) => {
 });
 
 // Update coin-cell configuration
-router.patch('/battery_coin_config/:battery_id', async (req, res) => {
+router.patch('/battery_coin_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
   const hasCoinCellMode = Object.prototype.hasOwnProperty.call(req.body, 'coin_cell_mode');
@@ -502,7 +512,7 @@ router.patch('/battery_coin_config/:battery_id', async (req, res) => {
 
 
 // Save pouch-cell configuration
-router.post('/battery_pouch_config', async (req, res) => {
+router.post('/battery_pouch_config', auth, async (req, res) => {
 
   const {
     battery_id,
@@ -547,7 +557,7 @@ router.post('/battery_pouch_config', async (req, res) => {
 });
 
 // Read pouch-cell configuration
-router.get('/battery_pouch_config/:battery_id', async (req, res) => {
+router.get('/battery_pouch_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -584,7 +594,7 @@ router.get('/battery_pouch_config/:battery_id', async (req, res) => {
 });
 
 // Update pouch-cell configuration
-router.patch('/battery_pouch_config/:battery_id', async (req, res) => {
+router.patch('/battery_pouch_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -632,7 +642,7 @@ router.patch('/battery_pouch_config/:battery_id', async (req, res) => {
 
 
 // Save cylindrical-cell configuration
-router.post('/battery_cyl_config', async (req, res) => {
+router.post('/battery_cyl_config', auth, async (req, res) => {
 
   const {
     battery_id,
@@ -681,7 +691,7 @@ router.post('/battery_cyl_config', async (req, res) => {
 });
 
 // Read cylindrical-cell configuration
-router.get('/battery_cyl_config/:battery_id', async (req, res) => {
+router.get('/battery_cyl_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -719,7 +729,7 @@ router.get('/battery_cyl_config/:battery_id', async (req, res) => {
 });
 
 // Update cylindrical-cell configuration
-router.patch('/battery_cyl_config/:battery_id', async (req, res) => {
+router.patch('/battery_cyl_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -772,7 +782,7 @@ router.patch('/battery_cyl_config/:battery_id', async (req, res) => {
 
 // Save electrode sources for a battery
 
-router.post('/battery_electrode_sources', async (req, res) => {
+router.post('/battery_electrode_sources', auth, async (req, res) => {
   
   const {
     battery_id,
@@ -783,8 +793,6 @@ router.post('/battery_electrode_sources', async (req, res) => {
     anode_cut_batch_id,
     anode_source_notes
   } = req.body;
-
-  console.log('REQ BODY:', req.body);
 
   const batteryId = Number(battery_id);
 
@@ -938,7 +946,7 @@ router.post('/battery_electrode_sources', async (req, res) => {
 });
 
 // Read electrode sources for a battery
-router.get('/battery_electrode_sources/:battery_id', async (req, res) => {
+router.get('/battery_electrode_sources/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -979,7 +987,7 @@ router.get('/battery_electrode_sources/:battery_id', async (req, res) => {
 });
 
 // Update electrode sources for a battery
-router.patch('/battery_electrode_sources/:battery_id', async (req, res) => {
+router.patch('/battery_electrode_sources/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -1047,7 +1055,7 @@ router.patch('/battery_electrode_sources/:battery_id', async (req, res) => {
 
 
 // Update electrode stack
-router.put('/battery_electrodes/:battery_id', async (req, res) => {
+router.put('/battery_electrodes/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
   const stack = req.body;
@@ -1136,7 +1144,7 @@ router.put('/battery_electrodes/:battery_id', async (req, res) => {
 });
 
 // Read electrode stack for a battery
-router.get('/battery_electrodes/:battery_id', async (req, res) => {
+router.get('/battery_electrodes/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -1173,7 +1181,7 @@ router.get('/battery_electrodes/:battery_id', async (req, res) => {
 
 
 // Save separator configuration
-router.post('/battery_sep_config', async (req, res) => {
+router.post('/battery_sep_config', auth, async (req, res) => {
 
   const {
     battery_id,
@@ -1223,7 +1231,7 @@ router.post('/battery_sep_config', async (req, res) => {
 });
 
 // Read separator configuration
-router.get('/battery_sep_config/:battery_id', async (req, res) => {
+router.get('/battery_sep_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -1261,7 +1269,7 @@ router.get('/battery_sep_config/:battery_id', async (req, res) => {
 });
 
 // Update separator configuration
-router.patch('/battery_sep_config/:battery_id', async (req, res) => {
+router.patch('/battery_sep_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -1313,7 +1321,7 @@ router.patch('/battery_sep_config/:battery_id', async (req, res) => {
 
 
 // Save electrolyte configuration
-router.post('/battery_electrolyte', async (req, res) => {
+router.post('/battery_electrolyte', auth, async (req, res) => {
 
   const {
     battery_id,
@@ -1351,7 +1359,7 @@ router.post('/battery_electrolyte', async (req, res) => {
         batteryId,
         electrolyteId,
         electrolyte_notes || null,
-        electrolyte_total_ul || null
+        electrolyte_total_ul ?? null
       ]
     );
 
@@ -1367,7 +1375,7 @@ router.post('/battery_electrolyte', async (req, res) => {
 });
 
 // Read electrolyte configuration
-router.get('/battery_electrolyte/:battery_id', async (req, res) => {
+router.get('/battery_electrolyte/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -1406,7 +1414,7 @@ router.get('/battery_electrolyte/:battery_id', async (req, res) => {
 });
 
 // Update electrolyte configuration
-router.patch('/battery_electrolyte/:battery_id', async (req, res) => {
+router.patch('/battery_electrolyte/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -1462,7 +1470,7 @@ router.patch('/battery_electrolyte/:battery_id', async (req, res) => {
 
 
 // Save battery QC data
-router.post('/battery_qc', async (req, res) => {
+router.post('/battery_qc', auth, async (req, res) => {
 
   const {
     battery_id,
@@ -1497,8 +1505,8 @@ router.post('/battery_qc', async (req, res) => {
       `,
       [
         batteryId,
-        ocv_v || null,
-        esr_mohm || null,
+        ocv_v ?? null,
+        esr_mohm ?? null,
         qc_notes || null
       ]
     );
@@ -1515,7 +1523,7 @@ router.post('/battery_qc', async (req, res) => {
 });
 
 // Read battery QC data
-router.get('/battery_qc/:battery_id', async (req, res) => {
+router.get('/battery_qc/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -1554,7 +1562,7 @@ router.get('/battery_qc/:battery_id', async (req, res) => {
 });
 
 // Update battery QC data
-router.patch('/battery_qc/:battery_id', async (req, res) => {
+router.patch('/battery_qc/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -1609,7 +1617,7 @@ router.patch('/battery_qc/:battery_id', async (req, res) => {
 
 
 // Save battery electrochem data
-router.post('/battery_electrochem', async (req, res) => {
+router.post('/battery_electrochem', auth, async (req, res) => {
 
   const {
     battery_id,
@@ -1692,7 +1700,7 @@ router.post('/battery_electrochem', async (req, res) => {
 });
 
 // Read battery electrochem data
-router.get('/battery_electrochem/:battery_id', async (req, res) => {
+router.get('/battery_electrochem/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -1734,7 +1742,7 @@ router.get('/battery_electrochem/:battery_id', async (req, res) => {
 });
 
 // Update battery electrochem data
-router.patch('/battery_electrochem/:battery_id', async (req, res) => {
+router.patch('/battery_electrochem/:battery_id', auth, async (req, res) => {
   res.status(405).json({ error: 'Используйте POST для добавления новых файлов электрохимических испытаний' });
 
 });
@@ -1744,7 +1752,7 @@ router.patch('/battery_electrochem/:battery_id', async (req, res) => {
 // ---------- LOAD THE FULL BATTERY RECORD ----------
 
 // Generates JSON
-router.get('/:id/assembly', async (req, res) => {
+router.get('/:id/assembly', auth, async (req, res) => {
 
   const batteryId = Number(req.params.id);
 

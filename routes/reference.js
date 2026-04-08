@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { auth } = require('../middleware/auth');
 
 router.get('/test', async (req, res) => {
   const result = await pool.query('SELECT 1 as ok');
@@ -12,7 +13,7 @@ router.get('/test', async (req, res) => {
 // -------- TAPE PROCESS STEPS (DRYING) --------
 
 // READ
-router.get('/drying-atmospheres', async (req, res) => {
+router.get('/drying-atmospheres', auth, async (req, res) => {
   try {
     const result = await pool.query(
       `
@@ -34,7 +35,7 @@ router.get('/drying-atmospheres', async (req, res) => {
 // -------- TAPE PROCESS STEPS (MIXING) --------
 
 // READ: dry mixing methods
-router.get('/dry-mixing-methods', async (req, res) => {
+router.get('/dry-mixing-methods', auth, async (req, res) => {
   try {
     const result = await pool.query(
       `
@@ -51,7 +52,7 @@ router.get('/dry-mixing-methods', async (req, res) => {
 });
 
 // READ: wet mixing methods
-router.get('/wet-mixing-methods', async (req, res) => {
+router.get('/wet-mixing-methods', auth, async (req, res) => {
   try {
     const result = await pool.query(
       `
@@ -71,7 +72,7 @@ router.get('/wet-mixing-methods', async (req, res) => {
 // -------- TAPE PROCESS STEPS (COATING) --------
 
 // READ
-router.get('/coating-methods', async (req, res) => {
+router.get('/coating-methods', auth, async (req, res) => {
   try {
     const result = await pool.query(
       `
@@ -89,7 +90,7 @@ router.get('/coating-methods', async (req, res) => {
 });
 
 // READ
-router.get('/foils', async (req, res) => {
+router.get('/foils', auth, async (req, res) => {
   try {
 
     const { rows } = await pool.query(`

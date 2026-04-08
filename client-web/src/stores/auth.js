@@ -34,6 +34,9 @@ export const useAuthStore = defineStore('auth', {
         login: data.login,
         role: data.role,
         position: data.position || null,
+        department: data.department || null,
+        isDepartmentHead: data.isDepartmentHead || false,
+        isDirector: data.isDirector || false,
       }
       this.projects = data.projects || []
     },

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { auth } = require('../middleware/auth');
 
 router.get('/test', async (req, res) => {
   const result = await pool.query('SELECT 1 as ok');
@@ -12,7 +13,7 @@ router.get('/test', async (req, res) => {
 // -------- RECIPES --------
 
 // CREATE: new recipe + lines
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   const {
     role,
     name,
@@ -122,7 +123,7 @@ router.post('/', async (req, res) => {
 });
 
 // COPY: duplicate recipe + lines
-router.post('/:id/duplicate', async (req, res) => {
+router.post('/:id/duplicate', auth, async (req, res) => {
   const sourceRecipeId = Number(req.params.id);
   const { created_by } = req.body;
   const createdBy = Number(created_by);
@@ -203,7 +204,7 @@ router.post('/:id/duplicate', async (req, res) => {
 });
 
 // READ
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   const role = req.query.role ? String(req.query.role) : null;
 
   if (req.query.role && role !== 'cathode' && role !== 'anode') {
@@ -261,7 +262,7 @@ router.get('/', async (req, res) => {
 });
 
 // READ: recipe details (header only)
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   const recipeId = Number(req.params.id);
 
   if (!Number.isInteger(recipeId)) {
@@ -297,7 +298,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // READ: recipe lines (composition)
-router.get('/:id/lines', async (req, res) => {
+router.get('/:id/lines', auth, async (req, res) => {
   const recipeId = Number(req.params.id);
 
   if (!Number.isInteger(recipeId)) {
@@ -334,7 +335,7 @@ router.get('/:id/lines', async (req, res) => {
 });
 
 // UPDATE: recipe header + replace-all lines
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   const recipeId = Number(req.params.id);
 
   const {
@@ -464,7 +465,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE recipe (header + cascade lines)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   const recipeId = Number(req.params.id);
 
   if (!Number.isInteger(recipeId)) {

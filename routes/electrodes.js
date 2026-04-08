@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { auth } = require('../middleware/auth');
 
 router.get('/test', async (req, res) => {
   const result = await pool.query('SELECT 1 as ok');
@@ -55,7 +56,7 @@ router.get('/electrode-cut-batches', async (req, res) => {
 
 // -------- ELECTRODE CUT BATCHES --------
 // CREATE cut batch
-router.post('/electrode-cut-batches', async (req, res) => {
+router.post('/electrode-cut-batches', auth, async (req, res) => {
     const {
     tape_id,
     created_by,
@@ -92,9 +93,9 @@ router.post('/electrode-cut-batches', async (req, res) => {
         tapeId,
         createdBy,
         shape || null,
-        diameter_mm || null,
-        length_mm || null,
-        width_mm || null,
+        diameter_mm ?? null,
+        length_mm ?? null,
+        width_mm ?? null,
         comments || null
       ]
     );
@@ -106,7 +107,7 @@ router.post('/electrode-cut-batches', async (req, res) => {
 });
 
 // UPDATE
-router.put('/electrode-cut-batches/:id', async (req, res) => {
+router.put('/electrode-cut-batches/:id', auth, async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   const {
@@ -140,9 +141,9 @@ router.put('/electrode-cut-batches/:id', async (req, res) => {
       `,
       [
         shape || null,
-        diameter_mm || null,
-        length_mm || null,
-        width_mm || null,
+        diameter_mm ?? null,
+        length_mm ?? null,
+        width_mm ?? null,
         comments || null,
         cutBatchId
       ]
@@ -161,7 +162,7 @@ router.put('/electrode-cut-batches/:id', async (req, res) => {
 });
 
 // GET cut batch by ID
-router.get('/electrode-cut-batches/:id', async (req, res) => {
+router.get('/electrode-cut-batches/:id', auth, async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -190,7 +191,7 @@ router.get('/electrode-cut-batches/:id', async (req, res) => {
 });
 
 // DELETE cut batch (and cascade delete electrodes and measurements)
-router.delete('/electrode-cut-batches/:id', async (req, res) => {
+router.delete('/electrode-cut-batches/:id', auth, async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -213,7 +214,7 @@ router.delete('/electrode-cut-batches/:id', async (req, res) => {
 
 
 // GET electrodes by batch
-router.get('/electrode-cut-batches/:id/electrodes', async (req, res) => {
+router.get('/electrode-cut-batches/:id/electrodes', auth, async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -246,7 +247,7 @@ router.get('/electrode-cut-batches/:id/electrodes', async (req, res) => {
 // -------- FOIL MASS MEASUREMENTS --------
 
 // ADD measurement
-router.post('/electrode-cut-batches/:id/foil-masses', async (req, res) => {
+router.post('/electrode-cut-batches/:id/foil-masses', auth, async (req, res) => {
   const cutBatchId = Number(req.params.id);
   const { mass_g } = req.body;
   const mass = Number(mass_g);
@@ -273,7 +274,7 @@ router.post('/electrode-cut-batches/:id/foil-masses', async (req, res) => {
 });
 
 // GET measurements
-router.get('/electrode-cut-batches/:id/foil-masses', async (req, res) => {
+router.get('/electrode-cut-batches/:id/foil-masses', auth, async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -299,7 +300,7 @@ router.get('/electrode-cut-batches/:id/foil-masses', async (req, res) => {
 });
 
 // DELETE all measurements for a batch
-router.delete('/electrode-cut-batches/:id/foil-masses', async (req, res) => {
+router.delete('/electrode-cut-batches/:id/foil-masses', auth, async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -326,7 +327,7 @@ router.delete('/electrode-cut-batches/:id/foil-masses', async (req, res) => {
 // These don't seem to appear anywhere... 
 // THere are no foil-measurements routes in the html files... 
 // UPDATE measurement
-router.put('/foil-measurements/:id', async (req, res) => {
+router.put('/foil-measurements/:id', auth, async (req, res) => {
   const measurementId = Number(req.params.id);
   const { mass_g } = req.body;
 
@@ -357,7 +358,7 @@ router.put('/foil-measurements/:id', async (req, res) => {
 });
 
 // DELETE measurement
-router.delete('/foil-measurements/:id', async (req, res) => {
+router.delete('/foil-measurements/:id', auth, async (req, res) => {
   const measurementId = Number(req.params.id);
 
   if (!Number.isInteger(measurementId)) {
@@ -382,7 +383,7 @@ router.delete('/foil-measurements/:id', async (req, res) => {
 // -------- ELECTRODES --------
 
 // CREATE electrode
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   const {
     cut_batch_id,
     electrode_mass_g,
@@ -426,7 +427,7 @@ router.post('/', async (req, res) => {
       [
         cut_batch_id,
         mass,
-        cup_number || null,
+        cup_number ?? null,
         comments || null
       ]
     );
@@ -442,7 +443,7 @@ router.post('/', async (req, res) => {
 });
 
 // UPDATE electrode status
-router.put('/:id/status', async (req, res) => {
+router.put('/:id/status', auth, async (req, res) => {
   const electrodeId = Number(req.params.id);
   const { status_code, used_in_battery_id, scrapped_reason } = req.body;
 
@@ -492,7 +493,7 @@ router.put('/:id/status', async (req, res) => {
 });
 
 // UPDATE electrode fields (mass, cup, comments)
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
 
   const electrodeId = Number(req.params.id);
   const {
@@ -541,7 +542,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE single electrode
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
 
   const electrodeId = Number(req.params.id);
 
@@ -593,7 +594,7 @@ router.delete('/:id', async (req, res) => {
 // -------- ELECTRODE DRYING --------
 
 // CREATE or UPDATE drying record (UPSERT)
-router.post('/electrode-cut-batches/:id/drying', async (req, res) => {
+router.post('/electrode-cut-batches/:id/drying', auth, async (req, res) => {
 
   const cutBatchId = Number(req.params.id);
 
@@ -637,7 +638,7 @@ router.post('/electrode-cut-batches/:id/drying', async (req, res) => {
         cutBatchId,
         start_time || null,
         end_time || null,
-        temperature_c || null,
+        temperature_c ?? null,
         other_parameters || null,
         comments || null
       ]
@@ -655,7 +656,7 @@ router.post('/electrode-cut-batches/:id/drying', async (req, res) => {
 });
 
 // GET drying records by batch
-router.get('/electrode-cut-batches/:id/drying', async (req, res) => {
+router.get('/electrode-cut-batches/:id/drying', auth, async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -681,7 +682,7 @@ router.get('/electrode-cut-batches/:id/drying', async (req, res) => {
 });
 
 // PUT update drying record
-router.put('/electrode-drying/:id', async (req, res) => {
+router.put('/electrode-drying/:id', auth, async (req, res) => {
   const dryingId = Number(req.params.id);
   const { start_time, end_time, temperature_c, other_parameters, comments } = req.body;
 
@@ -704,7 +705,7 @@ router.put('/electrode-drying/:id', async (req, res) => {
       [
         start_time || null,
         end_time || null,
-        temperature_c || null,
+        temperature_c ?? null,
         other_parameters || null,
         comments || null,
         dryingId
@@ -723,7 +724,7 @@ router.put('/electrode-drying/:id', async (req, res) => {
 });
 
 // DELETE drying record
-router.delete('/electrode-drying/:id', async (req, res) => {
+router.delete('/electrode-drying/:id', auth, async (req, res) => {
   const dryingId = Number(req.params.id);
 
   if (!Number.isInteger(dryingId)) {

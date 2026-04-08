@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { auth } = require('../middleware/auth');
 
 router.get('/test', async (req, res) => {
   const result = await pool.query('SELECT 1 as ok');
@@ -11,7 +12,7 @@ router.get('/test', async (req, res) => {
 
 // CREATE electrolyte
 // POST /api/electrolytes
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   const {
     name,
     electrolyte_type,
@@ -72,7 +73,7 @@ router.post('/', async (req, res) => {
 
 // READ all electrolytes (global list)
 // GET /api/electrolytes
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
@@ -100,7 +101,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id/files', async (req, res) => {
+router.get('/:id/files', auth, async (req, res) => {
   const electrolyteId = Number(req.params.id);
 
   if (!Number.isInteger(electrolyteId)) {
@@ -135,7 +136,7 @@ router.get('/:id/files', async (req, res) => {
   }
 });
 
-router.get('/files/:fileId/download', async (req, res) => {
+router.get('/files/:fileId/download', auth, async (req, res) => {
   const fileId = Number(req.params.fileId);
 
   if (!Number.isInteger(fileId)) {
@@ -173,7 +174,7 @@ router.get('/files/:fileId/download', async (req, res) => {
   }
 });
 
-router.post('/:id/files', async (req, res) => {
+router.post('/:id/files', auth, async (req, res) => {
   const electrolyteId = Number(req.params.id);
   const { entries } = req.body;
 
@@ -246,7 +247,7 @@ router.post('/:id/files', async (req, res) => {
   }
 });
 
-router.delete('/files/:fileId', async (req, res) => {
+router.delete('/files/:fileId', auth, async (req, res) => {
   const fileId = Number(req.params.fileId);
 
   if (!Number.isInteger(fileId)) {
@@ -276,7 +277,7 @@ router.delete('/files/:fileId', async (req, res) => {
 
 // UPDATE electrolyte
 // PUT /api/electrolytes/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   const electrolyteId = Number(req.params.id);
 
   if (!Number.isInteger(electrolyteId)) {
@@ -332,7 +333,7 @@ router.put('/:id', async (req, res) => {
 
 // DELETE electrolyte
 // DELETE /api/electrolytes/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   const electrolyteId = Number(req.params.id);
 
   if (!Number.isInteger(electrolyteId)) {

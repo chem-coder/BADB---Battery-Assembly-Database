@@ -1,9 +1,10 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const router = Router();
+const { auth } = require('../middleware/auth');
 
 // GET /api/departments — list all departments with head info
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT d.department_id, d.name,
@@ -20,7 +21,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/departments/:id — department with members
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Некорректный ID' });
