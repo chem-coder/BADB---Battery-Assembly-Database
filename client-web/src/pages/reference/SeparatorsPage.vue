@@ -250,7 +250,7 @@ function statusLabel(status) {
       modal
       @hide="resetForm"
     >
-      <div class="form-grid">
+      <form class="form-grid" @submit.prevent="saveSeparator">
         <label>Название</label>
         <InputText v-model="form.name" placeholder="Название сепаратора" class="w-full" />
 
@@ -297,7 +297,7 @@ function statusLabel(status) {
 
         <label>Комментарии</label>
         <Textarea v-model="form.comments" rows="3" placeholder="Замечания, методики" class="w-full" />
-      </div>
+      </form>
 
       <template #footer>
         <Button label="Отмена" severity="secondary" outlined @click="resetForm" />

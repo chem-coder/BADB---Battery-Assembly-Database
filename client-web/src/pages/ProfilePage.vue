@@ -270,9 +270,12 @@ async function onSubmit() {
 }
 
 .profile-card {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.62);
+  border: 0.5px solid rgba(180, 210, 255, 0.55);
   border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 11px rgba(0, 50, 116, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
   padding: 1.5rem 2rem;
   margin-bottom: 1.25rem;
 }

@@ -198,7 +198,7 @@ async function saveUser() {
       modal
       @hide="resetForm"
     >
-      <div class="form-grid">
+      <form class="form-grid" @submit.prevent="saveUser">
         <label>Имя</label>
         <InputText v-model="form.name" placeholder="Имя пользователя" class="w-full" />
 
@@ -212,7 +212,7 @@ async function saveUser() {
             class="w-full"
           />
         </template>
-      </div>
+      </form>
 
       <template #footer>
         <Button label="Отмена" severity="secondary" outlined @click="resetForm" />

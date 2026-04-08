@@ -244,7 +244,7 @@ function statusLabel(status) {
       modal
       @hide="resetForm"
     >
-      <div class="form-grid">
+      <form class="form-grid" @submit.prevent="saveElectrolyte">
         <label>Название</label>
         <InputText v-model="form.name" placeholder="Название электролита" class="w-full" />
 
@@ -271,7 +271,7 @@ function statusLabel(status) {
 
         <label>Примечания</label>
         <Textarea v-model="form.notes" rows="3" placeholder="Дополнительная информация" class="w-full" />
-      </div>
+      </form>
 
       <template #footer>
         <Button label="Отмена" severity="secondary" outlined @click="resetForm" />

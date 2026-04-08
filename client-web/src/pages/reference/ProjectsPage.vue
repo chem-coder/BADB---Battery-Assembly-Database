@@ -211,6 +211,7 @@ async function grantAccess() {
 
 async function revokeAccess(userId) {
   if (!currentId.value) return
+  if (!confirm('Отозвать доступ к проекту?')) return
   try {
     await api.delete(`/api/projects/${currentId.value}/access/${userId}`)
     await loadAccess(currentId.value)
@@ -280,7 +281,7 @@ async function revokeAccess(userId) {
       modal
       @hide="resetForm"
     >
-      <div class="form-grid">
+      <form class="form-grid" @submit.prevent="saveProject">
         <label>Название</label>
         <InputText v-model="form.name" placeholder="Название проекта" class="w-full" />
 
@@ -307,7 +308,7 @@ async function revokeAccess(userId) {
           optionValue="value"
           class="w-full"
         />
-      </div>
+      </form>
 
       <!-- Access management (edit mode only) -->
       <div v-if="mode === 'edit'" class="access-section">

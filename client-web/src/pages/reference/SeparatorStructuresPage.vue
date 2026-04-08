@@ -183,13 +183,13 @@ async function saveStructure() {
       modal
       @hide="resetForm"
     >
-      <div class="form-grid">
+      <form class="form-grid" @submit.prevent="saveStructure">
         <label>Название</label>
         <InputText v-model="form.name" placeholder="PP/PE/PP" class="w-full" />
 
         <label>Комментарий</label>
         <Textarea v-model="form.structure_comments" rows="3" placeholder="Описание, детали" class="w-full" />
-      </div>
+      </form>
 
       <template #footer>
         <Button label="Отмена" severity="secondary" outlined @click="resetForm" />
