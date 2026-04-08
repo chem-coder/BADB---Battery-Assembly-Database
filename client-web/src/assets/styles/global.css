@@ -645,3 +645,38 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   scrollbar-width: thin;
   scrollbar-color: #D9E0EA transparent;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile (<768px)
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Dialogs: never wider than viewport */
+  .p-dialog {
+    max-width: calc(100vw - 2rem) !important;
+    margin: 1rem auto !important;
+  }
+
+  /* Inputs/selects: slightly smaller on mobile */
+  .p-inputtext,
+  .p-select,
+  .p-multiselect,
+  .p-datepicker-input {
+    min-height: 36px !important;
+    height: 36px !important;
+    font-size: 13px !important;
+  }
+
+  /* Buttons: ensure touch-friendly size */
+  .p-button {
+    min-height: 36px;
+  }
+
+  /* Page containers: less padding */
+  .tapes-page,
+  .assembly-page,
+  .recipes-page,
+  .materials-page,
+  .electrodes-page {
+    padding: 0.75rem !important;
+  }
+}

@@ -885,4 +885,27 @@ function onEditKeydown(e, saveFn, cancelFn) {
   width: 2rem;
   height: 2rem;
 }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  .materials-content {
+    flex-direction: column;
+    max-height: none;
+    min-height: auto;
+  }
+  .left-panel {
+    width: 100%;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 0.5px solid rgba(180, 210, 255, 0.4);
+  }
+  .right-panel {
+    padding: 1rem;
+  }
+  .metadata-row {
+    flex-wrap: wrap;
+  }
+  .meta-name { flex: 1 1 100%; }
+  .meta-role { width: 100%; }
+}
 </style>

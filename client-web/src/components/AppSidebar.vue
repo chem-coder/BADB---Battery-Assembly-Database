@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { workflowSections, referenceSections, adminSections } from '@/config/navigation'
 import tvelLogo from '@/assets/logo/TVEL_horizontal_light.svg'
 
+const emit = defineEmits(['navigate'])
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -74,9 +75,12 @@ const sections = computed(() => {
   return list
 })
 
+function onNav() { emit('navigate') }
+
 function logout() {
   authStore.logout()
   router.push('/login')
+  emit('navigate')
 }
 </script>
 
@@ -91,7 +95,7 @@ function logout() {
     <nav class="sidebar-nav">
 
       <!-- Главная — standalone at top -->
-      <RouterLink to="/" class="sidebar-item" exact-active-class="active">
+      <RouterLink to="/" class="sidebar-item" exact-active-class="active" @click="onNav">
         <i class="pi pi-home"></i>
         <span class="sidebar-item-label">Главная</span>
       </RouterLink>
@@ -126,6 +130,7 @@ function logout() {
             :to="item.to"
             class="sidebar-item sidebar-item--nested"
             active-class="active"
+            @click="onNav"
           >
             <!-- Custom SVG: droplet -->
             <svg v-if="item.customIcon === 'droplet'" class="sidebar-custom-icon" viewBox="0 0 18 18">
@@ -148,7 +153,7 @@ function logout() {
         <span class="user-name">{{ authStore.user?.name }}</span>
         <span class="user-role">{{ roleLabel }}</span>
       </div>
-      <RouterLink to="/profile" class="sidebar-item" active-class="active">
+      <RouterLink to="/profile" class="sidebar-item" active-class="active" @click="onNav">
         <i class="pi pi-user"></i>
         <span class="sidebar-item-label">Профиль</span>
       </RouterLink>
@@ -420,4 +425,24 @@ function logout() {
 
 .sidebar-logout { color: rgba(255, 255, 255, 0.6); }
 .sidebar-logout:hover { color: #ff6b6b; background: rgba(231, 76, 60, 0.12); }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+  }
+  .sidebar.sidebar--open {
+    transform: translateX(0);
+  }
+  .sidebar-header {
+    padding-top: 3.5rem; /* space for hamburger overlay */
+  }
+}
 </style>

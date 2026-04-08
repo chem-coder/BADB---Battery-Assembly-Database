@@ -399,4 +399,11 @@ function goTo(path) {
 .recent-card :deep(.p-datatable-tbody > tr:hover) {
   background: rgba(0, 50, 116, 0.04) !important;
 }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .recent-grid { grid-template-columns: 1fr; }
+  .ref-grid { flex-wrap: wrap; }
+}
 </style>

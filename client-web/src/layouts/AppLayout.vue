@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, provide } from 'vue'
 import AppSidebar from '@/components/AppSidebar.vue'
 import Toast from 'primevue/toast'
 
@@ -7,14 +7,14 @@ const contentEl = ref(null)
 const isScrolled = ref(false)
 let rafId = null
 
-/* ── Scroll handler ──
-   1. Toggle isScrolled for PageHeader shadow
-   2. Per-element pixel-precise mask: each card is masked based on
-      how many pixels of it are behind the header.
-      Fade zone = from header bottom to midpoint(headerTop, containerTop).
-      Cards fully above that midpoint → 100% transparent.
-      Cards fully below header bottom → 100% visible, no mask.
-      PageHeader is NEVER touched.                                    */
+// ── Mobile sidebar toggle ──
+const sidebarOpen = ref(false)
+provide('sidebarOpen', sidebarOpen)
+
+function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
+function closeSidebar() { sidebarOpen.value = false }
+
+/* ── Scroll handler ── */
 function handleScroll () {
   const el = contentEl.value
   if (!el) return
@@ -27,39 +27,29 @@ function handleScroll () {
   const containerTop = el.getBoundingClientRect().top
   const headerRect = header.getBoundingClientRect()
 
-  // Line where fade begins (100% opaque below this)
   const fadeStartY = headerRect.bottom
-  // Line where objects are 100% transparent: slightly above the blue frame.
-  // Extends fade zone beyond the container for an even softer gradient.
   const fullyHiddenY = containerTop - 20
-  // Gradient zone size in pixels
   const fadeZone = fadeStartY - fullyHiddenY
 
-  // Select only top-level cards (not nested .glass-card inside card demos)
   const allEls = el.querySelectorAll('.glass-card, section, .p-card')
   for (const card of allEls) {
-    // Skip header
     if (card.classList.contains('page-header')) continue
-    // Skip nested glass-cards (inside another glass-card, e.g. card demos)
     if (card.parentElement && card.parentElement.closest('.glass-card')) continue
 
     const rect = card.getBoundingClientRect()
 
     if (rect.top >= fadeStartY) {
-      // Fully below header — visible, clear mask
       card.style.removeProperty('mask-image')
       card.style.removeProperty('-webkit-mask-image')
       continue
     }
 
     if (rect.bottom <= fullyHiddenY) {
-      // Fully above the hidden line — completely invisible
       card.style.maskImage = 'linear-gradient(transparent, transparent)'
       card.style.webkitMaskImage = 'linear-gradient(transparent, transparent)'
       continue
     }
 
-    // How many pixels of the card's top are above the fade start (header bottom)
     const overlap = fadeStartY - rect.top
     if (overlap <= 0) {
       card.style.removeProperty('mask-image')
@@ -67,9 +57,7 @@ function handleScroll () {
       continue
     }
 
-    // Fully transparent zone: pixels that have scrolled past the gradient
     const solidHidden = Math.max(0, overlap - fadeZone)
-    // Mask: transparent from 0→solidHidden, gradient from solidHidden→overlap, black after
     const mask = `linear-gradient(to bottom, transparent ${solidHidden}px, black ${overlap}px)`
     card.style.maskImage = mask
     card.style.webkitMaskImage = mask
@@ -88,7 +76,6 @@ onMounted(() => {
   if (contentEl.value) {
     contentEl.value.addEventListener('scroll', onScrollThrottled, { passive: true })
   }
-  // РЭНЕРА pattern — randomised on each load
   const images = [
     "/assets/renera-pattern-1.webp",
     "/assets/renera-pattern-2.webp",
@@ -115,7 +102,16 @@ onUnmounted(() => {
 
 <template>
   <div class="app-layout">
-    <AppSidebar />
+
+    <!-- Mobile hamburger button -->
+    <button class="hamburger-btn" :class="{ open: sidebarOpen }" @click="toggleSidebar">
+      <i :class="sidebarOpen ? 'pi pi-times' : 'pi pi-bars'" />
+    </button>
+
+    <!-- Sidebar overlay (mobile) -->
+    <div v-if="sidebarOpen" class="sidebar-overlay" @click="closeSidebar" />
+
+    <AppSidebar :class="{ 'sidebar--open': sidebarOpen }" @navigate="closeSidebar" />
     <div class="app-main">
       <Toast position="top-right" />
       <main ref="contentEl" class="app-content" :class="{ scrolled: isScrolled }">
@@ -173,7 +169,7 @@ onUnmounted(() => {
   z-index: 0;
 }
 
-/* ── Scroll container — cards untouched by default, JS handles masks ── */
+/* ── Scroll container ── */
 .app-content {
   flex: 1;
   padding: var(--inset);
@@ -184,7 +180,7 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* ── PageHeader: pinned in place, NEVER affected by fade ── */
+/* ── PageHeader: pinned in place ── */
 .app-content :deep(.page-header) {
   top: var(--inset);
   transition: box-shadow 0.4s ease;
@@ -193,5 +189,117 @@ onUnmounted(() => {
   box-shadow:
     0 3px 12px rgba(0, 50, 116, 0.10),
     0 0 0 0.5px rgba(180, 210, 255, 0.35);
+}
+
+/* ── Hamburger button (hidden on desktop) ── */
+.hamburger-btn {
+  display: none;
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 1100;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 10px;
+  background: #003274;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 50, 116, 0.3);
+  transition: background 0.15s;
+}
+.hamburger-btn:hover { background: #025EA1; }
+.hamburger-btn.open { background: rgba(0, 50, 116, 0.8); }
+
+/* ── Sidebar overlay (hidden on desktop) ── */
+.sidebar-overlay {
+  display: none;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE — < 768px
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .app-layout {
+    --frame: 0;
+    --inset: 1rem;
+  }
+
+  .hamburger-btn { display: flex; align-items: center; justify-content: center; }
+
+  /* Sidebar: hidden by default, slides in as overlay */
+  .app-layout :deep(.sidebar) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  .app-layout :deep(.sidebar--open.sidebar),
+  .app-layout .sidebar--open :deep(.sidebar) {
+    transform: translateX(0);
+  }
+  /* Direct class on AppSidebar root */
+  .sidebar--open {
+    transform: translateX(0) !important;
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(2px);
+  }
+
+  /* Main takes full width */
+  .app-main {
+    margin: 0;
+    border-radius: 0;
+    height: 100vh;
+    border: none;
+  }
+
+  .app-content {
+    padding-top: 3.5rem; /* space for hamburger */
+  }
+
+  /* Dialogs: max-width instead of fixed width */
+  :deep(.p-dialog) {
+    max-width: calc(100vw - 2rem) !important;
+    width: auto !important;
+    margin: 1rem !important;
+  }
+
+  /* CrudTable toolbar: wrap on mobile */
+  :deep(.ct-toolbar) {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* HomePage grid: single column */
+  :deep(.kpi-grid) {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  :deep(.recent-grid) {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TABLET — 769px to 1024px
+   ══════════════════════════════════════════════════════════════ */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .app-layout {
+    --inset: 1.25rem;
+  }
+
+  :deep(.p-dialog) {
+    max-width: calc(100vw - 4rem) !important;
+  }
 }
 </style>
