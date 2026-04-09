@@ -317,7 +317,7 @@ const filteredBatteries = computed(() => applyFilters(allBatches.value))
     <!-- ════════ PIPELINE TAB ════════ -->
     <template v-if="activeTab === 'pipeline'">
       <div class="glass-card pipeline-section">
-        <DashboardPipeline :tapes="filteredTapes" :electrodeBatches="filteredElectrodeBatches" :batteries="filteredBatteries" />
+        <DashboardPipeline :tapes="filteredTapes" :electrodeBatches="filteredElectrodeBatches" :batteries="filteredBatteries" @refresh="loadDashboard()" />
       </div>
     </template>
 
