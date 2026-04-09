@@ -115,15 +115,33 @@ function getLayoutConfig() {
 
   const gap = spacing.value          // vertical gap between layers
   const nodeGap = 55                 // horizontal gap between nodes in same layer
-  const orphanGap = 35               // tighter gap for orphans
+  const orphanGap = 40               // horizontal gap for orphans
   const padding = 60
 
-  // Separate connected vs orphan
-  const connectedIds = new Set()
-  cy.edges().forEach(e => {
-    connectedIds.add(e.source().id())
-    connectedIds.add(e.target().id())
+  // Find nodes reachable from production flow (project→tape→electrode→battery chain)
+  // A node is "main" if it's reachable from any tape or project via BFS
+  const mainIds = new Set()
+  const seedTypes = new Set(['project', 'tape', 'electrode_batch', 'battery'])
+  cy.nodes().forEach(node => {
+    if (node.isParent() || node.style('display') === 'none') return
+    if (seedTypes.has(node.data('type'))) mainIds.add(node.id())
   })
+  // BFS: expand from seeds to their neighbors
+  let frontier = [...mainIds]
+  while (frontier.length) {
+    const next = []
+    for (const nid of frontier) {
+      const node = cy.getElementById(nid)
+      node.neighborhood().nodes().forEach(nb => {
+        if (nb.isParent() || nb.style('display') === 'none') return
+        if (!mainIds.has(nb.id())) {
+          mainIds.add(nb.id())
+          next.push(nb.id())
+        }
+      })
+    }
+    frontier = next
+  }
 
   // Group visible non-parent nodes by type
   const layers = {}
@@ -135,7 +153,7 @@ function getLayoutConfig() {
     if (node.style('display') === 'none') return
     const type = node.data('type')
     if (!layers[type]) return
-    if (connectedIds.has(node.id())) {
+    if (mainIds.has(node.id())) {
       layers[type].push(node)
     } else {
       orphans[type].push(node)
@@ -151,7 +169,13 @@ function getLayoutConfig() {
     const w = layers[type].length * nodeGap
     if (w > maxConnectedWidth) maxConnectedWidth = w
   }
-  const orphanStartX = padding + maxConnectedWidth + 80
+  const orphanStartX = padding + maxConnectedWidth + 100
+
+  // Find max orphan count per layer for consistent right-side width
+  let maxOrphanCount = 0
+  for (const type of LAYER_ORDER) {
+    if (orphans[type].length > maxOrphanCount) maxOrphanCount = orphans[type].length
+  }
 
   for (const type of LAYER_ORDER) {
     const connected = layers[type]
@@ -167,15 +191,12 @@ function getLayoutConfig() {
       })
     }
 
-    // Orphans: right side, compact
+    // Orphans: same Y row, strictly horizontal, right side
     if (orph.length > 0) {
-      const orphCols = Math.ceil(Math.sqrt(orph.length))
       orph.forEach((node, i) => {
-        const col = i % orphCols
-        const row = Math.floor(i / orphCols)
         positions[node.id()] = {
-          x: orphanStartX + col * orphanGap,
-          y: currentY + row * orphanGap - ((Math.ceil(orph.length / orphCols) - 1) * orphanGap) / 2,
+          x: orphanStartX + i * orphanGap,
+          y: currentY,
         }
       })
     }
@@ -197,25 +218,13 @@ function initCytoscape() {
   if (cy) cy.destroy()
 
   const elements = []
-  const projectIds = new Set()
 
-  // Collect project IDs for compound grouping
+  // Add nodes (no compound parenting — conflicts with strict preset layout)
   for (const node of props.graphData.nodes) {
-    if (node.type === 'project') projectIds.add(node.id)
-  }
-
-  // Add nodes with parent assignment for compound grouping
-  for (const node of props.graphData.nodes) {
-    const el = {
+    elements.push({
       group: 'nodes',
       data: { id: node.id, label: node.label, type: node.type, ...node.data },
-    }
-    // Tapes and batteries belong to projects → set parent for compound grouping
-    if ((node.type === 'tape' || node.type === 'battery') && node.data?.project_id) {
-      const parentId = `project-${node.data.project_id}`
-      if (projectIds.has(parentId)) el.data.parent = parentId
-    }
-    elements.push(el)
+    })
   }
 
   for (const edge of props.graphData.edges) {
@@ -262,24 +271,6 @@ function initCytoscape() {
           'height': type === 'project' ? 44 : type === 'tape' ? 36 : type === 'battery' ? 32 : 26,
         },
       })),
-      // Compound parent nodes (project groups)
-      {
-        selector: ':parent',
-        style: {
-          'background-opacity': 0.03,
-          'border-width': 1.5,
-          'border-color': 'rgba(0, 50, 116, 0.12)',
-          'border-style': 'dashed',
-          'label': 'data(label)',
-          'text-valign': 'top',
-          'text-halign': 'center',
-          'font-size': '11px',
-          'font-weight': 600,
-          'color': 'rgba(0, 50, 116, 0.4)',
-          'padding': 20,
-          'shape': 'round-rectangle',
-        },
-      },
       // Edge styles with labels
       {
         selector: 'edge',
