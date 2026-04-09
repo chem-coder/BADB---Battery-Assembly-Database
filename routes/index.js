@@ -14,6 +14,7 @@ const electrodes   = require('./electrodes');
 const departments  = require('./departments');
 const activity     = require('./activity');
 const dashboard    = require('./dashboard');
+const feedback     = require('./feedback');
 
 module.exports = function registerRoutes(app) {
   app.use('/api/auth',         auth);
@@ -32,4 +33,5 @@ module.exports = function registerRoutes(app) {
   app.use('/api/departments',  departments);
   app.use('/api/activity',     activity);
   app.use('/api/dashboard',    dashboard);
+  app.use('/api/feedback',     feedback);
 };

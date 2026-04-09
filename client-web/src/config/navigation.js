@@ -89,7 +89,7 @@ export const adminSections = [
   { key: 'users',       label: 'Пользователи',   path: '/reference/users', icon: 'pi pi-users',    role: 'admin' },
   { key: 'activity',    label: 'Журнал действий', path: '/activity',        icon: 'pi pi-history' },
   { key: 'audit',       label: 'Журнал входов',   path: '/audit',           icon: 'pi pi-sign-in' },
-  { key: 'submissions', label: 'Журнал подач',    path: '/submissions',     icon: 'pi pi-upload' },
+  { key: 'feedback',    label: 'Обратная связь',   path: '/feedback',        icon: 'pi pi-comments' },
   { key: 'design',      label: 'Дизайн код',      path: '/design-system',   icon: 'pi pi-palette',  role: 'admin' },
 ]
 
