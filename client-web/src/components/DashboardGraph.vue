@@ -34,7 +34,6 @@ let _minimapTimer = null
 
 // ── State ──
 const spacing = ref(80)
-const layoutMode = ref('dagre') // 'dagre' | 'cose'
 const searchQuery = ref('')
 const selectedNode = ref(null)
 const pathMode = ref(false)
@@ -92,7 +91,6 @@ const TYPE_LABELS = {
 const EDGE_LABELS = {
   contains: 'содержит',
   uses_recipe: 'рецепт',
-  used_in_recipe: 'в рецепте',
   cut_from: 'нарезка',
   assembled_into: 'сборка',
   source_tape: 'лента',
@@ -110,25 +108,14 @@ const DETAIL_LABELS = {
 
 // ── Layout ──
 function getLayoutConfig() {
-  if (layoutMode.value === 'dagre') {
-    return {
-      name: 'dagre',
-      rankDir: 'LR',
-      nodeSep: 35,
-      rankSep: spacing.value,
-      edgeSep: 10,
-      animate: true,
-      animationDuration: 400,
-      padding: 30,
-    }
-  }
   return {
-    name: 'cose',
+    name: 'dagre',
+    rankDir: 'TB',
+    nodeSep: 40,
+    rankSep: spacing.value,
+    edgeSep: 10,
     animate: true,
-    animationDuration: 600,
-    nodeRepulsion: spacing.value * 150,
-    idealEdgeLength: spacing.value * 1.5,
-    gravity: 0.3,
+    animationDuration: 400,
     padding: 30,
   }
 }
@@ -294,6 +281,9 @@ function initCytoscape() {
     neighborhood.addClass('highlighted')
     neighborhood.edges().addClass('highlighted')
     node.addClass('selected-node')
+
+    // Animate viewport to fit the selected neighborhood
+    cy.animate({ fit: { eles: neighborhood, padding: 60 }, duration: 400 })
 
     const data = node.data()
     const neighbors = node.neighborhood().nodes().map(n => ({
@@ -505,11 +495,6 @@ function relayout() {
   if (cy) cy.layout(getLayoutConfig()).run()
 }
 
-function toggleLayout() {
-  layoutMode.value = layoutMode.value === 'dagre' ? 'cose' : 'dagre'
-  relayout()
-}
-
 function fitGraph() {
   if (cy) cy.fit(undefined, 30)
 }
@@ -564,9 +549,6 @@ onUnmounted(() => {
     <div class="graph-toolbar">
       <button class="graph-btn" @click="fitGraph" title="Вписать"><i class="pi pi-expand"></i></button>
       <button class="graph-btn" @click="showAll" title="Показать всё"><i class="pi pi-replay"></i></button>
-      <button class="graph-btn" @click="toggleLayout" :title="layoutMode === 'dagre' ? 'Переключить на force' : 'Переключить на dagre'">
-        <i :class="layoutMode === 'dagre' ? 'pi pi-sitemap' : 'pi pi-share-alt'"></i>
-      </button>
       <button :class="['graph-btn', pathMode ? 'graph-btn--active' : '']" @click="togglePathMode" title="Найти путь между двумя нодами">
         <i class="pi pi-directions"></i>
       </button>
