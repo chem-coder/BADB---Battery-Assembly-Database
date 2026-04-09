@@ -120,15 +120,19 @@ function groupElectrodes(stages) {
 
   return stages.map(s => ({
     ...s,
-    items: (grouped[s.code] || []).map(b => ({
-      id: b.cut_batch_id,
-      name: `Партия #${b.cut_batch_id}`,
-      badge: b.project_name || b.tape_name,
-      meta: `${b.electrode_count || 0} шт.`,
-      sub: b.created_by_name || '',
-      date: b.created_at,
-      link: `/electrodes/${b.cut_batch_id}`,
-    })),
+    items: (grouped[s.code] || []).map(b => {
+      const role = b.tape_role === 'cathode' ? 'К' : b.tape_role === 'anode' ? 'А' : ''
+      const dims = b.shape === 'circle' && b.diameter_mm ? ` · \u2300${b.diameter_mm}` : ''
+      return {
+        id: b.cut_batch_id,
+        name: b.tape_name ? `${b.tape_name} \u2192 #${b.cut_batch_id}` : `Партия #${b.cut_batch_id}`,
+        badge: b.project_name,
+        meta: `${role}${role ? ' · ' : ''}${b.electrode_count || 0} шт.${dims}`,
+        sub: b.created_by_name || '',
+        date: b.created_at,
+        link: `/electrodes/${b.cut_batch_id}`,
+      }
+    }),
   }))
 }
 
@@ -142,13 +146,15 @@ function groupBatteries(stages) {
     else grouped['draft'].push(bt)
   }
 
+  const FF_LABELS = { coin: 'Монета', pouch: 'Пакет', cylindrical: 'Цилиндр' }
+
   return stages.map(s => ({
     ...s,
     items: (grouped[s.code] || []).map(bt => ({
       id: bt.battery_id,
-      name: `${bt.form_factor || 'Акк.'} #${bt.battery_id}`,
+      name: `Акк. #${bt.battery_id}`,
       badge: bt.project_name,
-      meta: bt.form_factor,
+      meta: FF_LABELS[bt.form_factor] || bt.form_factor || '',
       sub: bt.created_by_name || '',
       date: bt.created_at,
       link: `/assembly/${bt.battery_id}`,

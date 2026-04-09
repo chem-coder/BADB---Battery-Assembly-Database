@@ -112,9 +112,10 @@ const kpis = computed(() => {
   if (!kpiData.value) return workflowSections.map(s => ({ key: s.key, label: s.shortLabel || s.label, icon: s.icon, customIcon: s.customIcon ?? null, route: s.path, total: '…', lines: [] }))
   const d = kpiData.value
   // Use Dalia's workflow_complete from /api/tapes for accurate counts
-  const tapeComplete = allTapes.value.filter(t => t.workflow_complete).length
-  const tapeInProgress = allTapes.value.filter(t => !t.workflow_complete).length
-  const tapeTotal = allTapes.value.length || d.tapes?.total || 0
+  const ft = filteredTapes.value
+  const tapeComplete = ft.filter(t => t.workflow_complete).length
+  const tapeInProgress = ft.filter(t => !t.workflow_complete).length
+  const tapeTotal = ft.length || d.tapes?.total || 0
   return [
     { key: 'tapes', label: 'Ленты', icon: 'pi pi-bars', route: '/tapes', total: tapeTotal, lines: [`Завершено: ${tapeComplete}`, `В работе: ${tapeInProgress}`] },
     { key: 'electrodes', label: 'Электроды', icon: 'pi pi-clone', route: '/electrodes', total: `${d.electrodes?.batches ?? 0} / ${d.electrodes?.electrodes ?? 0}`, lines: ['Партий / шт.'] },
@@ -174,6 +175,28 @@ function formatTime(ts) {
   if (diff < 86400000) return `${Math.floor(diff / 3600000)} ч назад`
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 }
+
+// ── Client-side filtering for Pipeline ───────────────────────────────
+function periodCutoff(period) {
+  const now = new Date()
+  if (period === '7d') return new Date(now - 7 * 86400000)
+  if (period === '30d') return new Date(now - 30 * 86400000)
+  if (period === '90d') return new Date(now - 90 * 86400000)
+  return null
+}
+
+function applyFilters(items, projectField = 'project_id', operatorField = 'created_by') {
+  let filtered = items
+  if (selectedProject.value) filtered = filtered.filter(i => String(i[projectField]) === String(selectedProject.value))
+  if (selectedOperator.value) filtered = filtered.filter(i => String(i[operatorField]) === String(selectedOperator.value))
+  const cutoff = periodCutoff(selectedPeriod.value)
+  if (cutoff) filtered = filtered.filter(i => new Date(i.created_at) >= cutoff)
+  return filtered
+}
+
+const filteredTapes = computed(() => applyFilters(allTapes.value))
+const filteredElectrodeBatches = computed(() => applyFilters(allElectrodeBatches.value))
+const filteredBatteries = computed(() => applyFilters(allBatches.value))
 </script>
 
 <template>
@@ -201,6 +224,7 @@ function formatTime(ts) {
           :options="periodOptions"
           optionLabel="label"
           optionValue="value"
+          size="small"
           @change="onPeriodChange"
           class="filter-period"
         />
@@ -211,6 +235,7 @@ function formatTime(ts) {
           optionValue="id"
           placeholder="Все проекты"
           showClear
+          size="small"
           class="filter-project"
           @change="loadDashboard()"
         />
@@ -221,6 +246,7 @@ function formatTime(ts) {
           optionValue="id"
           placeholder="Все операторы"
           showClear
+          size="small"
           class="filter-operator"
           @change="loadDashboard()"
         />
@@ -281,7 +307,7 @@ function formatTime(ts) {
     <!-- ════════ PIPELINE TAB ════════ -->
     <template v-if="activeTab === 'pipeline'">
       <div class="glass-card pipeline-section">
-        <DashboardPipeline :tapes="allTapes" :electrodeBatches="allElectrodeBatches" :batteries="allBatches" />
+        <DashboardPipeline :tapes="filteredTapes" :electrodeBatches="filteredElectrodeBatches" :batteries="filteredBatteries" />
       </div>
     </template>
 

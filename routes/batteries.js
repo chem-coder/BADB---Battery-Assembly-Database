@@ -119,6 +119,7 @@ router.get('/', auth, async (req, res) => {
         b.project_id,
         p.name AS project_name,
         b.form_factor,
+        b.status,
         b.created_by,
         u_created.name AS created_by_name,
         b.battery_notes AS notes,
