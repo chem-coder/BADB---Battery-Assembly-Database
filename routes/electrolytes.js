@@ -309,7 +309,7 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ error: 'Электролит не найден' });
     }
 
-    const newVals = { name, electrolyte_type, solvent_system: solvent_system || null, salts: salts || null, concentration: concentration || null, additives: additives || null, notes: notes || null, status: status || current.rows[0].status };
+    const newVals = { name, electrolyte_type, solvent_system: solvent_system || null, salts: salts || null, concentration: concentration || null, additives: additives || null, notes: notes || null, status: status != null ? status : current.rows[0].status };
 
     const result = await pool.query(
       `

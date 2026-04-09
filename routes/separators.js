@@ -113,6 +113,7 @@ router.get('/', auth, async (req, res) => {
         s.created_by,
         u_created.name AS created_by_name,
         s.updated_by,
+        s.updated_at,
         u_updated.name AS updated_by_name
       FROM separators s
       LEFT JOIN users u_created ON u_created.user_id = s.created_by
@@ -364,7 +365,8 @@ router.put('/:id', auth, async (req, res) => {
         status = $11,
         depleted_at = $12,
         file_path = $13,
-        updated_by = $14
+        updated_by = $14,
+        updated_at = now()
       WHERE sep_id = $15
       RETURNING *
       `,
