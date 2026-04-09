@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, defineAsyncComponent, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import Select from 'primevue/select'
@@ -8,8 +8,8 @@ import Column from 'primevue/column'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import DashboardPipeline from '@/components/DashboardPipeline.vue'
-const DashboardGraph = () => import('@/components/DashboardGraph.vue')
-const DashboardAnalytics = () => import('@/components/DashboardAnalytics.vue')
+const DashboardGraph = defineAsyncComponent(() => import('@/components/DashboardGraph.vue'))
+const DashboardAnalytics = defineAsyncComponent(() => import('@/components/DashboardAnalytics.vue'))
 import { workflowSections, referenceSections } from '@/config/navigation'
 
 const router = useRouter()
