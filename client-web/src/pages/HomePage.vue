@@ -8,7 +8,7 @@ import Column from 'primevue/column'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import DashboardPipeline from '@/components/DashboardPipeline.vue'
-import DashboardGraph from '@/components/DashboardGraph.vue'
+const DashboardGraph = () => import('@/components/DashboardGraph.vue')
 const DashboardAnalytics = () => import('@/components/DashboardAnalytics.vue')
 import { workflowSections, referenceSections } from '@/config/navigation'
 

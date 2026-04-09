@@ -23,6 +23,8 @@
     "ajv-formats": "^3.0.1",
     "bcryptjs": "^2.4.3",
     "chart.js": "^4.5.1",
+    "cytoscape-cxtmenu": "^3.5.0",
+    "cytoscape-dagre": "^2.5.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.17.2",
