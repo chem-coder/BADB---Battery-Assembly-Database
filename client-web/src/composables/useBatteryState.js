@@ -15,6 +15,7 @@ export function useBatteryState({ batteryId }) {
   const general = reactive({
     name: '',
     form_factor: '',
+    project_id: '',
     battery_notes: '',
   })
 
@@ -46,6 +47,16 @@ export function useBatteryState({ batteryId }) {
       electrolyte_total_ul: '',
       electrolyte_notes: '',
     },
+    assembly: {
+      separator_layout: '',
+      electrolyte_assembly_notes: '',
+    },
+    qc: {
+      ocv_v: '',
+      esr_mohm: '',
+      qc_notes: '',
+      electrochem_notes: '',
+    },
   })
 
   // ── Dirty tracking ──
@@ -55,6 +66,8 @@ export function useBatteryState({ batteryId }) {
     electrodes: false,
     separator: false,
     electrolyte: false,
+    assembly: false,
+    qc: false,
   })
 
   function setDirty(code, val = true) { dirtySteps[code] = val }
@@ -164,6 +177,7 @@ export function useBatteryState({ batteryId }) {
 
       if (code === 'general') {
         await api.patch(`/api/batteries/${id}`, {
+          project_id: general.project_id || undefined,
           form_factor: general.form_factor || undefined,
           battery_notes: general.battery_notes || null,
         })
@@ -202,6 +216,17 @@ export function useBatteryState({ batteryId }) {
           electrolyte_total_ul: el.electrolyte_total_ul || null,
           electrolyte_notes: el.electrolyte_notes || null,
         })
+      } else if (code === 'assembly') {
+        // Assembly params saved via coin config endpoint (spacer layout etc.)
+        const a = steps.assembly
+        await api.patch(`/api/batteries/battery_coin_config/${id}`, {
+          coin_layout: a.separator_layout || null,
+        })
+      } else if (code === 'qc') {
+        // QC data saved via battery header
+        await api.patch(`/api/batteries/${id}`, {
+          battery_notes: `OCV: ${steps.qc.ocv_v || '—'} В, ESR: ${steps.qc.esr_mohm || '—'} мОм. ${steps.qc.qc_notes || ''} ${steps.qc.electrochem_notes || ''}`.trim(),
+        })
       }
 
       setDirty(code, false)
@@ -225,6 +250,7 @@ export function useBatteryState({ batteryId }) {
 
       general.name = `Акк. #${b.battery_id}`
       general.form_factor = b.form_factor || ''
+      general.project_id = b.project_id ?? ''
       general.battery_notes = b.notes || ''
 
       // Load config (try coin first, then pouch, then cyl)
@@ -294,6 +320,8 @@ export function useBatteryState({ batteryId }) {
     if (code === 'electrodes') return steps.electrodes.cathode_tape_id || steps.electrodes.anode_tape_id ? 'done' : 'pending'
     if (code === 'separator') return steps.separator.separator_id ? 'done' : 'pending'
     if (code === 'electrolyte') return steps.electrolyte.electrolyte_id ? 'done' : 'pending'
+    if (code === 'assembly') return steps.assembly.separator_layout ? 'done' : 'pending'
+    if (code === 'qc') return steps.qc.ocv_v || steps.qc.esr_mohm ? 'done' : 'pending'
     return 'pending'
   }
 

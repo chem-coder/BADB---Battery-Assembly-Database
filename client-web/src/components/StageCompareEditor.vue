@@ -41,11 +41,17 @@ const _defaultIdFields = {
   users: 'user_id', projects: 'project_id', recipes: 'tape_recipe_id',
   atmospheres: 'code', dryMixingMethods: 'dry_mixing_id',
   wetMixingMethods: 'wet_mixing_id', foils: 'foil_id', coatingMethods: 'coating_id',
+  separators: 'sep_id', electrolytes: 'electrolyte_id', tapes: 'tape_id',
+  cathodeTapes: 'tape_id', anodeTapes: 'tape_id',
+  electrodeBatches: 'cut_batch_id',
 }
 const _defaultNameFields = {
   users: 'name', projects: 'name', recipes: 'name',
   atmospheres: 'display', dryMixingMethods: 'description',
   wetMixingMethods: 'description', foils: 'type', coatingMethods: 'comments',
+  separators: 'name', electrolytes: 'name', tapes: 'name',
+  cathodeTapes: 'name', anodeTapes: 'name',
+  electrodeBatches: 'cut_batch_id',
 }
 
 function getRefOptions(field) {

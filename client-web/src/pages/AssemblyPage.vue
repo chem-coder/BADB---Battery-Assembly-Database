@@ -4,7 +4,7 @@
  * Shows ALL batteries with CrudTable + inline TapeConstructor (battery mode).
  * Follows TapesPage / ElectrodesPage pattern.
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
@@ -26,6 +26,44 @@ const crudTable = ref(null)
 // ── Data ──
 const batteries = ref([])
 const loading = ref(false)
+
+// ── Reference data for constructor dropdowns ──
+const refData = reactive({
+  projects: [],
+  separators: [],
+  electrolytes: [],
+  cathodeTapes: [],
+  anodeTapes: [],
+  electrodeBatches: [],
+})
+
+async function loadRefData() {
+  const endpoints = [
+    { key: 'projects', url: '/api/projects?project_id=0' },
+    { key: 'separators', url: '/api/separators' },
+    { key: 'electrolytes', url: '/api/electrolytes' },
+  ]
+  const results = await Promise.allSettled(endpoints.map(e => api.get(e.url)))
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') refData[endpoints[i].key] = r.value.data
+  })
+
+  // Load tapes and split by role
+  try {
+    const { data: tapes } = await api.get('/api/tapes')
+    refData.cathodeTapes = tapes.filter(t => t.role === 'cathode')
+    refData.anodeTapes = tapes.filter(t => t.role === 'anode')
+  } catch {}
+
+  // Load electrode batches with labels
+  try {
+    const { data: batches } = await api.get('/api/electrodes/electrode-cut-batches')
+    refData.electrodeBatches = batches.map(b => ({
+      ...b,
+      _label: `#${b.cut_batch_id} — ${b.tape_name || ''} (${b.electrode_count || 0} шт.)`,
+    }))
+  } catch {}
+}
 
 const ffLabels = { coin: 'Монета', pouch: 'Пакет', cylindrical: 'Цилиндр' }
 const statusLabels = { draft: 'Черновик', assembled: 'Собран', testing: 'Тест', completed: 'Готов', failed: 'Брак' }
@@ -143,7 +181,7 @@ function discardChanges() {
 
 // ── Init ──
 onMounted(async () => {
-  await loadBatteries()
+  await Promise.allSettled([loadBatteries(), loadRefData()])
   const batteryId = Number(route.params.id)
   if (batteryId && Number.isInteger(batteryId)) {
     constructorIds.value = [batteryId]
@@ -213,6 +251,7 @@ onUnmounted(() => clearTimeout(saveTimer))
       :tapeList="tableData"
       :stageConfigs="BATTERY_STAGES"
       :stateFactory="batteryStateFactory"
+      :refs="refData"
       idField="battery_id"
       title="КОНСТРУКТОР АККУМУЛЯТОРОВ"
       emptyHint="Отметьте аккумуляторы в таблице для работы в конструкторе"
