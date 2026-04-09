@@ -3,6 +3,7 @@ import { ref, computed, defineAsyncComponent, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
 import Select from 'primevue/select'
+import MultiSelect from 'primevue/multiselect'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import PageHeader from '@/components/PageHeader.vue'
@@ -32,14 +33,17 @@ const loading = ref(true)
 
 // ── Filters ───────────────────────────────────────────────────────────
 const selectedPeriod = ref('30d')
-const selectedProject = ref(null)
-const selectedOperator = ref(null)
+const selectedProjects = ref([])
+const selectedOperators = ref([])
+const customDateFrom = ref('')
+const customDateTo = ref('')
 
 const periodOptions = [
   { label: '7 дней', value: '7d' },
   { label: '30 дней', value: '30d' },
   { label: '90 дней', value: '90d' },
   { label: 'Всё время', value: 'all' },
+  { label: 'Интервал...', value: 'custom' },
 ]
 
 // ── Reference counts ──────────────────────────────────────────────────
@@ -55,8 +59,8 @@ async function loadDashboard() {
   const period = selectedPeriod.value
 
   try {
-    const projectParam = selectedProject.value ? `&project_id=${selectedProject.value}` : ''
-    const operatorParam = selectedOperator.value ? `&operator_id=${selectedOperator.value}` : ''
+    const projectParam = selectedProjects.value.length === 1 ? `&project_id=${selectedProjects.value[0]}` : ''
+    const operatorParam = selectedOperators.value.length === 1 ? `&operator_id=${selectedOperators.value[0]}` : ''
 
     const [kpi, filters, act, prod, graph, funnel, matUsage, tapesRes, batchesRes, batteriesRes] = await Promise.allSettled([
       api.get(`/api/dashboard/kpi?period=${period}${projectParam}${operatorParam}`),
@@ -117,16 +121,18 @@ function onPeriodChange() { loadDashboard() }
 // ── Computed ──────────────────────────────────────────────────────────
 const kpis = computed(() => {
   if (!kpiData.value) return workflowSections.map(s => ({ key: s.key, label: s.shortLabel || s.label, icon: s.icon, customIcon: s.customIcon ?? null, route: s.path, total: '…', lines: [] }))
-  const d = kpiData.value
-  // Use Dalia's workflow_complete from /api/tapes for accurate counts
+  // Use filtered client-side data for accurate counts
   const ft = filteredTapes.value
+  const fe = filteredElectrodeBatches.value
+  const fb = filteredBatteries.value
   const tapeComplete = ft.filter(t => t.workflow_complete).length
   const tapeInProgress = ft.filter(t => !t.workflow_complete).length
-  const tapeTotal = ft.length || d.tapes?.total || 0
+  const battAssembled = fb.filter(b => b.status === 'assembled').length
+  const battTesting = fb.filter(b => b.status === 'testing').length
   return [
-    { key: 'tapes', label: 'Ленты', icon: 'pi pi-bars', route: '/tapes', total: tapeTotal, lines: [`Завершено: ${tapeComplete}`, `В работе: ${tapeInProgress}`] },
-    { key: 'electrodes', label: 'Электроды', icon: 'pi pi-clone', route: '/electrodes', total: `${d.electrodes?.batches ?? 0} / ${d.electrodes?.electrodes ?? 0}`, lines: ['Партий / шт.'] },
-    { key: 'assembly', label: 'Аккумуляторы', icon: 'pi pi-box', route: '/assembly', total: d.batteries?.total ?? 0, lines: [`Собрано: ${d.batteries?.assembled ?? 0}`, `Тестируется: ${d.batteries?.testing ?? 0}`] },
+    { key: 'tapes', label: 'Ленты', icon: 'pi pi-bars', route: '/tapes', total: ft.length, lines: [`Завершено: ${tapeComplete}`, `В работе: ${tapeInProgress}`] },
+    { key: 'electrodes', label: 'Электроды', icon: 'pi pi-clone', route: '/electrodes', total: fe.length, lines: [`Партий: ${fe.length}`] },
+    { key: 'assembly', label: 'Аккумуляторы', icon: 'pi pi-box', route: '/assembly', total: fb.length, lines: [`Собрано: ${battAssembled}`, `Тестируется: ${battTesting}`] },
     { key: 'modules', label: 'Модули', icon: 'pi pi-th-large', route: '/modules', total: '—', lines: [] },
   ]
 })
@@ -183,27 +189,61 @@ function formatTime(ts) {
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
 }
 
-// ── Client-side filtering for Pipeline ───────────────────────────────
-function periodCutoff(period) {
-  const now = new Date()
-  if (period === '7d') return new Date(now - 7 * 86400000)
-  if (period === '30d') return new Date(now - 30 * 86400000)
-  if (period === '90d') return new Date(now - 90 * 86400000)
-  return null
+// ── Client-side filtering (all tabs) ─────────────────────────────────
+function getDateRange() {
+  const period = selectedPeriod.value
+  if (period === 'custom') {
+    return {
+      from: customDateFrom.value ? new Date(customDateFrom.value) : null,
+      to: customDateTo.value ? new Date(customDateTo.value + 'T23:59:59') : null,
+    }
+  }
+  if (period === 'all') return { from: null, to: null }
+  const days = { '7d': 7, '30d': 30, '90d': 90 }
+  const d = days[period]
+  return { from: d ? new Date(Date.now() - d * 86400000) : null, to: null }
 }
 
 function applyFilters(items, projectField = 'project_id', operatorField = 'created_by') {
   let filtered = items
-  if (selectedProject.value) filtered = filtered.filter(i => String(i[projectField]) === String(selectedProject.value))
-  if (selectedOperator.value) filtered = filtered.filter(i => String(i[operatorField]) === String(selectedOperator.value))
-  const cutoff = periodCutoff(selectedPeriod.value)
-  if (cutoff) filtered = filtered.filter(i => new Date(i.created_at) >= cutoff)
+  if (selectedProjects.value.length > 0) {
+    const pset = new Set(selectedProjects.value.map(String))
+    filtered = filtered.filter(i => pset.has(String(i[projectField])))
+  }
+  if (selectedOperators.value.length > 0) {
+    const oset = new Set(selectedOperators.value.map(String))
+    filtered = filtered.filter(i => oset.has(String(i[operatorField])))
+  }
+  const { from, to } = getDateRange()
+  if (from) filtered = filtered.filter(i => new Date(i.created_at) >= from)
+  if (to) filtered = filtered.filter(i => new Date(i.created_at) <= to)
   return filtered
 }
 
 const filteredTapes = computed(() => applyFilters(allTapes.value))
 const filteredElectrodeBatches = computed(() => applyFilters(allElectrodeBatches.value))
 const filteredBatteries = computed(() => applyFilters(allBatches.value))
+const filteredActivity = computed(() => {
+  const { from, to } = getDateRange()
+  let items = activity.value
+  if (from) items = items.filter(i => new Date(i.created_at) >= from)
+  if (to) items = items.filter(i => new Date(i.created_at) <= to)
+  if (selectedOperators.value.length > 0) {
+    const oset = new Set(selectedOperators.value.map(String))
+    items = items.filter(i => oset.has(String(i.user_id)))
+  }
+  return items
+})
+const filteredProduction = computed(() => {
+  const { from, to } = getDateRange()
+  if (!from && !to) return production.value
+  return production.value.filter(w => {
+    const d = new Date(w.week_start)
+    if (from && d < from) return false
+    if (to && d > to) return false
+    return true
+  })
+})
 </script>
 
 <template>
@@ -238,33 +278,41 @@ const filteredBatteries = computed(() => applyFilters(allBatches.value))
           @change="onPeriodChange"
           class="filter-period"
         />
-        <Select
-          v-model="selectedProject"
+        <template v-if="selectedPeriod === 'custom'">
+          <input type="date" v-model="customDateFrom" class="filter-date-input" @change="onPeriodChange" />
+          <span class="filter-date-sep">—</span>
+          <input type="date" v-model="customDateTo" class="filter-date-input" @change="onPeriodChange" />
+        </template>
+        <MultiSelect
+          v-model="selectedProjects"
           :options="filterOptions.projects"
           optionLabel="name"
           optionValue="id"
-          placeholder="Все проекты"
-          showClear
+          placeholder="Проекты"
           size="small"
           class="filter-project"
+          :maxSelectedLabels="2"
+          selectedItemsLabel="{0} проектов"
           @change="loadDashboard()"
         />
-        <Select
-          v-model="selectedOperator"
+        <MultiSelect
+          v-model="selectedOperators"
           :options="filterOptions.operators"
           optionLabel="name"
           optionValue="id"
-          placeholder="Все операторы"
-          showClear
+          placeholder="Операторы"
           size="small"
           class="filter-operator"
+          :maxSelectedLabels="2"
+          selectedItemsLabel="{0} операторов"
           @change="loadDashboard()"
         />
       </div>
       <div class="filter-presets">
-        <button :class="['preset-chip', selectedPeriod === '7d' ? 'active' : '']" @click="selectedPeriod = '7d'; onPeriodChange()">Эта неделя</button>
+        <button :class="['preset-chip', selectedPeriod === '7d' ? 'active' : '']" @click="selectedPeriod = '7d'; onPeriodChange()">Неделя</button>
         <button :class="['preset-chip', selectedPeriod === '30d' ? 'active' : '']" @click="selectedPeriod = '30d'; onPeriodChange()">Месяц</button>
-        <button :class="['preset-chip', selectedPeriod === 'all' ? 'active' : '']" @click="selectedPeriod = 'all'; onPeriodChange()">Всё время</button>
+        <button :class="['preset-chip', selectedPeriod === 'all' ? 'active' : '']" @click="selectedPeriod = 'all'; onPeriodChange()">Всё</button>
+        <button v-if="selectedProjects.length || selectedOperators.length || selectedPeriod !== '30d'" class="preset-chip preset-chip--reset" @click="selectedProjects = []; selectedOperators = []; selectedPeriod = '30d'; onPeriodChange()">Сбросить</button>
       </div>
     </div>
 
@@ -298,9 +346,9 @@ const filteredBatteries = computed(() => applyFilters(allBatches.value))
     <!-- ── Activity timeline ── -->
     <div class="glass-card timeline-card">
         <div class="timeline-title">Активность</div>
-        <div v-if="activity.length === 0" class="empty-state">Нет событий</div>
+        <div v-if="filteredActivity.length === 0" class="empty-state">Нет событий</div>
         <div v-else class="timeline-list">
-          <div v-for="evt in activity" :key="evt.id" class="timeline-item">
+          <div v-for="evt in filteredActivity" :key="evt.id" class="timeline-item">
             <div class="timeline-dot" :style="{ background: activityColor(evt.action) }"></div>
             <div class="timeline-content">
               <span class="timeline-action">{{ evt.action }}</span>
@@ -330,7 +378,7 @@ const filteredBatteries = computed(() => applyFilters(allBatches.value))
 
     <!-- ════════ ANALYTICS TAB ════════ -->
     <template v-if="activeTab === 'analytics'">
-      <DashboardAnalytics :production="production" :funnel="funnelData" :materialsUsage="materialsUsage" />
+      <DashboardAnalytics :production="filteredProduction" :funnel="funnelData" :materialsUsage="materialsUsage" />
     </template>
 
   </div>
@@ -401,8 +449,21 @@ const filteredBatteries = computed(() => applyFilters(allBatches.value))
   align-items: center;
 }
 .filter-period { width: 140px; }
-.filter-project { width: 200px; }
-.filter-operator { width: 200px; }
+.filter-project { width: 210px; }
+.filter-operator { width: 210px; }
+.filter-date-input {
+  width: 130px;
+  height: 30px;
+  padding: 2px 8px;
+  border: 1px solid rgba(180, 210, 255, 0.55);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #333;
+  background: white;
+}
+.filter-date-input:focus { border-color: #003274; outline: none; }
+.filter-date-sep { color: #9CA3AF; font-size: 12px; }
 .filter-presets {
   display: flex;
   gap: 0.4rem;
@@ -419,6 +480,8 @@ const filteredBatteries = computed(() => applyFilters(allBatches.value))
 }
 .preset-chip:hover { border-color: rgba(82, 201, 166, 0.45); color: #003274; }
 .preset-chip.active { background: rgba(0, 50, 116, 0.08); border-color: #003274; color: #003274; font-weight: 600; }
+.preset-chip--reset { color: #E74C3C !important; border-color: rgba(231, 76, 60, 0.3) !important; }
+.preset-chip--reset:hover { background: rgba(231, 76, 60, 0.08); }
 
 /* ── KPI grid ── */
 .kpi-grid {
