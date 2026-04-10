@@ -15,7 +15,9 @@ const user = computed(() => authStore.user || {})
 // --- Department & colleagues ---
 const department = ref(null)
 const colleagues = ref([])
-const accessibleProjects = ref([])
+
+// --- My Access (from /api/access/my) ---
+const myAccess = ref(null)
 
 async function loadDepartment() {
   const deptId = user.value.department?.id
@@ -27,17 +29,38 @@ async function loadDepartment() {
   } catch {}
 }
 
-async function loadProjects() {
+async function loadMyAccess() {
   try {
-    const { data } = await api.get('/api/projects')
-    accessibleProjects.value = data
+    const { data } = await api.get('/api/access/my')
+    myAccess.value = data
   } catch {}
 }
 
 onMounted(() => {
   loadDepartment()
-  loadProjects()
+  loadMyAccess()
 })
+
+// Group metadata for display
+const ACCESS_GROUPS = [
+  { key: 'direct_grant',      label: 'Личный доступ',       icon: 'pi pi-key',       color: '#003274' },
+  { key: 'dept_head',         label: 'Как руководитель отдела', icon: 'pi pi-briefcase', color: '#8E44AD' },
+  { key: 'department_grant',  label: 'Доступ отделу',       icon: 'pi pi-users',     color: '#025EA1' },
+  { key: 'own_department',    label: 'Мой отдел',           icon: 'pi pi-building',  color: '#6CACE4' },
+  { key: 'public',            label: 'Открытые',            icon: 'pi pi-globe',     color: '#52C9A6' },
+]
+
+const totalProjects = computed(() => {
+  if (!myAccess.value) return 0
+  return Object.values(myAccess.value.grouped || {}).reduce((s, arr) => s + (Array.isArray(arr) ? arr.length : 0), 0)
+})
+
+function formatDaysRemaining(days) {
+  const d = Math.floor(days)
+  if (d < 1) return 'сегодня'
+  if (d === 1) return 'завтра'
+  return `через ${d} дн.`
+}
 
 const roleBadge = computed(() => {
   const map = {
@@ -165,17 +188,53 @@ async function onSubmit() {
       </div>
     </div>
 
-    <!-- Section: Accessible projects -->
+    <!-- Section: Мой доступ -->
     <div class="profile-card">
-      <h3 class="card-title"><i class="pi pi-folder"></i> Проекты</h3>
-      <div v-if="!accessibleProjects.length" class="empty-text">Нет доступных проектов</div>
-      <div v-else class="projects-list">
-        <div v-for="p in accessibleProjects" :key="p.project_id" class="project-row">
-          <span class="project-name">{{ p.name }}</span>
-          <span :class="['conf-badge', `conf-badge--${p.confidentiality_level || 'public'}`]">
-            {{ p.confidentiality_level === 'confidential' ? 'Конф.' : p.confidentiality_level === 'department' ? 'Отдел' : 'Откр.' }}
-          </span>
-          <span class="project-status">{{ p.status || '' }}</span>
+      <h3 class="card-title">
+        <i class="pi pi-shield"></i> Мой доступ
+        <span v-if="myAccess" class="total-count">{{ totalProjects }}</span>
+      </h3>
+
+      <!-- Expiring grants warning -->
+      <div v-if="myAccess?.expiring?.length" class="expiring-warning">
+        <div class="warn-header">
+          <i class="pi pi-exclamation-triangle"></i>
+          <strong>Истекающий доступ ({{ myAccess.expiring.length }})</strong>
+        </div>
+        <div v-for="ex in myAccess.expiring" :key="ex.project_id" class="expiring-row">
+          <span class="expiring-name">{{ ex.project_name }}</span>
+          <span class="expiring-level">{{ ex.access_level }}</span>
+          <span class="expiring-when">истекает {{ formatDaysRemaining(ex.days_remaining) }}</span>
+        </div>
+      </div>
+
+      <div v-if="!myAccess" class="empty-text">Загрузка...</div>
+      <div v-else-if="!totalProjects" class="empty-text">Нет доступных проектов</div>
+      <div v-else class="access-groups">
+        <div
+          v-for="group in ACCESS_GROUPS"
+          :key="group.key"
+          v-show="myAccess.grouped[group.key]?.length"
+          class="access-group"
+        >
+          <div class="group-header" :style="{ borderLeftColor: group.color }">
+            <i :class="group.icon" :style="{ color: group.color }"></i>
+            <span class="group-label">{{ group.label }}</span>
+            <span class="group-count">{{ myAccess.grouped[group.key]?.length }}</span>
+          </div>
+          <div class="group-projects">
+            <div v-for="p in myAccess.grouped[group.key]" :key="p.project_id" class="proj-row">
+              <span class="proj-name">{{ p.name }}</span>
+              <span v-if="p.project_dept_name" class="proj-dept">{{ p.project_dept_name }}</span>
+              <span v-if="p.direct_level" :class="['access-pill', `access-pill--${p.direct_level}`]">
+                {{ p.direct_level === 'view' ? 'V' : p.direct_level === 'edit' ? 'E' : 'A' }}
+              </span>
+              <span v-if="p.direct_expires_at" class="proj-expires" :title="new Date(p.direct_expires_at).toLocaleString('ru-RU')">
+                <i class="pi pi-clock"></i>
+                до {{ new Date(p.direct_expires_at).toLocaleDateString('ru-RU') }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -517,4 +576,139 @@ details.profile-card[open] > .card-title .chevron {
 .conf-badge--department { background: rgba(211, 167, 84, 0.12); color: #9a7030; }
 .conf-badge--confidential { background: rgba(176, 0, 32, 0.1); color: #b00020; }
 .empty-text { color: #6B7280; font-size: 13px; }
+
+/* ── My Access section ── */
+.total-count {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0, 50, 116, 0.08);
+  color: #003274;
+}
+
+.expiring-warning {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: rgba(231, 76, 60, 0.06);
+  border: 1px solid rgba(231, 76, 60, 0.2);
+  border-radius: 8px;
+}
+.warn-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: #b00020;
+  font-size: 12px;
+}
+.expiring-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.expiring-name { flex: 1; color: #003274; font-weight: 500; }
+.expiring-level {
+  background: rgba(0, 50, 116, 0.1);
+  color: #003274;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.expiring-when { color: #b00020; font-size: 11px; }
+
+.access-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.access-group { }
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-left: 3px solid;
+  background: rgba(0, 50, 116, 0.02);
+  margin-bottom: 6px;
+  border-radius: 0 6px 6px 0;
+}
+.group-header i { font-size: 13px; }
+.group-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #003274;
+  flex: 1;
+}
+.group-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(0, 50, 116, 0.5);
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(0, 50, 116, 0.06);
+}
+
+.group-projects {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.proj-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 15px;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.04);
+  font-size: 13px;
+}
+.proj-row:last-child { border-bottom: none; }
+.proj-name {
+  flex: 1;
+  color: #003274;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proj-dept {
+  font-size: 11px;
+  color: #6B7280;
+}
+.access-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+}
+.access-pill--view { background: #52C9A6; }
+.access-pill--edit { background: #025EA1; }
+.access-pill--admin { background: #E74C3C; }
+.proj-expires {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: #8a6d2b;
+  background: rgba(211, 167, 84, 0.1);
+  border: 0.5px solid rgba(211, 167, 84, 0.25);
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.proj-expires i { font-size: 9px; }
 </style>

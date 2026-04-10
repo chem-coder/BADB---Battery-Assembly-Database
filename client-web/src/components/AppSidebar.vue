@@ -66,8 +66,14 @@ const sections = computed(() => {
   ]
 
   if (isLead.value) {
+    // Role hierarchy: admin > lead > employee. Admin sees everything.
+    const userRole = authStore.user?.role
     const adminItems = adminSections
-      .filter(s => !s.role || authStore.user?.role === s.role)
+      .filter(s => {
+        if (!s.role) return true                    // no role requirement
+        if (userRole === 'admin') return true       // admin passes all
+        return userRole === s.role                  // exact match for non-admin
+      })
       .map(mapItem)
     list.push({ section: 'АДМИНИСТРИРОВАНИЕ', items: adminItems })
   }

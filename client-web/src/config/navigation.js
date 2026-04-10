@@ -101,6 +101,7 @@ export const referenceSections = [
 // --- АДМИНИСТРИРОВАНИЕ (расширение Vue — нет в Далином public/) ---
 export const adminSections = [
   { key: 'users',       label: 'Пользователи',   path: '/reference/users', icon: 'pi pi-users',    role: 'admin' },
+  { key: 'access',      label: 'Управление доступом', path: '/access',     icon: 'pi pi-shield',   role: 'lead' },
   { key: 'activity',    label: 'Журнал действий', path: '/activity',        icon: 'pi pi-history' },
   { key: 'audit',       label: 'Журнал входов',   path: '/audit',           icon: 'pi pi-sign-in' },
   { key: 'feedback',    label: 'Обратная связь',   path: '/feedback',        icon: 'pi pi-comments' },

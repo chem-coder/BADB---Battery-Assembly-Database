@@ -16,6 +16,7 @@ const activity     = require('./activity');
 const dashboard    = require('./dashboard');
 const feedback     = require('./feedback');
 const cycling      = require('./cycling');
+const access       = require('./access');
 
 module.exports = function registerRoutes(app) {
   app.use('/api/auth',         auth);
@@ -36,4 +37,5 @@ module.exports = function registerRoutes(app) {
   app.use('/api/dashboard',    dashboard);
   app.use('/api/feedback',     feedback);
   app.use('/api/cycling',      cycling);
+  app.use('/api/access',       access);
 };
