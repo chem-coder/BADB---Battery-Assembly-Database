@@ -12,6 +12,8 @@ router.get('/test', async (req, res) => {
 
 // -------- PROJECTS --------
 
+const VALID_CONFIDENTIALITY = ['public', 'department', 'confidential'];
+
 // CREATE
 router.post('/', auth, async (req, res) => {
   const {
@@ -21,11 +23,15 @@ router.post('/', auth, async (req, res) => {
     start_date,
     due_date,
     status = 'active',
-    description
+    description,
+    confidentiality_level,
+    department_id
   } = req.body;
 
   const createdBy = Number(created_by);
   const leadId = lead_id ? Number(lead_id) : null;
+  const deptId = department_id ? Number(department_id) : null;
+  const confLevel = confidentiality_level || 'public';
 
   // 1. validate required strings
   if (!name || !name.trim()) {
@@ -42,13 +48,31 @@ router.post('/', auth, async (req, res) => {
     return res.status(400).json({ error: 'Некорректный руководитель' });
   }
 
+  if (deptId !== null && !Number.isInteger(deptId)) {
+    return res.status(400).json({ error: 'Некорректный отдел' });
+  }
+
+  // 4. validate confidentiality level
+  if (!VALID_CONFIDENTIALITY.includes(confLevel)) {
+    return res.status(400).json({ error: 'Некорректный уровень доступа' });
+  }
+
+  // 5. department_id required when level === 'department'
+  if (confLevel === 'department' && !deptId) {
+    return res.status(400).json({ error: 'Укажите отдел для уровня «Отдел»' });
+  }
+
+  // Enforce: department_id only meaningful for 'department' level
+  const finalDeptId = confLevel === 'department' ? deptId : null;
+
   try {
     const result = await pool.query(
       `
       INSERT INTO projects
-        (name, created_by, lead_id, start_date, due_date, status, description)
+        (name, created_by, lead_id, start_date, due_date, status, description,
+         confidentiality_level, department_id)
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7)
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       RETURNING project_id
       `,
       [
@@ -58,7 +82,9 @@ router.post('/', auth, async (req, res) => {
         start_date || null,
         due_date || null,
         status,
-        description || null
+        description || null,
+        confLevel,
+        finalDeptId
       ]
     );
 
@@ -147,23 +173,56 @@ router.put('/:id', auth, async (req, res) => {
     start_date,
     due_date,
     status,
-    description
+    description,
+    confidentiality_level,
+    department_id
   } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Название проекта обязательно' });
   }
 
+  // Validate confidentiality level if provided
+  if (confidentiality_level !== undefined && !VALID_CONFIDENTIALITY.includes(confidentiality_level)) {
+    return res.status(400).json({ error: 'Некорректный уровень доступа' });
+  }
+
+  // department_id required when level === 'department'
+  if (confidentiality_level === 'department' && !department_id) {
+    return res.status(400).json({ error: 'Укажите отдел для уровня «Отдел»' });
+  }
+
   try {
     const current = await pool.query(
-      'SELECT name, lead_id, start_date, due_date, status, description FROM projects WHERE project_id = $1',
+      'SELECT name, lead_id, start_date, due_date, status, description, confidentiality_level, department_id FROM projects WHERE project_id = $1',
       [id]
     );
     if (current.rowCount === 0) {
       return res.status(404).json({ error: 'Проект не найден' });
     }
 
-    const newVals = { name: name.trim(), lead_id: lead_id || null, start_date: start_date || null, due_date: due_date || null, status: status || 'active', description: description || null };
+    const finalConfLevel = confidentiality_level !== undefined ? confidentiality_level : current.rows[0].confidentiality_level;
+    let finalDeptId;
+    if (department_id !== undefined) {
+      finalDeptId = department_id ? Number(department_id) : null;
+    } else {
+      finalDeptId = current.rows[0].department_id;
+    }
+    // Enforce: department_id only meaningful for 'department' level
+    if (finalConfLevel !== 'department') {
+      finalDeptId = null;
+    }
+
+    const newVals = {
+      name: name.trim(),
+      lead_id: lead_id || null,
+      start_date: start_date || null,
+      due_date: due_date || null,
+      status: status || 'active',
+      description: description || null,
+      confidentiality_level: finalConfLevel,
+      department_id: finalDeptId,
+    };
 
     const result = await pool.query(
       `
@@ -175,9 +234,11 @@ router.put('/:id', auth, async (req, res) => {
         due_date = $4,
         status = $5,
         description = $6,
-        updated_by = $7,
+        confidentiality_level = $7,
+        department_id = $8,
+        updated_by = $9,
         updated_at = now()
-      WHERE project_id = $8
+      WHERE project_id = $10
       RETURNING *
       `,
       [
@@ -187,6 +248,8 @@ router.put('/:id', auth, async (req, res) => {
         newVals.due_date,
         newVals.status,
         newVals.description,
+        newVals.confidentiality_level,
+        newVals.department_id,
         req.user.userId,
         id
       ]

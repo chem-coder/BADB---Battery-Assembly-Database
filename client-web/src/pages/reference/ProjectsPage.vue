@@ -22,6 +22,7 @@ const crudTable = ref(null)
 // ── Data ───────────────────────────────────────────────────────────────
 const projects = ref([])
 const activeUsers = ref([])
+const departments = ref([])
 const loading = ref(false)
 
 async function loadProjects() {
@@ -43,15 +44,23 @@ async function loadUsers() {
   } catch {}
 }
 
-onMounted(() => { loadProjects(); loadUsers() })
+async function loadDepartments() {
+  try {
+    const { data } = await api.get('/api/departments')
+    departments.value = data
+  } catch {}
+}
+
+onMounted(() => { loadProjects(); loadUsers(); loadDepartments() })
 
 // ── Column config ──────────────────────────────────────────────────────
 const columns = [
-  { field: 'name',        header: 'Название',     minWidth: '120px' },
-  { field: 'description', header: 'Описание',     minWidth: '150px', sortable: false },
-  { field: 'start_date',  header: 'Начало',       minWidth: '80px',  width: '120px' },
-  { field: 'due_date',    header: 'Окончание',    minWidth: '80px',  width: '120px' },
-  { field: 'status',      header: 'Статус',       minWidth: '80px',  width: '130px' },
+  { field: 'name',                header: 'Название',     minWidth: '120px' },
+  { field: 'description',         header: 'Описание',     minWidth: '150px', sortable: false },
+  { field: 'confidentiality_level', header: 'Доступ',     minWidth: '80px',  width: '150px', filterable: true },
+  { field: 'start_date',          header: 'Начало',       minWidth: '80px',  width: '120px' },
+  { field: 'due_date',            header: 'Окончание',    minWidth: '80px',  width: '120px' },
+  { field: 'status',              header: 'Статус',       minWidth: '80px',  width: '130px' },
 ]
 
 // ── Save indicator (delete flow) ──────────────────────────────────────
@@ -101,12 +110,15 @@ const form = ref({
   start_date: '',
   due_date: '',
   status: 'active',
+  confidentiality_level: 'public',
+  department_id: null,
 })
 
 function resetForm() {
   form.value = {
     name: '', created_by: '', lead_id: '', description: '',
     start_date: '', due_date: '', status: 'active',
+    confidentiality_level: 'public', department_id: null,
   }
   mode.value = null
   currentId.value = null
@@ -130,6 +142,8 @@ function openEdit(proj) {
     start_date: proj.start_date ? proj.start_date.slice(0, 10) : '',
     due_date: proj.due_date ? proj.due_date.slice(0, 10) : '',
     status: proj.status || 'active',
+    confidentiality_level: proj.confidentiality_level || 'public',
+    department_id: proj.department_id || null,
   }
   formVisible.value = true
   loadAccess(proj.project_id)
@@ -139,6 +153,10 @@ async function saveProject() {
   if (!mode.value) return
   if (!form.value.name?.trim()) {
     toast.add({ severity: 'warn', summary: 'Заполните название', life: 3000 })
+    return
+  }
+  if (form.value.confidentiality_level === 'department' && !form.value.department_id) {
+    toast.add({ severity: 'warn', summary: 'Выберите отдел', detail: 'Для уровня «Отдел» укажите отдел', life: 3000 })
     return
   }
 
@@ -271,6 +289,19 @@ async function revokeAccess(userId) {
           {{ statusLabel(data.status) }}
         </span>
       </template>
+
+      <!-- Custom cell: Доступ (confidentiality) -->
+      <template #col-confidentiality_level="{ data }">
+        <span :class="['vis-pill', `vis-pill--${data.confidentiality_level || 'public'}`]" :title="data.department_name || ''">
+          <i :class="data.confidentiality_level === 'public' ? 'pi pi-globe' :
+                     data.confidentiality_level === 'department' ? 'pi pi-users' :
+                     'pi pi-lock'"></i>
+          {{ confLabel(data.confidentiality_level) }}
+          <span v-if="data.confidentiality_level === 'department' && data.department_name" class="vis-pill-dept">
+            · {{ data.department_name }}
+          </span>
+        </span>
+      </template>
     </CrudTable>
 
     <!-- ── Create / Edit Dialog ── -->
@@ -308,12 +339,61 @@ async function revokeAccess(userId) {
           optionValue="value"
           class="w-full"
         />
+
+        <label>Доступ</label>
+        <div class="visibility-section">
+          <div class="visibility-options">
+            <button
+              type="button"
+              :class="['vis-btn', form.confidentiality_level === 'public' ? 'active' : '']"
+              @click="form.confidentiality_level = 'public'; form.department_id = null"
+            >
+              <i class="pi pi-globe"></i>
+              <span class="vis-title">Все</span>
+              <span class="vis-hint">Видят все сотрудники</span>
+            </button>
+            <button
+              type="button"
+              :class="['vis-btn', form.confidentiality_level === 'department' ? 'active' : '']"
+              @click="form.confidentiality_level = 'department'"
+            >
+              <i class="pi pi-users"></i>
+              <span class="vis-title">Отдел</span>
+              <span class="vis-hint">Видит только выбранный отдел</span>
+            </button>
+            <button
+              type="button"
+              :class="['vis-btn', form.confidentiality_level === 'confidential' ? 'active' : '']"
+              @click="form.confidentiality_level = 'confidential'; form.department_id = null"
+            >
+              <i class="pi pi-lock"></i>
+              <span class="vis-title">Выборочно</span>
+              <span class="vis-hint">Только явно допущенные</span>
+            </button>
+          </div>
+          <Select
+            v-if="form.confidentiality_level === 'department'"
+            v-model="form.department_id"
+            :options="departments"
+            optionLabel="name"
+            optionValue="department_id"
+            placeholder="— выбрать отдел —"
+            class="w-full"
+            style="margin-top: 0.5rem"
+          />
+        </div>
       </form>
 
       <!-- Access management (edit mode only) -->
       <div v-if="mode === 'edit'" class="access-section">
         <div class="access-header">
-          <span class="section-label">Доступ к проекту</span>
+          <span class="section-label">Явно допущенные пользователи</span>
+        </div>
+        <div v-if="form.confidentiality_level !== 'confidential'" class="access-hint">
+          <i class="pi pi-info-circle"></i>
+          {{ form.confidentiality_level === 'public'
+            ? 'Проект открыт для всех — явный список не обязателен.'
+            : 'Проект виден всему отделу — явный список добавляет доступ вне отдела.' }}
         </div>
 
         <!-- Grant form -->
@@ -456,4 +536,88 @@ async function revokeAccess(userId) {
 .access-level--edit { background: rgba(82, 201, 166, 0.12); color: #1a8a64; }
 .access-level--admin { background: rgba(176, 0, 32, 0.1); color: #b00020; }
 .access-empty { color: #6B7280; font-size: 12px; padding: 0.5rem 0; }
+.access-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 0.5rem;
+  font-size: 12px;
+  color: rgba(0, 50, 116, 0.55);
+  background: rgba(0, 50, 116, 0.04);
+  border-radius: 6px;
+}
+.access-hint .pi { font-size: 12px; color: rgba(0, 50, 116, 0.4); }
+
+/* ── Visibility selector ── */
+.visibility-section { display: flex; flex-direction: column; }
+.visibility-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.vis-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border: 1.5px solid rgba(0, 50, 116, 0.12);
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  text-align: center;
+}
+.vis-btn .pi { font-size: 16px; color: rgba(0, 50, 116, 0.5); }
+.vis-btn .vis-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #003274;
+}
+.vis-btn .vis-hint {
+  font-size: 10px;
+  color: #6B7280;
+  line-height: 1.3;
+}
+.vis-btn:hover {
+  border-color: rgba(0, 50, 116, 0.3);
+  background: rgba(0, 50, 116, 0.02);
+}
+.vis-btn.active {
+  border-color: #003274;
+  background: rgba(0, 50, 116, 0.06);
+}
+.vis-btn.active .pi { color: #003274; }
+
+/* ── Visibility pill (table) ── */
+.vis-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.vis-pill .pi { font-size: 10px; }
+.vis-pill-dept { color: rgba(0, 50, 116, 0.5); font-weight: 400; }
+.vis-pill--public {
+  background: rgba(82, 201, 166, 0.12);
+  color: #1a8a64;
+}
+.vis-pill--department {
+  background: rgba(0, 50, 116, 0.08);
+  color: #003274;
+}
+.vis-pill--confidential {
+  background: rgba(176, 0, 32, 0.1);
+  color: #b00020;
+}
 </style>
