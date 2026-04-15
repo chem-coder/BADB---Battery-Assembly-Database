@@ -55,7 +55,17 @@ const _defaultNameFields = {
   electrodeBatches: 'cut_batch_id',
 }
 
-function getRefOptions(field) {
+function getRefOptions(field, tapeId = null) {
+  // Cascade: dependsOn + optionsByDep → filter options by parent field value
+  if (field.dependsOn && field.optionsByDep && tapeId != null) {
+    const parentVal = getValue(tapeId, field.dependsOn)
+    if (parentVal && field.optionsByDep[parentVal]) {
+      return field.optionsByDep[parentVal].map(o => ({ value: o.value, label: o.label }))
+    }
+    // No parent selected → fallback options (flat list) or empty
+    if (field.fallbackOptions) return field.fallbackOptions.map(o => ({ value: o.value, label: o.label }))
+    return []
+  }
   if (field.options) return field.options.map(o => ({ value: o.value, label: o.label }))
   if (field.ref && props.refs[field.ref]?.length) {
     const items = props.refs[field.ref]
@@ -87,10 +97,12 @@ function copyField(sourceTapeId, fieldKey, destTapeId) {
   if (!dest) return
   const val = getValue(sourceTapeId, fieldKey)
   setValue(dest, fieldKey, val)
-  // Sync local AC model for destination tape
-  const f = fields.value.find(ff => ff.key === fieldKey)
-  if (f?.type === 'select') {
-    acModels[acKey(String(dest), fieldKey)] = resolveAcOption(dest, f)
+  // Sync local AC models for destination tape — re-sync ALL select fields
+  // because cascades (e.g. form_factor → config_code) may clear other fields
+  for (const f of fields.value) {
+    if (f.type === 'select') {
+      acModels[acKey(String(dest), f.key)] = resolveAcOption(dest, f)
+    }
   }
 }
 
@@ -169,7 +181,7 @@ function acKey(tid, fieldKey) {
 function resolveAcOption(tapeId, field) {
   const val = getValue(tapeId, field.key)
   if (!val && val !== 0) return null
-  const opts = getRefOptions(field)
+  const opts = getRefOptions(field, tapeId)
   return opts.find(o => String(o.value) === String(val)) || null
 }
 
@@ -186,16 +198,23 @@ function syncAcModels() {
 
 watch([() => props.stageCode, () => props.tabOrder], syncAcModels, { immediate: true, deep: true })
 
-function searchAc(field, event) {
+function searchAc(tapeId, field, event) {
   const query = (event.query || '').toLowerCase()
-  const opts = getRefOptions(field)
-  acSuggestions.value[field.key] = opts.filter(o => o.label.toLowerCase().includes(query))
+  const opts = getRefOptions(field, tapeId)
+  acSuggestions.value[acKey(tapeId, field.key)] = opts.filter(o => o.label.toLowerCase().includes(query))
 }
 
 function onAcItemSelect(tapeId, field, e) {
   // Commit selected option to tape state
   if (e.value && typeof e.value === 'object') {
     setValue(tapeId, field.key, e.value.value)
+  }
+  // Re-sync AC models for all select fields on this tape — cascade (e.g.
+  // target_form_factor → target_config_code clear) may have invalidated others.
+  for (const f of fields.value) {
+    if (f.type === 'select' && f.key !== field.key) {
+      acModels[acKey(String(tapeId), f.key)] = resolveAcOption(tapeId, f)
+    }
   }
   // Blur input after selection (DS pattern — use component ref, not event target)
   setTimeout(() => {
@@ -219,7 +238,7 @@ function setAcRef(tid, fieldKey, el) {
 // PrimeVue hardcodes hide() when query becomes empty (line 459-461 in AutoComplete.vue).
 // @clear fires right after — re-show dropdown with all options.
 function onAcClear(tid, field) {
-  acSuggestions.value[field.key] = getRefOptions(field)
+  acSuggestions.value[acKey(tid, field.key)] = getRefOptions(field, tid)
   nextTick(() => {
     const comp = acRefs[acKey(tid, field.key)]
     if (comp?.show) comp.show()
@@ -352,8 +371,8 @@ function onColDragEnd(e) {
               <AutoComplete
                 :ref="(el) => setAcRef(tid, field.key, el)"
                 v-model="acModels[tid + '__' + field.key]"
-                :suggestions="acSuggestions[field.key] || []"
-                @complete="searchAc(field, $event)"
+                :suggestions="acSuggestions[tid + '__' + field.key] || []"
+                @complete="searchAc(tid, field, $event)"
                 @item-select="onAcItemSelect(tid, field, $event)"
                 @clear="onAcClear(tid, field)"
                 optionLabel="label"

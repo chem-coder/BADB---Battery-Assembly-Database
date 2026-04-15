@@ -6,12 +6,19 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
 import Panel from 'primevue/panel'
+import Select from 'primevue/select'
 import Stepper from 'primevue/stepper'
 import StepList from 'primevue/steplist'
 import Step from 'primevue/step'
 import StepPanels from 'primevue/steppanels'
 import StepPanel from 'primevue/steppanel'
 import PageHeader from '@/components/PageHeader.vue'
+import {
+  TARGET_FORM_FACTOR_OPTIONS,
+  TARGET_CONFIG_CODE_OPTIONS_BY_FORM_FACTOR,
+  shapeForFormFactor,
+  isConfigCodeValidFor,
+} from '@/config/electrodeStages'
 
 const route = useRoute()
 const router = useRouter()
@@ -46,11 +53,41 @@ const hasChanges = ref(false)
 const createdBy = ref('')
 const batchComments = ref('')
 
+// ── Target form factor / config (drives shape + validation) ──
+const targetFormFactor = ref('')
+const targetConfigCode = ref('')
+const targetConfigOther = ref('')
+
 // ── Geometry ──
 const shape = ref('')
 const diameterMm = ref('')
 const lengthMm = ref('')
 const widthMm = ref('')
+
+// ── Target config cascade ──
+const targetConfigOptions = computed(() => {
+  if (!targetFormFactor.value) return []
+  return TARGET_CONFIG_CODE_OPTIONS_BY_FORM_FACTOR[targetFormFactor.value] || []
+})
+
+function onFormFactorChange() {
+  // Auto-set shape
+  const autoShape = shapeForFormFactor(targetFormFactor.value)
+  if (autoShape) shape.value = autoShape
+  // Clear config_code if it no longer fits
+  if (targetConfigCode.value && !isConfigCodeValidFor(targetFormFactor.value, targetConfigCode.value)) {
+    targetConfigCode.value = ''
+    targetConfigOther.value = ''
+  }
+  markChanged()
+}
+
+function onConfigCodeChange() {
+  if (targetConfigCode.value !== 'other') {
+    targetConfigOther.value = ''
+  }
+  markChanged()
+}
 
 // ── Electrodes ──
 const electrodes = ref([])
@@ -241,11 +278,20 @@ async function saveBatch() {
   }
 
   try {
+    const targetPayload = {
+      target_form_factor: targetFormFactor.value || null,
+      target_config_code: targetConfigCode.value || null,
+      target_config_other: targetConfigCode.value === 'other'
+        ? (targetConfigOther.value || null)
+        : null,
+    }
+
     if (!currentBatchId.value) {
       const { data } = await api.post('/api/electrodes/electrode-cut-batches', {
         tape_id: tapeId,
         created_by: operator,
         comments: batchComments.value || null,
+        ...targetPayload,
         shape: shape.value || null,
         diameter_mm: diameterMm.value || null,
         length_mm: lengthMm.value || null,
@@ -255,6 +301,7 @@ async function saveBatch() {
       if (isNew.value) router.replace(`/electrodes/${data.cut_batch_id}`)
     } else {
       await api.put(`/api/electrodes/electrode-cut-batches/${currentBatchId.value}`, {
+        ...targetPayload,
         shape: shape.value || null,
         diameter_mm: diameterMm.value || null,
         length_mm: lengthMm.value || null,
@@ -323,6 +370,9 @@ async function restoreBatch() {
     selectedTapeId.value = String(data.tape_id || '')
     createdBy.value = String(data.created_by || '')
     batchComments.value = data.comments || ''
+    targetFormFactor.value = data.target_form_factor || ''
+    targetConfigCode.value = data.target_config_code || ''
+    targetConfigOther.value = data.target_config_other || ''
     shape.value = data.shape || ''
     diameterMm.value = data.diameter_mm ?? ''
     lengthMm.value = data.length_mm ?? ''
@@ -435,14 +485,59 @@ onMounted(async () => {
               </fieldset>
             </Panel>
 
+            <Panel header="Целевая конфигурация элемента" toggleable>
+              <fieldset @change="markChanged">
+                <label>Семейство элемента</label>
+                <Select
+                  v-model="targetFormFactor"
+                  :options="TARGET_FORM_FACTOR_OPTIONS"
+                  option-label="label"
+                  option-value="value"
+                  placeholder="— выбрать —"
+                  show-clear
+                  class="field-medium"
+                  @change="onFormFactorChange"
+                />
+
+                <label>Конфигурация</label>
+                <Select
+                  v-model="targetConfigCode"
+                  :options="targetConfigOptions"
+                  option-label="label"
+                  option-value="value"
+                  :placeholder="targetFormFactor ? '— выбрать —' : '— выбрать семейство —'"
+                  :disabled="!targetFormFactor"
+                  show-clear
+                  class="field-medium"
+                  @change="onConfigCodeChange"
+                />
+
+                <div v-if="targetConfigCode === 'other'">
+                  <label>Другая конфигурация:</label>
+                  <input
+                    v-model="targetConfigOther"
+                    type="text"
+                    placeholder="Например: 14500"
+                    class="field-medium"
+                    @input="markChanged"
+                  />
+                </div>
+              </fieldset>
+            </Panel>
+
             <Panel header="Геометрия электродов" toggleable>
               <fieldset @input="markChanged" @change="markChanged">
-                <p>Форма электродов:</p>
+                <p>
+                  Форма электродов:
+                  <span v-if="targetFormFactor" class="auto-hint">
+                    (автоматически из семейства — {{ shape === 'circle' ? 'круг' : 'прямоугольник' }})
+                  </span>
+                </p>
                 <label>
-                  <input type="radio" v-model="shape" value="circle" /> Круг (монета)
+                  <input type="radio" v-model="shape" value="circle" :disabled="!!targetFormFactor" /> Круг (монета)
                 </label>
                 <label>
-                  <input type="radio" v-model="shape" value="rectangle" /> Прямоугольник (пауч, цилиндр)
+                  <input type="radio" v-model="shape" value="rectangle" :disabled="!!targetFormFactor" /> Прямоугольник (пауч, цилиндр)
                 </label>
 
                 <div v-if="shape === 'circle'">
@@ -660,6 +755,13 @@ textarea { max-width: 600px; }
 
 .summary-section { margin-bottom: 1rem; }
 .summary-section p { margin: 0.15rem 0; font-size: 0.9rem; }
+
+.auto-hint {
+  font-size: 0.8rem;
+  color: #8A939D;
+  font-weight: 400;
+  margin-left: 0.3rem;
+}
 
 :deep(.p-panel) { margin-bottom: 0.5rem; }
 :deep(.p-panel-header) { padding: 0.6rem 0.8rem; }

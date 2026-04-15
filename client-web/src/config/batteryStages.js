@@ -2,6 +2,21 @@
 // Battery Stage Definitions — for battery assembly constructor
 // ═══════════════════════════════════════════════════════════════════
 
+// Pouch case size options (mirrors backend validator in routes/batteries.js:
+// validatePouchCaseSizeInput)
+export const POUCH_CASE_SIZE_OPTIONS = [
+  { value: '103x83', label: '103 × 83' },
+  { value: '86x56', label: '86 × 56' },
+  { value: 'other', label: 'Другое' },
+]
+
+// Coin cell size codes (free-text field, but these are the known ones)
+export const COIN_SIZE_OPTIONS = [
+  { value: '2016', label: '2016' },
+  { value: '2025', label: '2025' },
+  { value: '2032', label: '2032' },
+]
+
 export const BATTERY_STAGES = [
   {
     code: 'general',
@@ -24,11 +39,12 @@ export const BATTERY_STAGES = [
     icon: 'pi pi-cog',
     hasApiStep: true,
     fields: [
+      // ── Coin-cell fields ──
       { key: 'coin_cell_mode', label: 'Режим ячейки', type: 'select', options: [
         { value: 'full_cell', label: 'Full cell' },
         { value: 'half_cell', label: 'Half cell' },
       ]},
-      { key: 'coin_size_code', label: 'Размер корпуса', type: 'text' },
+      { key: 'coin_size_code', label: 'Размер корпуса', type: 'select', options: COIN_SIZE_OPTIONS },
       { key: 'coin_layout', label: 'Схема сборки', type: 'select', options: [
         { value: 'SE', label: 'SE' },
         { value: 'ES', label: 'ES' },
@@ -39,6 +55,10 @@ export const BATTERY_STAGES = [
       { key: 'spacer_count', label: 'Кол-во спейсеров', type: 'number' },
       { key: 'spacer_notes', label: 'Заметки (спейсер)', type: 'textarea' },
       { key: 'li_foil_notes', label: 'Li фольга', type: 'textarea' },
+      // ── Pouch-cell fields (Dalia's new schema: battery_pouch_config) ──
+      { key: 'pouch_case_size_code', label: 'Корпус (пауч)', type: 'select', options: POUCH_CASE_SIZE_OPTIONS },
+      { key: 'pouch_case_size_other', label: 'Другой корпус', type: 'text' },
+      { key: 'pouch_notes', label: 'Заметки (пауч)', type: 'textarea' },
     ],
   },
   {

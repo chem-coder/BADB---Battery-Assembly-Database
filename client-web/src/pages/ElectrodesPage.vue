@@ -74,14 +74,34 @@ const tableData = computed(() => {
   return items.map(b => ({
     ...b,
     role_display: b.tape_role === 'cathode' ? 'К' : b.tape_role === 'anode' ? 'А' : '—',
-    shape_display: b.shape === 'circle'
-      ? (b.diameter_mm ? `Круг ⌀${b.diameter_mm}` : 'Круг')
-      : b.shape === 'rectangle'
-        ? (b.length_mm && b.width_mm ? `${b.length_mm}×${b.width_mm}` : 'Прямоуг.')
-        : '—',
+    shape_display: formatShapeDisplay(b),
     status_display: batchStatus(b),
   }))
 })
+
+function formatShapeDisplay(b) {
+  const ff = b.target_form_factor
+  const cc = b.target_config_code === 'other'
+    ? (b.target_config_other || 'другое')
+    : b.target_config_code
+  const ffLabel = ff === 'coin' ? 'Монета'
+    : ff === 'pouch' ? 'Пакет'
+    : ff === 'cylindrical' ? 'Цилиндр'
+    : ''
+
+  // Shape measurement (diameter or length×width)
+  const dims = b.shape === 'circle'
+    ? (b.diameter_mm ? `⌀${b.diameter_mm}` : '')
+    : b.shape === 'rectangle'
+      ? (b.length_mm && b.width_mm ? `${b.length_mm}×${b.width_mm}` : '')
+      : ''
+
+  // Combine: "Монета 2032 ⌀18" or "Пакет 103x83 50×50" or just dims if no form factor
+  if (ffLabel && cc) return dims ? `${ffLabel} ${cc} ${dims}` : `${ffLabel} ${cc}`
+  if (ffLabel) return dims ? `${ffLabel} ${dims}` : ffLabel
+  if (dims) return dims
+  return b.shape === 'circle' ? 'Круг' : b.shape === 'rectangle' ? 'Прямоуг.' : '—'
+}
 
 const roleOptions = [
   { label: 'Катоды', value: 'cathode' },

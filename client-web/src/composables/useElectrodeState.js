@@ -4,6 +4,7 @@
  */
 import { ref, reactive, computed } from 'vue'
 import api from '@/services/api'
+import { shapeForFormFactor, isConfigCodeValidFor } from '@/config/electrodeStages'
 
 export function useElectrodeState({ batchId }) {
   const currentBatchId = ref(batchId)
@@ -22,6 +23,9 @@ export function useElectrodeState({ batchId }) {
   // ── Reactive state ──
   const general = reactive({
     name: '',
+    target_form_factor: '',
+    target_config_code: '',
+    target_config_other: '',
     shape: '',
     diameter_mm: '',
     length_mm: '',
@@ -134,6 +138,21 @@ export function useElectrodeState({ batchId }) {
     pushHistoryDebounced()
     if (stageCode === 'cutting') {
       general[fieldKey] = value
+
+      // Cascade: target_form_factor → auto-set shape + clear invalid config_code
+      if (fieldKey === 'target_form_factor') {
+        const auto = shapeForFormFactor(value)
+        if (auto) general.shape = auto
+        if (general.target_config_code && !isConfigCodeValidFor(value, general.target_config_code)) {
+          general.target_config_code = ''
+          general.target_config_other = ''
+        }
+      }
+      // Cascade: target_config_code !== 'other' → clear target_config_other
+      if (fieldKey === 'target_config_code' && value !== 'other') {
+        general.target_config_other = ''
+      }
+
       setDirty('cutting')
       _scheduleAutoSave('cutting')
     } else if (steps[stageCode]) {
@@ -150,6 +169,11 @@ export function useElectrodeState({ batchId }) {
     try {
       if (code === 'cutting') {
         await api.put(`/api/electrodes/electrode-cut-batches/${currentBatchId.value}`, {
+          target_form_factor: general.target_form_factor || null,
+          target_config_code: general.target_config_code || null,
+          target_config_other: general.target_config_code === 'other'
+            ? (general.target_config_other || null)
+            : null,
           shape: general.shape || null,
           diameter_mm: general.diameter_mm || null,
           length_mm: general.length_mm || null,
@@ -180,6 +204,9 @@ export function useElectrodeState({ batchId }) {
     try {
       const { data: batch } = await api.get(`/api/electrodes/electrode-cut-batches/${currentBatchId.value}`)
       general.name = `#${batch.cut_batch_id}`
+      general.target_form_factor = batch.target_form_factor || ''
+      general.target_config_code = batch.target_config_code || ''
+      general.target_config_other = batch.target_config_other || ''
       general.shape = batch.shape || ''
       general.diameter_mm = batch.diameter_mm ?? ''
       general.length_mm = batch.length_mm ?? ''

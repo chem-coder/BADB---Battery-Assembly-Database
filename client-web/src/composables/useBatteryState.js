@@ -29,6 +29,7 @@ export function useBatteryState({ batteryId }) {
 
   const steps = reactive({
     config: {
+      // Coin-cell fields
       coin_cell_mode: '',
       coin_size_code: '',
       half_cell_type: '',
@@ -37,6 +38,10 @@ export function useBatteryState({ batteryId }) {
       spacer_count: '',
       spacer_notes: '',
       li_foil_notes: '',
+      // Pouch-cell fields (Dalia's battery_pouch_config)
+      pouch_case_size_code: '',
+      pouch_case_size_other: '',
+      pouch_notes: '',
     },
     electrodes: {
       cathode_tape_id: '',
@@ -177,6 +182,11 @@ export function useBatteryState({ batteryId }) {
       _scheduleAutoSave('general')
     } else if (steps[stageCode]) {
       steps[stageCode][fieldKey] = value
+      // Cascade: pouch_case_size_code !== 'other' → clear pouch_case_size_other
+      // (mirrors backend validator in routes/batteries.js:validatePouchCaseSizeInput)
+      if (stageCode === 'config' && fieldKey === 'pouch_case_size_code' && value !== 'other') {
+        steps.config.pouch_case_size_other = ''
+      }
       setDirty(stageCode)
       _scheduleAutoSave(stageCode)
     }
@@ -197,16 +207,30 @@ export function useBatteryState({ batteryId }) {
         })
       } else if (code === 'config') {
         const c = steps.config
-        await api.patch(`/api/batteries/battery_coin_config/${id}`, {
-          coin_cell_mode: c.coin_cell_mode || null,
-          coin_size_code: c.coin_size_code || null,
-          half_cell_type: c.half_cell_type || null,
-          coin_layout: c.coin_layout || null,
-          spacer_thickness_mm: c.spacer_thickness_mm || null,
-          spacer_count: c.spacer_count || null,
-          spacer_notes: c.spacer_notes || null,
-          li_foil_notes: c.li_foil_notes || null,
-        })
+        // Route by form factor: coin → battery_coin_config, pouch → battery_pouch_config
+        if (general.form_factor === 'pouch') {
+          // Pouch config uses POST (upsert semantics in Dalia's backend).
+          await api.post(`/api/batteries/battery_pouch_config`, {
+            battery_id: id,
+            pouch_case_size_code: c.pouch_case_size_code || null,
+            pouch_case_size_other: c.pouch_case_size_code === 'other'
+              ? (c.pouch_case_size_other || null)
+              : null,
+            pouch_notes: c.pouch_notes || null,
+          })
+        } else {
+          // Coin (default) config
+          await api.patch(`/api/batteries/battery_coin_config/${id}`, {
+            coin_cell_mode: c.coin_cell_mode || null,
+            coin_size_code: c.coin_size_code || null,
+            half_cell_type: c.half_cell_type || null,
+            coin_layout: c.coin_layout || null,
+            spacer_thickness_mm: c.spacer_thickness_mm || null,
+            spacer_count: c.spacer_count || null,
+            spacer_notes: c.spacer_notes || null,
+            li_foil_notes: c.li_foil_notes || null,
+          })
+        }
       } else if (code === 'electrodes') {
         const e = steps.electrodes
         await api.patch(`/api/batteries/battery_electrode_sources/${id}`, {
@@ -273,20 +297,32 @@ export function useBatteryState({ batteryId }) {
       meta.updated_by_name = b.updated_by_name || null
       meta.updated_at = b.updated_at || null
 
-      // Load config (try coin first, then pouch, then cyl)
-      try {
-        const { data: coin } = await api.get(`/api/batteries/battery_coin_config/${id}`)
-        if (coin) {
-          steps.config.coin_cell_mode = coin.coin_cell_mode || ''
-          steps.config.coin_size_code = coin.coin_size_code || ''
-          steps.config.half_cell_type = coin.half_cell_type || ''
-          steps.config.coin_layout = coin.coin_layout || ''
-          steps.config.spacer_thickness_mm = coin.spacer_thickness_mm ?? ''
-          steps.config.spacer_count = coin.spacer_count ?? ''
-          steps.config.spacer_notes = coin.spacer_notes || ''
-          steps.config.li_foil_notes = coin.li_foil_notes || ''
-        }
-      } catch {}
+      // Load config — route by form_factor
+      if (general.form_factor === 'pouch') {
+        try {
+          const { data: pouch } = await api.get(`/api/batteries/battery_pouch_config/${id}`)
+          if (pouch) {
+            steps.config.pouch_case_size_code = pouch.pouch_case_size_code || ''
+            steps.config.pouch_case_size_other = pouch.pouch_case_size_other || ''
+            steps.config.pouch_notes = pouch.pouch_notes || ''
+          }
+        } catch {}
+      } else {
+        // Coin (default) — also fall through for cylindrical until Dalia adds it
+        try {
+          const { data: coin } = await api.get(`/api/batteries/battery_coin_config/${id}`)
+          if (coin) {
+            steps.config.coin_cell_mode = coin.coin_cell_mode || ''
+            steps.config.coin_size_code = coin.coin_size_code || ''
+            steps.config.half_cell_type = coin.half_cell_type || ''
+            steps.config.coin_layout = coin.coin_layout || ''
+            steps.config.spacer_thickness_mm = coin.spacer_thickness_mm ?? ''
+            steps.config.spacer_count = coin.spacer_count ?? ''
+            steps.config.spacer_notes = coin.spacer_notes || ''
+            steps.config.li_foil_notes = coin.li_foil_notes || ''
+          }
+        } catch {}
+      }
 
       // Load electrode sources
       try {
@@ -336,7 +372,12 @@ export function useBatteryState({ batteryId }) {
   // ── Stage status ──
   function stageStatus(code) {
     if (code === 'general') return currentBatchId.value ? 'done' : 'pending'
-    if (code === 'config') return steps.config.coin_cell_mode || steps.config.coin_size_code ? 'done' : 'pending'
+    if (code === 'config') {
+      if (general.form_factor === 'pouch') {
+        return steps.config.pouch_case_size_code ? 'done' : 'pending'
+      }
+      return steps.config.coin_cell_mode || steps.config.coin_size_code ? 'done' : 'pending'
+    }
     if (code === 'electrodes') return steps.electrodes.cathode_tape_id || steps.electrodes.anode_tape_id ? 'done' : 'pending'
     if (code === 'separator') return steps.separator.separator_id ? 'done' : 'pending'
     if (code === 'electrolyte') return steps.electrolyte.electrolyte_id ? 'done' : 'pending'
