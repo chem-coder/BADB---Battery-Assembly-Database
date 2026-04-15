@@ -18,6 +18,7 @@ const COMMON_LABELS = {
   project_id:       'Проект',
   created_by:       'Создал',
   updated_by:       'Изменил',
+  performed_by:     'Оператор',
   // Text / notes
   notes:            'Примечания',
   comments:         'Комментарии',
@@ -31,6 +32,7 @@ const COMMON_LABELS = {
   temperature_c:    'Температура, °C',
   start_time:       'Начало',
   end_time:         'Конец',
+  started_at:       'Дата/время',
   other_parameters: 'Доп. параметры',
 }
 
@@ -80,6 +82,65 @@ const LABELS_BY_ENTITY = {
   // ─── Electrode drying ───
   electrode_drying: {
     cut_batch_id:     'Партия нарезки',
+  },
+
+  // ─── Tape process steps — 7 operation codes ───
+  // Audited via routes/tapes.js POST /:id/steps/by-code/:code dispatcher.
+  // Each entity_type is `tape_step_${code}` so the same subtype table
+  // (e.g. tape_step_drying) can be disambiguated across 3 drying variants.
+
+  // Drying AM (активного материала)
+  tape_step_drying_am: {
+    atmosphere:          'Атмосфера',
+    target_duration_min: 'Длительность, мин',
+  },
+  // Drying tape (ленты до каландрирования)
+  tape_step_drying_tape: {
+    atmosphere:          'Атмосфера',
+    target_duration_min: 'Длительность, мин',
+  },
+  // Drying pressed tape (ленты после каландрирования)
+  tape_step_drying_pressed_tape: {
+    atmosphere:          'Атмосфера',
+    target_duration_min: 'Длительность, мин',
+  },
+  // Weighing (замес пасты — header only, no subtype)
+  tape_step_weighing: {
+    // all fields covered by COMMON_LABELS (performed_by, started_at, comments)
+  },
+  // Mixing (перемешивание — dry + wet phases)
+  tape_step_mixing: {
+    slurry_volume_ml:    'Объём пасты, мл',
+    dry_mixing_id:       'Сухая смесь — метод',
+    dry_start_time:      'Сухая — начало',
+    dry_duration_min:    'Сухая — длительность, мин',
+    dry_rpm:             'Сухая — RPM',
+    wet_mixing_id:       'Паста — метод',
+    wet_start_time:      'Паста — начало',
+    wet_duration_min:    'Паста — длительность, мин',
+    wet_rpm:             'Паста — RPM',
+    viscosity_cp:        'Вязкость, cP',
+  },
+  // Coating (нанесение)
+  tape_step_coating: {
+    foil_id:          'Фольга',
+    coating_id:       'Метод нанесения',
+    gap_um:           'Зазор, мкм',
+    coat_temp_c:      'Темп. нанесения, °C',
+    coat_time_min:    'Длительность, мин',
+    method_comments:  'Параметры метода',
+  },
+  // Calendering (каландрирование)
+  tape_step_calendering: {
+    temp_c:                  'Темп. валков, °C',
+    pressure_value:          'Давление',
+    pressure_units:          'Ед. давления',
+    draw_speed_m_min:        'Скорость, м/мин',
+    other_params:            'Доп. параметры',
+    init_thickness_microns:  'Нач. толщина, мкм',
+    final_thickness_microns: 'Кон. толщина, мкм',
+    no_passes:               'Кол-во проходов',
+    appearance:              'Внешний вид',
   },
 
   // ─── Foil mass measurement ───

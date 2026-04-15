@@ -23,6 +23,40 @@ function hasSavedHeader(step) {
   return Boolean(step) && isFilled(step.performed_by) && isFilled(step.started_at);
 }
 
+/**
+ * Audit-log a change on a tape process step (header + subtype fields combined).
+ *
+ * Called AFTER the upsert transaction commits so that audit failures never
+ * break the primary save operation. Silently no-ops when oldValues is null
+ * (i.e. first insert — nothing to track yet).
+ *
+ * @param {string} code            operation code: drying_am|drying_tape|drying_pressed_tape|weighing|mixing|coating|calendering
+ * @param {string} subtypeTable    SQL table name (tape_step_drying etc.) — used only for the trackChanges tableName slot; updateMeta is false so the table itself is not written to
+ * @param {number} stepId          tape_process_steps.step_id
+ * @param {object|null} oldValues  row as returned by the pre-upsert SELECT, or null on insert
+ * @param {object} newValues       flat object of fields being saved (normalized to null for empty)
+ * @param {number} userId          req.user.userId
+ */
+async function auditStepChange(code, subtypeTable, stepId, oldValues, newValues, userId) {
+  if (!oldValues) return;
+  try {
+    await trackChanges(
+      pool,
+      `tape_step_${code}`,
+      subtypeTable,
+      'step_id',
+      stepId,
+      oldValues,
+      newValues,
+      userId,
+      null,
+      false // updateMeta=false — step subtype tables have no updated_by/updated_at columns
+    );
+  } catch (err) {
+    console.error(`trackChanges failed for ${code} step ${stepId}:`, err);
+  }
+}
+
 function computeTapeWorkflowStatus({ recipeMeta, stepsByCode }) {
   const recipeComplete =
     recipeMeta.total_lines > 0 &&
@@ -539,6 +573,9 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
     } = req.body || {};
 
     const client = await pool.connect();
+    let auditStepId = null;
+    let auditOldValues = null;
+    let auditNewValues = null;
     try {
       await client.query('BEGIN');
 
@@ -552,7 +589,20 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
       }
       const operationTypeId = ot.rows[0].operation_type_id;
 
-      // 2) upsert base step (unique: tape_id + operation_type_id)
+      // 2) read previous state (for audit) BEFORE upsert — null row means this is an insert
+      const prevRes = await client.query(
+        `
+        SELECT ps.performed_by, ps.started_at, ps.comments,
+               sub.temperature_c, sub.atmosphere, sub.target_duration_min, sub.other_parameters
+        FROM tape_process_steps ps
+        LEFT JOIN tape_step_drying sub ON sub.step_id = ps.step_id
+        WHERE ps.tape_id = $1 AND ps.operation_type_id = $2
+        `,
+        [tapeId, operationTypeId]
+      );
+      auditOldValues = prevRes.rows[0] || null;
+
+      // 3) upsert base step (unique: tape_id + operation_type_id)
       const step = await client.query(
         `
         INSERT INTO tape_process_steps (tape_id, operation_type_id, performed_by, started_at, comments)
@@ -574,8 +624,9 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
       );
 
       const stepId = step.rows[0].step_id;
+      auditStepId = stepId;
 
-      // 3) upsert drying subtype
+      // 4) upsert drying subtype
       await client.query(
         `
         INSERT INTO tape_step_drying
@@ -597,7 +648,20 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
         ]
       );
 
+      // 5) build audit payload (same normalization as the INSERT params above)
+      auditNewValues = {
+        performed_by: Number(performed_by) || null,
+        started_at: started_at || null,
+        comments: comments || null,
+        temperature_c: Number.isFinite(Number(temperature_c)) ? Number(temperature_c) : null,
+        atmosphere: atmosphere || null,
+        target_duration_min: Number.isFinite(Number(target_duration_min)) ? Number(target_duration_min) : null,
+        other_parameters: other_parameters || null
+      };
+
       await client.query('COMMIT');
+      // 6) best-effort audit AFTER commit — failures don't break the save
+      await auditStepChange(code, 'tape_step_drying', auditStepId, auditOldValues, auditNewValues, req.user.userId);
       return res.status(201).json({ step_id: stepId });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -617,6 +681,9 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
     } = req.body || {};
 
     const client = await pool.connect();
+    let auditStepId = null;
+    let auditOldValues = null;
+    let auditNewValues = null;
     try {
       await client.query('BEGIN');
 
@@ -630,6 +697,17 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
       }
 
       const operationTypeId = ot.rows[0].operation_type_id;
+
+      // read previous state (for audit) BEFORE upsert — header-only, no subtype join
+      const prevRes = await client.query(
+        `
+        SELECT performed_by, started_at, comments
+        FROM tape_process_steps
+        WHERE tape_id = $1 AND operation_type_id = $2
+        `,
+        [tapeId, operationTypeId]
+      );
+      auditOldValues = prevRes.rows[0] || null;
 
       const step = await client.query(
         `
@@ -652,8 +730,17 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
         ]
       );
 
+      auditStepId = step.rows[0].step_id;
+      auditNewValues = {
+        performed_by: Number(performed_by) || null,
+        started_at: started_at || null,
+        comments: comments || null
+      };
+
       await client.query('COMMIT');
-      return res.status(201).json({ step_id: step.rows[0].step_id });
+      // best-effort audit AFTER commit (no subtype table — use tape_process_steps)
+      await auditStepChange(code, 'tape_process_steps', auditStepId, auditOldValues, auditNewValues, req.user.userId);
+      return res.status(201).json({ step_id: auditStepId });
 
     } catch (err) {
       await client.query('ROLLBACK');
@@ -683,6 +770,9 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
     } = req.body || {};
 
     const client = await pool.connect();
+    let auditStepId = null;
+    let auditOldValues = null;
+    let auditNewValues = null;
     try {
       await client.query('BEGIN');
 
@@ -696,7 +786,25 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
       }
       const operationTypeId = ot.rows[0].operation_type_id;
 
-      // 2) upsert base step
+      // 2) read previous state (for audit) BEFORE upsert
+      // NOTE: viscosity_cP is stored as lowercase `viscosity_cp` because the
+      // INSERT uses unquoted identifier, which Postgres folds to lowercase.
+      const prevRes = await client.query(
+        `
+        SELECT ps.performed_by, ps.started_at, ps.comments,
+               sub.slurry_volume_ml,
+               sub.dry_mixing_id, sub.dry_start_time, sub.dry_duration_min, sub.dry_rpm,
+               sub.wet_mixing_id, sub.wet_start_time, sub.wet_duration_min, sub.wet_rpm,
+               sub.viscosity_cp
+        FROM tape_process_steps ps
+        LEFT JOIN tape_step_mixing sub ON sub.step_id = ps.step_id
+        WHERE ps.tape_id = $1 AND ps.operation_type_id = $2
+        `,
+        [tapeId, operationTypeId]
+      );
+      auditOldValues = prevRes.rows[0] || null;
+
+      // 3) upsert base step
       const step = await client.query(
         `
         INSERT INTO tape_process_steps (tape_id, operation_type_id, performed_by, started_at, comments)
@@ -760,7 +868,26 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
         ]
       );
 
+      auditStepId = stepId;
+      auditNewValues = {
+        performed_by: Number(performed_by) || null,
+        started_at: started_at || null,
+        comments: comments || null,
+        slurry_volume_ml: Number.isFinite(Number(slurry_volume_ml)) ? Number(slurry_volume_ml) : null,
+        dry_mixing_id: Number(dry_mixing_id) || null,
+        dry_start_time: dry_start_time || null,
+        dry_duration_min: Number.isFinite(Number(dry_duration_min)) ? Number(dry_duration_min) : null,
+        dry_rpm: dry_rpm || null,
+        wet_mixing_id: Number(wet_mixing_id) || null,
+        wet_start_time: wet_start_time || null,
+        wet_duration_min: Number.isFinite(Number(wet_duration_min)) ? Number(wet_duration_min) : null,
+        wet_rpm: wet_rpm || null,
+        // key is lowercased to match Postgres-normalized column name
+        viscosity_cp: Number.isFinite(Number(viscosity_cP)) ? Number(viscosity_cP) : null
+      };
+
       await client.query('COMMIT');
+      await auditStepChange(code, 'tape_step_mixing', auditStepId, auditOldValues, auditNewValues, req.user.userId);
       return res.status(201).json({ step_id: stepId });
 
     } catch (err) {
@@ -787,6 +914,9 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
     } = req.body || {};
 
     const client = await pool.connect();
+    let auditStepId = null;
+    let auditOldValues = null;
+    let auditNewValues = null;
 
     try {
       await client.query('BEGIN');
@@ -803,7 +933,21 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
 
       const operationTypeId = ot.rows[0].operation_type_id;
 
-      // 2) upsert base step
+      // 2) read previous state (for audit) BEFORE upsert
+      const prevRes = await client.query(
+        `
+        SELECT ps.performed_by, ps.started_at, ps.comments,
+               sub.foil_id, sub.coating_id, sub.gap_um,
+               sub.coat_temp_c, sub.coat_time_min, sub.method_comments
+        FROM tape_process_steps ps
+        LEFT JOIN tape_step_coating sub ON sub.step_id = ps.step_id
+        WHERE ps.tape_id = $1 AND ps.operation_type_id = $2
+        `,
+        [tapeId, operationTypeId]
+      );
+      auditOldValues = prevRes.rows[0] || null;
+
+      // 3) upsert base step
       const step = await client.query(
         `
         INSERT INTO tape_process_steps
@@ -853,7 +997,21 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
         ]
       );
 
+      auditStepId = stepId;
+      auditNewValues = {
+        performed_by: Number(performed_by) || null,
+        started_at: started_at || null,
+        comments: comments || null,
+        foil_id: Number(foil_id) || null,
+        coating_id: Number(coating_id) || null,
+        gap_um: Number.isFinite(Number(gap_um)) ? Number(gap_um) : null,
+        coat_temp_c: Number.isFinite(Number(coat_temp_c)) ? Number(coat_temp_c) : null,
+        coat_time_min: Number.isFinite(Number(coat_time_min)) ? Number(coat_time_min) : null,
+        method_comments: method_comments || null
+      };
+
       await client.query('COMMIT');
+      await auditStepChange(code, 'tape_step_coating', auditStepId, auditOldValues, auditNewValues, req.user.userId);
       return res.status(201).json({ step_id: stepId });
 
     } catch (err) {
@@ -883,6 +1041,9 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
     } = req.body || {};
 
     const client = await pool.connect();
+    let auditStepId = null;
+    let auditOldValues = null;
+    let auditNewValues = null;
 
     try {
       await client.query('BEGIN');
@@ -899,7 +1060,23 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
 
       const operationTypeId = ot.rows[0].operation_type_id;
 
-      // 2) upsert base step
+      // 2) read previous state (for audit) BEFORE upsert
+      const prevRes = await client.query(
+        `
+        SELECT ps.performed_by, ps.started_at, ps.comments,
+               sub.temp_c, sub.pressure_value, sub.pressure_units,
+               sub.draw_speed_m_min, sub.other_params,
+               sub.init_thickness_microns, sub.final_thickness_microns,
+               sub.no_passes, sub.appearance
+        FROM tape_process_steps ps
+        LEFT JOIN tape_step_calendering sub ON sub.step_id = ps.step_id
+        WHERE ps.tape_id = $1 AND ps.operation_type_id = $2
+        `,
+        [tapeId, operationTypeId]
+      );
+      auditOldValues = prevRes.rows[0] || null;
+
+      // 3) upsert base step
       const step = await client.query(
         `
         INSERT INTO tape_process_steps
@@ -965,7 +1142,24 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
         ]
       );
 
+      auditStepId = stepId;
+      auditNewValues = {
+        performed_by: Number(performed_by) || null,
+        started_at: started_at || null,
+        comments: comments || null,
+        temp_c: Number.isFinite(Number(temp_c)) ? Number(temp_c) : null,
+        pressure_value: Number.isFinite(Number(pressure_value)) ? Number(pressure_value) : null,
+        pressure_units: pressure_units || null,
+        draw_speed_m_min: Number.isFinite(Number(draw_speed_m_min)) ? Number(draw_speed_m_min) : null,
+        other_params: other_params || null,
+        init_thickness_microns: Number.isFinite(Number(init_thickness_microns)) ? Number(init_thickness_microns) : null,
+        final_thickness_microns: Number.isFinite(Number(final_thickness_microns)) ? Number(final_thickness_microns) : null,
+        no_passes: Number.isFinite(Number(no_passes)) ? Number(no_passes) : null,
+        appearance: appearance || null
+      };
+
       await client.query('COMMIT');
+      await auditStepChange(code, 'tape_step_calendering', auditStepId, auditOldValues, auditNewValues, req.user.userId);
       return res.status(201).json({ step_id: stepId });
 
     } catch (err) {
