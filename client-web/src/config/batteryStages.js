@@ -48,30 +48,34 @@ export const BATTERY_STAGES = [
     label: 'Конфигурация',
     icon: 'pi pi-cog',
     hasApiStep: true,
+    // `showIfFormFactor` is a cross-stage visibility hint used by
+    // StageCompareEditor. Fields with this key are only rendered when at
+    // least one tape in the current view has a matching general.form_factor.
+    // If no tape has a form_factor set yet, all fields are shown (fall-back).
     fields: [
       // ── Coin-cell fields ──
-      { key: 'coin_cell_mode', label: 'Режим ячейки', type: 'select', options: [
+      { key: 'coin_cell_mode', label: 'Режим ячейки', type: 'select', showIfFormFactor: 'coin', options: [
         { value: 'full_cell', label: 'Full cell' },
         { value: 'half_cell', label: 'Half cell' },
       ]},
-      { key: 'coin_size_code', label: 'Размер корпуса', type: 'select', options: COIN_SIZE_OPTIONS },
-      { key: 'coin_layout', label: 'Схема сборки', type: 'select', options: [
+      { key: 'coin_size_code', label: 'Размер корпуса', type: 'select', showIfFormFactor: 'coin', options: COIN_SIZE_OPTIONS },
+      { key: 'coin_layout', label: 'Схема сборки', type: 'select', showIfFormFactor: 'coin', options: [
         { value: 'SE', label: 'SE' },
         { value: 'ES', label: 'ES' },
         { value: 'ESE', label: 'ESE' },
       ]},
-      { key: 'half_cell_type', label: 'Тип полуячейки', type: 'text' },
-      { key: 'spacer_thickness_mm', label: 'Толщина спейсера, мм', type: 'number' },
-      { key: 'spacer_count', label: 'Кол-во спейсеров', type: 'number' },
-      { key: 'spacer_notes', label: 'Заметки (спейсер)', type: 'textarea' },
-      { key: 'li_foil_notes', label: 'Li фольга', type: 'textarea' },
+      { key: 'half_cell_type', label: 'Тип полуячейки', type: 'text', showIfFormFactor: 'coin' },
+      { key: 'spacer_thickness_mm', label: 'Толщина спейсера, мм', type: 'number', showIfFormFactor: 'coin' },
+      { key: 'spacer_count', label: 'Кол-во спейсеров', type: 'number', showIfFormFactor: 'coin' },
+      { key: 'spacer_notes', label: 'Заметки (спейсер)', type: 'textarea', showIfFormFactor: 'coin' },
+      { key: 'li_foil_notes', label: 'Li фольга', type: 'textarea', showIfFormFactor: 'coin' },
       // ── Pouch-cell fields (Dalia's new schema: battery_pouch_config) ──
-      { key: 'pouch_case_size_code', label: 'Корпус (пауч)', type: 'select', options: POUCH_CASE_SIZE_OPTIONS },
-      { key: 'pouch_case_size_other', label: 'Другой корпус', type: 'text' },
-      { key: 'pouch_notes', label: 'Заметки (пауч)', type: 'textarea' },
+      { key: 'pouch_case_size_code', label: 'Корпус (пауч)', type: 'select', showIfFormFactor: 'pouch', options: POUCH_CASE_SIZE_OPTIONS },
+      { key: 'pouch_case_size_other', label: 'Другой корпус', type: 'text', showIfFormFactor: 'pouch' },
+      { key: 'pouch_notes', label: 'Заметки (пауч)', type: 'textarea', showIfFormFactor: 'pouch' },
       // ── Cylindrical-cell fields (battery_cyl_config) ──
-      { key: 'cyl_size_code', label: 'Размер (цил.)', type: 'select', options: CYL_SIZE_OPTIONS },
-      { key: 'cyl_notes', label: 'Заметки (цил.)', type: 'textarea' },
+      { key: 'cyl_size_code', label: 'Размер (цил.)', type: 'select', showIfFormFactor: 'cylindrical', options: CYL_SIZE_OPTIONS },
+      { key: 'cyl_notes', label: 'Заметки (цил.)', type: 'textarea', showIfFormFactor: 'cylindrical' },
     ],
   },
   {
