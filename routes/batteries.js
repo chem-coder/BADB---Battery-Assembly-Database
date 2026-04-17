@@ -1327,49 +1327,55 @@ router.patch('/battery_electrode_sources/:battery_id', auth, async (req, res) =>
     const oldCathode = currentSources.rows.find(r => r.role === 'cathode') || {};
     const oldAnode = currentSources.rows.find(r => r.role === 'anode') || {};
 
-    await pool.query(
+    // rowCount-aware UPDATEs: if the role row doesn't exist yet, the UPDATE
+    // affects 0 rows. Previously the endpoint silently returned success —
+    // the UI thinks the source was saved but nothing is persisted. Now we
+    // explicitly report which roles were missing so the caller can fall
+    // back to POST or inform the user.
+    const cathodeUpd = await pool.query(
       `
       UPDATE battery_electrode_sources
-      SET
-        tape_id = $2,
-        cut_batch_id = $3,
-        source_notes = $4
-      WHERE battery_id = $1
-        AND role = 'cathode'
+      SET tape_id = $2, cut_batch_id = $3, source_notes = $4
+      WHERE battery_id = $1 AND role = 'cathode'
       `,
-      [
-        batteryId,
-        cathode_tape_id || null,
-        cathode_cut_batch_id || null,
-        cathode_source_notes || null
-      ]
-      );
-
-      await pool.query(
+      [batteryId, cathode_tape_id || null, cathode_cut_batch_id || null, cathode_source_notes || null]
+    );
+    const anodeUpd = await pool.query(
       `
       UPDATE battery_electrode_sources
-      SET
-        tape_id = $2,
-        cut_batch_id = $3,
-        source_notes = $4
-      WHERE battery_id = $1
-        AND role = 'anode'
+      SET tape_id = $2, cut_batch_id = $3, source_notes = $4
+      WHERE battery_id = $1 AND role = 'anode'
       `,
-      [
-        batteryId,
-        anode_tape_id || null,
-        anode_cut_batch_id || null,
-        anode_source_notes || null
-      ]
-      );
+      [batteryId, anode_tape_id || null, anode_cut_batch_id || null, anode_source_notes || null]
+    );
 
-      const cathodeNew = { tape_id: cathode_tape_id || null, cut_batch_id: cathode_cut_batch_id || null, source_notes: cathode_source_notes || null };
-      const anodeNew = { tape_id: anode_tape_id || null, cut_batch_id: anode_cut_batch_id || null, source_notes: anode_source_notes || null };
+    const cathodeNew = { tape_id: cathode_tape_id || null, cut_batch_id: cathode_cut_batch_id || null, source_notes: cathode_source_notes || null };
+    const anodeNew = { tape_id: anode_tape_id || null, cut_batch_id: anode_cut_batch_id || null, source_notes: anode_source_notes || null };
 
-      if (oldCathode.role) await trackChanges(pool, 'battery_electrode_source_cathode', 'battery_electrode_sources', 'battery_id', batteryId, oldCathode, cathodeNew, req.user.userId, null, false);
-      if (oldAnode.role) await trackChanges(pool, 'battery_electrode_source_anode', 'battery_electrode_sources', 'battery_id', batteryId, oldAnode, anodeNew, req.user.userId, null, false);
+    if (oldCathode.role) await trackChanges(pool, 'battery_electrode_source_cathode', 'battery_electrode_sources', 'battery_id', batteryId, oldCathode, cathodeNew, req.user.userId, null, false);
+    if (oldAnode.role) await trackChanges(pool, 'battery_electrode_source_anode', 'battery_electrode_sources', 'battery_id', batteryId, oldAnode, anodeNew, req.user.userId, null, false);
 
-      res.json({ success: true });
+    // If the caller sent cathode fields but no cathode row exists (likewise
+    // for anode), the PATCH is a no-op for that role. Surface it instead of
+    // lying about success, so the UI can recover (e.g. POST first).
+    const missingRoles = [];
+    const cathodeRequested = cathode_tape_id !== undefined || cathode_cut_batch_id !== undefined || cathode_source_notes !== undefined;
+    const anodeRequested = anode_tape_id !== undefined || anode_cut_batch_id !== undefined || anode_source_notes !== undefined;
+    if (cathodeRequested && cathodeUpd.rowCount === 0) missingRoles.push('cathode');
+    if (anodeRequested && anodeUpd.rowCount === 0) missingRoles.push('anode');
+
+    if (missingRoles.length > 0) {
+      return res.status(404).json({
+        error: `Записи для ролей [${missingRoles.join(', ')}] не существуют. Используйте POST /battery_electrode_sources для создания.`,
+        missing_roles: missingRoles,
+        updated: { cathode: cathodeUpd.rowCount, anode: anodeUpd.rowCount },
+      });
+    }
+
+    res.json({
+      success: true,
+      updated: { cathode: cathodeUpd.rowCount, anode: anodeUpd.rowCount },
+    });
 
   } catch (err) {
 

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const { auth } = require('../middleware/auth');
+const { auth, requireRole } = require('../middleware/auth');
 const { trackChanges } = require('../middleware/trackChanges');
 
 const WORKFLOW_STATUS_ORDER = [
@@ -531,14 +531,24 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE
-router.delete('/:id', auth, async (req, res) => {
+// Restricted to admin/lead: employees should not be able to destroy arbitrary
+// tapes owned by other users. Before this guard, any authenticated user could
+// DELETE /api/tapes/:id and receive {success:true} regardless of ownership.
+router.delete('/:id', auth, requireRole('admin', 'lead'), async (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Некорректный tape_id' });
+  }
 
   try {
-    await pool.query(
+    const result = await pool.query(
       `DELETE FROM tapes WHERE tape_id = $1`,
       [id]
     );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Лента не найдена' });
+    }
 
     res.json({ success: true });
   } catch (err) {

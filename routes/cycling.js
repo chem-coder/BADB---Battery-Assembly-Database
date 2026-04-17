@@ -151,9 +151,13 @@ router.post('/upload', auth, (req, res, next) => {
     return res.status(404).json({ error: 'Battery not found' });
   }
 
+  // Track the file's current location throughout the handler — req.file.path
+  // gets stale after renameSync, and the cleanup-on-error path needs the
+  // up-to-date location to actually delete the orphan.
+  let currentFilePath = req.file.path;
   try {
     // Compute SHA-256
-    const fileBuffer = fs.readFileSync(req.file.path);
+    const fileBuffer = fs.readFileSync(currentFilePath);
     const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
     // Check for duplicate
@@ -163,7 +167,8 @@ router.post('/upload', auth, (req, res, next) => {
     // Move file to raw/
     const rawFilename = `${Date.now()}_${fileHash.slice(0, 8)}${path.extname(req.file.originalname).toLowerCase()}`;
     const rawPath = path.join(UPLOAD_DIR, rawFilename);
-    fs.renameSync(req.file.path, rawPath);
+    fs.renameSync(currentFilePath, rawPath);
+    currentFilePath = rawPath;
 
     // Create session
     const sessionResult = await pool.query(`
@@ -195,8 +200,14 @@ router.post('/upload', auth, (req, res, next) => {
       duplicate_session_id: isDuplicate ? dupCheck.rows[0].session_id : null,
     });
   } catch (err) {
-    // Clean up on error
-    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    // Clean up the orphan file at its ACTUAL current location (could be
+    // the processing dir if we failed before rename, or raw/ if we failed
+    // during/after rename but before the session INSERT committed).
+    try {
+      if (fs.existsSync(currentFilePath)) fs.unlinkSync(currentFilePath);
+    } catch (cleanupErr) {
+      console.error('Cleanup failed for', currentFilePath, ':', cleanupErr.message);
+    }
     console.error('Upload error:', err);
     res.status(500).json({ error: 'Upload failed' });
   }

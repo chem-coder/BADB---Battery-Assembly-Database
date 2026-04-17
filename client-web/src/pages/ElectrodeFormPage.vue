@@ -185,7 +185,10 @@ function removeNewElectrodeRow(index) {
 async function updateElectrode(e, field, value) {
   if (!e.electrode_id) return
   try {
-    await api.put(`/api/electrodes/${e.electrode_id}`, { [field]: value || null })
+    // `?? null` not `|| null`: PrimeVue InputNumber emits the number 0
+    // which is falsy. `|| null` would drop legitimate zero values
+    // (mass=0 for calibration records, cup_number=0 for "stand zero").
+    await api.put(`/api/electrodes/${e.electrode_id}`, { [field]: value ?? null })
     await loadElectrodes(currentBatchId.value)
   } catch (err) {
     showStatus(err.response?.data?.error || 'Ошибка обновления электрода', true)
