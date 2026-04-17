@@ -206,8 +206,31 @@ router.post('/electrode-cut-batches', auth, async (req, res) => {
     return res.status(400).json({ error: geometry.error });
   }
 
+  const client = await pool.connect();
+
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    const tapeResult = await client.query(
+      `
+      SELECT tape_id, availability_status
+      FROM tapes
+      WHERE tape_id = $1
+      `,
+      [tapeId]
+    );
+
+    if (!tapeResult.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Лента не найдена' });
+    }
+
+    if (tapeResult.rows[0].availability_status === 'depleted') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Лента отмечена как израсходованная' });
+    }
+
+    const result = await client.query(
       `
       INSERT INTO electrode_cut_batches (
         tape_id,
@@ -237,10 +260,79 @@ router.post('/electrode-cut-batches', auth, async (req, res) => {
         comments || null
       ]
     );
+
+    await client.query(
+      `
+      INSERT INTO tape_dry_box_state (
+        tape_id,
+        started_at,
+        removed_at,
+        temperature_c,
+        atmosphere,
+        other_parameters,
+        comments,
+        updated_by,
+        updated_at
+      )
+      SELECT
+        $1,
+        COALESCE(ds.started_at, final_dry.started_at, now()),
+        now(),
+        COALESCE(ds.temperature_c, final_dry.temperature_c),
+        COALESCE(ds.atmosphere, final_dry.atmosphere),
+        COALESCE(ds.other_parameters, final_dry.other_parameters),
+        ds.comments,
+        $2,
+        now()
+      FROM (SELECT 1) seed
+      LEFT JOIN tape_dry_box_state ds
+        ON ds.tape_id = $1
+      LEFT JOIN LATERAL (
+        SELECT
+          s.started_at,
+          d.temperature_c,
+          d.atmosphere,
+          d.other_parameters
+        FROM tape_process_steps s
+        JOIN operation_types ot
+          ON ot.operation_type_id = s.operation_type_id
+        LEFT JOIN tape_step_drying d
+          ON d.step_id = s.step_id
+        WHERE s.tape_id = $1
+          AND ot.code = 'drying_pressed_tape'
+        ORDER BY s.started_at DESC NULLS LAST, s.step_id DESC
+        LIMIT 1
+      ) final_dry ON TRUE
+      ON CONFLICT (tape_id)
+      DO UPDATE SET
+        started_at = COALESCE(tape_dry_box_state.started_at, EXCLUDED.started_at),
+        removed_at = EXCLUDED.removed_at,
+        temperature_c = COALESCE(tape_dry_box_state.temperature_c, EXCLUDED.temperature_c),
+        atmosphere = COALESCE(tape_dry_box_state.atmosphere, EXCLUDED.atmosphere),
+        other_parameters = COALESCE(tape_dry_box_state.other_parameters, EXCLUDED.other_parameters),
+        updated_by = EXCLUDED.updated_by,
+        updated_at = now()
+      `,
+      [tapeId, createdBy]
+    );
+
+    await client.query(
+      `
+      UPDATE tapes
+      SET availability_status = 'out_of_dry_box'
+      WHERE tape_id = $1
+      `,
+      [tapeId]
+    );
+
+    await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
+  } finally {
+    client.release();
   }
 });
 

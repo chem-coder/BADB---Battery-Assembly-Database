@@ -286,6 +286,13 @@
         <!-- I'm not sure what is saves though - the electrodes or the batch drying information? What is the right workflow here? -->
         <button type="button" id="saveBtn">Сохранить партию</button>
         <button type="button" id="exitBatchBtn">Выйти</button>
+
+        <fieldset id="electrodes-tape-dry-box" hidden>
+          <legend>Что дальше с лентой?</legend>
+          <div id="electrodes-tape-dry-box-status" aria-live="polite"></div>
+          <button type="button" id="electrodes-return-tape-btn">Вернуть в шкаф сейчас</button>
+          <button type="button" id="electrodes-deplete-tape-btn">Лента израсходована</button>
+        </fieldset>
         
       </div>
       

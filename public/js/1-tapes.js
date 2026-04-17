@@ -6,6 +6,7 @@ const nameInput = document.getElementById('tape-name-input');
 const form = document.forms['tape-form'];
 const title = form.querySelector('h2');
 const saveBtn = document.getElementById('saveBtn');
+const printBtn = document.getElementById('printBtn');
 const clearBtn = document.getElementById('clearBtn');
 const recipeMaterialsSaveBtn = document.getElementById('0-recipe-materials-save-btn');
 const tapesList = document.getElementById('tapesList');
@@ -59,6 +60,7 @@ const tapePageState = window.tapePageState = {
     drying_am: null,
     drying_tape: null,
     drying_pressed_tape: null,
+    maintenance_dry_box: null,
     weighing: null,
     mixing: null,
     coating: null,
@@ -86,6 +88,7 @@ const tapePageState = window.tapePageState = {
       drying_tape: '',
       calendering: '',
       drying_pressed_tape: '',
+      maintenance_dry_box: '',
       liveSinceLastStep: ''
     },
     sections: {
@@ -95,6 +98,7 @@ const tapePageState = window.tapePageState = {
         '0-drying_materials': false,
         '1-slurry': false,
         '2-tape': false,
+        '3-storage': false,
         'calculations-expanded': true
       },
       open: {
@@ -103,6 +107,7 @@ const tapePageState = window.tapePageState = {
         '0-drying_materials': false,
         '1-slurry': false,
         '2-tape': false,
+        '3-storage': false,
         'calculations-expanded': false
       }
     },
@@ -209,9 +214,9 @@ function renderDelayState() {
     weighing: '1-weighing-delay',
     mixing: '1-mixing-delay',
     coating: '2-coating-delay',
-    drying_tape: '2a-drying_tape-delay',
     calendering: '2-calendering-delay',
-    drying_pressed_tape: '2b-drying_pressed_tape-delay'
+    drying_pressed_tape: '2b-drying_pressed_tape-delay',
+    maintenance_dry_box: '2c-dry-box-live'
   };
 
   Object.entries(delayMap).forEach(([key, elementId]) => {
@@ -264,6 +269,23 @@ function setCurrentTape(tape, { mode = null, render = true } = {}) {
   }
 }
 
+function patchCurrentTapeAvailability(availabilityStatus) {
+  if (!state.selection.currentTapeId) return;
+
+  if (state.selection.currentTape) {
+    state.selection.currentTape = {
+      ...state.selection.currentTape,
+      availability_status: availabilityStatus
+    };
+  }
+
+  state.tapes.items = state.tapes.items.map((tape) =>
+    Number(tape.tape_id) === Number(state.selection.currentTapeId)
+      ? { ...tape, availability_status: availabilityStatus }
+      : tape
+  );
+}
+
 function clearCurrentTapeSelection() {
   setCurrentTape(null);
 }
@@ -301,6 +323,7 @@ function resetSectionState() {
     '0-drying_materials': false,
     '1-slurry': false,
     '2-tape': false,
+    '3-storage': false,
     'calculations-expanded': true
   };
   state.ui.sections.open = {
@@ -309,6 +332,7 @@ function resetSectionState() {
     '0-drying_materials': false,
     '1-slurry': false,
     '2-tape': false,
+    '3-storage': false,
     'calculations-expanded': false
   };
   renderSectionState();
@@ -423,9 +447,9 @@ function renderTapeWorkflowProgressionState() {
   const dryingAmSaved = hasSavedStep('drying_am');
   const weighingSaved = hasSavedStep('weighing');
   const mixingSaved = hasSavedStep('mixing');
-  const coatingSaved = hasSavedStep('coating');
   const dryingTapeSaved = hasSavedStep('drying_tape');
   const calenderingSaved = hasSavedStep('calendering');
+  const dryingPressedSaved = hasSavedStep('drying_pressed_tape');
 
   setSectionsVisibility({
     '0-general-info': true,
@@ -433,6 +457,7 @@ function renderTapeWorkflowProgressionState() {
     '0-drying_materials': recipeSaved,
     '1-slurry': dryingAmSaved,
     '2-tape': mixingSaved,
+    '3-storage': dryingPressedSaved,
     'calculations-expanded': hasTape
   }, { render: true });
 
@@ -449,15 +474,9 @@ function renderTapeWorkflowProgressionState() {
   );
 
   setFieldsetDisabled(
-    '2a-drying_tape',
-    !coatingSaved,
-    'Сначала сохраните этап II.1. Нанесение.'
-  );
-
-  setFieldsetDisabled(
     '2-calendering',
     !dryingTapeSaved,
-    'Сначала сохраните этап II.2. Сушка ленты в шкафу.'
+    'Сначала сохраните этап II.1. Нанесение и параметры сушки.'
   );
 
   setFieldsetDisabled(
@@ -465,6 +484,21 @@ function renderTapeWorkflowProgressionState() {
     !calenderingSaved,
     'Сначала сохраните этап II.3. Каландрирование.'
   );
+}
+
+function getSectionOpenStateForWorkflowStatus(statusCode) {
+  return {
+    '0-general-info': !statusCode,
+    '0-tape-recipe-materials': statusCode === 'recipe_materials',
+    '0-drying_materials': statusCode === 'drying_am',
+    '1-slurry': statusCode === 'weighing' || statusCode === 'mixing',
+    '2-tape': statusCode === 'coating'
+      || statusCode === 'drying_tape'
+      || statusCode === 'calendering'
+      || statusCode === 'drying_pressed_tape',
+    '3-storage': statusCode === 'finished',
+    'calculations-expanded': false
+  };
 }
 
 function setRecipeLines(lines) {
@@ -658,6 +692,8 @@ function getDefaultWorkflowState() {
       performed_by: '',
       date: '',
       time: '',
+      end_date: '',
+      end_time: '',
       comments: '',
       temperature_c: '80',
       atmosphere: 'vacuum',
@@ -668,6 +704,8 @@ function getDefaultWorkflowState() {
       performed_by: '',
       date: '',
       time: '',
+      end_date: '',
+      end_time: '',
       comments: '',
       temperature_c: '80',
       atmosphere: 'vacuum',
@@ -678,11 +716,27 @@ function getDefaultWorkflowState() {
       performed_by: '',
       date: '',
       time: '',
+      end_date: '',
+      end_time: '',
       comments: '',
       temperature_c: '80',
       atmosphere: 'vacuum',
       target_duration_min: '120',
       other_parameters: ''
+    },
+    maintenance_dry_box: {
+      availability_status: 'out_of_dry_box',
+      started_at_date: '',
+      started_at_time: '',
+      removed_at_date: '',
+      removed_at_time: '',
+      temperature_c: '80',
+      atmosphere: 'vacuum',
+      other_parameters: '',
+      comments: '',
+      updated_by: '',
+      updated_by_name: '',
+      updated_at: ''
     },
     weighing: {
       performed_by: '',
@@ -701,11 +755,15 @@ function getDefaultWorkflowState() {
       dry_start_date: '',
       dry_start_time: '',
       dry_duration_min: '',
+      dry_end_date: '',
+      dry_end_time: '',
       dry_rpm: '',
       wet_mixing_id: '',
       wet_start_date: '',
       wet_start_time: '',
       wet_duration_min: '',
+      wet_end_date: '',
+      wet_end_time: '',
       wet_rpm: '',
       viscosity_cP: ''
     },
@@ -816,6 +874,156 @@ function combineDateAndTime(date, time) {
   return `${date}T${time}`;
 }
 
+function addMinutesToDateTime(date, time, durationMinutes) {
+  const duration = Number(durationMinutes);
+  if (!date || !time || !Number.isFinite(duration)) {
+    return { date: '', time: '' };
+  }
+
+  const base = new Date(`${date}T${time}`);
+  if (!Number.isFinite(base.getTime())) {
+    return { date: '', time: '' };
+  }
+
+  base.setMinutes(base.getMinutes() + duration);
+  return splitIsoToDateTime(base.toISOString());
+}
+
+const DRYING_TAPE_PREFILL_MATRIX = {
+  anode: {
+    dr_blade: { temperature_c: '80', atmosphere: 'vacuum', target_duration_min: '45' },
+    coater_machine: { temperature_c: '80', atmosphere: 'air', target_duration_min: '20' }
+  },
+  cathode: {
+    dr_blade: { temperature_c: '80', atmosphere: 'vacuum', target_duration_min: '90' },
+    coater_machine: { temperature_c: '80', atmosphere: 'air', target_duration_min: '30' }
+  }
+};
+
+function getNormalizedTapeRole() {
+  return String(state.form.fields.tape_type || state.selection.currentTape?.role || '')
+    .trim()
+    .toLowerCase();
+}
+
+function getNormalizedCoatingMethodKey() {
+  const method = getSelectedCoatingMethod();
+  return String(method?.name || '')
+    .trim()
+    .toLowerCase();
+}
+
+function getDryingTapePrefillValues() {
+  const role = getNormalizedTapeRole();
+  const methodKey = getNormalizedCoatingMethodKey();
+  return DRYING_TAPE_PREFILL_MATRIX[role]?.[methodKey] || null;
+}
+
+function applyDryingTapePrefillFromCoating({
+  force = false,
+  forceOperator = force,
+  forceTiming = force,
+  forceDefaults = force
+} = {}) {
+  const defaults = getDryingTapePrefillValues();
+  const coating = state.workflow.coating || {};
+  const drying = state.workflow.drying_tape || {};
+  const patch = {};
+
+  if (coating.performed_by && (forceOperator || !String(drying.performed_by || '').trim())) {
+    patch.performed_by = coating.performed_by;
+  }
+
+  if (coating.date && coating.time) {
+    const derivedStart = addMinutesToDateTime(coating.date, coating.time, 10);
+    if (derivedStart.date && (forceTiming || !String(drying.date || '').trim())) {
+      patch.date = derivedStart.date;
+    }
+    if (derivedStart.time && (forceTiming || !String(drying.time || '').trim())) {
+      patch.time = derivedStart.time;
+    }
+  }
+
+  if (defaults) {
+    if (forceDefaults || !String(drying.temperature_c || '').trim()) {
+      patch.temperature_c = defaults.temperature_c;
+    }
+    if (forceDefaults || !String(drying.atmosphere || '').trim()) {
+      patch.atmosphere = defaults.atmosphere;
+    }
+    if (forceDefaults || !String(drying.target_duration_min || '').trim()) {
+      patch.target_duration_min = defaults.target_duration_min;
+    }
+  }
+
+  if (!Object.keys(patch).length) return;
+
+  const nextStep = { ...drying, ...patch };
+  const nextEnd = addMinutesToDateTime(nextStep.date, nextStep.time, nextStep.target_duration_min);
+  nextStep.end_date = nextEnd.date;
+  nextStep.end_time = nextEnd.time;
+
+  setWorkflowStep('drying_tape', nextStep);
+  renderCoatingDryingBridgeControls();
+}
+
+function syncDryingEndTime(stepKey) {
+  const step = state.workflow[stepKey];
+  if (!step) return;
+  const next = addMinutesToDateTime(step.date, step.time, step.target_duration_min);
+  const nextStep = {
+    ...step,
+    end_date: next.date,
+    end_time: next.time
+  };
+  setWorkflowStep(stepKey, nextStep);
+
+  if (stepKey === 'drying_am') {
+    setElValue('0-drying_am-end-date', next.date);
+    setElValue('0-drying_am-end-time', next.time);
+    return;
+  }
+
+  if (stepKey === 'drying_pressed_tape') {
+    setElValue('2b-drying_pressed_tape-end-date', next.date);
+    setElValue('2b-drying_pressed_tape-end-time', next.time);
+  }
+}
+
+function syncMixingEndTime(phase) {
+  const step = state.workflow.mixing;
+  if (!step) return;
+  const derived = deriveMixingTimeline(step);
+  setWorkflowStep('mixing', {
+    ...step,
+    ...derived
+  });
+}
+
+function deriveMixingTimeline(step) {
+  const baseDate = step?.started_at_date || '';
+  const baseTime = step?.started_at_time || '';
+
+  const dryStartDate = baseDate;
+  const dryStartTime = baseTime;
+  const dryEnd = addMinutesToDateTime(dryStartDate, dryStartTime, step?.dry_duration_min);
+
+  const wetStartDate = dryEnd.date || dryStartDate;
+  const wetStartTime = dryEnd.time || dryStartTime;
+  const wetEnd = addMinutesToDateTime(wetStartDate, wetStartTime, step?.wet_duration_min);
+
+  return {
+    dry_start_date: dryStartDate,
+    dry_start_time: dryStartTime,
+    dry_end_date: dryEnd.date,
+    dry_end_time: dryEnd.time,
+    wet_start_date: wetStartDate,
+    wet_start_time: wetStartTime,
+    wet_end_date: wetEnd.date,
+    wet_end_time: wetEnd.time
+  };
+}
+
 function setElValue(id, value) {
   const el = document.getElementById(id);
   if (el) el.value = value ?? '';
@@ -831,6 +1039,8 @@ function renderDryingStep(step, prefix) {
   setElValue(`${prefix}-operator`, step.performed_by);
   setElValue(`${prefix}-date`, step.date);
   setElValue(`${prefix}-time`, step.time);
+  setElValue(`${prefix}-end-date`, step.end_date);
+  setElValue(`${prefix}-end-time`, step.end_time);
   setElValue(`${prefix}-notes`, step.comments);
   setElValue(`${prefix}-temperature`, step.temperature_c);
   setElValue(`${prefix}-atmosphere`, step.atmosphere);
@@ -838,16 +1048,69 @@ function renderDryingStep(step, prefix) {
   setElValue(`${prefix}-other_param`, step.other_parameters);
 }
 
+function renderCoatingDryingBridgeControls() {
+  const step = state.workflow.drying_tape || {};
+  setElValue('2-coating-dry-temp', step.temperature_c);
+  setElValue('2-coating-dry-atmosphere', step.atmosphere);
+  setElValue('2-coating-dry-duration', step.target_duration_min);
+}
+
 function renderDryingAmStep() {
   renderDryingStep(state.workflow.drying_am, '0-drying_am');
 }
 
-function renderDryingCoatedTapeStep() {
-  renderDryingStep(state.workflow.drying_tape, '2a-drying_tape');
-}
-
 function renderDryingPressedTapeStep() {
   renderDryingStep(state.workflow.drying_pressed_tape, '2b-drying_pressed_tape');
+}
+
+function getDryBoxStatusLabel(status) {
+  return status === 'in_dry_box'
+    ? 'Лента находится в сушильном шкафу'
+    : status === 'depleted'
+      ? 'Лента израсходована'
+      : 'Лента находится вне сушильного шкафа';
+}
+
+function renderMaintenanceDryBoxStep() {
+  const step = state.workflow.maintenance_dry_box || getDefaultWorkflowState().maintenance_dry_box;
+  const finalDrying = state.workflow.drying_pressed_tape || getDefaultWorkflowState().drying_pressed_tape;
+  const stageFieldset = document.getElementById('2c-dry-box-state');
+  const lockNote = document.getElementById('2c-dry-box-lock-note');
+  const finalDryingEnd = getDryingEnd(finalDrying);
+  const isAvailable = Boolean(finalDryingEnd);
+
+  setElValue('2c-dry-box-start-date', step.started_at_date);
+  setElValue('2c-dry-box-start-time', step.started_at_time);
+  setElValue('2c-dry-box-temperature', step.temperature_c);
+  setElValue('2c-dry-box-atmosphere', step.atmosphere);
+  setElValue('2c-dry-box-other-parameters', step.other_parameters);
+  setElValue('2c-dry-box-comments', step.comments);
+
+  const statusEl = document.getElementById('2c-dry-box-status');
+  if (statusEl) {
+    statusEl.textContent = getDryBoxStatusLabel(step.availability_status);
+  }
+
+  if (lockNote) {
+    lockNote.textContent = isAvailable
+      ? ''
+      : 'Этот этап становится доступен только после завершения II.4 сушки ленты после каландрирования.';
+  }
+
+  const saveBtn = document.getElementById('2c-dry-box-save-btn');
+  const removeBtn = document.getElementById('2c-dry-box-remove-btn');
+  const returnBtn = document.getElementById('2c-dry-box-return-btn');
+  const depleteBtn = document.getElementById('2c-dry-box-deplete-btn');
+  const isDepleted = step.availability_status === 'depleted';
+  const isInDryBox = step.availability_status === 'in_dry_box';
+  const isOutOfDryBox = step.availability_status === 'out_of_dry_box';
+
+  if (stageFieldset) stageFieldset.disabled = !isAvailable;
+
+  if (saveBtn) saveBtn.disabled = !isAvailable || isDepleted;
+  if (removeBtn) removeBtn.disabled = !isAvailable || isDepleted || isOutOfDryBox;
+  if (returnBtn) returnBtn.disabled = !isAvailable || isDepleted || isInDryBox;
+  if (depleteBtn) depleteBtn.disabled = !isAvailable || isDepleted;
 }
 
 function renderWeighingStep() {
@@ -866,13 +1129,9 @@ function renderMixingStep() {
   setElValue('1-mixing-comments', step.comments);
   setElValue('1-mixing-slurry_volume_ml', step.slurry_volume_ml);
   setElValue('1-mixing-dry_mixing_id', step.dry_mixing_id);
-  setElValue('dry-start-date', step.dry_start_date);
-  setElValue('dry-start-time', step.dry_start_time);
   setElValue('dry-duration-min', step.dry_duration_min);
   setElValue('dry-rpm', step.dry_rpm);
   setElValue('1-mixing-wet_mixing_id', step.wet_mixing_id);
-  setElValue('wet-start-date', step.wet_start_date);
-  setElValue('wet-start-time', step.wet_start_time);
   setElValue('wet-duration-min', step.wet_duration_min);
   setElValue('wet-rpm', step.wet_rpm);
   setElValue('wet-viscosity_cP', step.viscosity_cP);
@@ -891,6 +1150,7 @@ function renderCoatingStep() {
   setElValue('2-coating-temp-c', step.coat_temp_c);
   setElValue('2-coating-time-min', step.coat_time_min);
   setElValue('2-coating-method-comments', step.method_comments);
+  renderCoatingDryingBridgeControls();
 }
 
 function renderCalenderingStep() {
@@ -918,8 +1178,8 @@ function renderCalenderingStep() {
 
 function renderWorkflowState() {
   renderDryingAmStep();
-  renderDryingCoatedTapeStep();
   renderDryingPressedTapeStep();
+  renderMaintenanceDryBoxStep();
   renderWeighingStep();
   renderMixingStep();
   renderCoatingStep();
@@ -1086,6 +1346,75 @@ async function updateTape(id, data) {
   return res.json();
 }
 
+async function fetchTapeDryBoxState(tapeId) {
+  const res = await fetch(`/api/tapes/${tapeId}/dry-box-state`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка загрузки состояния сушильного шкафа');
+  }
+  return res.json();
+}
+
+async function saveTapeDryBoxState(tapeId, payload) {
+  const res = await fetch(`/api/tapes/${tapeId}/dry-box-state`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка сохранения параметров сушки в шкафу');
+  }
+
+  return res.json();
+}
+
+async function returnTapeToDryBoxNow(tapeId, payload) {
+  const res = await fetch(`/api/tapes/${tapeId}/dry-box-state/return-now`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка возврата ленты в сушильный шкаф');
+  }
+
+  return res.json();
+}
+
+async function removeTapeFromDryBoxNow(tapeId, payload) {
+  const res = await fetch(`/api/tapes/${tapeId}/dry-box-state/remove-now`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка изменения статуса ленты в сушильном шкафу');
+  }
+
+  return res.json();
+}
+
+async function markTapeDepleted(tapeId, payload) {
+  const res = await fetch(`/api/tapes/${tapeId}/dry-box-state/deplete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка изменения статуса ленты');
+  }
+
+  return res.json();
+}
+
 async function deleteTape(id) {
   const res = await fetch(`/api/tapes/${id}`, {
     method: 'DELETE'
@@ -1198,7 +1527,7 @@ async function loadDryingAtmospheres(selectEl, selectedCode = '') {
   if (!selectEl) return;
   
   const res = await fetch('/api/reference/drying-atmospheres');
-  if (!res.ok) throw new Error('Failed to load drying atmospheres');
+  if (!res.ok) throw new Error('Ошибка загрузки атмосфер сушки');
   
   const items = await res.json();
   setReferenceDryingAtmospheres(items);
@@ -1221,7 +1550,7 @@ async function loadDryMixingMethods(selectEl, selectedId = '') {
   if (!selectEl) return;
   
   const res = await fetch('/api/reference/dry-mixing-methods');
-  if (!res.ok) throw new Error('Failed to load dry mixing methods');
+  if (!res.ok) throw new Error('Ошибка загрузки методов сухого смешивания');
   
   const items = await res.json();
   setReferenceDryMixingMethods(items);
@@ -1243,7 +1572,7 @@ async function loadWetMixingMethods(selectEl, selectedId = '') {
   if (!selectEl) return;
   
   const res = await fetch('/api/reference/wet-mixing-methods');
-  if (!res.ok) throw new Error('Failed to load wet mixing methods');
+  if (!res.ok) throw new Error('Ошибка загрузки методов влажного смешивания');
   
   const items = await res.json();
   setReferenceWetMixingMethods(items);
@@ -1648,7 +1977,6 @@ function renderUsersSelects() {
     if (sel.id === '1-weighing-operator') selectedValue = state.workflow.weighing.performed_by;
     if (sel.id === '1-mixing-operator') selectedValue = state.workflow.mixing.performed_by;
     if (sel.id === '2-coating-operator') selectedValue = state.workflow.coating.performed_by;
-    if (sel.id === '2a-drying_tape-operator') selectedValue = state.workflow.drying_tape.performed_by;
     if (sel.id === '2-calendering-operator') selectedValue = state.workflow.calendering.performed_by;
     if (sel.id === '2b-drying_pressed_tape-operator') selectedValue = state.workflow.drying_pressed_tape.performed_by;
 
@@ -2105,27 +2433,32 @@ async function fetchTapeRestoreData(tape) {
   const stepEntries = await Promise.all(stepCodes.map(async (code) => {
     const res = await fetch(`/api/tapes/${tapeId}/steps/by-code/${code}`);
     if (!res.ok) {
-      throw new Error(`Restore failed for ${code}`);
+      throw new Error(`Ошибка восстановления этапа: ${code}`);
     }
     return [code, await res.json()];
   }));
 
   const actuals = tape.tape_recipe_id ? await fetchTapeActuals(tapeId) : [];
+  const dryBoxState = await fetchTapeDryBoxState(tapeId);
 
   return {
     tape,
     stepsByCode: Object.fromEntries(stepEntries),
-    actuals
+    actuals,
+    dryBoxState
   };
 }
 
 function normalizeDryingRestoreStep(drying) {
   if (!drying) return getDefaultWorkflowState().drying_am;
   const { date, time } = splitIsoToDateTime(drying.started_at);
+  const ended = splitIsoToDateTime(drying.ended_at);
   return {
     performed_by: String(drying.performed_by ?? ''),
     date,
     time,
+    end_date: ended.date,
+    end_time: ended.time,
     comments: drying.comments ?? '',
     temperature_c: drying.temperature_c ?? '',
     atmosphere: drying.atmosphere ?? 'vacuum',
@@ -2134,8 +2467,30 @@ function normalizeDryingRestoreStep(drying) {
   };
 }
 
+function normalizeDryBoxRestoreState(dryBoxState) {
+  if (!dryBoxState) return getDefaultWorkflowState().maintenance_dry_box;
+
+  const started = splitIsoToDateTime(dryBoxState.started_at);
+  const removed = splitIsoToDateTime(dryBoxState.removed_at);
+
+  return {
+    availability_status: dryBoxState.availability_status || 'out_of_dry_box',
+    started_at_date: started.date,
+    started_at_time: started.time,
+    removed_at_date: removed.date,
+    removed_at_time: removed.time,
+    temperature_c: dryBoxState.temperature_c ?? '80',
+    atmosphere: dryBoxState.atmosphere ?? 'vacuum',
+    other_parameters: dryBoxState.other_parameters ?? '',
+    comments: dryBoxState.comments ?? '',
+    updated_by: String(dryBoxState.updated_by ?? ''),
+    updated_by_name: dryBoxState.updated_by_name ?? '',
+    updated_at: dryBoxState.updated_at ?? ''
+  };
+}
+
 function normalizeTapeRestoreDataIntoState(restoreData) {
-  const { tape, stepsByCode, actuals } = restoreData;
+  const { tape, stepsByCode, actuals, dryBoxState } = restoreData;
   const defaults = getDefaultWorkflowState();
 
   state.form.isRestoringTape = true;
@@ -2147,15 +2502,13 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
     '0-tape-recipe-materials': true,
     '0-drying_materials': true,
     '1-slurry': true,
-    '2-tape': true
+    '2-tape': true,
+    '3-storage': Boolean(stepsByCode.drying_pressed_tape)
   }, { render: false });
-  setSectionsOpen({
-    '0-general-info': false,
-    '0-tape-recipe-materials': false,
-    '0-drying_materials': false,
-    '1-slurry': false,
-    '2-tape': false
-  }, { render: false });
+  setSectionsOpen(
+    getSectionOpenStateForWorkflowStatus(tape?.workflow_status_code || null),
+    { render: false }
+  );
 
   setTopLevelFormState({
     name: (tape?.name || '').trim(),
@@ -2181,6 +2534,7 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
   setWorkflowStep('drying_am', normalizeDryingRestoreStep(stepsByCode.drying_am));
   setWorkflowStep('drying_tape', normalizeDryingRestoreStep(stepsByCode.drying_tape));
   setWorkflowStep('drying_pressed_tape', normalizeDryingRestoreStep(stepsByCode.drying_pressed_tape));
+  setWorkflowStep('maintenance_dry_box', normalizeDryBoxRestoreState(dryBoxState));
 
   if (stepsByCode.weighing) {
     const { date, time } = splitIsoToDateTime(stepsByCode.weighing.started_at);
@@ -2197,9 +2551,7 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
 
   if (stepsByCode.mixing) {
     const started = splitIsoToDateTime(stepsByCode.mixing.started_at);
-    const dryStarted = splitIsoToDateTime(stepsByCode.mixing.dry_start_time);
-    const wetStarted = splitIsoToDateTime(stepsByCode.mixing.wet_start_time);
-    setWorkflowStep('mixing', {
+    const restoredMixing = {
       ...defaults.mixing,
       performed_by: String(stepsByCode.mixing.performed_by ?? ''),
       started_at_date: started.date,
@@ -2207,16 +2559,16 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
       comments: stepsByCode.mixing.comments ?? '',
       slurry_volume_ml: stepsByCode.mixing.slurry_volume_ml ?? '',
       dry_mixing_id: stepsByCode.mixing.dry_mixing_id ?? '',
-      dry_start_date: dryStarted.date,
-      dry_start_time: dryStarted.time,
       dry_duration_min: stepsByCode.mixing.dry_duration_min ?? '',
       dry_rpm: stepsByCode.mixing.dry_rpm ?? '',
       wet_mixing_id: stepsByCode.mixing.wet_mixing_id ?? '',
-      wet_start_date: wetStarted.date,
-      wet_start_time: wetStarted.time,
       wet_duration_min: stepsByCode.mixing.wet_duration_min ?? '',
       wet_rpm: stepsByCode.mixing.wet_rpm ?? '',
       viscosity_cP: stepsByCode.mixing.viscosity_cp ?? ''
+    };
+    setWorkflowStep('mixing', {
+      ...restoredMixing,
+      ...deriveMixingTimeline(restoredMixing)
     });
   } else {
     setWorkflowStep('mixing', defaults.mixing);
@@ -2269,6 +2621,25 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
   } else {
     setWorkflowStep('calendering', defaults.calendering);
   }
+}
+
+function buildMaintenanceDryBoxPayload() {
+  const step = state.workflow.maintenance_dry_box;
+
+  return {
+    updated_by: Number(step.updated_by || state.form.fields.created_by || 0) || null,
+    started_at: combineDateAndTime(step.started_at_date, step.started_at_time),
+    temperature_c: step.temperature_c || null,
+    atmosphere: step.atmosphere || null,
+    other_parameters: step.other_parameters || null,
+    comments: step.comments || null
+  };
+}
+
+function applyDryBoxStateToUi(stateRow) {
+  const normalized = normalizeDryBoxRestoreState(stateRow);
+  setWorkflowStep('maintenance_dry_box', normalized, { apply: true });
+  patchCurrentTapeAvailability(normalized.availability_status);
 }
 
 async function renderTapeRestoreFromState(restoreData) {
@@ -2529,24 +2900,83 @@ function getDelayTextFromDates(prev, cur) {
   return text ? `Время с прошлого этапа: ${text}` : '';
 }
 
+function getDryingStart(step) {
+  return parseDateTimeValue(step?.date, step?.time);
+}
+
+function getDryingEnd(step) {
+  return parseDateTimeValue(step?.end_date, step?.end_time) || getDryingStart(step);
+}
+
+function getWeighingStart(step) {
+  return parseDateTimeValue(step?.date, step?.time);
+}
+
+function getWeighingEnd() {
+  return getMixingStart(state.workflow.mixing) || getWeighingStart(state.workflow.weighing);
+}
+
+function getMixingStart(step) {
+  return parseDateTimeValue(step?.started_at_date, step?.started_at_time);
+}
+
+function getMixingEnd(step) {
+  const dryEnd = parseDateTimeValue(step?.dry_end_date, step?.dry_end_time);
+  const wetEnd = parseDateTimeValue(step?.wet_end_date, step?.wet_end_time);
+  const dryStart = parseDateTimeValue(step?.dry_start_date, step?.dry_start_time);
+  const wetStart = parseDateTimeValue(step?.wet_start_date, step?.wet_start_time);
+  const overallStart = getMixingStart(step);
+
+  const candidates = [dryEnd, wetEnd, dryStart, wetStart, overallStart].filter(Boolean);
+  if (!candidates.length) return null;
+
+  return candidates.reduce((latest, current) => (
+    !latest || current.getTime() > latest.getTime() ? current : latest
+  ), null);
+}
+
+function getCoatingStart(step) {
+  return parseDateTimeValue(step?.date, step?.time);
+}
+
+function getCoatingEnd() {
+  return getDryingStart(state.workflow.drying_tape) || getCoatingStart(state.workflow.coating);
+}
+
+function getCalenderingStart(step) {
+  return parseDateTimeValue(step?.date, step?.time);
+}
+
+function getCalenderingEnd() {
+  return getDryingStart(state.workflow.drying_pressed_tape) || getCalenderingStart(state.workflow.calendering);
+}
+
+function getMaintenanceDryBoxStart(step) {
+  return parseDateTimeValue(step?.started_at_date, step?.started_at_time);
+}
+
+function getMaintenanceDryBoxRemoved(step) {
+  return parseDateTimeValue(step?.removed_at_date, step?.removed_at_time);
+}
+
 // -------- Live timer since last step --------
 
 let liveSinceTimerId = null;
 
-function getLatestStepStart() {
+function getLatestStepMoment() {
   let latest = null;
   
-  const stepStarts = [
-    parseDateTimeValue(state.workflow.drying_am.date, state.workflow.drying_am.time),
-    parseDateTimeValue(state.workflow.weighing.date, state.workflow.weighing.time),
-    parseDateTimeValue(state.workflow.mixing.started_at_date, state.workflow.mixing.started_at_time),
-    parseDateTimeValue(state.workflow.coating.date, state.workflow.coating.time),
-    parseDateTimeValue(state.workflow.drying_tape.date, state.workflow.drying_tape.time),
-    parseDateTimeValue(state.workflow.calendering.date, state.workflow.calendering.time),
-    parseDateTimeValue(state.workflow.drying_pressed_tape.date, state.workflow.drying_pressed_tape.time)
+  const stepMoments = [
+    getDryingEnd(state.workflow.drying_am),
+    getWeighingEnd(),
+    getMixingEnd(state.workflow.mixing),
+    getCoatingEnd(),
+    getDryingEnd(state.workflow.drying_tape),
+    getCalenderingEnd(),
+    getDryingEnd(state.workflow.drying_pressed_tape)
   ];
 
-  stepStarts.forEach((dt) => {
+  stepMoments.forEach((dt) => {
     if (!dt) return;
     if (!latest || dt.getTime() > latest.getTime()) latest = dt;
   });
@@ -2556,31 +2986,39 @@ function getLatestStepStart() {
 
 function refreshDelayState() {
   state.ui.delays.weighing = getDelayTextFromDates(
-    parseDateTimeValue(state.workflow.drying_am.date, state.workflow.drying_am.time),
-    parseDateTimeValue(state.workflow.weighing.date, state.workflow.weighing.time)
+    getDryingEnd(state.workflow.drying_am),
+    getWeighingStart(state.workflow.weighing)
   );
-  state.ui.delays.mixing = getDelayTextFromDates(
-    parseDateTimeValue(state.workflow.weighing.date, state.workflow.weighing.time),
-    parseDateTimeValue(state.workflow.mixing.started_at_date, state.workflow.mixing.started_at_time)
-  );
+  state.ui.delays.mixing = '';
   state.ui.delays.coating = getDelayTextFromDates(
-    parseDateTimeValue(state.workflow.mixing.started_at_date, state.workflow.mixing.started_at_time),
-    parseDateTimeValue(state.workflow.coating.date, state.workflow.coating.time)
+    getMixingEnd(state.workflow.mixing),
+    getCoatingStart(state.workflow.coating)
   );
-  state.ui.delays.drying_tape = getDelayTextFromDates(
-    parseDateTimeValue(state.workflow.coating.date, state.workflow.coating.time),
-    parseDateTimeValue(state.workflow.drying_tape.date, state.workflow.drying_tape.time)
-  );
+  state.ui.delays.drying_tape = '';
   state.ui.delays.calendering = getDelayTextFromDates(
-    parseDateTimeValue(state.workflow.drying_tape.date, state.workflow.drying_tape.time),
-    parseDateTimeValue(state.workflow.calendering.date, state.workflow.calendering.time)
+    getDryingEnd(state.workflow.drying_tape),
+    getCalenderingStart(state.workflow.calendering)
   );
-  state.ui.delays.drying_pressed_tape = getDelayTextFromDates(
-    parseDateTimeValue(state.workflow.calendering.date, state.workflow.calendering.time),
-    parseDateTimeValue(state.workflow.drying_pressed_tape.date, state.workflow.drying_pressed_tape.time)
-  );
+  state.ui.delays.drying_pressed_tape = '';
 
-  const latest = getLatestStepStart();
+  const dryBoxStep = state.workflow.maintenance_dry_box;
+  const dryBoxStart = getMaintenanceDryBoxStart(dryBoxStep);
+  const dryBoxRemoved = getMaintenanceDryBoxRemoved(dryBoxStep);
+  state.ui.delays.maintenance_dry_box = '';
+
+  if (dryBoxStep?.availability_status === 'in_dry_box' && dryBoxStart) {
+    const currentDryingDuration = formatDurationMs(Date.now() - dryBoxStart.getTime());
+    state.ui.delays.maintenance_dry_box = currentDryingDuration
+      ? `Сушится в шкафу: ${currentDryingDuration}`
+      : '';
+  } else if (dryBoxStart && dryBoxRemoved) {
+    const lastDryingDuration = formatDurationMs(dryBoxRemoved.getTime() - dryBoxStart.getTime());
+    state.ui.delays.maintenance_dry_box = lastDryingDuration
+      ? `Последняя сушка: ${lastDryingDuration}`
+      : '';
+  }
+
+  const latest = getLatestStepMoment();
   if (!latest) {
     state.ui.delays.liveSinceLastStep = '';
     renderDelayState();
@@ -2675,7 +3113,7 @@ async function loadFoils() {
   const res = await fetch('/api/reference/foils');
   
   if (!res.ok) {
-    throw new Error(`Failed to load foils: ${res.status}`);
+    throw new Error(`Ошибка загрузки фольги: ${res.status}`);
   }
   
   const foils = await res.json();
@@ -2749,12 +3187,13 @@ function attachWorkflowStateSync() {
 
   [
     ['drying_am', '0-drying_am'],
-    ['drying_tape', '2a-drying_tape'],
     ['drying_pressed_tape', '2b-drying_pressed_tape']
   ].forEach(([stepKey, prefix]) => {
     bindValueField(`${prefix}-operator`, stepKey, 'performed_by');
     bindValueField(`${prefix}-date`, stepKey, 'date');
     bindValueField(`${prefix}-time`, stepKey, 'time');
+    bindValueField(`${prefix}-end-date`, stepKey, 'end_date');
+    bindValueField(`${prefix}-end-time`, stepKey, 'end_time');
     bindValueField(`${prefix}-notes`, stepKey, 'comments');
     bindValueField(`${prefix}-temperature`, stepKey, 'temperature_c');
     bindValueField(`${prefix}-atmosphere`, stepKey, 'atmosphere');
@@ -2773,13 +3212,9 @@ function attachWorkflowStateSync() {
   bindValueField('1-mixing-comments', 'mixing', 'comments');
   bindValueField('1-mixing-slurry_volume_ml', 'mixing', 'slurry_volume_ml');
   bindValueField('1-mixing-dry_mixing_id', 'mixing', 'dry_mixing_id');
-  bindValueField('dry-start-date', 'mixing', 'dry_start_date');
-  bindValueField('dry-start-time', 'mixing', 'dry_start_time');
   bindValueField('dry-duration-min', 'mixing', 'dry_duration_min');
   bindValueField('dry-rpm', 'mixing', 'dry_rpm');
   bindValueField('1-mixing-wet_mixing_id', 'mixing', 'wet_mixing_id');
-  bindValueField('wet-start-date', 'mixing', 'wet_start_date');
-  bindValueField('wet-start-time', 'mixing', 'wet_start_time');
   bindValueField('wet-duration-min', 'mixing', 'wet_duration_min');
   bindValueField('wet-rpm', 'mixing', 'wet_rpm');
   bindValueField('wet-viscosity_cP', 'mixing', 'viscosity_cP');
@@ -2794,6 +3229,9 @@ function attachWorkflowStateSync() {
   bindValueField('2-coating-temp-c', 'coating', 'coat_temp_c');
   bindValueField('2-coating-time-min', 'coating', 'coat_time_min');
   bindValueField('2-coating-method-comments', 'coating', 'method_comments');
+  bindValueField('2-coating-dry-temp', 'drying_tape', 'temperature_c');
+  bindValueField('2-coating-dry-atmosphere', 'drying_tape', 'atmosphere');
+  bindValueField('2-coating-dry-duration', 'drying_tape', 'target_duration_min');
 
   bindValueField('2-calendering-operator', 'calendering', 'performed_by');
   bindValueField('2-calendering-date', 'calendering', 'date');
@@ -2812,6 +3250,13 @@ function attachWorkflowStateSync() {
   bindCheckedField('2-cal-dots', 'calendering', 'dots');
   bindCheckedField('2-cal-other-check', 'calendering', 'other_check');
   bindValueField('2-cal-other-text', 'calendering', 'other_text');
+
+  bindValueField('2c-dry-box-start-date', 'maintenance_dry_box', 'started_at_date');
+  bindValueField('2c-dry-box-start-time', 'maintenance_dry_box', 'started_at_time');
+  bindValueField('2c-dry-box-temperature', 'maintenance_dry_box', 'temperature_c');
+  bindValueField('2c-dry-box-atmosphere', 'maintenance_dry_box', 'atmosphere');
+  bindValueField('2c-dry-box-other-parameters', 'maintenance_dry_box', 'other_parameters');
+  bindValueField('2c-dry-box-comments', 'maintenance_dry_box', 'comments');
 }
 
 function attachSectionStateSync() {
@@ -2852,6 +3297,7 @@ async function loadRecipeLinesIntoStateAndRender(recipeId, { restoringActuals = 
   renderRecipeLines();
   recalculatePlannedMasses();
   applyDefaultCoatingFoil();
+  applyDryingTapePrefillFromCoating();
 
   if (state.form.isRestoringTape) {
     markAllSavedSnapshotsCurrent();
@@ -2869,6 +3315,7 @@ projectSelect.addEventListener('focus', loadProjects);
 recipeSelect.addEventListener('focus', loadRecipesDropdown);
 tapeTypeSelect.addEventListener('change', loadRecipesDropdown);
 tapeTypeSelect.addEventListener('change', applyDefaultCoatingFoil);
+tapeTypeSelect.addEventListener('change', () => applyDryingTapePrefillFromCoating({ forceDefaults: true }));
 
 // When recipe changes: load lines + reset instance selections + clear planned masses
 recipeSelect.addEventListener('change', async () => {
@@ -3013,6 +3460,16 @@ clearBtn.addEventListener('click', async () => {
   resetForm();
 });
 
+printBtn.addEventListener('click', () => {
+  if (!state.selection.currentTapeId) {
+    showStatus('Сначала откройте ленту', true);
+    return;
+  }
+
+  const url = `/workflow/tape-print.html?tape_id=${encodeURIComponent(state.selection.currentTapeId)}`;
+  window.open(url, '_blank', 'noopener');
+});
+
 recipeMaterialsSaveBtn.addEventListener('click', () => trackPendingSave((async () => {
   if (!state.selection.currentTapeId) {
     showInlineStatus('0-recipe-materials-save-btn', 'Сначала создайте ленту', true);
@@ -3029,15 +3486,12 @@ recipeMaterialsSaveBtn.addEventListener('click', () => trackPendingSave((async (
   }
 })()));
 
-function buildDryingPayload(prefix) {
-  const stepKey =
-    prefix === '0-drying_am' ? 'drying_am'
-    : prefix === '2a-drying_tape' ? 'drying_tape'
-    : 'drying_pressed_tape';
+function buildDryingPayload(stepKey) {
   const step = state.workflow[stepKey];
   return {
     performed_by: Number(step.performed_by) || null,
     started_at: combineDateAndTime(step.date, step.time),
+    ended_at: combineDateAndTime(step.end_date, step.end_time),
     comments: step.comments || null,
     temperature_c: Number(step.temperature_c) || null,
     atmosphere: step.atmosphere || null,
@@ -3046,12 +3500,12 @@ function buildDryingPayload(prefix) {
   };
 }
 
-async function saveDryingStep({ code, prefix }) {
+async function saveDryingStep({ code, stepKey }) {
   if (!state.selection.currentTapeId) {
     alert('Сначала создайте ленту');
     return;
   }
-  const payload = buildDryingPayload(prefix);
+  const payload = buildDryingPayload(stepKey);
   
   const res = await fetch(
     `/api/tapes/${state.selection.currentTapeId}/steps/by-code/${code}`,
@@ -3068,11 +3522,16 @@ async function saveDryingStep({ code, prefix }) {
   }
 }
 
+async function autoSaveDryingTapeFromCoating() {
+  await saveDryingStep({ code: 'drying_tape', stepKey: 'drying_tape' });
+  markSavedSnapshot('drying_tape');
+  return true;
+}
+
 // Wire all drying save buttons 
 [
-  { code: 'drying_am',           prefix: '0-drying_am',            btnId: '0-drying_am-save-btn' },
-  { code: 'drying_tape',         prefix: '2a-drying_tape',         btnId: '2a-drying_tape-save-btn' },
-  { code: 'drying_pressed_tape', prefix: '2b-drying_pressed_tape', btnId: '2b-drying_pressed_tape-save-btn' }
+  { code: 'drying_am',           stepKey: 'drying_am',            btnId: '0-drying_am-save-btn' },
+  { code: 'drying_pressed_tape', stepKey: 'drying_pressed_tape', btnId: '2b-drying_pressed_tape-save-btn' }
 ].forEach(cfg => {
   const btn = document.getElementById(cfg.btnId);
   if (!btn) return;
@@ -3080,6 +3539,10 @@ async function saveDryingStep({ code, prefix }) {
   btn.addEventListener('click', () => trackPendingSave((async () => {
     try {
       await saveDryingStep(cfg);
+      if (cfg.code === 'drying_pressed_tape' && state.selection.currentTapeId) {
+        const dryBoxState = await fetchTapeDryBoxState(state.selection.currentTapeId);
+        applyDryBoxStateToUi(dryBoxState);
+      }
       markSavedSnapshot(cfg.code);
       refreshDirtyFromSnapshots();
       showInlineStatus(cfg.btnId, 'Изменения сохранены');
@@ -3177,6 +3640,7 @@ document.getElementById('1-mixing-save-btn').onclick = () => trackPendingSave((a
     return;
   }
   const step = state.workflow.mixing;
+  const derived = deriveMixingTimeline(step);
   
   // ---- Build payload ----
   const payload = {
@@ -3185,12 +3649,14 @@ document.getElementById('1-mixing-save-btn').onclick = () => trackPendingSave((a
     comments: step.comments || null,
     slurry_volume_ml: step.slurry_volume_ml || null,
     dry_mixing_id: step.dry_mixing_id || null,
-    dry_start_time: combineDateAndTime(step.dry_start_date, step.dry_start_time),
+    dry_start_time: combineDateAndTime(derived.dry_start_date, derived.dry_start_time),
     dry_duration_min: step.dry_duration_min || null,
+    dry_end_time: combineDateAndTime(derived.dry_end_date, derived.dry_end_time),
     dry_rpm: step.dry_rpm || null,
     wet_mixing_id: step.wet_mixing_id || null,
-    wet_start_time: combineDateAndTime(step.wet_start_date, step.wet_start_time),
+    wet_start_time: combineDateAndTime(derived.wet_start_date, derived.wet_start_time),
     wet_duration_min: step.wet_duration_min || null,
+    wet_end_time: combineDateAndTime(derived.wet_end_date, derived.wet_end_time),
     wet_rpm: step.wet_rpm || null,
     viscosity_cP: step.viscosity_cP || null
   };
@@ -3241,7 +3707,7 @@ function applyCoatingMethodDefaultsToState({ force = false } = {}) {
     patch.coat_temp_c = method.coat_temp_c ?? '';
   }
   if (force || !String(step.coat_time_min || '').trim()) {
-    patch.coat_time_min = method.coat_time_min ?? '';
+    patch.coat_time_min = method.coat_time_min ?? '10';
   }
   if (Object.keys(patch).length > 0) {
     setWorkflowStep('coating', {
@@ -3249,6 +3715,12 @@ function applyCoatingMethodDefaultsToState({ force = false } = {}) {
       ...patch
     });
   }
+
+  applyDryingTapePrefillFromCoating({
+    forceOperator: true,
+    forceTiming: true,
+    forceDefaults: force
+  });
 }
 
 document.getElementById('2-coating-save-btn').onclick = () => trackPendingSave((async () => {
@@ -3295,9 +3767,25 @@ document.getElementById('2-coating-save-btn').onclick = () => trackPendingSave((
     return;
   }
   
+  let autoDryingError = null;
+  try {
+    await autoSaveDryingTapeFromCoating();
+  } catch (err) {
+    autoDryingError = err;
+  }
+
   markSavedSnapshot('coating');
   refreshDirtyFromSnapshots();
-  showInlineStatus('2-coating-save-btn', 'Изменения сохранены');
+
+  if (autoDryingError) {
+    showInlineStatus('2-coating-save-btn', 'Нанесение сохранено, но автосушка не сохранилась', true);
+    return;
+  }
+
+  showInlineStatus(
+    '2-coating-save-btn',
+    'Нанесение и параметры сушки сохранены'
+  );
 })());
 
 document
@@ -3305,6 +3793,18 @@ document
 .addEventListener('change', () => {
   applyCoatingMethodDefaultsToState({ force: true });
   renderCoatingStep();
+});
+
+document.getElementById('2-coating-date').addEventListener('change', () => {
+  applyDryingTapePrefillFromCoating({ forceTiming: true });
+});
+
+document.getElementById('2-coating-time').addEventListener('change', () => {
+  applyDryingTapePrefillFromCoating({ forceTiming: true });
+});
+
+document.getElementById('2-coating-operator').addEventListener('change', () => {
+  applyDryingTapePrefillFromCoating({ forceOperator: true });
 });
 
 // -------- II.2. Save calendering --------
@@ -3371,16 +3871,101 @@ document.getElementById('2-cal-other-check').addEventListener('change', e => {
   document.getElementById('2-cal-other-text').disabled = !e.target.checked;
 });
 
+document.getElementById('2c-dry-box-save-btn').addEventListener('click', () => trackPendingSave((async () => {
+  if (!state.selection.currentTapeId) {
+    showInlineStatus('2c-dry-box-save-btn', 'Сначала создайте ленту', true);
+    return;
+  }
+
+  try {
+    const nextState = await saveTapeDryBoxState(
+      state.selection.currentTapeId,
+      buildMaintenanceDryBoxPayload()
+    );
+    applyDryBoxStateToUi(nextState);
+    await loadTapes();
+    showInlineStatus('2c-dry-box-save-btn', 'Параметры сушки сохранены');
+  } catch (err) {
+    showInlineStatus('2c-dry-box-save-btn', err.message, true);
+  }
+})()));
+
+document.getElementById('2c-dry-box-remove-btn').addEventListener('click', () => trackPendingSave((async () => {
+  if (!state.selection.currentTapeId) {
+    showInlineStatus('2c-dry-box-remove-btn', 'Сначала создайте ленту', true);
+    return;
+  }
+
+  try {
+    const nextState = await removeTapeFromDryBoxNow(state.selection.currentTapeId, {
+      updated_by: Number(state.workflow.maintenance_dry_box.updated_by || state.form.fields.created_by || 0) || null
+    });
+    applyDryBoxStateToUi(nextState);
+    await loadTapes();
+    showInlineStatus('2c-dry-box-remove-btn', 'Лента отмечена как вынутая из шкафа');
+  } catch (err) {
+    showInlineStatus('2c-dry-box-remove-btn', err.message, true);
+  }
+})()));
+
+document.getElementById('2c-dry-box-return-btn').addEventListener('click', () => trackPendingSave((async () => {
+  if (!state.selection.currentTapeId) {
+    showInlineStatus('2c-dry-box-return-btn', 'Сначала создайте ленту', true);
+    return;
+  }
+
+  try {
+    const nextState = await returnTapeToDryBoxNow(
+      state.selection.currentTapeId,
+      buildMaintenanceDryBoxPayload()
+    );
+    applyDryBoxStateToUi(nextState);
+    await loadTapes();
+    showInlineStatus('2c-dry-box-return-btn', 'Лента возвращена в шкаф');
+  } catch (err) {
+    showInlineStatus('2c-dry-box-return-btn', err.message, true);
+  }
+})()));
+
+document.getElementById('2c-dry-box-deplete-btn').addEventListener('click', () => trackPendingSave((async () => {
+  if (!state.selection.currentTapeId) {
+    showInlineStatus('2c-dry-box-deplete-btn', 'Сначала создайте ленту', true);
+    return;
+  }
+
+  try {
+    const nextState = await markTapeDepleted(state.selection.currentTapeId, {
+      updated_by: Number(state.workflow.maintenance_dry_box.updated_by || state.form.fields.created_by || 0) || null
+    });
+    applyDryBoxStateToUi(nextState);
+    await loadTapes();
+    showInlineStatus('2c-dry-box-deplete-btn', 'Лента отмечена как израсходованная');
+  } catch (err) {
+    showInlineStatus('2c-dry-box-deplete-btn', err.message, true);
+  }
+})()));
+
 // ---- NOW buttons (scoped to their own fieldset) ----
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.date-time-now-button');
   if (!btn) return;
   
-  const scope = btn.closest('.mix-params') || btn.closest('fieldset');
-  if (!scope) return;
-  
-  const dateInput = scope.querySelector('input[type="date"]');
-  const timeInput = scope.querySelector('input[type="time"]');
+  let dateInput = null;
+  let timeInput = null;
+
+  if (btn.dataset.dateTarget) {
+    dateInput = document.getElementById(btn.dataset.dateTarget);
+  }
+  if (btn.dataset.timeTarget) {
+    timeInput = document.getElementById(btn.dataset.timeTarget);
+  }
+
+  if (!dateInput || !timeInput) {
+    const scope = btn.closest('.mix-params') || btn.closest('fieldset');
+    if (!scope) return;
+    dateInput = dateInput || scope.querySelector('input[type="date"]');
+    timeInput = timeInput || scope.querySelector('input[type="time"]');
+  }
   
   const now = new Date();
   
@@ -3399,6 +3984,42 @@ document.addEventListener('click', (e) => {
 
   if (dateInput) dateInput.dispatchEvent(new Event('input', { bubbles: true }));
   if (timeInput) timeInput.dispatchEvent(new Event('input', { bubbles: true }));
+});
+
+[
+  ['0-drying_am', 'drying_am'],
+  ['2b-drying_pressed_tape', 'drying_pressed_tape']
+].forEach(([prefix, stepKey]) => {
+  ['date', 'time', 'target-duration'].forEach((suffix) => {
+    const el = document.getElementById(`${prefix}-${suffix}`);
+    if (!el) return;
+    el.addEventListener('input', () => syncDryingEndTime(stepKey));
+    el.addEventListener('change', () => syncDryingEndTime(stepKey));
+  });
+});
+
+[
+  '2-coating-dry-temp',
+  '2-coating-dry-atmosphere',
+  '2-coating-dry-duration'
+].forEach((id) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (id !== '2-coating-dry-duration') return;
+  el.addEventListener('input', () => syncDryingEndTime('drying_tape'));
+  el.addEventListener('change', () => syncDryingEndTime('drying_tape'));
+});
+
+[
+  ['1-mixing-started_at-date', 'dry'],
+  ['1-mixing-started_at-time', 'dry'],
+  ['dry-duration-min', 'dry'],
+  ['wet-duration-min', 'wet']
+].forEach(([id, phase]) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => syncMixingEndTime(phase));
+  el.addEventListener('change', () => syncMixingEndTime(phase));
 });
 
 // -------- Init --------
@@ -3422,8 +4043,9 @@ loadRecipesDropdown();
 
 const dryingAtmosphereSelectIds = [
   '0-drying_am-atmosphere',
-  '2a-drying_tape-atmosphere',
-  '2b-drying_pressed_tape-atmosphere'
+  '2-coating-dry-atmosphere',
+  '2b-drying_pressed_tape-atmosphere',
+  '2c-dry-box-atmosphere'
 ];
 
 dryingAtmosphereSelectIds.forEach(id => {

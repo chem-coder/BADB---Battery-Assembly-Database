@@ -2202,6 +2202,236 @@ router.get('/:id/assembly', auth, async (req, res) => {
 
 });
 
+router.get('/:id/report', async (req, res) => {
+
+  const batteryId = Number(req.params.id);
+
+  if (!Number.isInteger(batteryId)) {
+    return res.status(400).json({ error: 'Некорректный battery_id' });
+  }
+
+  try {
+
+    await ensureBatteryAssembledStatus(batteryId);
+
+    const result = await pool.query(
+      `
+      SELECT jsonb_build_object(
+
+        'battery',
+        (
+          SELECT row_to_json(bx)
+          FROM (
+            SELECT
+              b.battery_id,
+              b.project_id,
+              p.name AS project_name,
+              b.form_factor,
+              b.status,
+              b.created_by,
+              u.name AS created_by_name,
+              b.battery_notes,
+              b.created_at,
+              b.updated_at
+            FROM batteries b
+            LEFT JOIN projects p
+              ON p.project_id = b.project_id
+            LEFT JOIN users u
+              ON u.user_id = b.created_by
+            WHERE b.battery_id = $1
+          ) bx
+        ),
+
+        'coin_config',
+        (
+          SELECT row_to_json(cx)
+          FROM (
+            SELECT
+              c.*
+            FROM battery_coin_config c
+            WHERE c.battery_id = $1
+          ) cx
+        ),
+
+        'pouch_config',
+        (
+          SELECT row_to_json(px)
+          FROM (
+            SELECT
+              p.*
+            FROM battery_pouch_config p
+            WHERE p.battery_id = $1
+          ) px
+        ),
+
+        'cyl_config',
+        (
+          SELECT row_to_json(cyx)
+          FROM (
+            SELECT
+              cy.*
+            FROM battery_cyl_config cy
+            WHERE cy.battery_id = $1
+          ) cyx
+        ),
+
+        'separator',
+        (
+          SELECT row_to_json(sx)
+          FROM (
+            SELECT
+              sconfig.*,
+              s.name AS separator_name,
+              s.supplier AS separator_supplier,
+              s.brand AS separator_brand,
+              s.batch AS separator_batch,
+              s.thickness_um AS separator_thickness_um
+            FROM battery_sep_config sconfig
+            LEFT JOIN separators s
+              ON s.sep_id = sconfig.separator_id
+            WHERE sconfig.battery_id = $1
+          ) sx
+        ),
+
+        'electrolyte',
+        (
+          SELECT row_to_json(ex)
+          FROM (
+            SELECT
+              econfig.*,
+              e.name AS electrolyte_name,
+              e.solvent_system,
+              e.salts,
+              e.concentration,
+              e.additives
+            FROM battery_electrolyte econfig
+            LEFT JOIN electrolytes e
+              ON e.electrolyte_id = econfig.electrolyte_id
+            WHERE econfig.battery_id = $1
+          ) ex
+        ),
+
+        'qc',
+        (
+          SELECT row_to_json(qx)
+          FROM (
+            SELECT
+              q.*
+            FROM battery_qc q
+            WHERE q.battery_id = $1
+          ) qx
+        ),
+
+        'electrochem',
+        (
+          SELECT COALESCE(
+            jsonb_agg(to_jsonb(ecx) ORDER BY ecx.battery_electrochem_id),
+            '[]'::jsonb
+          )
+          FROM (
+            SELECT
+              ec.battery_electrochem_id,
+              ec.file_name,
+              ec.file_link,
+              ec.electrochem_notes,
+              ec.uploaded_at
+            FROM battery_electrochem ec
+            WHERE ec.battery_id = $1
+          ) ecx
+        ),
+
+        'electrode_sources',
+        (
+          SELECT COALESCE(
+            jsonb_agg(to_jsonb(esx) ORDER BY esx.role),
+            '[]'::jsonb
+          )
+          FROM (
+            SELECT
+              es.battery_id,
+              es.role,
+              es.tape_id,
+              es.cut_batch_id,
+              es.source_notes,
+              t.name AS tape_name,
+              p.name AS tape_project_name,
+              tr.name AS tape_recipe_name,
+              tr.role AS tape_recipe_role,
+              cb.target_form_factor,
+              cb.target_config_code,
+              cb.target_config_other,
+              cb.shape,
+              cb.diameter_mm,
+              cb.length_mm,
+              cb.width_mm,
+              cb.created_by,
+              ub.name AS cut_batch_created_by_name,
+              COALESCE(ec.electrode_count, 0) AS electrode_count
+            FROM battery_electrode_sources es
+            LEFT JOIN tapes t
+              ON t.tape_id = es.tape_id
+            LEFT JOIN projects p
+              ON p.project_id = t.project_id
+            LEFT JOIN tape_recipes tr
+              ON tr.tape_recipe_id = t.tape_recipe_id
+            LEFT JOIN electrode_cut_batches cb
+              ON cb.cut_batch_id = es.cut_batch_id
+            LEFT JOIN users ub
+              ON ub.user_id = cb.created_by
+            LEFT JOIN (
+              SELECT
+                cut_batch_id,
+                COUNT(*) AS electrode_count
+              FROM electrodes
+              GROUP BY cut_batch_id
+            ) ec
+              ON ec.cut_batch_id = cb.cut_batch_id
+            WHERE es.battery_id = $1
+          ) esx
+        ),
+
+        'electrodes',
+        (
+          SELECT COALESCE(
+            jsonb_agg(to_jsonb(elx) ORDER BY elx.position_index),
+            '[]'::jsonb
+          )
+          FROM (
+            SELECT
+              be.electrode_id,
+              be.role,
+              be.position_index,
+              e.electrode_mass_g,
+              e.cut_batch_id
+            FROM battery_electrodes be
+            LEFT JOIN electrodes e
+              ON e.electrode_id = be.electrode_id
+            WHERE be.battery_id = $1
+          ) elx
+        )
+
+      ) AS report
+      `,
+      [batteryId]
+    );
+
+    const report = result.rows[0].report;
+
+    if (!report.battery) {
+      return res.status(404).json({ error: 'Батарея не найдена' });
+    }
+
+    res.json(report);
+
+  } catch (err) {
+
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки печатного отчёта по батарее' });
+
+  }
+
+});
+
 
 
 module.exports = router;
