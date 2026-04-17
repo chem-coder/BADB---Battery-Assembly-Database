@@ -58,13 +58,20 @@ async function auth(req, res, next) {
     const token = header.slice(7);
     const decoded = jwt.verify(token, config.jwt.secret);
 
-    // Verify token_version hasn't been bumped (password change invalidates old tokens)
+    // Fetch token_version AND active on every request. token_version check
+    // revokes tokens after a password change; active check blocks an already-
+    // issued token once an admin/lead deactivates the account. The two-column
+    // round-trip is unavoidable for real-time deactivation — caching would
+    // leave windows where a disabled user keeps working for up to TTL.
     const { rows } = await pool.query(
-      'SELECT token_version FROM users WHERE user_id = $1',
+      'SELECT token_version, active FROM users WHERE user_id = $1',
       [decoded.userId]
     );
     if (!rows.length || rows[0].token_version !== decoded.tokenVersion) {
       return res.status(401).json({ error: 'Token revoked' });
+    }
+    if (rows[0].active === false) {
+      return res.status(403).json({ error: 'Учётная запись отключена' });
     }
 
     req.user = decoded;

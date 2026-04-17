@@ -43,7 +43,7 @@ router.post('/login', async (req, res) => {
 
     // Find user by login
     const userResult = await pool.query(
-      'SELECT user_id, name, login, password_hash, role, position, token_version FROM users WHERE lower(login) = lower($1)',
+      'SELECT user_id, name, login, password_hash, role, position, token_version, active FROM users WHERE lower(login) = lower($1)',
       [login]
     );
 
@@ -67,6 +67,19 @@ router.post('/login', async (req, res) => {
         [user.user_id, login, ip, userAgent, JSON.stringify({ reason: 'wrong_password' })]
       );
       return res.status(401).json({ error: 'Invalid login or password' });
+    }
+
+    // Soft-disabled users cannot log in. Preserves history (FK-referenced tapes,
+    // audit trail, etc.) without allowing login. Admin/lead toggles this via
+    // PUT /api/users/:id. Log the attempt as a distinct auth_log event so
+    // suspicious repeated attempts on a disabled account are visible.
+    if (user.active === false) {
+      await pool.query(
+        `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent, details)
+         VALUES ($1, $2, 'login_failed', $3, $4, $5)`,
+        [user.user_id, login, ip, userAgent, JSON.stringify({ reason: 'account_disabled' })]
+      );
+      return res.status(403).json({ error: 'Учётная запись отключена. Обратитесь к администратору.' });
     }
 
     // Get project access list
