@@ -44,6 +44,77 @@ const upload = multer({
   },
 });
 
+/**
+ * Content-type sanity check. Extension-whitelist alone can be bypassed by
+ * renaming malware.exe → data.csv. Read the first few bytes and verify:
+ *   - .xlsx → ZIP magic "PK\x03\x04"
+ *   - .xls  → OLE2 compound magic "\xD0\xCF\x11\xE0"
+ *   - .csv / .txt → ASCII/UTF-8 text-like, and NOT a known executable header
+ *
+ * Returns null on OK, or an error message string on reject.
+ * The file is NOT deleted here — caller handles cleanup.
+ */
+function verifyMagicBytes(filePath, ext) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(16);
+    const bytesRead = fs.readSync(fd, buf, 0, 16, 0);
+    if (bytesRead === 0) return 'Файл пустой';
+
+    // Executable headers — reject regardless of extension
+    // MZ (Windows PE), ELF (Linux), Mach-O (macOS, 4 variants)
+    const execPatterns = [
+      [0x4d, 0x5a],                                 // MZ (PE/COFF)
+      [0x7f, 0x45, 0x4c, 0x46],                     // ELF
+      [0xfe, 0xed, 0xfa, 0xce],                     // Mach-O 32 BE
+      [0xfe, 0xed, 0xfa, 0xcf],                     // Mach-O 64 BE
+      [0xce, 0xfa, 0xed, 0xfe],                     // Mach-O 32 LE
+      [0xcf, 0xfa, 0xed, 0xfe],                     // Mach-O 64 LE
+      [0xca, 0xfe, 0xba, 0xbe],                     // Mach-O universal / Java class
+    ];
+    for (const pat of execPatterns) {
+      let match = true;
+      for (let i = 0; i < pat.length; i++) {
+        if (buf[i] !== pat[i]) { match = false; break; }
+      }
+      if (match) return 'Файл похож на исполняемый — отклонён';
+    }
+
+    if (ext === '.xlsx') {
+      // ZIP archive magic
+      if (buf[0] !== 0x50 || buf[1] !== 0x4b || buf[2] !== 0x03 || buf[3] !== 0x04) {
+        return 'Файл не похож на .xlsx (нет ZIP-сигнатуры)';
+      }
+      return null;
+    }
+    if (ext === '.xls') {
+      // OLE2 compound document magic
+      if (buf[0] !== 0xd0 || buf[1] !== 0xcf || buf[2] !== 0x11 || buf[3] !== 0xe0) {
+        return 'Файл не похож на .xls (нет OLE2-сигнатуры)';
+      }
+      return null;
+    }
+    if (ext === '.csv' || ext === '.txt') {
+      // Text files: every byte must be printable ASCII/UTF-8 or common whitespace
+      // (tab, LF, CR). Any other control byte (0x00-0x08, 0x0e-0x1f, 0x7f) is a red flag.
+      for (let i = 0; i < bytesRead; i++) {
+        const b = buf[i];
+        if (b === 0x09 || b === 0x0a || b === 0x0d) continue; // tab/LF/CR
+        if (b < 0x20 || b === 0x7f) return 'Файл содержит бинарные данные — ожидался текст';
+      }
+      return null;
+    }
+    return null; // unknown ext slipped past — handled upstream
+  } catch (err) {
+    return `Не удалось проверить файл: ${err.message}`;
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch {}
+    }
+  }
+}
+
 // ── POST /api/cycling/upload ──────────────────────────────────────────
 router.post('/upload', auth, (req, res, next) => {
   upload.single('file')(req, res, (err) => {
@@ -56,6 +127,13 @@ router.post('/upload', auth, (req, res, next) => {
 }, async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  // Magic-byte content check — reject renamed executables and fake Excels
+  const magicErr = verifyMagicBytes(req.file.path, path.extname(req.file.originalname).toLowerCase());
+  if (magicErr) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: magicErr });
   }
 
   const { battery_id, equipment_type, channel, protocol, notes } = req.body;

@@ -26,6 +26,8 @@
     "cytoscape-cxtmenu": "^3.5.0",
     "cytoscape-dagre": "^2.5.0",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.3.2",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.1.1",
     "pg": "^8.17.2",

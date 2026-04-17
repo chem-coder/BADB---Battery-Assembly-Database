@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Launchd job that runs scripts/backup.js daily at 23:00 (end of lab shift).
+
+  Template — do not symlink directly. Run scripts/launchd/install.sh
+  which substitutes absolute paths into this template and installs it at
+  ~/Library/LaunchAgents/com.badb.backup.plist.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.badb.backup</string>
+
+  <!-- Use a shell wrapper so PATH/PG env vars are loaded the same way
+       a terminal would see them (pg_dump must be discoverable). -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd __REPO_ABS_PATH__ &amp;&amp; /usr/local/bin/node scripts/backup.js --keep-days=30</string>
+  </array>
+
+  <!-- 23:00 every day -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>23</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <!-- If the Mac is asleep at 23:00, run as soon as it wakes -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- Log destinations — symlinked into repo for easy inspection -->
+  <key>StandardOutPath</key>
+  <string>__REPO_ABS_PATH__/sql_backups/auto/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO_ABS_PATH__/sql_backups/auto/launchd.err.log</string>
+
+  <!-- Environment — adjust if your Node is elsewhere (`which node`) -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
