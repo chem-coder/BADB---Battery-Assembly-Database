@@ -43,7 +43,8 @@
     function getDefaultElectrodePageState() {
       return {
         selection: {
-          currentCutBatchId: null
+          currentCutBatchId: null,
+          currentTapeDryBoxState: null
         },
         reference: {
           tapes: [],
@@ -93,6 +94,10 @@
 
     function setCurrentCutBatchId(cutBatchId) {
       state.selection.currentCutBatchId = cutBatchId ?? null;
+    }
+
+    function setCurrentTapeDryBoxState(nextState) {
+      state.selection.currentTapeDryBoxState = nextState || null;
     }
 
     function setReferenceTapes(nextTapes) {
@@ -369,6 +374,40 @@
       renderElectrodeDryingForm();
       renderFoilMassDrafts();
       renderElectrodeDraftRows();
+      renderTapeDryBoxActions();
+    }
+
+    function tapeDryBoxStatusLabel(dryBoxState) {
+      if (!dryBoxState) return '';
+      return dryBoxState.availability_status === 'in_dry_box'
+        ? 'Лента находится в сушильном шкафу'
+        : dryBoxState.availability_status === 'depleted'
+          ? 'Лента отмечена как израсходованная'
+          : 'Лента находится вне сушильного шкафа';
+    }
+
+    function renderTapeDryBoxActions() {
+      const fieldset = document.getElementById('electrodes-tape-dry-box');
+      const status = document.getElementById('electrodes-tape-dry-box-status');
+      const returnBtn = document.getElementById('electrodes-return-tape-btn');
+      const depleteBtn = document.getElementById('electrodes-deplete-tape-btn');
+      const dryBoxState = state.selection.currentTapeDryBoxState;
+      const hasBatch = Boolean(state.selection.currentCutBatchId);
+
+      if (!fieldset || !status || !returnBtn || !depleteBtn) return;
+
+      fieldset.hidden = !hasBatch || !dryBoxState;
+
+      if (!hasBatch || !dryBoxState) {
+        status.textContent = '';
+        returnBtn.disabled = true;
+        depleteBtn.disabled = true;
+        return;
+      }
+
+      status.textContent = tapeDryBoxStatusLabel(dryBoxState);
+      returnBtn.disabled = dryBoxState.availability_status !== 'out_of_dry_box';
+      depleteBtn.disabled = dryBoxState.availability_status === 'depleted';
     }
 
     function shouldShowElectrodeWorkflow() {
@@ -632,6 +671,17 @@
       );
     }
 
+    async function fetchTapeDryBoxState(tapeId) {
+      const res = await fetch(`/api/tapes/${tapeId}/dry-box-state`);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Ошибка загрузки состояния ленты');
+      }
+
+      return data;
+    }
+
     async function fetchCutBatchElectrodes(cutBatchId) {
       return fetchElectrodeArray(
         `/api/electrodes/electrode-cut-batches/${cutBatchId}/electrodes`,
@@ -778,6 +828,7 @@
     
     function clearElectrodeWorkspace() {
       setCurrentCutBatchId(null);
+      setCurrentTapeDryBoxState(null);
       setCurrentBatchElectrodes([]);
       setCutBatchFormState(getDefaultCutBatchFormState());
       setElectrodeDryingState(getDefaultElectrodeDryingState());
@@ -790,6 +841,24 @@
       renderElectrodePage();
       syncElectrodePageStateFromDom();
       markAllElectrodeSectionsSaved();
+    }
+
+    async function loadCurrentTapeDryBoxState(tapeId) {
+      if (!tapeId) {
+        setCurrentTapeDryBoxState(null);
+        renderElectrodePage();
+        return;
+      }
+
+      try {
+        const dryBoxState = await fetchTapeDryBoxState(tapeId);
+        setCurrentTapeDryBoxState(dryBoxState);
+      } catch (err) {
+        console.error(err);
+        setCurrentTapeDryBoxState(null);
+      }
+
+      renderElectrodePage();
     }
 
     function roleLabel(role) {
@@ -1223,6 +1292,7 @@
       await loadElectrodes(batch.cut_batch_id);
       await loadFoilMassMeasurements(batch.cut_batch_id);
       await loadDrying(batch.cut_batch_id);
+      await loadCurrentTapeDryBoxState(Number(batch.tape_id));
       syncElectrodePageStateFromDom();
       markAllElectrodeSectionsSaved();
     }
@@ -1993,9 +2063,66 @@
       await loadElectrodes(state.selection.currentCutBatchId);
       await loadFoilMassMeasurements(state.selection.currentCutBatchId);
       await loadDrying(state.selection.currentCutBatchId);
+      await loadCurrentTapeDryBoxState(tapeId);
       syncElectrodePageStateFromDom();
       markAllElectrodeSectionsSaved();
       showElectrodeInlineStatus('saveBtn', 'Партия сохранена.');
+    });
+
+    document.getElementById('electrodes-return-tape-btn').addEventListener('click', async () => {
+      const tapeId = Number(state.form.filters.tape_id);
+      const updatedBy = Number(state.form.filters.created_by);
+
+      if (!tapeId || !updatedBy) {
+        showElectrodeInlineStatus('electrodes-return-tape-btn', 'Не выбрана лента или оператор', true);
+        return;
+      }
+
+      const res = await fetch(`/api/tapes/${tapeId}/dry-box-state/return-now`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updated_by: updatedBy })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        showElectrodeInlineStatus('electrodes-return-tape-btn', data.error || 'Ошибка возврата ленты в шкаф', true);
+        return;
+      }
+
+      setCurrentTapeDryBoxState(data);
+      await loadTapes();
+      renderElectrodePage();
+      showElectrodeInlineStatus('electrodes-return-tape-btn', 'Лента возвращена в шкаф');
+    });
+
+    document.getElementById('electrodes-deplete-tape-btn').addEventListener('click', async () => {
+      const tapeId = Number(state.form.filters.tape_id);
+      const updatedBy = Number(state.form.filters.created_by);
+
+      if (!tapeId || !updatedBy) {
+        showElectrodeInlineStatus('electrodes-deplete-tape-btn', 'Не выбрана лента или оператор', true);
+        return;
+      }
+
+      const res = await fetch(`/api/tapes/${tapeId}/dry-box-state/deplete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updated_by: updatedBy })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        showElectrodeInlineStatus('electrodes-deplete-tape-btn', data.error || 'Ошибка изменения статуса ленты', true);
+        return;
+      }
+
+      setCurrentTapeDryBoxState(data);
+      await loadTapes();
+      renderElectrodePage();
+      showElectrodeInlineStatus('electrodes-deplete-tape-btn', 'Лента отмечена как израсходованная');
     });
     
     

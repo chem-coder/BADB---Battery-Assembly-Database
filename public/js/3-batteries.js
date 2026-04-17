@@ -1283,6 +1283,7 @@ function renderBatteryWorkspaceVisibility() {
   const hasBattery = Boolean(state.selection.currentBatteryId);
   const header = document.getElementById('battery_header');
   const workspace = document.getElementById('battery_workspace');
+  const printBtn = document.getElementById('printBatteryBtn');
   const exitBtn = document.getElementById('exitBatteriesBtn');
 
   if (header) {
@@ -1291,6 +1292,10 @@ function renderBatteryWorkspaceVisibility() {
 
   if (workspace) {
     workspace.hidden = !hasBattery;
+  }
+
+  if (printBtn) {
+    printBtn.hidden = !hasBattery;
   }
 
   if (exitBtn) {
@@ -3763,6 +3768,17 @@ document
 });
 
 /* ---------- EXIT BATTERIES ---------- */
+
+const printBatteryBtn = document.getElementById('printBatteryBtn');
+
+printBatteryBtn.addEventListener('click', () => {
+  if (!state.selection.currentBatteryId) return;
+  window.open(
+    `/workflow/battery-print.html?battery_id=${state.selection.currentBatteryId}`,
+    '_blank',
+    'noopener'
+  );
+});
 
 const exitBatteriesBtn = document.getElementById('exitBatteriesBtn');
 

@@ -92,6 +92,7 @@
     <form name="tape-form" hidden autocomplete="on" data-state-root="tapePageState">
       
       <div class="form-actions" style="display:flex; gap:.5rem; align-items:center; margin:.5rem 0 1rem 0;">
+        <button type="button" id="printBtn">Печать</button>
         <button type="button" id="clearBtn">Выход</button>
       </div>
       <div class="status-feedback" aria-live="polite"></div>
@@ -218,6 +219,12 @@
           
           <label for="0-drying_am-target-duration">Плановая длительность, мин: </label>
           <input id="0-drying_am-target-duration" type="number" step="1" min="0" name="0-drying_am-target-duration" value="120"><br>
+
+          <label for="0-drying_am-end-date">Дата/время окончания: </label>
+          <input id="0-drying_am-end-date" type="date" name="0-drying_am-end-date" placeholder="Дата окончания сушки">
+          <input id="0-drying_am-end-time" type="time" name="0-drying_am-end-time" placeholder="Время окончания сушки">
+
+          <button type="button" class="date-time-now-button" id="0-drying_am-end-now-button" data-date-target="0-drying_am-end-date" data-time-target="0-drying_am-end-time">Сейчас</button><br>
           
           <label for="0-drying_am-other_param">Дополнительные технические параметры (если применимо): </label>
           <textarea id="0-drying_am-other_param" name="0-drying_am-other_param" placeholder="Примечания к этапу сушки активного материала"></textarea><br>
@@ -319,17 +326,10 @@
           
           <!-- Параметры сухого перемешивания (универсальные) -->
           <div class="mix-params" id="mix-dry-params" hidden>
-            
-            <label for="dry-start-date">Дата/время запуска: </label>
-            <input id="dry-start-date" type="date" name="dry_start_date">
-            <input id="dry-start-time" type="time" name="dry_start_time_clock">
-            
-            <button type="button" class="date-time-now-button" id="dry-start-now-button">Сейчас</button><br>
-            
             <label for="dry-duration-min">Длительность, мин: </label>
             <input id="dry-duration-min" type="number" name="dry_duration_min" min="0" step="1"><br>
             
-            <label for="dry-rpm">Скорость / режим (RPM, комментарий): </label>
+            <label for="dry-rpm">Скорость / режим (RPM/коммент., необяз.): </label>
             <input id="dry-rpm"
             type="text"
             name="dry_rpm"
@@ -337,7 +337,7 @@
           </div>
           
           <!-- Мокрое перемешивание -->
-          <h4>Параметры мокрого перемешивания</h4>
+          <h5>Параметры мокрого перемешивания</h5>
           <label for="1-mixing-wet_mixing_id">Электродная паста - метод перемешивания: </label>
           <select id="1-mixing-wet_mixing_id" name="wet_mixing_id">
             <option value="">— не выбрано —</option>
@@ -345,23 +345,17 @@
           
           <!-- Параметры мокрого перемешивания (универсальные) -->
           <div class="mix-params" id="mix-wet-params" hidden>
-            
-            <label for="wet-start-date">Дата/время запуска: </label>
-            <input id="wet-start-date" type="date" name="wet_start_date">
-            <input id="wet-start-time" type="time" name="wet_start_time_clock">
-            
-            <button type="button" class="date-time-now-button" id="wet-start-now-button">Сейчас</button><br>
-            
             <label for="wet-duration-min">Длительность, мин: </label>
             <input id="wet-duration-min" type="number" name="wet_duration_min" min="0" step="1"><br>
             
-            <label for="wet-rpm">Скорость / режим (RPM, комментарий): </label>
+            <label for="wet-rpm">Скорость / режим (RPM/коммент., необяз.): </label>
             <input id="wet-rpm"
             type="text"
             name="wet_rpm"
             placeholder="Например: 500–800 об/мин"><br>
           </div>
           
+          <h4>Вязкость</h4>
           <label for="wet-viscosity_cP">Вязкость, cP: </label>
           <input id="wet-viscosity_cP"
           name="viscosity_cP"
@@ -427,59 +421,30 @@
               <label for="2-coating-gap-um">Зазор, мкм: </label>
               <input id="2-coating-gap-um" type="number" step="0.1" min="0" required><br>
               
-              <label for="2-coating-temp-c">Температура, °C: </label>
+              <label for="2-coating-temp-c">Температура нанесения, °C: </label>
               <input id="2-coating-temp-c" type="number" step="0.1"><br>
               
-              <label for="2-coating-time-min">Время, мин: </label>
+              <label for="2-coating-time-min">Длительность нанесения (приблизительно), мин: </label>
               <input id="2-coating-time-min" type="number" step="1" min="0"><br>
               
               <label for="2-coating-method-comments">Комментарий: </label>
               <textarea id="2-coating-method-comments"></textarea><br>
             </div>
-            
-            <button type="button" id="2-coating-save-btn">Сохранить этап нанесения</button>
-            <span class="inline-save-status" aria-live="polite"></span>
-          </fieldset>
-          
-          <fieldset id="2a-drying_tape">
-            <legend>II.2. Сушка ленты в шкафу (до каландрирования)
-              <span id="dirty-drying_tape" style="display:none; margin-left:8px;">● не сохранено</span>
-            </legend>
-            <div class="time-since" id="2a-drying_tape-delay" aria-live="polite"></div>
-            
-            <!-- кто/когда -->
-            <label for="2a-drying_tape-operator">Оператор: </label>
-            <select id="2a-drying_tape-operator" name="2a-drying_tape-operator">
-              <option value="">— выбрать пользователя —</option>
-            </select>
-            <br>
-            
-            <label for="2a-drying_tape-date">Дата/время: </label>
-            <input id="2a-drying_tape-date" type="date" name="2a-drying_tape-date" placeholder="Дата начала сушки">
-            <input id="2a-drying_tape-time" type="time" name="2a-drying_tape-time" placeholder="Время начала сушки">
-            
-            <button type="button" class="date-time-now-button" id="2a-drying_tape-now-button">Сейчас</button><br>
-            
-            <label for="2a-drying_tape-notes">Примечания: </label>
-            <textarea id="2a-drying_tape-notes" name="2a-drying_tape-notes" placeholder="Примечания к этапу сушки"></textarea><br>
-            
-            <hr class="section-divider">
-            
-            <label for="2a-drying_tape-temperature">Температура, °C: </label>
-            <input id="2a-drying_tape-temperature" type="number" step="1" min="-273" name="2a-drying_tape-temperature" value="80"><br>
-            
-            <label for="2a-drying_tape-atmosphere">Атмосфера: </label>
-            <select id="2a-drying_tape-atmosphere" name="2a-drying_tape-atmosphere">
+
+            <h4>Параметры сушки (в процессе нанесения):</h4>
+
+            <label for="2-coating-dry-temp">Температура сушки, °C:</label>
+            <input id="2-coating-dry-temp" type="number" step="1" min="-273"><br>
+
+            <label for="2-coating-dry-atmosphere">Атмосфера:</label>
+            <select id="2-coating-dry-atmosphere" name="2-coating-dry-atmosphere">
               <option value="">— не выбрано —</option>
             </select><br>
+
+            <label for="2-coating-dry-duration">Длительность, мин:</label>
+            <input id="2-coating-dry-duration" type="number" step="1" min="0"><br>
             
-            <label for="2a-drying_tape-target-duration">Плановая длительность, мин: </label>
-            <input id="2a-drying_tape-target-duration" type="number" step="1" min="0" name="2a-drying_tape-target-duration" value="120"><br>
-            
-            <label for="2a-drying_tape-other_param">Дополнительные технические параметры (если применимо): </label>
-            <textarea id="2a-drying_tape-other_param" name="2a-drying_tape-other_param" placeholder="Примечания к этапу сушки активного материала"></textarea><br>
-            
-            <button type="button" id="2a-drying_tape-save-btn">Сохранить этап сушки</button>
+            <button type="button" id="2-coating-save-btn">Сохранить этап нанесения</button>
             <span class="inline-save-status" aria-live="polite"></span>
           </fieldset>
           
@@ -600,6 +565,12 @@
             
             <label for="2b-drying_pressed_tape-target-duration">Плановая длительность, мин: </label>
             <input id="2b-drying_pressed_tape-target-duration" type="number" step="1" min="0" name="2b-drying_pressed_tape-target-duration" value="120"><br>
+
+            <label for="2b-drying_pressed_tape-end-date">Дата/время окончания: </label>
+            <input id="2b-drying_pressed_tape-end-date" type="date" name="2b-drying_pressed_tape-end-date" placeholder="Дата окончания сушки">
+            <input id="2b-drying_pressed_tape-end-time" type="time" name="2b-drying_pressed_tape-end-time" placeholder="Время окончания сушки">
+
+            <button type="button" class="date-time-now-button" id="2b-drying_pressed_tape-end-now-button" data-date-target="2b-drying_pressed_tape-end-date" data-time-target="2b-drying_pressed_tape-end-time">Сейчас</button><br>
             
             <label for="2b-drying_pressed_tape-other_param">Дополнительные технические параметры (если применимо): </label>
             <textarea id="2b-drying_pressed_tape-other_param" name="2b-drying_pressed_tape-other_param" placeholder="Примечания к этапу сушки активного материала"></textarea><br>
@@ -608,6 +579,56 @@
             <span class="inline-save-status" aria-live="polite"></span>
             
           </fieldset>
+
+        </fieldset>
+
+      </details>
+
+      <details id="3-storage" hidden>
+        <summary>Этап III. Хранение и использование ленты</summary>
+
+        <fieldset id="2c-dry-box-state">
+          <legend>III.1. Последняя сушка ленты в шкафу</legend>
+          <div id="2c-dry-box-status" aria-live="polite"></div>
+          <div id="2c-dry-box-lock-note" aria-live="polite"></div>
+          <div class="time-since" id="2c-dry-box-live" aria-live="polite"></div>
+
+          <label for="2c-dry-box-start-date">Дата/время начала: </label>
+          <input id="2c-dry-box-start-date" type="date" name="2c-dry-box-start-date">
+          <input id="2c-dry-box-start-time" type="time" name="2c-dry-box-start-time">
+          <button
+            type="button"
+            class="date-time-now-button"
+            id="2c-dry-box-start-now-button"
+            data-date-target="2c-dry-box-start-date"
+            data-time-target="2c-dry-box-start-time"
+          >Сейчас</button><br>
+
+          <label for="2c-dry-box-temperature">Температура, °C: </label>
+          <input id="2c-dry-box-temperature" type="number" step="1" min="-273"><br>
+
+          <label for="2c-dry-box-atmosphere">Атмосфера: </label>
+          <select id="2c-dry-box-atmosphere">
+            <option value="">— не выбрано —</option>
+          </select><br>
+
+          <label for="2c-dry-box-other-parameters">Дополнительные технические параметры: </label>
+          <textarea id="2c-dry-box-other-parameters" placeholder="Параметры последней сушки в шкафу"></textarea><br>
+
+          <label for="2c-dry-box-comments">Примечания: </label>
+          <textarea id="2c-dry-box-comments" placeholder="Комментарии по последней сушке в шкафу"></textarea><br>
+
+          <button type="button" id="2c-dry-box-save-btn">Сохранить параметры сушки</button>
+          <span class="inline-save-status" aria-live="polite"></span><br>
+
+          <button type="button" id="2c-dry-box-remove-btn">Вынуть из шкафа сейчас</button>
+          <span class="inline-save-status" aria-live="polite"></span><br>
+
+          <button type="button" id="2c-dry-box-return-btn">Вернуть в шкаф сейчас</button>
+          <span class="inline-save-status" aria-live="polite"></span><br>
+
+          <button type="button" id="2c-dry-box-deplete-btn">Лента израсходована</button>
+          <span class="inline-save-status" aria-live="polite"></span>
         </fieldset>
       </details>
     </form>
