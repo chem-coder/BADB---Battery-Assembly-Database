@@ -7,6 +7,11 @@ import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
 import Panel from 'primevue/panel'
 import Select from 'primevue/select'
+import InputText from 'primevue/inputtext'
+import InputNumber from 'primevue/inputnumber'
+import Textarea from 'primevue/textarea'
+import DatePicker from 'primevue/datepicker'
+import RadioButton from 'primevue/radiobutton'
 import Stepper from 'primevue/stepper'
 import StepList from 'primevue/steplist'
 import Step from 'primevue/step'
@@ -59,16 +64,25 @@ const targetConfigCode = ref('')
 const targetConfigOther = ref('')
 
 // ── Geometry ──
+// PrimeVue InputNumber returns null on empty input (not '') so refs start at null.
 const shape = ref('')
-const diameterMm = ref('')
-const lengthMm = ref('')
-const widthMm = ref('')
+const diameterMm = ref(null)
+const lengthMm = ref(null)
+const widthMm = ref(null)
 
 // ── Target config cascade ──
 const targetConfigOptions = computed(() => {
   if (!targetFormFactor.value) return []
   return TARGET_CONFIG_CODE_OPTIONS_BY_FORM_FACTOR[targetFormFactor.value] || []
 })
+
+// ── Tape select options (flat list for PrimeVue Select) ──
+const tapeOptions = computed(() =>
+  tapes.value.map(t => ({
+    value: t.tape_id,
+    label: `#${t.tape_id} | ${t.name} (${t.role})`,
+  }))
+)
 
 function onFormFactorChange() {
   // Auto-set shape
@@ -97,11 +111,12 @@ const foilRows = ref([])
 let foilCounter = 0
 
 // ── Drying ──
-const dryingStartDate = ref('')
-const dryingStartTime = ref('')
-const dryingEndDate = ref('')
-const dryingEndTime = ref('')
-const dryingTemperature = ref('')
+// Consolidated date+time into single DatePicker Date objects per boundary,
+// replacing the legacy dryingStart{Date,Time}/dryingEnd{Date,Time} split.
+// PrimeVue DatePicker with showTime returns/accepts a native Date object.
+const dryingStart = ref(null)
+const dryingEnd = ref(null)
+const dryingTemperature = ref(null)
 const dryingOtherParams = ref('')
 const dryingComments = ref('')
 
@@ -239,33 +254,33 @@ async function loadDrying(cutBatchId) {
   try {
     const { data } = await api.get(`/api/electrodes/electrode-cut-batches/${cutBatchId}/drying`)
     if (!data) return
-    if (data.start_time) {
-      const s = new Date(data.start_time)
-      dryingStartDate.value = s.toISOString().slice(0, 10)
-      dryingStartTime.value = s.toTimeString().slice(0, 5)
-    }
-    if (data.end_time) {
-      const e = new Date(data.end_time)
-      dryingEndDate.value = e.toISOString().slice(0, 10)
-      dryingEndTime.value = e.toTimeString().slice(0, 5)
-    }
-    dryingTemperature.value = data.temperature_c ?? ''
+    dryingStart.value = data.start_time ? new Date(data.start_time) : null
+    dryingEnd.value = data.end_time ? new Date(data.end_time) : null
+    dryingTemperature.value = data.temperature_c ?? null
     dryingOtherParams.value = data.other_parameters ?? ''
     dryingComments.value = data.comments ?? ''
   } catch {}
 }
 
+// Combined date+time DatePicker takes a Date object. "Сейчас" sets both
+// boundaries — start to this moment, or end to this moment.
 function setNow(target) {
   const now = new Date()
-  const date = now.toISOString().slice(0, 10)
-  const time = now.toTimeString().slice(0, 5)
-  if (target === 'start') {
-    dryingStartDate.value = date
-    dryingStartTime.value = time
-  } else {
-    dryingEndDate.value = date
-    dryingEndTime.value = time
-  }
+  if (target === 'start') dryingStart.value = now
+  else dryingEnd.value = now
+}
+
+// Convert a Date back to a wire format the backend accepts.
+// Existing code sent "YYYY-MM-DDTHH:MM" — keep the same slice for
+// bit-for-bit compatibility with Dalia's drying route.
+function _formatWire(dt) {
+  if (!dt) return null
+  const year = dt.getFullYear()
+  const mm = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  const hh = String(dt.getHours()).padStart(2, '0')
+  const mi = String(dt.getMinutes()).padStart(2, '0')
+  return `${year}-${mm}-${dd}T${hh}:${mi}`
 }
 
 // ── Save batch ──
@@ -334,20 +349,14 @@ async function saveBatch() {
     }
 
     // Save drying
-    let startTime = null
-    let endTime = null
-    if (dryingStartDate.value && dryingStartTime.value) {
-      startTime = `${dryingStartDate.value}T${dryingStartTime.value}`
-    }
-    if (dryingEndDate.value && dryingEndTime.value) {
-      endTime = `${dryingEndDate.value}T${dryingEndTime.value}`
-    }
-    if (startTime || endTime || dryingTemperature.value) {
+    const startTime = _formatWire(dryingStart.value)
+    const endTime = _formatWire(dryingEnd.value)
+    if (startTime || endTime || dryingTemperature.value != null) {
       await api.post(`/api/electrodes/electrode-cut-batches/${currentBatchId.value}/drying`, {
         cut_batch_id: currentBatchId.value,
         start_time: startTime,
         end_time: endTime,
-        temperature_c: dryingTemperature.value || null,
+        temperature_c: dryingTemperature.value ?? null,
         other_parameters: dryingOtherParams.value || null,
         comments: dryingComments.value || null,
       })
@@ -374,9 +383,9 @@ async function restoreBatch() {
     targetConfigCode.value = data.target_config_code || ''
     targetConfigOther.value = data.target_config_other || ''
     shape.value = data.shape || ''
-    diameterMm.value = data.diameter_mm ?? ''
-    lengthMm.value = data.length_mm ?? ''
-    widthMm.value = data.width_mm ?? ''
+    diameterMm.value = data.diameter_mm ?? null
+    lengthMm.value = data.length_mm ?? null
+    widthMm.value = data.width_mm ?? null
 
     await Promise.all([
       loadElectrodes(data.cut_batch_id),
@@ -470,18 +479,22 @@ onMounted(async () => {
             <Panel header="Оператор и параметры нарезки">
               <fieldset @input="markChanged" @change="markChanged">
                 <label>Кто добавил</label>
-                <input type="text" :value="authStore.user?.name || ''" disabled class="field-medium" />
+                <InputText :model-value="authStore.user?.name || ''" disabled class="field-medium" />
 
                 <label>Лента</label>
-                <select v-model="selectedTapeId" class="field-medium" :disabled="!!currentBatchId">
-                  <option value="">— выбрать ленту —</option>
-                  <option v-for="t in tapes" :key="t.tape_id" :value="t.tape_id">
-                    #{{ t.tape_id }} | {{ t.name }} ({{ t.role }})
-                  </option>
-                </select>
+                <Select
+                  v-model="selectedTapeId"
+                  :options="tapeOptions"
+                  option-label="label"
+                  option-value="value"
+                  placeholder="— выбрать ленту —"
+                  :disabled="!!currentBatchId"
+                  show-clear
+                  class="field-medium"
+                />
 
                 <label>Комментарии</label>
-                <textarea v-model="batchComments" class="field-wide" placeholder="Комментарии о вырезании электродов"></textarea>
+                <Textarea v-model="batchComments" class="field-wide" rows="2" placeholder="Комментарии о вырезании электродов" />
               </fieldset>
             </Panel>
 
@@ -514,9 +527,8 @@ onMounted(async () => {
 
                 <div v-if="targetConfigCode === 'other'">
                   <label>Другая конфигурация:</label>
-                  <input
+                  <InputText
                     v-model="targetConfigOther"
-                    type="text"
                     placeholder="Например: 14500"
                     class="field-medium"
                     @input="markChanged"
@@ -526,30 +538,34 @@ onMounted(async () => {
             </Panel>
 
             <Panel header="Геометрия электродов" toggleable>
-              <fieldset @input="markChanged" @change="markChanged">
+              <fieldset @change="markChanged">
                 <p>
                   Форма электродов:
                   <span v-if="targetFormFactor" class="auto-hint">
                     (автоматически из семейства — {{ shape === 'circle' ? 'круг' : 'прямоугольник' }})
                   </span>
                 </p>
-                <label>
-                  <input type="radio" v-model="shape" value="circle" :disabled="!!targetFormFactor" /> Круг (монета)
-                </label>
-                <label>
-                  <input type="radio" v-model="shape" value="rectangle" :disabled="!!targetFormFactor" /> Прямоугольник (пауч, цилиндр)
-                </label>
+                <div class="radio-row">
+                  <label class="radio-label">
+                    <RadioButton v-model="shape" input-id="shape-circle" value="circle" :disabled="!!targetFormFactor" />
+                    <span>Круг (монета)</span>
+                  </label>
+                  <label class="radio-label">
+                    <RadioButton v-model="shape" input-id="shape-rect" value="rectangle" :disabled="!!targetFormFactor" />
+                    <span>Прямоугольник (пауч, цилиндр)</span>
+                  </label>
+                </div>
 
                 <div v-if="shape === 'circle'">
                   <label>Диаметр электрода, мм:</label>
-                  <input v-model="diameterMm" type="number" step="0.01" min="0" class="field-short" />
+                  <InputNumber v-model="diameterMm" :min="0" :max-fraction-digits="2" class="field-short" @input="markChanged" />
                 </div>
 
                 <div v-if="shape === 'rectangle'">
                   <label>Длина электрода, мм:</label>
-                  <input v-model="lengthMm" type="number" step="0.01" min="0" class="field-short" />
+                  <InputNumber v-model="lengthMm" :min="0" :max-fraction-digits="2" class="field-short" @input="markChanged" />
                   <label>Ширина электрода, мм:</label>
-                  <input v-model="widthMm" type="number" step="0.01" min="0" class="field-short" />
+                  <InputNumber v-model="widthMm" :min="0" :max-fraction-digits="2" class="field-short" @input="markChanged" />
                 </div>
 
                 <label>Площадь электрода, мм²: <span class="computed-field">{{ electrodeArea }}</span></label>
@@ -557,9 +573,9 @@ onMounted(async () => {
             </Panel>
 
             <Panel header="Масса фольги" toggleable>
-              <fieldset @input="markChanged">
+              <fieldset>
                 <label>Средняя масса фольги одного электрода, г:</label>
-                <input type="number" :value="foilMassAverage" disabled class="field-short" />
+                <InputText :model-value="foilMassAverage" disabled class="field-short" />
 
                 <table class="data-table">
                   <thead><tr><th>#</th><th>Масса, г</th><th></th></tr></thead>
@@ -567,8 +583,14 @@ onMounted(async () => {
                     <tr v-for="(row, idx) in foilRows" :key="row._key">
                       <td class="row-index">{{ idx + 1 }}</td>
                       <td>
-                        <input v-model="row.mass_g" type="number" step="0.0001" min="0"
-                          @keydown.enter.prevent="addFoilRow" />
+                        <InputNumber
+                          v-model="row.mass_g"
+                          :min="0"
+                          :max-fraction-digits="4"
+                          class="cell-input"
+                          @input="markChanged"
+                          @keydown.enter.prevent="addFoilRow"
+                        />
                       </td>
                       <td>
                         <Button icon="pi pi-trash" severity="danger" text rounded size="small" @click="removeFoilRow(idx)" />
@@ -612,17 +634,33 @@ onMounted(async () => {
                       <td class="row-index">{{ idx + 1 }}</td>
                       <td>{{ e.number_in_batch ?? '' }}</td>
                       <td>
-                        <input v-model="e.electrode_mass_g" type="number" step="0.0001" min="0"
-                          @change="e._new ? markChanged() : updateElectrode(e, 'electrode_mass_g', e.electrode_mass_g)"
-                          @keydown.enter.prevent="e._new ? appendElectrodeRow() : null" />
+                        <InputNumber
+                          v-model="e.electrode_mass_g"
+                          :min="0"
+                          :max-fraction-digits="4"
+                          class="cell-input"
+                          @input="e._new ? markChanged() : null"
+                          @blur="e._new ? null : updateElectrode(e, 'electrode_mass_g', e.electrode_mass_g)"
+                          @keydown.enter.prevent="e._new ? appendElectrodeRow() : null"
+                        />
                       </td>
                       <td>
-                        <input v-model="e.cup_number" type="number" step="1" min="0"
-                          @change="e._new ? markChanged() : updateElectrode(e, 'cup_number', e.cup_number)" />
+                        <InputNumber
+                          v-model="e.cup_number"
+                          :min="0"
+                          :use-grouping="false"
+                          class="cell-input"
+                          @input="e._new ? markChanged() : null"
+                          @blur="e._new ? null : updateElectrode(e, 'cup_number', e.cup_number)"
+                        />
                       </td>
                       <td>
-                        <input v-model="e.comments" type="text"
-                          @change="e._new ? markChanged() : updateElectrode(e, 'comments', e.comments)" />
+                        <InputText
+                          v-model="e.comments"
+                          class="cell-input"
+                          @input="e._new ? markChanged() : null"
+                          @blur="e._new ? null : updateElectrode(e, 'comments', e.comments)"
+                        />
                       </td>
                       <td>{{ renderStatus(e) }}</td>
                       <td>
@@ -651,29 +689,43 @@ onMounted(async () => {
         <StepPanel value="summary">
           <div class="form-body">
             <Panel header="Сушка готовой партии электродов" toggleable>
-              <fieldset @input="markChanged" @change="markChanged">
-                <label>Дата начала:</label>
+              <fieldset @change="markChanged">
+                <label>Начало:</label>
                 <div class="datetime-row">
-                  <input v-model="dryingStartDate" type="date" />
-                  <input v-model="dryingStartTime" type="time" />
+                  <DatePicker
+                    v-model="dryingStart"
+                    show-time
+                    hour-format="24"
+                    show-icon
+                    placeholder="— дата и время —"
+                    class="field-medium"
+                    @date-select="markChanged"
+                  />
                   <Button size="small" severity="secondary" outlined label="Сейчас" @click="setNow('start'); markChanged()" />
                 </div>
 
-                <label>Дата окончания:</label>
+                <label>Окончание:</label>
                 <div class="datetime-row">
-                  <input v-model="dryingEndDate" type="date" />
-                  <input v-model="dryingEndTime" type="time" />
+                  <DatePicker
+                    v-model="dryingEnd"
+                    show-time
+                    hour-format="24"
+                    show-icon
+                    placeholder="— дата и время —"
+                    class="field-medium"
+                    @date-select="markChanged"
+                  />
                   <Button size="small" severity="secondary" outlined label="Сейчас" @click="setNow('end'); markChanged()" />
                 </div>
 
                 <label>Температура, °C:</label>
-                <input v-model="dryingTemperature" type="number" step="0.1" min="-273" class="field-short" />
+                <InputNumber v-model="dryingTemperature" :min="-273" :max-fraction-digits="1" class="field-short" @input="markChanged" />
 
                 <label>Дополнительные параметры:</label>
-                <textarea v-model="dryingOtherParams" class="field-wide" placeholder="Например: вакуум, сухая комната"></textarea>
+                <Textarea v-model="dryingOtherParams" class="field-wide" rows="2" placeholder="Например: вакуум, сухая комната" />
 
                 <label>Комментарии:</label>
-                <textarea v-model="dryingComments" class="field-wide" placeholder="Комментарии по сушке"></textarea>
+                <Textarea v-model="dryingComments" class="field-wide" rows="2" placeholder="Комментарии по сушке" />
               </fieldset>
             </Panel>
 
@@ -721,22 +773,48 @@ onMounted(async () => {
 }
 .step-indicator.complete { background: #D1FAE5; }
 
-/* Form fields */
+/* Form layout */
 fieldset { border: none; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.4rem; }
 label { font-weight: 500; font-size: 0.9rem; margin-top: 0.3rem; }
 
-select, input[type="text"], input[type="number"], input[type="date"], input[type="time"], textarea {
-  padding: 0.4rem 0.5rem; border: 1px solid #D1D7DE; border-radius: 6px; font-size: 0.9rem;
-}
-select:focus, input:focus, textarea:focus {
-  border-color: #003274; outline: none; box-shadow: 0 0 0 2px rgba(0, 51, 102, 0.15);
-}
-textarea { min-height: 2.5rem; resize: vertical; }
+/* PrimeVue input sizing — width classes .field-short / .field-medium / .field-wide
+   now apply to the outer PrimeVue component wrapper, which we then pass to the
+   inner input via :deep(). InputNumber/DatePicker/Select wrap their real <input>
+   in multiple divs; the :deep rules below target the rendered input width. */
+.field-short  { max-width: 180px; }
+.field-medium { max-width: 360px; }
+.field-wide   { max-width: 600px; }
 
-select, input[type="number"] { max-width: 360px; }
-textarea { max-width: 600px; }
+:deep(.p-inputnumber.field-short),
+:deep(.p-inputnumber.field-medium),
+:deep(.p-datepicker.field-medium),
+:deep(.p-select.field-medium),
+:deep(.p-inputtext.field-short),
+:deep(.p-inputtext.field-medium),
+:deep(.p-textarea.field-wide) {
+  width: 100%;
+}
+:deep(.p-inputnumber.field-short .p-inputtext),
+:deep(.p-inputtext.field-short),
+:deep(.p-datepicker-input) {
+  width: 100%;
+}
 
-.datetime-row { display: flex; gap: 0.5rem; align-items: center; }
+/* Radio button rows — PrimeVue RadioButton + label side-by-side */
+.radio-row { display: flex; flex-direction: column; gap: 0.35rem; }
+.radio-label {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  font-weight: 400; margin-top: 0; cursor: pointer;
+}
+
+/* In-table inputs — compact, fill the cell */
+.cell-input { width: 100%; min-width: 80px; }
+:deep(.cell-input .p-inputtext),
+:deep(.cell-input.p-inputtext) {
+  width: 100%; padding: 0.25rem 0.4rem; font-size: 0.85rem;
+}
+
+.datetime-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 .computed-field { font-weight: bold; color: #003274; }
 
 .electrodes-table-wrapper { overflow-x: auto; }
