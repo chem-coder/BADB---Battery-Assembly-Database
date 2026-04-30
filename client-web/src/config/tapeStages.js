@@ -90,6 +90,14 @@ export const TAPE_STAGES = [
       { key: 'time',       label: 'Время',              type: 'time' },
       { key: 'foilId',     label: 'Фольга',             type: 'select', ref: 'foils' },
       { key: 'coatingId',  label: 'Метод нанесения',    type: 'select', ref: 'coatingMethods' },
+      // Coating sidedness — enum column added by Dalia in migration d024.
+      // Inline options (no reference table) because it's only 2 fixed values.
+      // Backfilled for existing rows in d025: dr_blade → one_sided,
+      // coater_machine → two_sided. User can still override per coating.
+      { key: 'coatingSidedness', label: 'Сторонность покрытия', type: 'select', options: [
+        { value: 'one_sided', label: '1-сторонняя' },
+        { value: 'two_sided', label: '2-сторонняя' },
+      ]},
       { key: 'notes',      label: 'Примечания',         type: 'textarea' },
     ],
   },

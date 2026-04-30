@@ -138,7 +138,12 @@ export const BATTERY_STAGES = [
       { key: 'ocv_v', label: 'OCV, В', type: 'number' },
       { key: 'esr_mohm', label: 'ESR, мОм', type: 'number' },
       { key: 'qc_notes', label: 'Заметки КК', type: 'textarea' },
-      { key: 'electrochem_notes', label: 'Электрохимия', type: 'textarea' },
+      // NB: electrochem measurement data lives in the separate
+      // battery_electrochem table (file attachments + per-file notes),
+      // rendered by <BatteryElectrochemEditor> on AssemblyPage. The
+      // previously-here "Электрохимия" textarea was misleading — it
+      // used to save into batteries.battery_notes together with OCV/ESR
+      // as a formatted string, bypassing the dedicated tables.
     ],
   },
 ]
