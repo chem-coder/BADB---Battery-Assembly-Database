@@ -253,6 +253,133 @@ echo "Pre-commit check: PASSED"
 5. Confirm no secrets (.env, passwords, tokens) in diff
 6. `node -e "require('./app')"` — syntax check passes
 
+## PR split protocol — large feature branches → small reviewable PRs
+
+Refined during the 2026-04-30 split of `dima/v2-security-mobile-dashboard`
+(100 commits as GitHub counts in the closed monolith PR, 108 as
+`git log --oneline` reports incl. merge commits; +12772/-939 total)
+into 8 small thematic PRs. Captured here so the next big-branch split
+goes faster.
+
+### When to split
+
+Trigger to split a feature branch into multiple PRs:
+- Branch has 50+ commits OR 3000+ lines of net change
+- Branch touches more than one of: schema, auth, routes, frontend
+- Lead reviewer asks "smaller PRs please" (Dalia's exact ask precedent)
+
+Don't split:
+- Bug fix branches under ~200 lines
+- Single-feature branches with naturally cohesive scope
+- Anything that needs to land atomically (schema + matching code)
+
+### Strategy: "Variant B" — file-based, fresh branches from main
+
+Don't try to merge main into your big branch and split commits.
+Conflicts compound, history gets ugly, force-pushes proliferate.
+
+Instead:
+
+1. **Inventory the diff first**:
+   ```bash
+   git fetch origin
+   git diff --name-status origin/main...your-big-branch | sort > /tmp/files.txt
+   ```
+   Group the changed files by domain (schema, auth, routes, cycling,
+   frontend, etc.). One bucket = one PR.
+
+2. **Per PR**: fresh branch from `origin/main`, copy in just that
+   bucket's files, fresh commit, push, open PR.
+   ```bash
+   git checkout -b dima/pr-bucket-name origin/main
+   git checkout your-big-branch -- path/to/file1.js path/to/file2.js
+   git commit -m "feat(bucket): ..."
+   git push -u origin dima/pr-bucket-name
+   gh pr create --base main ...
+   ```
+
+3. **For "contaminated" files** (one file mixing multiple concerns):
+   manual edit. E.g. `app.js` mixing helmet (auth PR) + Phase δ
+   redirects (frontend PR) — copy main's version, manually add only
+   the auth pieces in the auth PR; the frontend pieces land in the
+   frontend PR. Same for `package.json` shared deps.
+
+4. **For files Dalia is actively refactoring** (e.g. `services/`):
+   Variant B fails — copying our older version regresses her work.
+   Detect via `wc -l` comparison: if our version is significantly
+   smaller than main, EXCLUDE the file. Document the exclusion in the
+   PR description; consider a follow-up tiny PR on top of her version.
+
+### "Foundation utils" cross-PR dependency
+
+When a util (e.g. `errorClassifier.js`, `useBackendCache.js`) is
+imported by multiple feature PRs (cycling + foundation), include the
+util in BOTH PRs (identical content from the same source branch).
+Git auto-resolves identical-additions on merge. Avoid trying to chain
+"PR A depends on PR B for util X" — it serializes review for no
+benefit.
+
+### Self-review checklist BEFORE pushing each split PR
+
+Run after `git commit`, before `git push`:
+
+| Check | Command | Why |
+|-------|---------|-----|
+| Description matches code | grep table/column/route names in diff vs PR body | Caught `cycling_summary` vs `cycling_cycle_summary` typo on PR #7 |
+| No tracking-file regressions | `git diff --cached migrations/migrations_log.txt` should be empty unless explicitly applying | These get bumped post-apply, not pre-merge |
+| No "fake history" wording | Read commit message — does it claim a merge that didn't happen? | Caught "after merge of …" wording on PR #7 |
+| Server boots | `node -e "require('./app')"` + `node server.js` for 2 seconds | Catches missing imports / bad refs |
+| Smoke endpoint | `curl http://localhost:3003/api/some-route` returns expected status | Confirms route registered, middleware chain intact |
+| Frontend build | `cd client-web && npm run build` | Catches missing imports / bad alias |
+| No external service refs | grep new code for unknown deps / hard-coded URLs | LAN-only invariant |
+| Backward-compat for shared classes | If editing a class constructor, verify all existing callers still work | Caught `BatteryElectrodeSourceValidationError` constructor change in PR #9 |
+| Force-push only on feature branch | Never `--force` to main; on feature branch use `--force-with-lease` | Standard safety |
+
+### `package-lock.json` conflict — the universal trigger
+
+When two PRs add deps in parallel, `package-lock.json` always conflicts
+on merge or rebase. Don't try to resolve it manually — it's
+regenerated content, not source. Just delete and reinstall:
+
+```bash
+# 1. Make sure package.json itself is in the state you want
+#    (resolve any conflicts in it manually — that's the source of truth).
+# 2. Delete the lock and regenerate it:
+rm package-lock.json
+npm install        # regenerates clean lock with current package.json deps
+# 3. Stage the result so the rebase/merge can continue:
+git add package-lock.json package.json
+git rebase --continue   # or `git merge --continue`, depending on the op
+```
+
+Avoid `git checkout --theirs/--ours package-lock.json` — the meaning of
+`--theirs` is INVERTED between rebase (our work is "theirs", main is
+"ours") and merge (incoming is "theirs", current is "ours"), so the
+intent is easy to get wrong. Deleting + regenerating is unambiguous.
+
+If `client-web/package-lock.json` also conflicts, repeat in the
+client-web subdirectory.
+
+### After Dalia merges your PR
+
+Verify your fixes are preserved on main, especially when she made her
+own edits during merge:
+
+```bash
+git fetch origin
+# For each file you changed in the merged PR:
+git show origin/main:path/to/file.js | grep -A 5 "your fix marker"
+```
+
+Don't trust "she clicked merge → it's all there". Dalia sometimes
+edits files during merge (she did this for PR #9 services/). Verify.
+
+### Closing the original monolith PR
+
+When the split is complete, close the original big PR with a comment
+listing every replacement PR + its scope. Keep the original branch on
+remote as a backup until all split PRs are merged. Then delete.
+
 ## Code audit procedure
 
 When running a code audit (bug search), follow this two-phase process.
