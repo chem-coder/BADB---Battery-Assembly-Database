@@ -1,0 +1,246 @@
+{
+  "datapoints": [
+    {
+      "cycle_number": 1,
+      "step_number": 1,
+      "time_s": 0.0,
+      "voltage_v": 2.5,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 0.0,
+      "energy_wh": 0.0
+    },
+    {
+      "cycle_number": 1,
+      "step_number": 1,
+      "time_s": 60.0,
+      "voltage_v": 3.0,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 1.6667e-05,
+      "energy_wh": 4.5833e-05
+    },
+    {
+      "cycle_number": 1,
+      "step_number": 1,
+      "time_s": 120.0,
+      "voltage_v": 3.5,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 3.3333e-05,
+      "energy_wh": 0.0001
+    },
+    {
+      "cycle_number": 1,
+      "step_number": 1,
+      "time_s": 180.0,
+      "voltage_v": 4.0,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 5e-05,
+      "energy_wh": 0.0001625
+    },
+    {
+      "cycle_number": 1,
+      "step_number": 1,
+      "time_s": 240.0,
+      "voltage_v": 4.2,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 6.6667e-05,
+      "energy_wh": 0.000230833
+    },
+    {
+      "cycle_number": 1,
+      "step_number": 2,
+      "time_s": 0.0,
+      "voltage_v": 4.2,
+      "current_a": -0.001,
+      "step_type": "discharge",
+      "capacity_ah": 0.0,
+      "energy_wh": 0.0
+    },
+    {
+      "cycle_number": 1,
+      "step_number": 2,
+      "time_s": 60.0,
+      "voltage_v": 4.0,
+      "current_a": -0.001,
+      "step_type": "discharge",
+      "capacity_ah": 1.6667e-05,
+      "energy_wh": 6.8333e-05
+    },
+    {
+      "cycle_number": 1,
+      "step_number": 2,
+      "time_s": 120.0,
+      "voltage_v": 3.5,
+      "current_a": -0.001,
+      "step_type": "discharge",
+      "capacity_ah": 3.3333e-05,
+      "energy_wh": 0.000130833
+    },
+    {
+      "cycle_number": 1,
+      "step_number": 2,
+      "time_s": 180.0,
+      "voltage_v": 3.0,
+      "current_a": -0.001,
+      "step_type": "discharge",
+      "capacity_ah": 5e-05,
+      "energy_wh": 0.000185
+    },
+    {
+      "cycle_number": 1,
+      "step_number": 2,
+      "time_s": 240.0,
+      "voltage_v": 2.5,
+      "current_a": -0.001,
+      "step_type": "discharge",
+      "capacity_ah": 6.6667e-05,
+      "energy_wh": 0.000230833
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 1,
+      "time_s": 0.0,
+      "voltage_v": 2.5,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 0.0,
+      "energy_wh": 0.0
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 1,
+      "time_s": 60.0,
+      "voltage_v": 3.0,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 1.6667e-05,
+      "energy_wh": 4.5833e-05
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 1,
+      "time_s": 120.0,
+      "voltage_v": 3.5,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 3.3333e-05,
+      "energy_wh": 0.0001
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 1,
+      "time_s": 180.0,
+      "voltage_v": 4.0,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 5e-05,
+      "energy_wh": 0.0001625
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 1,
+      "time_s": 240.0,
+      "voltage_v": 4.2,
+      "current_a": 0.001,
+      "step_type": "charge",
+      "capacity_ah": 6.6667e-05,
+      "energy_wh": 0.000230833
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 2,
+      "time_s": 0.0,
+      "voltage_v": 4.2,
+      "current_a": -0.0009,
+      "step_type": "discharge",
+      "capacity_ah": 0.0,
+      "energy_wh": 0.0
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 2,
+      "time_s": 60.0,
+      "voltage_v": 4.0,
+      "current_a": -0.0009,
+      "step_type": "discharge",
+      "capacity_ah": 1.5e-05,
+      "energy_wh": 6.15e-05
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 2,
+      "time_s": 120.0,
+      "voltage_v": 3.5,
+      "current_a": -0.0009,
+      "step_type": "discharge",
+      "capacity_ah": 3e-05,
+      "energy_wh": 0.00011775
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 2,
+      "time_s": 180.0,
+      "voltage_v": 3.0,
+      "current_a": -0.0009,
+      "step_type": "discharge",
+      "capacity_ah": 4.5e-05,
+      "energy_wh": 0.0001665
+    },
+    {
+      "cycle_number": 2,
+      "step_number": 2,
+      "time_s": 240.0,
+      "voltage_v": 2.5,
+      "current_a": -0.0009,
+      "step_type": "discharge",
+      "capacity_ah": 6e-05,
+      "energy_wh": 0.00020775
+    }
+  ],
+  "summary": [
+    {
+      "cycle_number": 1,
+      "charge_capacity_ah": 6.6667e-05,
+      "discharge_capacity_ah": 6.6667e-05,
+      "coulombic_efficiency": 100.0,
+      "energy_efficiency": 100.0,
+      "charge_energy_wh": 0.000230833,
+      "discharge_energy_wh": 0.000230833,
+      "avg_charge_voltage_v": 3.44,
+      "avg_discharge_voltage_v": 3.44,
+      "max_voltage_v": 4.2,
+      "min_voltage_v": 2.5,
+      "avg_temperature_c": null,
+      "duration_s": 240.0
+    },
+    {
+      "cycle_number": 2,
+      "charge_capacity_ah": 6.6667e-05,
+      "discharge_capacity_ah": 6e-05,
+      "coulombic_efficiency": 90.0,
+      "energy_efficiency": 90.0,
+      "charge_energy_wh": 0.000230833,
+      "discharge_energy_wh": 0.00020775,
+      "avg_charge_voltage_v": 3.44,
+      "avg_discharge_voltage_v": 3.44,
+      "max_voltage_v": 4.2,
+      "min_voltage_v": 2.5,
+      "avg_temperature_c": null,
+      "duration_s": 240.0
+    }
+  ],
+  "meta": {
+    "total_cycles": 2,
+    "total_datapoints": 20,
+    "started_at": null,
+    "ended_at": null,
+    "max_time_s": 240.0,
+    "encoding": "utf-8",
+    "source_format": "elitech",
+    "detected_format": "elitech"
+  }
+}
