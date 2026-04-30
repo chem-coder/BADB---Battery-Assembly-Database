@@ -18,9 +18,18 @@ router.post('/login', async (req, res) => {
   const ip = req.ip;
   const userAgent = req.headers['user-agent'] || '';
 
+  // All writes for this login go through one serialized transaction. The
+  // pg_advisory_xact_lock on hashtext(login) serializes concurrent login
+  // attempts for the SAME login string, closing the count-then-insert race
+  // that would otherwise let N parallel attempts each read the same
+  // "below limit" count and all bypass the lockout.
+  const client = await pool.connect();
   try {
-    // Brute-force protection: count recent failed attempts
-    const lockoutCheck = await pool.query(
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [login.toLowerCase()]);
+
+    // Brute-force protection: count recent failed attempts (now under the lock)
+    const lockoutCheck = await client.query(
       `SELECT COUNT(*) AS cnt FROM auth_log
        WHERE login = $1 AND event = 'login_failed'
        AND created_at > now() - make_interval(mins => $2)`,
@@ -28,66 +37,76 @@ router.post('/login', async (req, res) => {
     );
 
     if (parseInt(lockoutCheck.rows[0].cnt, 10) >= config.rateLimit.maxFailedAttempts) {
-      // Log the locked-out attempt
-      await pool.query(
+      await client.query(
         `INSERT INTO auth_log (login, event, ip_address, user_agent, details)
          VALUES ($1, 'login_failed', $2, $3, $4)`,
         [login, ip, userAgent, JSON.stringify({ reason: 'locked_out' })]
       );
-
+      await client.query('COMMIT');
       return res.status(429).json({
         error: 'Too many failed attempts',
         retryAfter: config.rateLimit.lockoutWindowMinutes * 60
       });
     }
 
-    // Find user by login
-    const userResult = await pool.query(
-      'SELECT user_id, name, login, password_hash, role, position, token_version FROM users WHERE lower(login) = lower($1)',
+    const userResult = await client.query(
+      'SELECT user_id, name, login, password_hash, role, position, token_version, active FROM users WHERE lower(login) = lower($1)',
       [login]
     );
 
     if (userResult.rowCount === 0) {
-      await pool.query(
+      await client.query(
         `INSERT INTO auth_log (login, event, ip_address, user_agent, details)
          VALUES ($1, 'login_failed', $2, $3, $4)`,
         [login, ip, userAgent, JSON.stringify({ reason: 'user_not_found' })]
       );
+      await client.query('COMMIT');
       return res.status(401).json({ error: 'Invalid login or password' });
     }
 
     const user = userResult.rows[0];
 
-    // Verify password
     const valid = await bcrypt.compare(password, user.password_hash || '');
     if (!valid) {
-      await pool.query(
+      await client.query(
         `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent, details)
          VALUES ($1, $2, 'login_failed', $3, $4, $5)`,
         [user.user_id, login, ip, userAgent, JSON.stringify({ reason: 'wrong_password' })]
       );
+      await client.query('COMMIT');
       return res.status(401).json({ error: 'Invalid login or password' });
     }
 
-    // Get project access list
+    // Soft-disabled users cannot log in (see users.active + middleware/auth.js)
+    if (user.active === false) {
+      await client.query(
+        `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent, details)
+         VALUES ($1, $2, 'login_failed', $3, $4, $5)`,
+        [user.user_id, login, ip, userAgent, JSON.stringify({ reason: 'account_disabled' })]
+      );
+      await client.query('COMMIT');
+      return res.status(403).json({ error: 'Учётная запись отключена. Обратитесь к администратору.' });
+    }
+
+    // Successful login — log + issue token
+    await client.query(
+      `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent)
+       VALUES ($1, $2, 'login_success', $3, $4)`,
+      [user.user_id, login, ip, userAgent]
+    );
+    await client.query('COMMIT');
+
+    // Post-transaction: project access list + JWT issuance don't need the lock
     const projectsResult = await pool.query(
       'SELECT project_id FROM user_project_access WHERE user_id = $1',
       [user.user_id]
     );
     const projects = projectsResult.rows.map(r => r.project_id);
 
-    // Create JWT token (tokenVersion enables revocation on password change)
     const token = jwt.sign(
       { userId: user.user_id, login: user.login, role: user.role, tokenVersion: user.token_version },
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn }
-    );
-
-    // Log successful login
-    await pool.query(
-      `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent)
-       VALUES ($1, $2, 'login_success', $3, $4)`,
-      [user.user_id, login, ip, userAgent]
     );
 
     res.json({
@@ -102,8 +121,11 @@ router.post('/login', async (req, res) => {
       projects
     });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
   }
 });
 
@@ -265,6 +287,11 @@ router.put('/change-password', auth, async (req, res) => {
 });
 
 // POST /api/auth/change-password-public (no JWT — for login page)
+// Legitimate flow for users with a temporary/initial password issued by admin:
+// caller provides login + CURRENT password + NEW password; we verify current
+// via bcrypt, bump token_version (revokes all existing JWTs), and issue a
+// fresh token. Brute-force count + password check wrapped in the same
+// advisory-lock transaction as /login to prevent the race.
 router.post('/change-password-public', async (req, res) => {
   const { login, current_password, new_password } = req.body;
 
@@ -279,64 +306,85 @@ router.post('/change-password-public', async (req, res) => {
   const ip = req.ip;
   const userAgent = req.headers['user-agent'] || '';
 
+  const client = await pool.connect();
   try {
-    // Brute-force protection (same as /login)
-    const lockoutCheck = await pool.query(
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [login.toLowerCase()]);
+
+    const lockoutCheck = await client.query(
       `SELECT COUNT(*) AS cnt FROM auth_log
        WHERE login = $1 AND event = 'login_failed'
        AND created_at > now() - make_interval(mins => $2)`,
       [login, config.rateLimit.lockoutWindowMinutes]
     );
     if (parseInt(lockoutCheck.rows[0].cnt, 10) >= config.rateLimit.maxFailedAttempts) {
+      await client.query('COMMIT');
       return res.status(429).json({
         error: 'Too many failed attempts',
         retryAfter: config.rateLimit.lockoutWindowMinutes * 60
       });
     }
 
-    const userResult = await pool.query(
-      'SELECT user_id, login, password_hash FROM users WHERE lower(login) = lower($1)',
+    const userResult = await client.query(
+      'SELECT user_id, login, password_hash, active FROM users WHERE lower(login) = lower($1)',
       [login]
     );
 
     if (userResult.rowCount === 0) {
-      await pool.query(
+      await client.query(
         `INSERT INTO auth_log (login, event, ip_address, user_agent, details)
          VALUES ($1, 'login_failed', $2, $3, $4)`,
         [login, ip, userAgent, JSON.stringify({ reason: 'user_not_found', via: 'change-password-public' })]
       );
+      await client.query('COMMIT');
       return res.status(401).json({ error: 'Неверный логин или пароль' });
     }
 
     const user = userResult.rows[0];
 
+    // Soft-disabled users can't change password via this endpoint either —
+    // they'd just be able to log in again after. Reject explicitly.
+    if (user.active === false) {
+      await client.query(
+        `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent, details)
+         VALUES ($1, $2, 'login_failed', $3, $4, $5)`,
+        [user.user_id, login, ip, userAgent, JSON.stringify({ reason: 'account_disabled', via: 'change-password-public' })]
+      );
+      await client.query('COMMIT');
+      return res.status(403).json({ error: 'Учётная запись отключена. Обратитесь к администратору.' });
+    }
+
     const valid = await bcrypt.compare(current_password, user.password_hash || '');
     if (!valid) {
-      await pool.query(
+      await client.query(
         `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent, details)
          VALUES ($1, $2, 'login_failed', $3, $4, $5)`,
         [user.user_id, login, ip, userAgent, JSON.stringify({ reason: 'wrong_password', via: 'change-password-public' })]
       );
+      await client.query('COMMIT');
       return res.status(401).json({ error: 'Неверный логин или пароль' });
     }
 
     if (new_password === current_password) {
+      await client.query('COMMIT');
       return res.status(400).json({ error: 'Новый пароль должен отличаться' });
     }
 
     const passwordHash = await bcrypt.hash(new_password, config.bcrypt.rounds);
 
     // Bump token_version → invalidates all existing JWTs for this user
-    const updated = await pool.query(
+    const updated = await client.query(
       'UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE user_id = $2 RETURNING login, role, token_version',
       [passwordHash, user.user_id]
     );
 
-    await pool.query(
+    await client.query(
       `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent)
        VALUES ($1, $2, 'password_changed', $3, $4)`,
       [user.user_id, user.login, ip, userAgent]
     );
+
+    await client.query('COMMIT');
 
     // Issue token so user can proceed without re-login
     const newToken = jwt.sign(
@@ -347,8 +395,93 @@ router.post('/change-password-public', async (req, res) => {
 
     res.json({ message: 'Пароль успешно изменён', token: newToken });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/auth/admin-reset-password/:userId (admin only)
+// For the "user forgot password" flow: admin sets a new temporary password
+// that the user will then change via /change-password-public on next login.
+// Body: { new_password: string }  — min 6 chars, same rules as other endpoints.
+// Side effects:
+//   - hashes new_password with bcrypt
+//   - bumps token_version → revokes all existing JWTs for this user
+//   - writes auth_log event 'password_reset_by_admin' with details
+// Does NOT email anyone — lab is LAN-only; admin tells the user the new
+// temporary password verbally or via internal chat.
+router.post('/admin-reset-password/:userId', auth, requireRole('admin'), async (req, res) => {
+  const targetUserId = Number(req.params.userId);
+  const { new_password } = req.body;
+
+  if (!Number.isInteger(targetUserId)) {
+    return res.status(400).json({ error: 'Некорректный user_id' });
+  }
+  if (!new_password || typeof new_password !== 'string' || new_password.length < 6) {
+    return res.status(400).json({ error: 'Минимум 6 символов' });
+  }
+
+  const ip = req.ip;
+  const userAgent = req.headers['user-agent'] || '';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Look up target — also get login for audit logging
+    const target = await client.query(
+      'SELECT user_id, login, active FROM users WHERE user_id = $1',
+      [targetUserId]
+    );
+    if (target.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+    const targetLogin = target.rows[0].login;
+
+    // Allow reset even for disabled users — admin may reset then re-enable.
+    const passwordHash = await bcrypt.hash(new_password, config.bcrypt.rounds);
+
+    const updated = await client.query(
+      'UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE user_id = $2 RETURNING token_version',
+      [passwordHash, targetUserId]
+    );
+    if (updated.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+
+    // Audit: record WHO reset WHOSE password. The acting admin is in req.user;
+    // the target user_id goes into the `details` JSON column. We log under
+    // the TARGET user's login so a "recent auth_log for <target>" query shows
+    // the reset event in their history.
+    await client.query(
+      `INSERT INTO auth_log (user_id, login, event, ip_address, user_agent, details)
+       VALUES ($1, $2, 'password_reset_by_admin', $3, $4, $5)`,
+      [
+        targetUserId,
+        targetLogin,
+        ip,
+        userAgent,
+        JSON.stringify({ reset_by_user_id: req.user.userId, reset_by_login: req.user.login })
+      ]
+    );
+
+    await client.query('COMMIT');
+    res.json({
+      message: 'Пароль сброшен. Передайте новый пароль пользователю лично.',
+      user_id: targetUserId,
+      login: targetLogin,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сброса пароля' });
+  } finally {
+    client.release();
   }
 });
 
