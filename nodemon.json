@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/nodemon.json",
+  "_comment": "Nodemon watches only the server-side code. Everything else (client-web, node_modules incl. Vite's dep cache, public static, migrations, SQL backups, Dalia's HTML) is ignored so Vite's HMR writes don't bounce the Node server.",
+  "watch": [
+    "app.js",
+    "server.js",
+    "config",
+    "db",
+    "middleware",
+    "routes",
+    "contracts",
+    "scripts"
+  ],
+  "ext": "js,mjs,cjs,json",
+  "ignore": [
+    "node_modules",
+    "client-web",
+    "public",
+    "public-vue",
+    "migrations",
+    "sql_backups",
+    "uploads",
+    "*.test.js",
+    ".git",
+    ".claude",
+    ".local",
+    "obsidian_badb"
+  ]
+}

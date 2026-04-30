@@ -17,6 +17,7 @@ pool.query('SELECT 1')
   .then(() => console.log('Postgres connected'))
   .catch(err => console.error('Postgres connection error', err));
 
-app.listen(config.port, () => {
-  console.log(`Listening on port ${config.port}`);
+app.listen(config.port, config.bindHost, () => {
+  const label = config.bindHost === '0.0.0.0' ? 'all interfaces' : config.bindHost;
+  console.log(`Listening on ${label}:${config.port}`);
 });
