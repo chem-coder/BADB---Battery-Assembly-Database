@@ -269,6 +269,9 @@ router.delete('/foil-measurements/:id', auth, async (req, res) => {
   try {
     res.json(await deleteFoilMassMeasurement(pool, measurementId));
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
@@ -470,6 +473,9 @@ router.delete('/electrode-drying/:id', auth, async (req, res) => {
     const result = await deleteElectrodeDrying(pool, dryingId);
     res.json(result);
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }

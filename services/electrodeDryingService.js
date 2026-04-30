@@ -122,10 +122,18 @@ async function updateElectrodeDrying(pool, dryingId, payload, userId) {
 }
 
 async function deleteElectrodeDrying(pool, dryingId) {
-  await pool.query(
+  // rowCount check: previously this returned success even when the drying
+  // record was already gone or the id was wrong. The UI displayed
+  // "deleted" with no DB effect; refresh exposed the inconsistency.
+  // 404 surfaces the mistake.
+  const result = await pool.query(
     `DELETE FROM electrode_drying WHERE drying_id = $1`,
     [dryingId]
   );
+
+  if (result.rowCount === 0) {
+    throw statusError('Запись сушки не найдена', 404);
+  }
 
   return { success: true };
 }

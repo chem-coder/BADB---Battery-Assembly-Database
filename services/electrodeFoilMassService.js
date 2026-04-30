@@ -86,10 +86,18 @@ async function updateFoilMassMeasurement(pool, measurementId, massG, userId) {
 }
 
 async function deleteFoilMassMeasurement(pool, measurementId) {
-  await pool.query(
+  // rowCount check: previously the service silently returned success even if
+  // the row was already gone (or the id was bogus). The UI then "thought"
+  // the deletion worked; refresh would show the row still there if the id
+  // was simply wrong. 404 makes the bug visible.
+  const result = await pool.query(
     `DELETE FROM foil_mass_measurements WHERE foil_measurement_id = $1`,
     [measurementId]
   );
+
+  if (result.rowCount === 0) {
+    throw statusError('Замер не найден', 404);
+  }
 
   return { success: true };
 }

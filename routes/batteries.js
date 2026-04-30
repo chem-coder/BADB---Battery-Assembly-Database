@@ -52,6 +52,7 @@ const {
   updateBatteryQc
 } = require('../services/batteryQcService');
 const {
+  deleteBatteryElectrochem,
   fetchBatteryElectrochem,
   saveBatteryElectrochem
 } = require('../services/batteryElectrochemService');
@@ -433,7 +434,12 @@ router.patch('/battery_electrode_sources/:battery_id', auth, async (req, res) =>
   } catch (err) {
 
     if (err instanceof BatteryElectrodeSourceValidationError) {
-      return res.status(err.statusCode).json({ error: err.message });
+      // Expose missing_roles + updated metadata when present (404 case)
+      // so the UI can decide whether to POST instead.
+      const body = { error: err.message };
+      if (err.missing_roles) body.missing_roles = err.missing_roles;
+      if (err.updated) body.updated = err.updated;
+      return res.status(err.statusCode).json(body);
     }
     console.error(err);
     res.status(500).json({ error: 'Ошибка обновления источников электродов' });
@@ -749,6 +755,33 @@ router.get('/battery_electrochem/:battery_id', auth, async (req, res) => {
 router.patch('/battery_electrochem/:battery_id', auth, async (req, res) => {
   res.status(405).json({ error: 'Используйте POST для добавления новых файлов электрохимических испытаний' });
 
+});
+
+
+// Delete a single battery_electrochem file (DB row + file on disk).
+//
+// Route shape matches /battery_electrochem/* sibling routes (POST/GET/PATCH
+// are keyed by battery_id; this one is keyed by battery_electrochem_id since
+// a delete needs to target exactly one row).
+//
+// Disk cleanup is best-effort and lives inside the service: a missing file
+// behind a deleted row is harmless. Returns 404 if no row matched the id.
+router.delete('/battery_electrochem/:electrochem_id', auth, async (req, res) => {
+  const electrochemId = Number(req.params.electrochem_id);
+
+  if (!Number.isInteger(electrochemId)) {
+    return res.status(400).json({ error: 'Некорректный battery_electrochem_id' });
+  }
+
+  try {
+    res.json(await deleteBatteryElectrochem(pool, electrochemId));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка удаления файла электрохимических испытаний' });
+  }
 });
 
 
