@@ -113,24 +113,81 @@ router.get('/filter-options', auth, async (req, res) => {
 })
 
 // ── GET /api/dashboard/activity ───────────────────────────────────────
-// Returns recent activity events for timeline
+// Returns recent activity events for the HomePage timeline.
+//
+// Originally read just `activity_log`, which is barely populated —
+// migrations/012_activity_log.sql seeded 6 fake rows but no CRUD
+// route writes to it on real edits, so the timeline was stuck on
+// those seeds (user reported them as «неправильная информация»).
+//
+// Now unions three real sources into a single timeline:
+//   - auth_log         → login / register / logout events (real, per
+//                        every actual session)
+//   - field_changelog  → per-field edits (real, written by traceability
+//                        triggers/code on every CRUD edit)
+//   - activity_log     → legacy table; kept in for the seed entries
+//                        until they're cleaned out
+//
+// Each source is normalized into the shape the frontend already
+// renders: { id, user_id, user_name, action, entity, entity_id,
+// details, created_at }. `id` is namespaced by source prefix to
+// avoid collisions across the three integer PKs (e.g. `auth-42`,
+// `chg-13`, `act-7`).
 router.get('/activity', auth, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 30, 100)
 
     const result = await pool.query(`
-      SELECT
-        a.id,
-        a.user_id,
-        u.name AS user_name,
-        a.action,
-        a.entity,
-        a.entity_id,
-        a.details,
-        a.created_at
-      FROM activity_log a
-      LEFT JOIN users u ON u.user_id = a.user_id
-      ORDER BY a.created_at DESC
+      SELECT id, user_id, user_name, action, entity, entity_id, details, created_at FROM (
+        -- Logins / registrations / logouts (real auth events)
+        SELECT
+          'auth-' || al.id              AS id,
+          al.user_id                    AS user_id,
+          COALESCE(u.name, al.login)    AS user_name,
+          al.event                      AS action,
+          'auth'                        AS entity,
+          al.user_id                    AS entity_id,
+          al.details                    AS details,
+          al.created_at                 AS created_at
+        FROM auth_log al
+        LEFT JOIN users u ON u.user_id = al.user_id
+        WHERE al.event IN ('login_success', 'register', 'logout')
+
+        UNION ALL
+
+        -- Per-field edits via the traceability trigger
+        SELECT
+          'chg-' || fc.id               AS id,
+          fc.changed_by                 AS user_id,
+          u.name                        AS user_name,
+          'edit'                        AS action,
+          fc.entity_type                AS entity,
+          fc.entity_id                  AS entity_id,
+          jsonb_build_object(
+            'field', fc.field_name,
+            'old', fc.old_value,
+            'new', fc.new_value
+          )                             AS details,
+          fc.changed_at                 AS created_at
+        FROM field_changelog fc
+        LEFT JOIN users u ON u.user_id = fc.changed_by
+
+        UNION ALL
+
+        -- Legacy CRUD log (mostly seed data, kept for back-compat)
+        SELECT
+          'act-' || a.id                AS id,
+          a.user_id                     AS user_id,
+          u.name                        AS user_name,
+          a.action                      AS action,
+          a.entity                      AS entity,
+          a.entity_id                   AS entity_id,
+          a.details                     AS details,
+          a.created_at                  AS created_at
+        FROM activity_log a
+        LEFT JOIN users u ON u.user_id = a.user_id
+      ) merged
+      ORDER BY created_at DESC
       LIMIT $1
     `, [limit])
 

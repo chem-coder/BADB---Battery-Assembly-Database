@@ -1,10 +1,24 @@
 const { trackChanges } = require('../middleware/trackChanges');
 
 class BatteryElectrodeSourceValidationError extends Error {
-  constructor(message) {
+  // statusCode default 400 (validation). Pass 404 for "row not found"
+  // shape errors so the route returns the right status. Optional `details`
+  // object exposes richer fields on the JSON response.
+  //
+  // Allowlist explicit keys instead of Object.assign(this, details) — that
+  // would let a caller overwrite this.message / this.statusCode / this.name
+  // by passing them in details. Only callers in this service file build
+  // details, so the risk is internal — but the explicit form is clearer
+  // about the contract and avoids silent surprises if more details fields
+  // are added later.
+  constructor(message, statusCode = 400, details = null) {
     super(message);
     this.name = 'BatteryElectrodeSourceValidationError';
-    this.statusCode = 400;
+    this.statusCode = statusCode;
+    if (details) {
+      if (details.missing_roles !== undefined) this.missing_roles = details.missing_roles;
+      if (details.updated !== undefined) this.updated = details.updated;
+    }
   }
 }
 
@@ -255,7 +269,12 @@ async function updateBatteryElectrodeSources(pool, batteryId, payload, userId) {
   const oldCathode = currentSources.rows.find((row) => row.role === 'cathode') || {};
   const oldAnode = currentSources.rows.find((row) => row.role === 'anode') || {};
 
-  await pool.query(
+  // rowCount-aware UPDATEs: if the role row doesn't exist yet, the UPDATE
+  // affects 0 rows. Previously the service silently returned success — the
+  // UI thought the source was saved but nothing was persisted. Now we
+  // explicitly report which roles were missing so the caller can fall back
+  // to POST or inform the user.
+  const cathodeUpd = await pool.query(
     `
     UPDATE battery_electrode_sources
     SET
@@ -273,7 +292,7 @@ async function updateBatteryElectrodeSources(pool, batteryId, payload, userId) {
     ]
   );
 
-  await pool.query(
+  const anodeUpd = await pool.query(
     `
     UPDATE battery_electrode_sources
     SET
@@ -301,7 +320,30 @@ async function updateBatteryElectrodeSources(pool, batteryId, payload, userId) {
     await trackChanges(pool, 'battery_electrode_source_anode', 'battery_electrode_sources', 'battery_id', batteryId, oldAnode, anodeNew, userId, null, false);
   }
 
-  return { success: true };
+  // If the caller sent cathode fields but no cathode row exists (likewise
+  // for anode), the PATCH is a no-op for that role. Surface it as 404 so
+  // the UI can recover (e.g. POST first) instead of being told success.
+  const missingRoles = [];
+  const cathodeRequested = cathode_tape_id !== undefined || cathode_cut_batch_id !== undefined || cathode_source_notes !== undefined;
+  const anodeRequested = anode_tape_id !== undefined || anode_cut_batch_id !== undefined || anode_source_notes !== undefined;
+  if (cathodeRequested && cathodeUpd.rowCount === 0) missingRoles.push('cathode');
+  if (anodeRequested && anodeUpd.rowCount === 0) missingRoles.push('anode');
+
+  if (missingRoles.length > 0) {
+    throw new BatteryElectrodeSourceValidationError(
+      `Записи для ролей [${missingRoles.join(', ')}] не существуют. Используйте POST /battery_electrode_sources для создания.`,
+      404,
+      {
+        missing_roles: missingRoles,
+        updated: { cathode: cathodeUpd.rowCount, anode: anodeUpd.rowCount },
+      }
+    );
+  }
+
+  return {
+    success: true,
+    updated: { cathode: cathodeUpd.rowCount, anode: anodeUpd.rowCount },
+  };
 }
 
 module.exports = {

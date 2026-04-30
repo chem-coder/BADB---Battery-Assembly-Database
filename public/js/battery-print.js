@@ -381,6 +381,19 @@ function renderReport(report) {
   `;
 }
 
+// Read the JWT the Vue SPA saves on login — same pattern as the
+// electrode-batch-print.js auth patch (commit 2cca4b4). Without this
+// header the report endpoint returns 401 in any prod build with
+// config.authBypass disabled.
+function getAuthHeader() {
+  try {
+    const token = localStorage.getItem('badb_auth_token');
+    return token && token !== 'bypass' ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function loadBatteryReport() {
   const batteryId = getBatteryIdFromQuery();
   const root = document.getElementById('reportRoot');
@@ -391,7 +404,10 @@ async function loadBatteryReport() {
   }
 
   try {
-    const res = await fetch(`/api/batteries/${batteryId}/report`);
+    const res = await fetch(
+      `/api/batteries/${batteryId}/report`,
+      { headers: getAuthHeader() }
+    );
     if (!res.ok) {
       throw new Error('Не удалось загрузить отчёт по батарее');
     }

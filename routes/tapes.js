@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const { auth } = require('../middleware/auth');
+const { auth, requireRole } = require('../middleware/auth');
 const {
   sendDependencyConflict,
   sendForeignKeyConflict
@@ -145,7 +145,11 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE
-router.delete('/:id', auth, async (req, res) => {
+// Restricted to admin/lead: employees should not be able to destroy
+// arbitrary tapes owned by other users. Before this guard, any authenticated
+// user could DELETE /api/tapes/:id and the only barrier was the schema-level
+// dependency check.
+router.delete('/:id', auth, requireRole('admin', 'lead'), async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {

@@ -431,6 +431,20 @@ function renderReport(report) {
   `;
 }
 
+// Read the JWT the Vue SPA saves on login (src/stores/auth.js:4 —
+// STORAGE_KEY = 'badb_auth_token'). Same-origin localStorage is
+// shared: this print page opens from Vue's session, so the token is
+// already there. Without this header the auth middleware returns
+// 401 in any build where AUTH_BYPASS is disabled (prod).
+function getAuthHeader() {
+  try {
+    const token = localStorage.getItem('badb_auth_token');
+    return token && token !== 'bypass' ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function loadElectrodeBatchReport() {
   const cutBatchId = getCutBatchIdFromQuery();
   const root = document.getElementById('reportRoot');
@@ -441,7 +455,10 @@ async function loadElectrodeBatchReport() {
   }
 
   try {
-    const res = await fetch(`/api/electrodes/electrode-cut-batches/${cutBatchId}/report`);
+    const res = await fetch(
+      `/api/electrodes/electrode-cut-batches/${cutBatchId}/report`,
+      { headers: getAuthHeader() }
+    );
     if (!res.ok) {
       throw new Error('Не удалось загрузить отчёт по партии электродов');
     }

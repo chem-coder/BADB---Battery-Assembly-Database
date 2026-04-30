@@ -200,6 +200,12 @@ router.post('/', auth, async (req, res) => {
   const finalDeptId = confLevel === 'department' ? deptId : null;
 
   try {
+    // NOTE: `status` is NOT NULL in the schema with DEFAULT 'active'. If the
+    // frontend ever sends `null` explicitly (e.g. an empty Select bound to
+    // null instead of undefined), PG treats that as "user chose NULL" and
+    // rejects with a not-null violation instead of falling back to the
+    // default. COALESCE to 'active' enum value is the same defense already
+    // used for `start_date` above.
     const result = await pool.query(
       `
       INSERT INTO projects
@@ -207,7 +213,9 @@ router.post('/', auth, async (req, res) => {
          created_at, updated_at,
          confidentiality_level, department_id)
       VALUES
-        ($1,$2,$3,COALESCE($4::date, CURRENT_DATE),$5,$6,$7,now(),now(),$8,$9)
+        ($1, $2, $3, COALESCE($4::date, CURRENT_DATE), $5,
+         COALESCE($6::project_status, 'active'::project_status), $7,
+         now(), now(), $8, $9)
       RETURNING project_id
       `,
       [
@@ -216,7 +224,7 @@ router.post('/', auth, async (req, res) => {
         leadId,
         startDate,
         due_date || null,
-        status,
+        status || null,
         description || null,
         confLevel,
         finalDeptId
