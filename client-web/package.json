@@ -11,6 +11,7 @@
   "dependencies": {
     "@primevue/themes": "^4.5.4",
     "axios": "^1.13.6",
+    "chartjs-plugin-zoom": "^2.2.0",
     "cytoscape": "^3.33.2",
     "pinia": "^3.0.4",
     "primeicons": "^7.0.0",
