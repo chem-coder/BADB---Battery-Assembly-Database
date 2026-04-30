@@ -1,0 +1,95 @@
+# BADB Continuous Integration
+#
+# Runs on every PR + push to main. Validates:
+#   1. Backend dependencies install cleanly (npm ci)
+#   2. Frontend dependencies install cleanly (cd client-web && npm ci)
+#   3. Backend tests pass (npm test → vitest)
+#   4. Frontend tests pass (cd client-web && npm test → vitest)
+#   5. Frontend production build succeeds (cd client-web && npm run build)
+#
+# What this workflow does NOT do (out of scope for first CI):
+#   - DB integration tests (no test database in CI)
+#   - Linting (no ESLint config exists yet)
+#   - Type checking (project is plain JS)
+#   - Coverage reporting
+#   - Deployment
+#   - Security scanning
+#
+# Concurrency: cancels previous runs on the same PR when new commits land
+# (no point validating outdated commits, costs CI minutes).
+#
+# Permissions: read-only — we don't push, comment, or modify state. The
+# workflow only validates.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:  # allow manual runs from the Actions tab
+
+# Cancel outdated runs on the same ref (PR or branch) when a new push
+# arrives. Saves CI minutes and gives faster feedback on the latest commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test backend + frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Node 22 — current Active LTS (until 2027-04-30). Node 20 LTS
+          # ended on 2026-04-30. Bumping to 22 keeps CI forward-compatible
+          # with Node-22-only features Daria or future PRs may use.
+          node-version: '22'
+          # Caches both root + client-web npm caches keyed off lock files.
+          # Hits on identical lock files produce ~5x install speedup.
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            client-web/package-lock.json
+
+      # ── Backend ──────────────────────────────────────────────
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Backend syntax check
+        run: node -e "require('./app')"
+
+      # Backend tests are gated on the presence of vitest.config.js because
+      # this CI workflow lands as a separate PR (#19) before the testing
+      # setup PR (#17) is merged. Without the gate, CI on its own merger
+      # would fail with "vitest not found" and we'd never get the workflow
+      # onto main. After #17 lands, this gate becomes a no-op (the file
+      # exists for every subsequent PR).
+      - name: Backend tests
+        if: hashFiles('vitest.config.js') != ''
+        run: npm test
+
+      # ── Frontend ─────────────────────────────────────────────
+      - name: Install frontend dependencies
+        working-directory: client-web
+        run: npm ci
+
+      - name: Frontend tests
+        if: hashFiles('client-web/vitest.config.js') != ''
+        working-directory: client-web
+        run: npm test
+
+      - name: Frontend production build
+        working-directory: client-web
+        run: npm run build
