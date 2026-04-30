@@ -323,6 +323,8 @@ state.ui.sectionState = getDefaultBatterySectionLifecycleState();
 
 function getCurrentBatteryStackSnapshot() {
   return JSON.stringify({
+    targetCathodeCount: state.stack.targetCathodeCount,
+    targetAnodeCount: state.stack.targetAnodeCount,
     selectedCathodes: state.stack.selectedCathodes.map(e => ({
       electrode_id: e.electrode_id,
       electrode_mass_g: e.electrode_mass_g ?? null
@@ -654,7 +656,10 @@ function renderBatteryDirtyMarkers() {
     const el = markerId ? document.getElementById(markerId) : null;
 
     if (el) {
-      el.classList.toggle('visible', Boolean(state.ui.sectionState?.[sectionKey]?.isDirty));
+      el.classList.toggle(
+        'visible',
+        !state.ui.isRestoringBattery && Boolean(state.ui.sectionState?.[sectionKey]?.isDirty)
+      );
     }
   });
 }
@@ -682,49 +687,6 @@ function hasMeaningfulObjectValue(obj) {
   });
 }
 
-function getSavedBatterySectionKeysFromAssemblyData(data) {
-  const sectionKeys = [];
-
-  if (data?.battery?.battery_id) {
-    sectionKeys.push('battery_meta');
-  }
-
-  const formFactor = data?.battery?.form_factor || null;
-
-  if (
-    (formFactor === 'coin' && hasMeaningfulObjectValue(data?.coin_config)) ||
-    (formFactor === 'pouch' && hasMeaningfulObjectValue(data?.pouch_config)) ||
-    (formFactor === 'cylindrical' && hasMeaningfulObjectValue(data?.cyl_config))
-  ) {
-    sectionKeys.push('battery_config');
-  }
-
-  if (Array.isArray(data?.electrode_sources) && data.electrode_sources.length > 0) {
-    sectionKeys.push('electrode_sources');
-  }
-
-  if (Array.isArray(data?.electrodes) && data.electrodes.length > 0) {
-    sectionKeys.push('battery_stack');
-  }
-
-  if (
-    hasMeaningfulObjectValue(data?.separator) ||
-    hasMeaningfulObjectValue(data?.electrolyte)
-  ) {
-    sectionKeys.push('battery_assembly');
-  }
-
-  if (hasMeaningfulObjectValue(data?.qc)) {
-    sectionKeys.push('battery_qc');
-  }
-
-  if (Array.isArray(data?.electrochem) && data.electrochem.length > 0) {
-    sectionKeys.push('battery_electrochem');
-  }
-
-  return sectionKeys;
-}
-
 function markBatterySectionsSaved(sectionKeys) {
   state.snapshots.savedSectionStates = {};
   sectionKeys.forEach(sectionKey => {
@@ -733,11 +695,18 @@ function markBatterySectionsSaved(sectionKeys) {
   refreshDirtyState();
 }
 
+function markCurrentBatteryPageClean() {
+  state.snapshots.savedSectionStates = getAllCurrentBatterySectionSnapshots();
+  refreshDirtyState();
+}
+
 function markRestoredBatterySectionsSaved(data) {
-  markBatterySectionsSaved(getSavedBatterySectionKeysFromAssemblyData(data));
+  if (!data?.battery?.battery_id) return;
+  markCurrentBatteryPageClean();
 }
 
 function hasUnsavedBatteryChanges() {
+  if (state.ui.isRestoringBattery) return false;
   return BATTERY_SECTION_KEYS.some(sectionKey => Boolean(state.ui.sectionState?.[sectionKey]?.isDirty));
 }
 
@@ -864,6 +833,13 @@ function setSelectedAnodes(anodes) {
 function setStackTargetCounts({ cathodes = null, anodes = null } = {}) {
   state.stack.targetCathodeCount = cathodes;
   state.stack.targetAnodeCount = anodes;
+}
+
+function setStackTargetCountsFromCurrentStack() {
+  setStackTargetCounts({
+    cathodes: state.stack.selectedCathodes.length,
+    anodes: state.stack.selectedAnodes.length
+  });
 }
 
 function resetSelectedElectrodes() {
@@ -1065,6 +1041,8 @@ function captureSectionState(sectionKey) {
 
   if (sectionKey === 'battery_stack') {
     return JSON.stringify({
+      targetCathodeCount: state.stack.targetCathodeCount,
+      targetAnodeCount: state.stack.targetAnodeCount,
       selectedCathodes: state.stack.selectedCathodes.map(e => ({
         electrode_id: e.electrode_id,
         electrode_mass_g: e.electrode_mass_g ?? null
@@ -1663,7 +1641,7 @@ function renderBatteryWorkspaceVisibility() {
   }
 
   if (addBtn) {
-    addBtn.hidden = isFormOpen;
+    addBtn.hidden = isFormOpen || state.ui.isRestoringBattery;
   }
 
   if (header) {
@@ -2511,8 +2489,9 @@ async function saveElectrodeStack() {
   }
 
   const confirmed = confirm(
-    'Вы уверены, что готовы сохранить стек электродов? ' +
-    'После сохранения стек нельзя будет изменить.'
+    'Сохранить стек электродов?\n\n' +
+    'Пока эта карточка аккумулятора открыта, стек можно будет исправить.\n' +
+    'После выхода и повторной загрузки аккумулятора сохранённый стек будет заблокирован.'
   );
 
   if (!confirmed) {
@@ -3269,6 +3248,7 @@ function applyStackToState(data) {
 
   setSelectedCathodes(cathodes);
   setSelectedAnodes(anodes);
+  setStackTargetCountsFromCurrentStack();
 }
 
 function applyAssemblyToState(data) {
@@ -3339,9 +3319,9 @@ async function loadSavedStackElectrodes(savedCathodeBatchId, savedAnodeBatchId) 
 
 function finalizeRestoredBatteryPage(data) {
   applySavedElectrodeState(data);
+  setBatteryFormOpen(true);
   renderBatteryPage();
   markRestoredBatterySectionsSaved(data);
-  renderBatteryPage();
 }
 
 // Load a battery for editing
@@ -4782,7 +4762,9 @@ document.getElementById('battery_create_btn').onclick = async () => {
 };
 
 async function populateBatteryForm(battery) {
-  setBatteryFormOpen(true);
+  setIsRestoringBattery(true);
+  clearDirtyFlags();
+  setBatteryFormOpen(false);
   setCurrentBattery(battery);
   setMetaState({
     project_id: battery.project_id ?? null,
@@ -4792,7 +4774,7 @@ async function populateBatteryForm(battery) {
     battery_notes: battery.notes ?? battery.battery_notes ?? null
   });
   setBatteryCreateButtonMode('edit');
-  renderBatteryPage();
+  renderBatteryWorkspaceVisibility();
 
   await loadTapes();
   await loadBatteryAssembly(battery.battery_id);
