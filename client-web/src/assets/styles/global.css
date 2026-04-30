@@ -647,6 +647,113 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
 }
 
 /* ══════════════════════════════════════════════════════════════
+   Constructor-column header — clickable text matching other headers
+   ══════════════════════════════════════════════════════════════
+   Used on TapesPage / ElectrodesPage / AssemblyPage via the
+   `#header-_constructor` slot in CrudTable. Replaces the previous
+   bare 🔧 emoji header which gave no hint that:
+     1. This column toggles "add to constructor", and
+     2. Clicking the header itself selects/deselects ALL on the page.
+   First iteration was a bordered pill with icon + count badge —
+   visually too heavy next to plain «№ / Тип / Прогресс» headers.
+   Now: plain inline text that LOOKS like sibling headers, with
+   hover affordance (subtle underline) and an inline count when
+   items are selected. Tooltip explains the bulk-toggle action.
+
+   Lives in global.css (not scoped) because Vue scoped CSS doesn't
+   cover slot content mounted inside CrudTable's scope. */
+.ct-cons-header {
+  cursor: pointer;
+  user-select: none;
+  font: inherit;            /* match the column-header font set by DataTable */
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  /* `text-decoration` reset so the inline <span> doesn't pick up any
+     ambient link styling — we manage underline ourselves on hover. */
+  text-decoration: none;
+}
+.ct-cons-header:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(0, 50, 116, 0.45);
+}
+.ct-cons-header:focus-visible {
+  outline: 2px solid rgba(0, 50, 116, 0.45);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.ct-cons-header.is-active {
+  /* Subtle green tint when items are selected — same hue family as
+     the «.role-badge--anode / status-complete» elsewhere. */
+  color: #1a7a5f;
+}
+.ct-cons-count {
+  /* Inline count, weight-bumped for scannability. NO badge pill —
+     reads as part of the header text. */
+  margin-left: 3px;
+  font-weight: 700;
+}
+
+/* Body cell wrapper — centers the per-row Checkbox in its column.
+   PrimeVue DataTable cells default to `text-align: left` and the
+   bare <Checkbox> sits left-aligned, looking detached from the
+   centered «Конструктор» header. The wrapper makes column content
+   uniformly center-aligned in both axes. */
+.ct-cons-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Same pattern for the per-row 🖨️ print button column. The narrow
+   42-px column has a centered icon header — the body cell needs a
+   matching flex-center wrapper so the icon button sits in the middle
+   of the column instead of hugging the left edge. */
+.ct-print-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Header icon for the print column, rendered via `#header-_print`
+   slot. Inline-flex so it sits visually centered on the baseline,
+   subtle navy tint to match the other column headers. */
+.ct-print-header {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 50, 116, 0.55);
+}
+.ct-print-header i {
+  font-size: 13px;
+}
+
+/* PrimeVue wraps each header cell's content in `.p-column-header-content`.
+   Default justification is start (left); for the print column we force
+   center so the lone icon sits over the centered body button instead
+   of hugging the column's left edge. Same trick already used for
+   `.ct-cons-header` above. */
+.p-datatable th:has(> div > .ct-print-header) > div {
+  justify-content: center;
+}
+
+/* Header button is `inline-flex` from above; force the parent header
+   cell to center it too so the «Конструктор» word sits over the
+   centered checkbox column instead of being left-aligned. PrimeVue
+   wraps the header content in `.p-column-header-content` — target
+   the slot rendered inside that container via `:has()`. Falls back
+   to a generic td/th selector for older browsers without :has. */
+.p-datatable th:has(> div > .ct-cons-header) > div {
+  justify-content: center;
+}
+.p-datatable th .ct-cons-header {
+  margin: 0 auto;
+}
+
+/* ══════════════════════════════════════════════════════════════
    RESPONSIVE — Mobile (<768px)
    ══════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
