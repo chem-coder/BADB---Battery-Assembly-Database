@@ -2,6 +2,7 @@ const {
   buildBatteryCapacitySummary,
   enrichBatteryElectrodesWithCapacity
 } = require('./batteryCapacityService');
+const { attachBatteryProjects } = require('./batteryProjectService');
 
 async function ensureBatteryAssembledStatus(queryable, batteryId) {
   await queryable.query(
@@ -172,6 +173,7 @@ async function fetchBatteryAssembly(queryable, batteryId) {
     return null;
   }
 
+  [assembly.battery] = await attachBatteryProjects(queryable, [assembly.battery]);
   assembly.electrodes = await enrichBatteryElectrodesWithCapacity(queryable, assembly.electrodes);
   assembly.capacity_summary = buildBatteryCapacitySummary(assembly.electrodes);
 
@@ -388,6 +390,7 @@ async function fetchBatteryReport(queryable, batteryId) {
     return null;
   }
 
+  [report.battery] = await attachBatteryProjects(queryable, [report.battery]);
   report.electrodes = await enrichBatteryElectrodesWithCapacity(queryable, report.electrodes);
   report.capacity_summary = buildBatteryCapacitySummary(report.electrodes);
 

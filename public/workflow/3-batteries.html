@@ -12,7 +12,6 @@
       Locked assembly inputs (electrodes saved)
       ========================================= */
 
-      #battery_project_id:disabled,
       #battery_created_by:disabled,
       #battery_form_factor:disabled,
       #coin_cell_mode:disabled,
@@ -29,7 +28,6 @@
 
       }
 
-      #battery_project_id:disabled:hover,
       #battery_created_by:disabled:hover,
       #battery_form_factor:disabled:hover,
       #coin_cell_mode:disabled:hover,
@@ -110,6 +108,25 @@
         opacity: 0.7;
       }
 
+      #battery_stack_builder input[type="checkbox"]:disabled {
+        cursor: not-allowed;
+        opacity: 0.35;
+        filter: grayscale(1);
+      }
+
+      #battery_stack_builder tr.stack-electrode-unavailable {
+        color: #8a8f99;
+      }
+
+      #battery_stack_target_counts {
+        margin-bottom: 12px;
+      }
+
+      #battery_stack_target_counts input {
+        max-width: 90px;
+        margin-right: 16px;
+      }
+
       .battery-capacity-summary {
         margin: 10px 0 12px;
         padding: 12px 14px;
@@ -158,8 +175,10 @@
         <a href="/index.html" aria-label="Главная" class="home-link"><img src="/icons/house-regular.svg" alt=""></a>
         <h1>Протокол сборки аккумуляторa</h1>
       </header>
+
+      <button type="button" id="addBatteryBtn">+ Добавить аккумулятор</button>
       
-      <form name="battery_assembly_log_form" autocomplete="on">
+      <form name="battery_assembly_log_form" autocomplete="on" hidden>
 
         <div id="battery_header" hidden>
 
@@ -194,11 +213,6 @@
         <fieldset id="battery_meta" data-table="batteries">
           <legend>1 Общая информация об аккумуляторе <span id="dirty-battery-meta" class="dirty_marker">Не сохранено</span></legend>
 
-          <label for="battery_project_id">Проект</label>
-          <select id="battery_project_id" name="project_id" required>
-            <option value="">— выбрать проект —</option>
-          </select><br>
-
           <label for="battery_created_by">Создал</label>
           <select id="battery_created_by" name="created_by" disabled>
             <option value="">— автоматически —</option>
@@ -218,8 +232,6 @@
             name="battery_notes"
             placeholder="Общие комментарии по сборке"
           ></textarea><br>
-
-          <button type="button" id="battery_create_btn">Создать аккумулятор</button>
         </fieldset>
 
 
@@ -309,15 +321,6 @@
               ></textarea>
             </fieldset>
 
-            <button
-              type="button"
-              id="battery_config_save_btn"
-              class="btn_secondary"
-              onclick="saveBatteryConfig()"
-            >
-              Сохранить конфигурацию
-            </button>
-    
           </fieldset>
           
           <fieldset id="battery_electrodes">
@@ -328,6 +331,11 @@
               <fieldset id="battery_electrode_sources" data-table="battery_electrode_sources">
                 <legend>Источник электродов <span id="dirty-electrode-sources" class="dirty_marker">Не сохранено</span></legend>
                 <div id="battery_electrode_sidedness_display" style="margin-bottom:8px; color:#555;"></div>
+
+                <label for="battery_project_filter_id">Фильтр по проекту партии</label>
+                <select id="battery_project_filter_id">
+                  <option value="">— все проекты —</option>
+                </select><br>
 
                 <div class="electrode_source" id="cathode_source_block" data-electrode-role="cathode">
                   <label for="cathode_tape_id">Катодная лента</label>
@@ -367,9 +375,22 @@
                   ></textarea>
                 </div>
 
-                <button type="button" id="battery_sources_save_btn" class="btn_secondary" onclick="saveElectrodeSources()">
-                  Сохранить источники электродов
-                </button>
+                <label for="battery-project-multiselect-trigger">Проекты аккумулятора</label>
+                <div id="battery-project-multiselect" class="multi-select">
+                  <button
+                    type="button"
+                    id="battery-project-multiselect-trigger"
+                    class="multi-select-trigger"
+                    aria-expanded="false"
+                    aria-controls="battery-project-multiselect-options"
+                  >— выбрать проекты —</button>
+                  <div id="battery-project-multiselect-options" class="multi-select-options" hidden></div>
+                </div>
+                <input type="hidden" id="battery_project_id" name="project_id" required>
+                <input type="hidden" id="battery_project_ids" name="project_ids">
+                <div id="battery_project_hint" class="field-hint"></div>
+
+                <button type="button" id="battery_create_btn">Создать аккумулятор</button>
 
               </fieldset>
 
@@ -378,6 +399,28 @@
                 <legend>Формирование стека <span id="dirty-battery-stack" class="dirty_marker">Не сохранено</span></legend>
 
                 <p>Выберите электроды для данного элемента.</p>
+
+                <div id="battery_stack_target_counts" hidden>
+                  <p>Укажите количество электродов в стеке:</p>
+
+                  <label for="stack_target_cathodes">Катодов</label>
+                  <input
+                    id="stack_target_cathodes"
+                    type="number"
+                    min="0"
+                    step="1"
+                  >
+
+                  <label for="stack_target_anodes">Анодов</label>
+                  <input
+                    id="stack_target_anodes"
+                    type="number"
+                    min="0"
+                    step="1"
+                  >
+
+                  <div id="battery_stack_target_hint" class="field-hint"></div>
+                </div>
 
                 <div class="stack_cathode_block">
                   <h4>Катоды</h4>
@@ -811,7 +854,7 @@
     </div>
     
     <script src="/js/auth.js"></script>
-    <script src="/js/3-batteries.js"></script>
+    <script src="/js/3-batteries.js?v=battery-stack-rework-20260430d"></script>
     
   </body>
 </html>

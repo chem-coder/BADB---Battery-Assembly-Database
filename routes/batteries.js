@@ -68,25 +68,14 @@ router.get('/test', async (req, res) => {
 // Create a new battery header
 router.post('/', auth, async (req, res) => {
 
-  const {
-    project_id,
-    form_factor
-  } = req.body;
-
-  const projectId = Number(project_id);
-
-  if (
-    !Number.isInteger(projectId) ||
-    !form_factor
-  ) {
-    return res.status(400).json({ error: 'Некорректные данные' });
-  }
-
   try {
     res.status(201).json(await createBattery(pool, req.body, req.user.userId));
 
   } catch (err) {
 
+    if (err.statusCode === 400 || err.statusCode === 404) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Ошибка создания аккумулятора' });
 

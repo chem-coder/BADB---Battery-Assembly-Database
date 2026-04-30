@@ -475,6 +475,12 @@ router.delete('/:id', auth, requireModify, async (req, res) => {
           SELECT battery_id AS id, battery_notes AS name
           FROM batteries
           WHERE project_id = $1
+             OR EXISTS (
+               SELECT 1
+               FROM battery_projects bp
+               WHERE bp.battery_id = batteries.battery_id
+                 AND bp.project_id = $1
+             )
           ORDER BY battery_id
           LIMIT 25
         `,

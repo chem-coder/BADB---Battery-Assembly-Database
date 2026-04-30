@@ -26,7 +26,8 @@ const DEFAULT_DB = 'badb_app_v1_smoke';
 const DEFAULT_LOGIN = 'dkmaraulayte';
 const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd028_tape_projects_many_to_many.sql'),
-  path.join(ROOT, 'migrations', 'd029_electrode_cut_batch_projects_many_to_many.sql')
+  path.join(ROOT, 'migrations', 'd029_electrode_cut_batch_projects_many_to_many.sql'),
+  path.join(ROOT, 'migrations', 'd030_battery_projects_many_to_many.sql')
 ];
 
 function parseArgs(argv) {
@@ -872,6 +873,12 @@ async function runWriteSmoke(client, seed) {
       cup_number: 1,
       comments: 'smoke electrode'
     })).electrode_id;
+    made.anodeElectrodeId = (await client.post('/api/electrodes', {
+      cut_batch_id: made.cutBatchId,
+      electrode_mass_g: 0.1236,
+      cup_number: 3,
+      comments: 'smoke anode electrode'
+    })).electrode_id;
     await client.put(`/api/electrodes/${made.electrodeId}`, {
       electrode_mass_g: 0.1235,
       cup_number: 2,
@@ -891,6 +898,45 @@ async function runWriteSmoke(client, seed) {
     });
     made.batteryId = battery.battery_id;
     client.assertEqual(battery.created_by, userId, 'battery create ignores browser-created created_by');
+    const identityBattery = await client.post('/api/batteries', {
+      project_id: projectId,
+      project_ids: [projectId],
+      form_factor: 'coin',
+      coin_cell_mode: 'half_cell',
+      coin_size_code: '2032',
+      half_cell_type: 'cathode_vs_li',
+      cathode_tape_id: made.tapeId,
+      cathode_cut_batch_id: made.cutBatchId,
+      cathode_source_notes: 'smoke identity source',
+      created_by: forgedUserId,
+      battery_notes: `Codex Smoke Battery ${suffix} Identity`
+    });
+    client.assertEqual(
+      Array.isArray(identityBattery.project_ids) && identityBattery.project_ids.map(Number).includes(Number(projectId)),
+      true,
+      'battery identity create stores battery project link'
+    );
+    await client.patch(`/api/batteries/battery_electrode_sources/${identityBattery.battery_id}`, {
+      cathode_tape_id: null,
+      cathode_cut_batch_id: null,
+      cathode_source_notes: null,
+      anode_tape_id: null,
+      anode_cut_batch_id: null,
+      anode_source_notes: null
+    });
+    if (made.projectId) {
+      await client.post('/api/batteries', {
+        project_id: made.projectId,
+        project_ids: [made.projectId],
+        form_factor: 'coin',
+        coin_cell_mode: 'half_cell',
+        coin_size_code: '2032',
+        half_cell_type: 'cathode_vs_li',
+        cathode_tape_id: made.tapeId,
+        cathode_cut_batch_id: made.cutBatchId,
+        battery_notes: `Codex Smoke Battery ${suffix} Invalid Project`
+      }, [400]);
+    }
     const patchedBattery = await client.patch(`/api/batteries/${made.batteryId}`, {
       project_id: projectId,
       form_factor: 'coin',
@@ -1024,11 +1070,25 @@ async function runWriteSmoke(client, seed) {
       anode_cut_batch_id: null,
       anode_source_notes: null
     });
+    await client.post('/api/batteries/battery_electrode_sources', {
+      battery_id: made.batteryId,
+      cathode_tape_id: made.tapeId,
+      cathode_cut_batch_id: made.cutBatchId,
+      cathode_source_notes: 'smoke stack cathode source',
+      anode_tape_id: made.tapeId,
+      anode_cut_batch_id: made.cutBatchId,
+      anode_source_notes: 'smoke stack anode source'
+    });
     const batteryStackPayload = [
       {
         electrode_id: made.electrodeId,
         role: 'cathode',
         position_index: 1
+      },
+      {
+        electrode_id: made.anodeElectrodeId,
+        role: 'anode',
+        position_index: 2
       }
     ];
     await client.put(`/api/batteries/battery_electrodes/${made.batteryId}`, batteryStackPayload);
@@ -1039,6 +1099,14 @@ async function runWriteSmoke(client, seed) {
       .find((electrode) => Number(electrode.electrode_id) === Number(made.electrodeId));
     client.assertEqual(releasedElectrode?.status_code, 1, 'clearing battery stack releases electrode status');
     client.assertEqual(releasedElectrode?.used_in_battery_id, null, 'clearing battery stack clears used_in_battery_id');
+    await client.patch(`/api/batteries/battery_electrode_sources/${made.batteryId}`, {
+      cathode_tape_id: null,
+      cathode_cut_batch_id: null,
+      cathode_source_notes: null,
+      anode_tape_id: null,
+      anode_cut_batch_id: null,
+      anode_source_notes: null
+    });
     await client.put(`/api/electrodes/${made.electrodeId}/status`, {
       status_code: 1,
       used_in_battery_id: null,
@@ -1063,6 +1131,7 @@ async function cleanupCreatedData(client, made) {
   }
 
   const cleanup = [
+    made.anodeElectrodeId && ['DELETE', `/api/electrodes/${made.anodeElectrodeId}`],
     made.electrodeId && ['DELETE', `/api/electrodes/${made.electrodeId}`],
     made.cutBatchId && ['DELETE', `/api/electrodes/electrode-cut-batches/${made.cutBatchId}`],
     made.tapeId && ['DELETE', `/api/tapes/${made.tapeId}`],
@@ -1140,7 +1209,7 @@ function deleteSmokeBatteries(opts, tools) {
     '-v',
     'ON_ERROR_STOP=1',
     '-c',
-    "DELETE FROM batteries WHERE battery_notes LIKE 'Codex Smoke Battery%';"
+    "WITH target AS (SELECT battery_id FROM batteries WHERE battery_notes LIKE 'Codex Smoke Battery%') DELETE FROM battery_projects WHERE battery_id IN (SELECT battery_id FROM target); DELETE FROM batteries WHERE battery_notes LIKE 'Codex Smoke Battery%';"
   ], { quiet: true });
 }
 

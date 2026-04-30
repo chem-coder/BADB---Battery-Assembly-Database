@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "public/js/**/*.js",
-  "updatedAt": "2026-04-28",
+  "updatedAt": "2026-04-29",
   "normalization": {
     "pathParams": ":param",
     "query": "?:query"
@@ -21,7 +21,7 @@
       "path": "/api/batteries",
       "methods": ["GET", "POST"],
       "auth": "auth",
-      "request": "GET none; POST creates the battery shell; created_by is server-derived",
+      "request": "GET none; POST creates battery identity/header; created_by is server-derived",
       "response": "battery list or created battery JSON",
       "sources": ["public/js/3-batteries.js"]
     },

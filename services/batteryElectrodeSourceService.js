@@ -121,7 +121,7 @@ async function fetchBatteryElectrodeSources(queryable, batteryId) {
   return result.rows.length === 0 ? null : result.rows;
 }
 
-async function saveBatteryElectrodeSources(pool, batteryId, payload) {
+async function saveBatteryElectrodeSourcesInTransaction(queryable, batteryId, payload) {
   const {
     cathode_tape_id,
     cathode_cut_batch_id,
@@ -131,98 +131,102 @@ async function saveBatteryElectrodeSources(pool, batteryId, payload) {
     anode_source_notes
   } = payload;
 
-  const { form, coinMode } = await getBatteryFormAndCoinMode(pool, batteryId);
+  const { form, coinMode } = await getBatteryFormAndCoinMode(queryable, batteryId);
 
   const hasCathode = !!cathode_tape_id && !!cathode_cut_batch_id;
   const hasAnode = !!anode_tape_id && !!anode_cut_batch_id;
 
   if (hasCathode && hasAnode) {
-    await assertCompatibleSidedness(pool, cathode_cut_batch_id, anode_cut_batch_id);
+    await assertCompatibleSidedness(queryable, cathode_cut_batch_id, anode_cut_batch_id);
   }
   assertSourceCompleteness(form, coinMode, hasCathode, hasAnode);
 
+  if (hasCathode) {
+    await queryable.query(
+      `
+      INSERT INTO battery_electrode_sources
+        (battery_id, role, tape_id, cut_batch_id, source_notes)
+      VALUES
+        ($1, 'cathode', $2, $3, $4)
+      ON CONFLICT (battery_id, role)
+      DO UPDATE SET
+        tape_id = EXCLUDED.tape_id,
+        cut_batch_id = EXCLUDED.cut_batch_id,
+        source_notes = EXCLUDED.source_notes
+      `,
+      [
+        batteryId,
+        Number(cathode_tape_id),
+        Number(cathode_cut_batch_id),
+        cathode_source_notes || null
+      ]
+    );
+  } else {
+    await queryable.query(
+      `
+      DELETE FROM battery_electrode_sources
+      WHERE battery_id = $1 AND role = 'cathode'
+      `,
+      [batteryId]
+    );
+  }
+
+  if (hasAnode) {
+    await queryable.query(
+      `
+      INSERT INTO battery_electrode_sources
+        (battery_id, role, tape_id, cut_batch_id, source_notes)
+      VALUES
+        ($1, 'anode', $2, $3, $4)
+      ON CONFLICT (battery_id, role)
+      DO UPDATE SET
+        tape_id = EXCLUDED.tape_id,
+        cut_batch_id = EXCLUDED.cut_batch_id,
+        source_notes = EXCLUDED.source_notes
+      `,
+      [
+        batteryId,
+        Number(anode_tape_id),
+        Number(anode_cut_batch_id),
+        anode_source_notes || null
+      ]
+    );
+  } else {
+    await queryable.query(
+      `
+      DELETE FROM battery_electrode_sources
+      WHERE battery_id = $1 AND role = 'anode'
+      `,
+      [batteryId]
+    );
+  }
+
+  const result = await queryable.query(
+    `
+    SELECT
+      battery_id,
+      role,
+      tape_id,
+      cut_batch_id,
+      source_notes
+    FROM battery_electrode_sources
+    WHERE battery_id = $1
+    ORDER BY role
+    `,
+    [batteryId]
+  );
+
+  return result.rows;
+}
+
+async function saveBatteryElectrodeSources(pool, batteryId, payload) {
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
-
-    if (hasCathode) {
-      await client.query(
-        `
-        INSERT INTO battery_electrode_sources
-          (battery_id, role, tape_id, cut_batch_id, source_notes)
-        VALUES
-          ($1, 'cathode', $2, $3, $4)
-        ON CONFLICT (battery_id, role)
-        DO UPDATE SET
-          tape_id = EXCLUDED.tape_id,
-          cut_batch_id = EXCLUDED.cut_batch_id,
-          source_notes = EXCLUDED.source_notes
-        `,
-        [
-          batteryId,
-          Number(cathode_tape_id),
-          Number(cathode_cut_batch_id),
-          cathode_source_notes || null
-        ]
-      );
-    } else {
-      await client.query(
-        `
-        DELETE FROM battery_electrode_sources
-        WHERE battery_id = $1 AND role = 'cathode'
-        `,
-        [batteryId]
-      );
-    }
-
-    if (hasAnode) {
-      await client.query(
-        `
-        INSERT INTO battery_electrode_sources
-          (battery_id, role, tape_id, cut_batch_id, source_notes)
-        VALUES
-          ($1, 'anode', $2, $3, $4)
-        ON CONFLICT (battery_id, role)
-        DO UPDATE SET
-          tape_id = EXCLUDED.tape_id,
-          cut_batch_id = EXCLUDED.cut_batch_id,
-          source_notes = EXCLUDED.source_notes
-        `,
-        [
-          batteryId,
-          Number(anode_tape_id),
-          Number(anode_cut_batch_id),
-          anode_source_notes || null
-        ]
-      );
-    } else {
-      await client.query(
-        `
-        DELETE FROM battery_electrode_sources
-        WHERE battery_id = $1 AND role = 'anode'
-        `,
-        [batteryId]
-      );
-    }
-
-    const result = await client.query(
-      `
-      SELECT
-        battery_id,
-        role,
-        tape_id,
-        cut_batch_id,
-        source_notes
-      FROM battery_electrode_sources
-      WHERE battery_id = $1
-      ORDER BY role
-      `,
-      [batteryId]
-    );
-
+    const rows = await saveBatteryElectrodeSourcesInTransaction(client, batteryId, payload);
     await client.query('COMMIT');
-    return result.rows;
+    return rows;
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -307,6 +311,7 @@ async function updateBatteryElectrodeSources(pool, batteryId, payload, userId) {
 module.exports = {
   BatteryElectrodeSourceValidationError,
   fetchBatteryElectrodeSources,
+  saveBatteryElectrodeSourcesInTransaction,
   saveBatteryElectrodeSources,
   updateBatteryElectrodeSources
 };

@@ -1,3 +1,5 @@
+const { attachElectrodeBatchProjects } = require('./electrodeBatchProjectService');
+
 async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selectedBatchId) {
   const result = await pool.query(
     `
@@ -41,10 +43,22 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
       ) AS coating_sidedness,
       (
         ctx.expected_shape IS NOT NULL
-        AND ctx.target_config_code IS NOT NULL
         AND b.shape = ctx.expected_shape
         AND b.target_form_factor = ctx.form_factor
-        AND b.target_config_code = ctx.target_config_code
+        AND (
+          ctx.form_factor <> 'coin'
+          OR (
+            SELECT c.coating_sidedness
+            FROM tape_process_steps ts_coating
+            JOIN operation_types ot_coating
+              ON ot_coating.operation_type_id = ts_coating.operation_type_id
+            JOIN tape_step_coating c
+              ON c.step_id = ts_coating.step_id
+            WHERE ts_coating.tape_id = b.tape_id
+              AND ot_coating.code = 'coating'
+            LIMIT 1
+          ) = 'one_sided'
+        )
       ) AS is_compatibility_match,
       d.start_time AS drying_start,
       d.end_time AS drying_end,
@@ -67,10 +81,22 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
       AND (
         (
           ctx.expected_shape IS NOT NULL
-          AND ctx.target_config_code IS NOT NULL
           AND b.shape = ctx.expected_shape
           AND b.target_form_factor = ctx.form_factor
-          AND b.target_config_code = ctx.target_config_code
+          AND (
+            ctx.form_factor <> 'coin'
+            OR (
+              SELECT c.coating_sidedness
+              FROM tape_process_steps ts_coating
+              JOIN operation_types ot_coating
+                ON ot_coating.operation_type_id = ts_coating.operation_type_id
+              JOIN tape_step_coating c
+                ON c.step_id = ts_coating.step_id
+              WHERE ts_coating.tape_id = b.tape_id
+                AND ot_coating.code = 'coating'
+              LIMIT 1
+            ) = 'one_sided'
+          )
         )
         OR (
           $3::integer IS NOT NULL
@@ -85,7 +111,7 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
     [batteryId, tapeId, selectedBatchId]
   );
 
-  return result.rows;
+  return attachElectrodeBatchProjects(pool, result.rows);
 }
 
 module.exports = {
