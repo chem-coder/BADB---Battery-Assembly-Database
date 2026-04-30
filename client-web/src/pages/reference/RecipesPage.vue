@@ -7,9 +7,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
+import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
 import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
+import EntityMeta from '@/components/EntityMeta.vue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
@@ -21,7 +23,6 @@ const crudTable = ref(null)
 
 // ── Data ───────────────────────────────────────────────────────────────
 const recipes = ref([])
-const activeUsers = ref([])
 const loading = ref(false)
 let cachedMaterials = null
 
@@ -30,18 +31,11 @@ async function loadRecipes() {
   try {
     const { data } = await api.get('/api/recipes')
     recipes.value = data
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось загрузить рецептуры', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить рецептуры')
   } finally {
     loading.value = false
   }
-}
-
-async function loadUsers() {
-  try {
-    const { data } = await api.get('/api/users')
-    activeUsers.value = data.filter(u => u.active)
-  } catch {}
 }
 
 async function fetchMaterials() {
@@ -56,7 +50,7 @@ async function fetchRecipeLines(recipeId) {
   return data
 }
 
-onMounted(() => { loadRecipes(); loadUsers() })
+onMounted(() => { loadRecipes() })
 
 // Invalidate material cache on window refocus
 function onWindowFocus() { cachedMaterials = null }
@@ -70,6 +64,7 @@ const columns = [
   { field: 'active_percent',       header: '% АМ',           minWidth: '60px',  width: '80px' },
   { field: 'active_material_name', header: 'Активный материал', minWidth: '120px', width: '180px' },
   { field: 'variant_label',        header: 'Версия',         minWidth: '100px', width: '180px' },
+  { field: 'created_by_name',      header: 'Оператор',       minWidth: '90px',  width: '130px' },
 ]
 
 // ── Save indicator (delete flow) ──────────────────────────────────────
@@ -93,8 +88,8 @@ async function confirmSave() {
     saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
     crudTable.value?.clearSelection()
     await loadRecipes()
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось удалить', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось удалить')
   }
 }
 
@@ -166,19 +161,25 @@ async function loadLinesIntoForm(lines) {
 const formVisible = ref(false)
 const mode = ref(null)
 const currentId = ref(null)
+// Full row of the entity being edited — fed to EntityMeta for the
+// "Создано: ФИО, дата" + "Изменено: ФИО, дата" read-only audit trail.
+const currentItem = ref(null)
 
+// `created_by` is NOT part of the form — backend forces it from the
+// authenticated user (req.user.userId, see routes/recipes.js). The
+// existing creator is shown read-only via EntityMeta when available.
 const form = ref({
   name: '',
-  created_by: '',
   variant_label: '',
   role: '',
   notes: '',
 })
 
 function resetForm() {
-  form.value = { name: '', created_by: '', variant_label: '', role: '', notes: '' }
+  form.value = { name: '', variant_label: '', role: '', notes: '' }
   mode.value = null
   currentId.value = null
+  currentItem.value = null
   recipeLines.value = []
   formVisible.value = false
 }
@@ -194,16 +195,15 @@ function openCreate() {
 async function openEdit(recipe) {
   mode.value = 'edit'
   currentId.value = recipe.tape_recipe_id
+  currentItem.value = recipe
   form.value = {
     name: recipe.name || '',
-    created_by: recipe.created_by || '',
     variant_label: recipe.variant_label || '',
     role: recipe.role || '',
     notes: recipe.notes || '',
   }
   formVisible.value = true
   cachedMaterials = null
-  loadUsers()
 
   const lines = await fetchRecipeLines(recipe.tape_recipe_id)
   await loadLinesIntoForm(lines)
@@ -214,14 +214,12 @@ async function openDuplicate(recipe) {
   currentId.value = null
   form.value = {
     name: recipe.name + ' (копия)',
-    created_by: '',
     variant_label: recipe.variant_label || '',
     role: recipe.role || '',
     notes: recipe.notes || '',
   }
   formVisible.value = true
   cachedMaterials = null
-  loadUsers()
 
   const lines = await fetchRecipeLines(recipe.tape_recipe_id)
   await loadLinesIntoForm(lines)
@@ -231,10 +229,6 @@ async function openDuplicate(recipe) {
 function validate() {
   if (!form.value.name?.trim()) {
     toast.add({ severity: 'warn', summary: 'Заполните название рецепта', life: 3000 })
-    return false
-  }
-  if (!form.value.created_by) {
-    toast.add({ severity: 'warn', summary: 'Укажите кто добавил', life: 3000 })
     return false
   }
   if (!form.value.role) {
@@ -281,12 +275,13 @@ async function saveRecipe() {
     line_notes: l.line_notes || null,
   }))
 
+  // created_by intentionally NOT in the payload — backend forces it
+  // from the authenticated user (routes/recipes.js POST).
   const payload = {
     name: form.value.name.trim(),
     role: form.value.role,
     variant_label: form.value.variant_label || null,
     notes: form.value.notes || null,
-    created_by: Number(form.value.created_by),
     lines,
   }
 
@@ -301,7 +296,7 @@ async function saveRecipe() {
     resetForm()
     await loadRecipes()
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка сохранения', life: 3000 })
+    toastApiError(toast, err, 'Ошибка сохранения')
   }
 }
 
@@ -381,9 +376,6 @@ function roleLabel(role) {
             class="w-full"
           />
 
-          <label>Кто добавил</label>
-          <Select v-model="form.created_by" :options="activeUsers" optionLabel="name" optionValue="user_id" placeholder="-- выбрать --" class="w-full" @focus="loadUsers" />
-
           <label>Комментарии</label>
           <Textarea v-model="form.notes" rows="2" placeholder="Кратко: что это за рецепт" class="w-full" />
         </div>
@@ -445,6 +437,14 @@ function roleLabel(role) {
           </table>
         </div>
       </div>
+
+      <EntityMeta
+        v-if="mode === 'edit' && currentItem"
+        :createdByName="currentItem.created_by_name"
+        :createdAt="currentItem.created_at"
+        :updatedByName="currentItem.updated_by_name"
+        :updatedAt="currentItem.updated_at"
+      />
 
       <template #footer>
         <div class="dialog-footer">

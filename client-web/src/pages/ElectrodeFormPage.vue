@@ -3,6 +3,18 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { useBackendCache } from '@/composables/useBackendCache'
+import { errorMessageRu, toastApiError } from '@/utils/errorClassifier'
+import {
+  fmtCapacity,
+  fmtArealCapacity,
+  fmtMass,
+  fmtSpecCapacity,
+  fmtCoatingSidedness,
+  fmtActualFractionStatus,
+  capacityIncompleteHint,
+} from '@/utils/formatCapacity'
+import CapacityHint from '@/components/CapacityHint.vue'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
 import Panel from 'primevue/panel'
@@ -167,6 +179,84 @@ async function loadElectrodes(cutBatchId) {
   electrodes.value = data
 }
 
+// ── Capacity summary (Dalia's 026efbf — per-batch capacity_summary) ──
+// Lives in the server's /report endpoint; we fetch lazily whenever the
+// current batch identity or its electrode data changes. Read-only —
+// all four mutations below (saveBatch / updateElectrode / deleteElectrode /
+// scrapElectrode) reload electrodes first (existing behaviour) and then
+// re-fetch this summary so the displayed numbers stay in sync after any
+// write. Endpoint is a pure read (no side-effects, unlike /assembly on
+// batteries), so no concurrency cap needed on this page.
+// Capacity summary fetching — migrated from inline state/loader (~50
+// lines) to useBackendCache (Phase 0.3c). Single-batch on this page
+// (always the currently-edited batch), so only one cache entry is
+// ever populated, but the composable handles dedup/error classification/
+// race-guard uniformly with other pages.
+//
+// The isEmpty callback decides whether a 2xx response counts as "draft
+// batch with no numbers yet" vs "real capacity present". Matches the
+// user-visible distinction: empty → blue italic "fill masses" hint,
+// error → red "server broke" message.
+const capacity = useBackendCache({
+  fetchFn: async (cutBatchId) => {
+    const { data } = await api.get(`/api/electrodes/electrode-cut-batches/${cutBatchId}/report`)
+    return data?.capacity_summary || null
+  },
+  isEmpty: (summary) => !summary || !(
+    Number.isFinite(Number(summary.average_capacity_theoretical_mAh)) ||
+    Number.isFinite(Number(summary.average_capacity_actual_mAh))
+  ),
+  maxConcurrent: 1, // single-batch page, no need for parallel slots
+})
+
+// Thin wrapper that reloads after every write mutation (saveBatch,
+// updateElectrode, deleteElectrode, scrapElectrode) — invalidate first,
+// then load for a guaranteed-fresh fetch. Also the call site for
+// restoreBatch on mount. Null cutBatchId is a no-op.
+async function loadCapacitySummary(cutBatchId) {
+  if (!cutBatchId) return
+  capacity.invalidate(cutBatchId)
+  await capacity.load(cutBatchId)
+}
+
+// Current-batch shortcuts for template bindings. `currentBatchId.value`
+// is reactive, so these re-evaluate when the batch identity changes.
+const capacitySummary        = computed(() => capacity.cache.value[currentBatchId.value])
+const capacitySummaryLoading = computed(() => !!capacity.loading.value[currentBatchId.value])
+const capacitySummaryError   = computed(() => capacity.errors.value[currentBatchId.value])
+
+function capacitySummaryMessage() {
+  return errorMessageRu(capacitySummaryError.value, 'capacity')
+}
+
+// Capacity-hint click → navigate to /tapes (with the parent tape
+// of this batch pre-selected) or to /electrodes/<id> for a foil-
+// measurement gap. Same dispatch shape as AssemblyPage's
+// handleHintGo, scoped to the contexts ElectrodeFormPage cares
+// about ('electrode' only — no battery contexts here).
+function hintExtra() {
+  const t = Number(selectedTapeId.value)
+  return {
+    tapeId: Number.isInteger(t) && t > 0 ? t : null,
+    cutBatchId: currentBatchId.value || null,
+  }
+}
+function handleHintGo(action) {
+  if (!action) return
+  if (action.kind === 'open-tape-recipe') {
+    const tapeId = action.payload?.tapeId
+    const query = tapeId ? { select: String(tapeId), stage: 'recipe_actual' } : {}
+    router.push({ path: '/tapes', query })
+  } else if (action.kind === 'open-materials') {
+    router.push('/reference/materials')
+  } else if (action.kind === 'open-electrode-batch') {
+    // Already on the batch — just toast. The "foil measurement"
+    // form is in the same page, on the «Замеры фольги» panel.
+    // Future: scroll to that panel. For now the message itself is
+    // enough since we're already here.
+  }
+}
+
 function appendElectrodeRow() {
   electrodes.value.push({
     _new: true,
@@ -185,10 +275,14 @@ function removeNewElectrodeRow(index) {
 async function updateElectrode(e, field, value) {
   if (!e.electrode_id) return
   try {
-    await api.put(`/api/electrodes/${e.electrode_id}`, { [field]: value || null })
+    // `?? null` not `|| null`: PrimeVue InputNumber emits the number 0
+    // which is falsy. `|| null` would drop legitimate zero values
+    // (mass=0 for calibration records, cup_number=0 for "stand zero").
+    await api.put(`/api/electrodes/${e.electrode_id}`, { [field]: value ?? null })
     await loadElectrodes(currentBatchId.value)
+    await loadCapacitySummary(currentBatchId.value)
   } catch (err) {
-    showStatus(err.response?.data?.error || 'Ошибка обновления электрода', true)
+    toastApiError(toast, err, 'Ошибка обновления электрода')
   }
 }
 
@@ -198,8 +292,9 @@ async function deleteElectrode(e, index) {
   try {
     await api.delete(`/api/electrodes/${e.electrode_id}`)
     await loadElectrodes(currentBatchId.value)
+    await loadCapacitySummary(currentBatchId.value)
   } catch (err) {
-    showStatus(err.response?.data?.error || 'Ошибка удаления', true)
+    toastApiError(toast, err, 'Ошибка удаления')
   }
 }
 
@@ -213,8 +308,9 @@ async function scrapElectrode(e) {
       used_in_battery_id: null,
     })
     await loadElectrodes(currentBatchId.value)
+    await loadCapacitySummary(currentBatchId.value)
   } catch (err) {
-    showStatus(err.response?.data?.error || 'Ошибка списания', true)
+    toastApiError(toast, err, 'Ошибка списания')
   }
 }
 
@@ -333,7 +429,11 @@ async function saveBatch() {
       await api.post('/api/electrodes', {
         cut_batch_id: currentBatchId.value,
         electrode_mass_g: mass,
-        cup_number: e.cup_number || null,
+        // ?? null not || null: stand zero (cup_number === 0) is a
+        // legitimate input per L249 comment, same policy as the inline
+        // updateElectrode path above. The bulk-save path was missed
+        // when that fix landed.
+        cup_number: e.cup_number ?? null,
         comments: e.comments || null,
       })
     }
@@ -365,8 +465,9 @@ async function saveBatch() {
     hasChanges.value = false
     showStatus('Партия сохранена')
     await loadElectrodes(currentBatchId.value)
+    await loadCapacitySummary(currentBatchId.value)
   } catch (err) {
-    showStatus(err.response?.data?.error || 'Ошибка сохранения', true)
+    toastApiError(toast, err, 'Ошибка сохранения')
   }
 }
 
@@ -391,6 +492,7 @@ async function restoreBatch() {
       loadElectrodes(data.cut_batch_id),
       loadFoilMasses(data.cut_batch_id),
       loadDrying(data.cut_batch_id),
+      loadCapacitySummary(data.cut_batch_id),
     ])
   } catch {
     showStatus('Партия не найдена', true)
@@ -738,6 +840,106 @@ onMounted(async () => {
               </div>
             </Panel>
 
+            <!-- Capacity summary (Dalia's 026efbf, computed on the backend
+                 from recipe actuals + foil mass + material spec capacity).
+                 Lives in the /report endpoint → fetched lazily when the batch
+                 is loaded + after every write that could affect the numbers. -->
+            <Panel v-if="currentBatchId" header="Расчёт ёмкости" toggleable>
+              <div v-if="capacitySummaryLoading" class="capacity-loading">
+                <i class="pi pi-spin pi-spinner" style="font-size:12px"></i>
+                Расчёт…
+              </div>
+              <template v-else-if="capacitySummary && capacitySummaryError === null">
+                <div class="capacity-grid">
+                  <div class="capacity-cell">
+                    <div class="capacity-label">Активный материал</div>
+                    <div class="capacity-value">
+                      <strong>{{ capacitySummary.active_material_name || '—' }}</strong>
+                      <span
+                        v-if="capacitySummary.specific_capacity_mAh_g != null"
+                        class="capacity-sub"
+                      >
+                        {{ fmtSpecCapacity(capacitySummary.specific_capacity_mAh_g) }}
+                      </span>
+                    </div>
+                  </div>
+                  <div class="capacity-cell">
+                    <div class="capacity-label">Покрытие</div>
+                    <div class="capacity-value">
+                      <strong>{{ fmtCoatingSidedness(capacitySummary.coating_sidedness) }}</strong>
+                      <span class="capacity-sub">ср. масса фольги: {{ fmtMass(capacitySummary.average_foil_mass_g) }}</span>
+                    </div>
+                  </div>
+                  <div class="capacity-cell capacity-cell--primary">
+                    <div class="capacity-label">Ср. ёмкость электрода</div>
+                    <div class="capacity-value">
+                      <div>теор.: <strong>{{ fmtCapacity(capacitySummary.average_capacity_theoretical_mAh) }}</strong></div>
+                      <div class="capacity-actual-row">
+                        факт.: <strong>{{ fmtCapacity(capacitySummary.average_capacity_actual_mAh) }}</strong>
+                        <CapacityHint
+                          v-if="capacitySummary.average_capacity_actual_mAh == null"
+                          :summary="capacitySummary"
+                          context="electrode"
+                          :extra="hintExtra()"
+                          @go="handleHintGo"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="capacity-cell" title="Поверхностная плотность ёмкости">
+                    <div class="capacity-label">Поверхн. ёмкость</div>
+                    <div class="capacity-value">
+                      <div>теор.: <strong>{{ fmtArealCapacity(capacitySummary.areal_capacity_theoretical_mAh_cm2) }}</strong></div>
+                      <div class="capacity-actual-row">
+                        факт.: <strong>{{ fmtArealCapacity(capacitySummary.areal_capacity_actual_mAh_cm2) }}</strong>
+                        <CapacityHint
+                          v-if="capacitySummary.areal_capacity_actual_mAh_cm2 == null"
+                          :summary="capacitySummary"
+                          context="electrode"
+                          :extra="hintExtra()"
+                          @go="handleHintGo"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="capacity-cell capacity-cell--wide">
+                    <div class="capacity-label">Статус расчёта фактич. значений</div>
+                    <div class="capacity-value">
+                      <strong
+                        :class="{
+                          'status-complete':    capacitySummary.actual_fraction_status === 'complete',
+                          'status-incomplete':  capacitySummary.actual_fraction_status === 'incomplete',
+                          'status-unavailable': capacitySummary.actual_fraction_status === 'unavailable',
+                        }"
+                        :tabindex="capacitySummary.actual_fraction_status === 'complete' ? -1 : 0"
+                        v-tooltip.top="capacitySummary.actual_fraction_status === 'complete'
+                          ? 'Все массы рецепта и фольги измерены — реальные значения доступны'
+                          : (capacityIncompleteHint(capacitySummary, 'electrode') || 'Часть масс не введена')"
+                      >
+                        {{ fmtActualFractionStatus(capacitySummary.actual_fraction_status) }}
+                        <i
+                          v-if="capacitySummary.actual_fraction_status !== 'complete'"
+                          class="pi pi-question-circle capacity-hint-icon"
+                          style="margin-left:4px"
+                        ></i>
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <div
+                v-else
+                class="capacity-empty"
+                :class="{
+                  'capacity-empty--auth':    capacitySummaryError === 'auth',
+                  'capacity-empty--server':  capacitySummaryError === 'server' || capacitySummaryError === 'network',
+                  'capacity-empty--missing': capacitySummaryError === 'missing',
+                }"
+              >
+                {{ capacitySummaryMessage() }}
+              </div>
+            </Panel>
+
             <div class="form-actions">
               <Button label="← Назад" severity="secondary" @click="activeStep = 'weighing'" />
               <Button label="Сохранить" icon="pi pi-save" @click="saveBatch" />
@@ -833,6 +1035,84 @@ label { font-weight: 500; font-size: 0.9rem; margin-top: 0.3rem; }
 
 .summary-section { margin-bottom: 1rem; }
 .summary-section p { margin: 0.15rem 0; font-size: 0.9rem; }
+
+/* Capacity summary — Panel body content (Dalia's 026efbf) */
+.capacity-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(0, 50, 116, 0.65);
+  font-size: 12px;
+}
+.capacity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+.capacity-cell {
+  padding: 0.5rem 0.7rem;
+  border: 0.5px solid rgba(0, 50, 116, 0.08);
+  border-radius: 6px;
+  background: rgba(0, 50, 116, 0.02);
+}
+.capacity-cell--primary {
+  background: rgba(82, 201, 166, 0.06);
+  border-color: rgba(82, 201, 166, 0.25);
+}
+.capacity-cell--wide { grid-column: 1 / -1; }
+.capacity-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 4px;
+}
+.capacity-value {
+  font-size: 13px;
+  color: #003274;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+.capacity-value strong { font-weight: 600; }
+.capacity-sub {
+  display: block;
+  font-size: 11px;
+  color: #6B7280;
+  font-weight: 400;
+}
+.status-complete    { color: #1a8a64; }
+.status-incomplete  { color: #9a7030; cursor: help; }
+/* 'unavailable' — neutral "no data entered yet" vs 'incomplete's "partially
+   filled" warning. Muted primary-navy at 0.45 opacity reads as informational
+   rather than warning-grade. Tooltip + fmtActualFractionStatus('unavailable')
+   = "—" still distinguishes the case; this CSS split lines up the visual. */
+.status-unavailable { color: rgba(0, 50, 116, 0.45); cursor: help; }
+.capacity-actual-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.capacity-hint-icon {
+  font-size: 12px;
+  color: rgba(212, 164, 65, 0.80);
+  cursor: help;
+}
+.capacity-empty {
+  font-size: 12px;
+  color: rgba(0, 50, 116, 0.55);
+  padding: 0.5rem 0;
+  font-style: italic;
+}
+.capacity-empty--auth,
+.capacity-empty--server {
+  color: #c0392b;
+  font-style: normal;
+}
+.capacity-empty--missing {
+  color: #9a7030;
+  font-style: normal;
+}
 
 .auto-hint {
   font-size: 0.8rem;

@@ -7,6 +7,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
+import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
@@ -102,7 +103,7 @@ async function saveNewMaterial() {
     const created = materials.value.find(m => m.name === name)
     if (created) selectMaterial(created)
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка создания', life: 3000 })
+    toastApiError(toast, err, 'Не удалось создать материал')
   }
 }
 
@@ -120,7 +121,7 @@ async function saveMaterialEdit() {
     toast.add({ severity: 'success', summary: 'Материал обновлён', life: 3000 })
     await loadMaterials()
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка обновления', life: 3000 })
+    toastApiError(toast, err, 'Не удалось обновить материал')
   }
 }
 
@@ -134,7 +135,7 @@ async function deleteMaterial(m) {
     }
     await loadMaterials()
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка удаления', life: 3000 })
+    toastApiError(toast, err, 'Не удалось удалить материал')
   }
 }
 
@@ -152,10 +153,21 @@ async function loadInstances(materialId) {
     const { data } = await api.get(`/api/materials/${materialId}/instances`)
     instances.value = data.sort((a, b) => a.name.localeCompare(b.name))
     // Auto-expand all instances and load their components
-    const ids = instances.value.map(i => i.material_instance_id)
-    openInstances.value = new Set(ids)
-    ids.forEach(id => {
+    openInstances.value = new Set(instances.value.map(i => i.material_instance_id))
+    instances.value.forEach(inst => {
+      const id = inst.material_instance_id
       if (!componentsLoaded.value[id]) loadComponents(id)
+      // source-info is only meaningful for pure instances — backend
+      // rejects non-pure with 400. Skip the load for composites (they
+      // get a friendly "N/A" message in the template instead of a
+      // spinner-forever + error toast). File lists share the pure-only
+      // guard because they live under the source row.
+      if (inst.is_pure) {
+        if (!sourceInfoLoaded.value[id])   loadSourceInfo(id)
+        if (!sourceFilesLoaded.value[id])  loadSourceFiles(id)
+      }
+      if (!propertiesLoaded.value[id])   loadProperties(id)
+      if (!propertyFilesLoaded.value[id]) loadPropertyFiles(id)
     })
   } finally {
     instancesLoading.value = false
@@ -166,6 +178,316 @@ async function loadComponents(instanceId) {
   const { data } = await api.get(`/api/materials/instances/${instanceId}/components`)
   componentsMap.value[instanceId] = data
   componentsLoaded.value[instanceId] = true
+}
+
+// ── Source info & properties (per material instance) ──────────────────
+// Dalia added material_sources + material_properties in migrations
+// d026/d027. The Vue UI exposes two per-instance forms:
+//   - Source info — supplier, brand, lot, dates, quality rating, notes.
+//   - Properties  — specific capacity (mAh/g), density (g/ml), notes.
+// Loaded lazily when the user expands an instance (parallel with the
+// components fetch). Same reactive object doubles as the edit buffer —
+// on PUT success the backend-returned row replaces the buffer, so the
+// form always reflects the authoritative DB state after save.
+const sourceInfoForm = ref({})
+const sourceInfoLoaded = ref({})
+const sourceInfoSaving = ref({})
+const propertiesForm = ref({})
+const propertiesLoaded = ref({})
+const propertiesSaving = ref({})
+
+const QUALITY_LABELS = [
+  { value: 'good', label: 'Хорошо' },
+  { value: 'ok',   label: 'Приемлемо' },
+  { value: 'bad',  label: 'Плохо' },
+  { value: 'tbd',  label: 'Не оценено' },
+]
+
+function blankSourceInfo() {
+  return {
+    supplier: '', brand: '', model_or_catalog_no: '', lot_number: '',
+    date_ordered: '', date_received: '',
+    quality_rating_label: '', quality_rating_score: '',
+    evaluation_notes: '', is_evaluated: false,
+  }
+}
+function blankProperties() {
+  return {
+    specific_capacity_mAh_g: '',
+    density_g_ml: '',
+    notes: '',
+  }
+}
+
+async function loadSourceInfo(instanceId) {
+  try {
+    const { data } = await api.get(`/api/materials/instances/${instanceId}/source-info`)
+    // Endpoint returns { instance, source }. When source is null (no row
+    // yet) we seed the form with blanks so inputs don't bind to null.
+    const src = data?.source || {}
+    sourceInfoForm.value[instanceId] = {
+      ...blankSourceInfo(),
+      ...src,
+      // DB dates come back as ISO; inputs expect yyyy-mm-dd. Slice the T.
+      date_ordered: src.date_ordered ? String(src.date_ordered).slice(0, 10) : '',
+      date_received: src.date_received ? String(src.date_received).slice(0, 10) : '',
+    }
+    sourceInfoLoaded.value[instanceId] = true
+  } catch (err) {
+    toastApiError(toast, err, 'Источник — не удалось загрузить', { life: 4000 })
+  }
+}
+
+async function saveSourceInfo(instanceId) {
+  const form = sourceInfoForm.value[instanceId]
+  if (!form) return
+  sourceInfoSaving.value[instanceId] = true
+  try {
+    const payload = {
+      supplier:               form.supplier || null,
+      brand:                  form.brand || null,
+      model_or_catalog_no:    form.model_or_catalog_no || null,
+      lot_number:             form.lot_number || null,
+      date_ordered:           form.date_ordered || null,
+      date_received:          form.date_received || null,
+      quality_rating_label:   form.quality_rating_label || null,
+      quality_rating_score:   form.quality_rating_score === '' || form.quality_rating_score == null
+                                ? null : Number(form.quality_rating_score),
+      evaluation_notes:       form.evaluation_notes || null,
+      is_evaluated:           !!form.is_evaluated,
+    }
+    await api.put(`/api/materials/instances/${instanceId}/source-info`, payload)
+    toast.add({ severity: 'success', summary: 'Источник', detail: 'Сохранено', life: 2500 })
+    // Reload to get canonical server state (including server-computed
+    // updated_at / updated_by / updated_by_name).
+    await loadSourceInfo(instanceId)
+  } catch (err) {
+    toastApiError(toast, err, 'Источник — ошибка сохранения', { life: 4000 })
+  } finally {
+    sourceInfoSaving.value[instanceId] = false
+  }
+}
+
+async function loadProperties(instanceId) {
+  try {
+    const { data } = await api.get(`/api/materials/instances/${instanceId}/properties`)
+    const p = data?.properties || {}
+    propertiesForm.value[instanceId] = {
+      ...blankProperties(),
+      // Postgres normalises column names lower-case — the column is
+      // specific_capacity_mAh_g, PG returns specific_capacity_mah_g.
+      // Read both spellings to be robust.
+      specific_capacity_mAh_g: p.specific_capacity_mAh_g ?? p.specific_capacity_mah_g ?? '',
+      density_g_ml:            p.density_g_ml ?? '',
+      notes:                   p.notes ?? '',
+    }
+    propertiesLoaded.value[instanceId] = true
+  } catch (err) {
+    toastApiError(toast, err, 'Свойства — не удалось загрузить', { life: 4000 })
+  }
+}
+
+// ── Source-info and property files (d027) ────────────────────────────
+// Two independent file buckets keyed by instance_id. Backend stores
+// bytes as BYTEA with a mime type; we upload base64, list metadata,
+// and fetch download blobs authenticated so the Bearer token is sent
+// (direct <a href=/download> would lose the token in prod).
+const sourceFilesMap = ref({})
+const sourceFilesLoaded = ref({})
+const propertyFilesMap = ref({})
+const propertyFilesLoaded = ref({})
+const uploadingSourceFiles = ref({})
+const uploadingPropertyFiles = ref({})
+// In-flight delete flags keyed by "kind-fileId" — prevents the "click
+// twice, second click 404s" UX wart and stops the second toast from
+// appearing. source-files and property-files have separate primary-key
+// sequences so we namespace by kind to avoid a false-positive disable
+// on a property-file when the user deletes a source-file with the same
+// numeric id.
+const deletingFileIds = ref({})
+function deleteKey(kind, fileId) { return `${kind}-${fileId}` }
+
+// Upload size budget — Express body limit is 10 MB (app.js:19) and
+// base64 inflates bytes by 4/3. A 7 MB raw file → 9.4 MB base64 +
+// JSON wrapper, which hugs the 10 MB wall with no margin; a long
+// filename or a multi-file entries[] array can push it over. 6 MB
+// leaves ~1.8 MB of headroom and matches BatteryElectrochemEditor.
+const MAX_FILE_BYTES = 6 * 1024 * 1024
+
+function validateUploadSize(files) {
+  const oversized = Array.from(files).filter(f => f.size > MAX_FILE_BYTES)
+  if (oversized.length === 0) return null
+  const names = oversized.map(f => f.name).join(', ')
+  return `Слишком большие файлы (лимит 6 МБ): ${names}`
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      // readAsDataURL yields "data:<mime>;base64,<payload>" — strip the
+      // prefix so the backend gets just the payload.
+      const result = String(reader.result || '')
+      const commaIdx = result.indexOf(',')
+      resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result)
+    }
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+async function loadSourceFiles(instanceId) {
+  try {
+    const { data } = await api.get(`/api/materials/instances/${instanceId}/source-info/files`)
+    sourceFilesMap.value[instanceId] = Array.isArray(data) ? data : []
+    sourceFilesLoaded.value[instanceId] = true
+  } catch (err) {
+    // For composite instances the backend throws 400 — we guard upstream
+    // via is_pure so this branch is only hit on real network failures.
+    toastApiError(toast, err, 'Файлы источника — не удалось загрузить', { life: 4000 })
+  }
+}
+
+async function loadPropertyFiles(instanceId) {
+  try {
+    const { data } = await api.get(`/api/materials/instances/${instanceId}/properties/files`)
+    propertyFilesMap.value[instanceId] = Array.isArray(data) ? data : []
+    propertyFilesLoaded.value[instanceId] = true
+  } catch (err) {
+    toastApiError(toast, err, 'Файлы свойств — не удалось загрузить', { life: 4000 })
+  }
+}
+
+async function uploadSourceFiles(instanceId, fileList) {
+  if (!fileList || fileList.length === 0) return
+  // Pre-flight size check so oversize uploads don't silently 413 or get
+  // a generic "Ошибка загрузки" — we explain exactly which file exceeds.
+  const sizeError = validateUploadSize(fileList)
+  if (sizeError) {
+    toast.add({ severity: 'warn', summary: 'Размер файла', detail: sizeError, life: 5000 })
+    return
+  }
+  uploadingSourceFiles.value[instanceId] = true
+  try {
+    const entries = await Promise.all(
+      Array.from(fileList).map(async (f) => ({
+        file_name: f.name,
+        mime_type: f.type || 'application/octet-stream',
+        file_content_base64: await fileToBase64(f),
+      }))
+    )
+    await api.post(`/api/materials/instances/${instanceId}/source-info/files`, { entries })
+    toast.add({ severity: 'success', summary: 'Файлы', detail: `Загружено: ${entries.length}`, life: 2500 })
+    await loadSourceFiles(instanceId)
+  } catch (err) {
+    toastApiError(toast, err, 'Файлы — ошибка загрузки', { life: 4000 })
+  } finally {
+    uploadingSourceFiles.value[instanceId] = false
+  }
+}
+
+async function uploadPropertyFiles(instanceId, fileList) {
+  if (!fileList || fileList.length === 0) return
+  const sizeError = validateUploadSize(fileList)
+  if (sizeError) {
+    toast.add({ severity: 'warn', summary: 'Размер файла', detail: sizeError, life: 5000 })
+    return
+  }
+  uploadingPropertyFiles.value[instanceId] = true
+  try {
+    const entries = await Promise.all(
+      Array.from(fileList).map(async (f) => ({
+        file_name: f.name,
+        mime_type: f.type || 'application/octet-stream',
+        file_content_base64: await fileToBase64(f),
+      }))
+    )
+    await api.post(`/api/materials/instances/${instanceId}/properties/files`, { entries })
+    toast.add({ severity: 'success', summary: 'Файлы', detail: `Загружено: ${entries.length}`, life: 2500 })
+    await loadPropertyFiles(instanceId)
+  } catch (err) {
+    toastApiError(toast, err, 'Файлы — ошибка загрузки', { life: 4000 })
+  } finally {
+    uploadingPropertyFiles.value[instanceId] = false
+  }
+}
+
+// Authenticated file download — fetches blob via axios (Bearer token
+// attached by the interceptor), creates an object URL, triggers a
+// click on a temporary <a download>. Avoids the "direct <a> loses
+// token in prod" trap and gives the user a proper Save dialog.
+async function downloadFile(kind, fileId, suggestedName) {
+  const path = kind === 'source'
+    ? `/api/materials/source-files/${fileId}/download`
+    : `/api/materials/property-files/${fileId}/download`
+  try {
+    const response = await api.get(path, { responseType: 'blob' })
+    const url = URL.createObjectURL(response.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = suggestedName || 'download'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    // Revoke the object URL on next tick so the browser finishes the
+    // download before we free it (revoking synchronously can race).
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  } catch (err) {
+    toastApiError(toast, err, 'Скачивание — ошибка', { life: 4000 })
+  }
+}
+
+async function deleteFile(kind, fileId, instanceId) {
+  // In-flight guard — second click on the same file is a no-op, which
+  // prevents the "404 Not found" toast that would fire when the 2nd
+  // DELETE hits a row already removed by the 1st.
+  const key = deleteKey(kind, fileId)
+  if (deletingFileIds.value[key]) return
+  if (!confirm('Удалить файл?')) return
+  deletingFileIds.value[key] = true
+  const path = kind === 'source'
+    ? `/api/materials/source-files/${fileId}`
+    : `/api/materials/property-files/${fileId}`
+  try {
+    await api.delete(path)
+    toast.add({ severity: 'success', summary: 'Файл', detail: 'Удалён', life: 2500 })
+    if (kind === 'source') await loadSourceFiles(instanceId)
+    else await loadPropertyFiles(instanceId)
+  } catch (err) {
+    toastApiError(toast, err, 'Файл — ошибка удаления', { life: 4000 })
+  } finally {
+    deletingFileIds.value[key] = false
+  }
+}
+
+function formatFileSize(bytes) {
+  const n = Number(bytes)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+async function saveProperties(instanceId) {
+  const form = propertiesForm.value[instanceId]
+  if (!form) return
+  propertiesSaving.value[instanceId] = true
+  try {
+    const payload = {
+      specific_capacity_mAh_g: form.specific_capacity_mAh_g === '' || form.specific_capacity_mAh_g == null
+                                 ? null : Number(form.specific_capacity_mAh_g),
+      density_g_ml:            form.density_g_ml === '' || form.density_g_ml == null
+                                 ? null : Number(form.density_g_ml),
+      notes:                   form.notes || null,
+    }
+    await api.put(`/api/materials/instances/${instanceId}/properties`, payload)
+    toast.add({ severity: 'success', summary: 'Свойства', detail: 'Сохранено', life: 2500 })
+    await loadProperties(instanceId)
+  } catch (err) {
+    toastApiError(toast, err, 'Свойства — ошибка сохранения', { life: 4000 })
+  } finally {
+    propertiesSaving.value[instanceId] = false
+  }
 }
 
 async function loadAllInstances() {
@@ -180,6 +502,13 @@ function toggleInstance(inst) {
   } else {
     openInstances.value = new Set([...openInstances.value, id])
     if (!componentsLoaded.value[id]) loadComponents(id)
+    // Same pure-instance gate as loadInstances above.
+    if (inst.is_pure) {
+      if (!sourceInfoLoaded.value[id])  loadSourceInfo(id)
+      if (!sourceFilesLoaded.value[id]) loadSourceFiles(id)
+    }
+    if (!propertiesLoaded.value[id])   loadProperties(id)
+    if (!propertyFilesLoaded.value[id]) loadPropertyFiles(id)
   }
 }
 
@@ -221,7 +550,7 @@ async function saveEditInstance(inst) {
     editingInstanceId.value = null
     await loadInstances(selectedMaterialId.value)
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка обновления', life: 3000 })
+    toastApiError(toast, err, 'Не удалось обновить экземпляр')
   }
 }
 
@@ -232,7 +561,7 @@ async function deleteInstance(inst) {
     toast.add({ severity: 'success', summary: 'Экземпляр удалён', life: 3000 })
     await loadInstances(selectedMaterialId.value)
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка удаления', life: 3000 })
+    toastApiError(toast, err, 'Не удалось удалить экземпляр')
   }
 }
 
@@ -259,7 +588,7 @@ async function saveNewInstance() {
     resetInstanceCreate()
     await loadInstances(selectedMaterialId.value)
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка создания', life: 3000 })
+    toastApiError(toast, err, 'Не удалось создать экземпляр')
   }
 }
 
@@ -290,7 +619,7 @@ async function saveEditComponent(comp, instanceId) {
     editingComponentId.value = null
     await loadComponents(instanceId)
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка обновления', life: 3000 })
+    toastApiError(toast, err, 'Не удалось обновить компонент')
   }
 }
 
@@ -301,7 +630,7 @@ async function deleteComponent(comp, instanceId) {
     toast.add({ severity: 'success', summary: 'Компонент удалён', life: 3000 })
     await loadComponents(instanceId)
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка удаления', life: 3000 })
+    toastApiError(toast, err, 'Не удалось удалить компонент')
   }
 }
 
@@ -335,7 +664,7 @@ async function saveNewComponent(instanceId) {
     resetComponentCreate()
     await loadComponents(instanceId)
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка создания', life: 3000 })
+    toastApiError(toast, err, 'Не удалось добавить компонент')
   }
 }
 
@@ -566,6 +895,227 @@ function onEditKeydown(e, saveFn, cancelFn) {
                     />
                   </template>
                   <div v-else class="loading-text">Загрузка...</div>
+
+                  <!-- ── Source info (supplier/lot/quality, d026) ──
+                       Only meaningful for "pure" instances (single compound,
+                       no components). Backend returns 400 for composites,
+                       so we hide the form entirely and show a short hint
+                       instead of a loading spinner that never resolves. -->
+                  <div v-if="!inst.is_pure" class="instance-sub-section instance-sub-section--muted">
+                    <div class="sub-section-title">Источник</div>
+                    <div class="meta-text">
+                      Информация о поставщике/партии/качестве ведётся только для
+                      однокомпонентных материалов. У этого экземпляра есть компоненты
+                      — источник каждого компонента ведётся в его отдельной карточке.
+                    </div>
+                  </div>
+                  <div v-else class="instance-sub-section">
+                    <div class="sub-section-title">Источник (поставщик · партия · качество)</div>
+                    <template v-if="sourceInfoLoaded[inst.material_instance_id]">
+                      <div class="form-grid">
+                        <div class="form-field">
+                          <label>Поставщик</label>
+                          <InputText v-model="sourceInfoForm[inst.material_instance_id].supplier" class="w-full" />
+                        </div>
+                        <div class="form-field">
+                          <label>Бренд</label>
+                          <InputText v-model="sourceInfoForm[inst.material_instance_id].brand" class="w-full" />
+                        </div>
+                        <div class="form-field">
+                          <label>Модель / каталожный №</label>
+                          <InputText v-model="sourceInfoForm[inst.material_instance_id].model_or_catalog_no" class="w-full" />
+                        </div>
+                        <div class="form-field">
+                          <label>Номер партии</label>
+                          <InputText v-model="sourceInfoForm[inst.material_instance_id].lot_number" class="w-full" />
+                        </div>
+                        <div class="form-field">
+                          <label>Дата заказа</label>
+                          <input type="date" v-model="sourceInfoForm[inst.material_instance_id].date_ordered" class="date-input" />
+                        </div>
+                        <div class="form-field">
+                          <label>Дата получения</label>
+                          <input type="date" v-model="sourceInfoForm[inst.material_instance_id].date_received" class="date-input" />
+                        </div>
+                        <div class="form-field">
+                          <label>Метка качества</label>
+                          <Select
+                            v-model="sourceInfoForm[inst.material_instance_id].quality_rating_label"
+                            :options="QUALITY_LABELS"
+                            optionLabel="label"
+                            optionValue="value"
+                            placeholder="—"
+                            showClear
+                            class="w-full"
+                          />
+                        </div>
+                        <div class="form-field">
+                          <label title="1 — худшая оценка, 5 — лучшая">Оценка, 1–5</label>
+                          <input
+                            type="number" min="1" max="5" step="1"
+                            v-model="sourceInfoForm[inst.material_instance_id].quality_rating_score"
+                            class="num-input"
+                          />
+                        </div>
+                        <div class="form-field form-field--full">
+                          <label>Комментарий по оценке</label>
+                          <textarea
+                            v-model="sourceInfoForm[inst.material_instance_id].evaluation_notes"
+                            class="textarea-input"
+                            rows="2"
+                          />
+                        </div>
+                        <div class="form-field form-field--full form-field--checkbox">
+                          <label>
+                            <input
+                              type="checkbox"
+                              v-model="sourceInfoForm[inst.material_instance_id].is_evaluated"
+                            />
+                            Оценка завершена
+                          </label>
+                        </div>
+                      </div>
+                      <div class="form-actions">
+                        <Button
+                          label="Сохранить источник"
+                          icon="pi pi-save"
+                          size="small"
+                          :loading="!!sourceInfoSaving[inst.material_instance_id]"
+                          :disabled="!!sourceInfoSaving[inst.material_instance_id]"
+                          @click="saveSourceInfo(inst.material_instance_id)"
+                        />
+                      </div>
+
+                      <!-- Source files (datasheets, certificates) — d027 -->
+                      <div class="files-panel">
+                        <div class="files-panel-head">
+                          <span class="files-panel-title">📎 Прикреплённые файлы источника</span>
+                          <label class="file-upload-btn" :class="{ 'is-busy': !!uploadingSourceFiles[inst.material_instance_id] }">
+                            <i :class="uploadingSourceFiles[inst.material_instance_id] ? 'pi pi-spin pi-spinner' : 'pi pi-plus'"></i>
+                            Добавить
+                            <input
+                              type="file"
+                              multiple
+                              style="display:none"
+                              :disabled="!!uploadingSourceFiles[inst.material_instance_id]"
+                              @change="(e) => { uploadSourceFiles(inst.material_instance_id, e.target.files); e.target.value = '' }"
+                            />
+                          </label>
+                        </div>
+                        <ul v-if="sourceFilesLoaded[inst.material_instance_id] && (sourceFilesMap[inst.material_instance_id] || []).length" class="file-list">
+                          <li v-for="f in sourceFilesMap[inst.material_instance_id]" :key="f.material_source_file_id">
+                            <button
+                              type="button"
+                              class="file-link"
+                              :title="f.mime_type || ''"
+                              @click="downloadFile('source', f.material_source_file_id, f.file_name)"
+                            >
+                              <i class="pi pi-file" style="font-size:11px;margin-right:4px"></i>
+                              {{ f.file_name }}
+                            </button>
+                            <button
+                              type="button"
+                              class="file-del-btn"
+                              title="Удалить файл"
+                              :disabled="!!deletingFileIds[`source-${f.material_source_file_id}`]"
+                              @click="deleteFile('source', f.material_source_file_id, inst.material_instance_id)"
+                            >
+                              <i :class="deletingFileIds[`source-${f.material_source_file_id}`] ? 'pi pi-spin pi-spinner' : 'pi pi-trash'"></i>
+                            </button>
+                          </li>
+                        </ul>
+                        <div v-else-if="!sourceFilesLoaded[inst.material_instance_id]" class="loading-text loading-text--small">Загрузка файлов…</div>
+                        <div v-else class="empty-text empty-text--small">Файлы не прикреплены</div>
+                      </div>
+                    </template>
+                    <div v-else class="loading-text">Загрузка…</div>
+                  </div>
+
+                  <!-- ── Properties (spec capacity / density, d026) ── -->
+                  <div class="instance-sub-section">
+                    <div class="sub-section-title">Свойства (удельная ёмкость · плотность)</div>
+                    <template v-if="propertiesLoaded[inst.material_instance_id]">
+                      <div class="form-grid">
+                        <div class="form-field">
+                          <label>Удельная ёмкость, мАч/г</label>
+                          <input
+                            type="number" step="any" min="0"
+                            v-model="propertiesForm[inst.material_instance_id].specific_capacity_mAh_g"
+                            class="num-input"
+                          />
+                        </div>
+                        <div class="form-field">
+                          <label>Плотность, г/мл</label>
+                          <input
+                            type="number" step="any" min="0"
+                            v-model="propertiesForm[inst.material_instance_id].density_g_ml"
+                            class="num-input"
+                          />
+                        </div>
+                        <div class="form-field form-field--full">
+                          <label>Заметки</label>
+                          <textarea
+                            v-model="propertiesForm[inst.material_instance_id].notes"
+                            class="textarea-input"
+                            rows="2"
+                          />
+                        </div>
+                      </div>
+                      <div class="form-actions">
+                        <Button
+                          label="Сохранить свойства"
+                          icon="pi pi-save"
+                          size="small"
+                          :loading="!!propertiesSaving[inst.material_instance_id]"
+                          :disabled="!!propertiesSaving[inst.material_instance_id]"
+                          @click="saveProperties(inst.material_instance_id)"
+                        />
+                      </div>
+
+                      <!-- Property files (measurement reports etc) — d027 -->
+                      <div class="files-panel">
+                        <div class="files-panel-head">
+                          <span class="files-panel-title">📎 Файлы свойств</span>
+                          <label class="file-upload-btn" :class="{ 'is-busy': !!uploadingPropertyFiles[inst.material_instance_id] }">
+                            <i :class="uploadingPropertyFiles[inst.material_instance_id] ? 'pi pi-spin pi-spinner' : 'pi pi-plus'"></i>
+                            Добавить
+                            <input
+                              type="file"
+                              multiple
+                              style="display:none"
+                              :disabled="!!uploadingPropertyFiles[inst.material_instance_id]"
+                              @change="(e) => { uploadPropertyFiles(inst.material_instance_id, e.target.files); e.target.value = '' }"
+                            />
+                          </label>
+                        </div>
+                        <ul v-if="propertyFilesLoaded[inst.material_instance_id] && (propertyFilesMap[inst.material_instance_id] || []).length" class="file-list">
+                          <li v-for="f in propertyFilesMap[inst.material_instance_id]" :key="f.material_property_file_id">
+                            <button
+                              type="button"
+                              class="file-link"
+                              :title="f.mime_type || ''"
+                              @click="downloadFile('property', f.material_property_file_id, f.file_name)"
+                            >
+                              <i class="pi pi-file" style="font-size:11px;margin-right:4px"></i>
+                              {{ f.file_name }}
+                            </button>
+                            <button
+                              type="button"
+                              class="file-del-btn"
+                              title="Удалить файл"
+                              :disabled="!!deletingFileIds[`property-${f.material_property_file_id}`]"
+                              @click="deleteFile('property', f.material_property_file_id, inst.material_instance_id)"
+                            >
+                              <i :class="deletingFileIds[`property-${f.material_property_file_id}`] ? 'pi pi-spin pi-spinner' : 'pi pi-trash'"></i>
+                            </button>
+                          </li>
+                        </ul>
+                        <div v-else-if="!propertyFilesLoaded[inst.material_instance_id]" class="loading-text loading-text--small">Загрузка файлов…</div>
+                        <div v-else class="empty-text empty-text--small">Файлы не прикреплены</div>
+                      </div>
+                    </template>
+                    <div v-else class="loading-text">Загрузка…</div>
+                  </div>
                 </div>
               </div>
 
@@ -843,6 +1393,182 @@ function onEditKeydown(e, saveFn, cancelFn) {
 .components-section {
   margin-left: 1.75rem;
   padding-bottom: 0.5rem;
+}
+
+/* ── Source-info & Properties sub-sections (Dalia d026) ── */
+.instance-sub-section {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(0, 50, 116, 0.02);
+  border: 0.5px solid rgba(0, 50, 116, 0.08);
+  border-radius: 6px;
+}
+.instance-sub-section--muted {
+  background: rgba(0, 50, 116, 0.015);
+  opacity: 0.75;
+}
+.instance-sub-section--muted .meta-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #6B7280;
+}
+.sub-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(0, 50, 116, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.5rem;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 0.7rem;
+  margin-bottom: 0.5rem;
+}
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.form-field--full { grid-column: 1 / -1; }
+.form-field--checkbox label {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.form-field label {
+  font-size: 11px;
+  color: #6B7280;
+  font-weight: 500;
+}
+.num-input,
+.date-input {
+  padding: 4px 8px;
+  border: 1px solid rgba(0, 50, 116, 0.15);
+  border-radius: 5px;
+  background: white;
+  color: #003274;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+.num-input:focus,
+.date-input:focus {
+  outline: none;
+  border-color: #003274;
+  box-shadow: 0 0 0 2px rgba(0, 50, 116, 0.1);
+}
+.textarea-input {
+  padding: 5px 8px;
+  border: 1px solid rgba(0, 50, 116, 0.15);
+  border-radius: 5px;
+  background: white;
+  color: #003274;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── File attachments (d027) ── */
+.files-panel {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 0.5px dashed rgba(0, 50, 116, 0.15);
+}
+.files-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+.files-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6B7280;
+}
+.file-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border: 1px solid rgba(0, 50, 116, 0.15);
+  border-radius: 5px;
+  background: white;
+  color: #003274;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+.file-upload-btn:hover:not(.is-busy) {
+  background: #003274;
+  color: white;
+}
+.file-upload-btn.is-busy {
+  opacity: 0.6;
+  cursor: progress;
+}
+.file-upload-btn i { font-size: 11px; }
+.file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.file-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.file-list li:hover { background: rgba(0, 50, 116, 0.04); }
+.file-link {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #003274;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-family: inherit;
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-link:hover { text-decoration: underline; }
+.file-del-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: rgba(231, 76, 60, 0.7);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.file-del-btn:hover { background: rgba(231, 76, 60, 0.1); color: #E74C3C; }
+.file-del-btn i { font-size: 11px; }
+.loading-text--small,
+.empty-text--small {
+  font-size: 11px;
+  padding: 3px 0;
 }
 .comp-table {
   width: 100%;

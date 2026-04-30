@@ -7,9 +7,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
+import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
 import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
+import EntityMeta from '@/components/EntityMeta.vue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
@@ -21,7 +23,6 @@ const crudTable = ref(null)
 
 // ── Data ───────────────────────────────────────────────────────────────
 const electrolytes = ref([])
-const activeUsers = ref([])
 const loading = ref(false)
 
 async function loadElectrolytes() {
@@ -29,21 +30,14 @@ async function loadElectrolytes() {
   try {
     const { data } = await api.get('/api/electrolytes')
     electrolytes.value = data
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось загрузить электролиты', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить электролиты')
   } finally {
     loading.value = false
   }
 }
 
-async function loadUsers() {
-  try {
-    const { data } = await api.get('/api/users')
-    activeUsers.value = data.filter(u => u.active)
-  } catch {}
-}
-
-onMounted(() => { loadElectrolytes(); loadUsers() })
+onMounted(() => { loadElectrolytes() })
 
 // ── Column config ──────────────────────────────────────────────────────
 const columns = [
@@ -53,6 +47,7 @@ const columns = [
   { field: 'salts',            header: 'Соли',         minWidth: '80px',  width: '110px' },
   { field: 'concentration',    header: 'Концентрация', minWidth: '80px',  width: '120px' },
   { field: 'status',           header: 'Статус',       minWidth: '80px',  width: '115px' },
+  { field: 'created_by_name',  header: 'Оператор',     minWidth: '90px',  width: '130px' },
 ]
 
 // ── Save indicator (delete flow) ──────────────────────────────────────
@@ -76,8 +71,8 @@ async function confirmSave() {
     saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
     crudTable.value?.clearSelection()
     await loadElectrolytes()
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось удалить', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось удалить')
   }
 }
 
@@ -93,10 +88,17 @@ onUnmounted(() => clearTimeout(saveTimer))
 const formVisible = ref(false)
 const mode = ref(null) // 'create' | 'edit'
 const currentId = ref(null)
+// Full row of the entity being edited — kept so EntityMeta can show
+// `Создано: ФИО, дата` + `Изменено: ФИО, дата` from the backend's
+// JOIN-populated created_by_name / updated_by_name fields.
+const currentItem = ref(null)
 
+// `created_by` is NOT part of the form — backend forces it from the
+// authenticated user (req.user.userId). Storing it on the form would
+// invite an "edit creator" UI that the backend ignores anyway. The
+// existing creator is shown read-only via EntityMeta when available.
 const form = ref({
   name: '',
-  created_by: '',
   electrolyte_type: '',
   solvent_system: '',
   salts: '',
@@ -120,11 +122,12 @@ const statusOptions = [
 
 function resetForm() {
   form.value = {
-    name: '', created_by: '', electrolyte_type: '', solvent_system: '',
+    name: '', electrolyte_type: '', solvent_system: '',
     salts: '', concentration: '', additives: '', notes: '', status: 'active',
   }
   mode.value = null
   currentId.value = null
+  currentItem.value = null
   formVisible.value = false
 }
 
@@ -137,9 +140,9 @@ function openCreate() {
 function openEdit(el) {
   mode.value = 'edit'
   currentId.value = el.electrolyte_id
+  currentItem.value = el
   form.value = {
     name: el.name || '',
-    created_by: el.created_by || '',
     electrolyte_type: el.electrolyte_type || '',
     solvent_system: el.solvent_system || '',
     salts: el.salts || '',
@@ -158,8 +161,9 @@ async function saveElectrolyte() {
     return
   }
 
+  // created_by intentionally NOT in the payload — backend forces it
+  // from the authenticated user (routes/electrolytes.js:31).
   const payload = { ...form.value }
-  if (payload.created_by) payload.created_by = Number(payload.created_by)
 
   try {
     if (mode.value === 'create') {
@@ -172,7 +176,7 @@ async function saveElectrolyte() {
     resetForm()
     await loadElectrolytes()
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка сохранения', life: 3000 })
+    toastApiError(toast, err, 'Ошибка сохранения')
   }
 }
 
@@ -248,9 +252,6 @@ function statusLabel(status) {
         <label>Название</label>
         <InputText v-model="form.name" placeholder="Название электролита" class="w-full" />
 
-        <label>Кто добавил</label>
-        <Select v-model="form.created_by" :options="activeUsers" optionLabel="name" optionValue="user_id" placeholder="— выбрать —" class="w-full" />
-
         <label>Тип электролита</label>
         <Select v-model="form.electrolyte_type" :options="typeOptions" optionLabel="label" optionValue="value" placeholder="— выбрать —" class="w-full" />
 
@@ -272,6 +273,15 @@ function statusLabel(status) {
         <label>Примечания</label>
         <Textarea v-model="form.notes" rows="3" placeholder="Дополнительная информация" class="w-full" />
       </form>
+
+      <!-- Read-only audit trail (only on edit — `currentItem` is null in create) -->
+      <EntityMeta
+        v-if="mode === 'edit' && currentItem"
+        :createdByName="currentItem.created_by_name"
+        :createdAt="currentItem.created_at"
+        :updatedByName="currentItem.updated_by_name"
+        :updatedAt="currentItem.updated_at"
+      />
 
       <template #footer>
         <Button label="Отмена" severity="secondary" outlined @click="resetForm" />

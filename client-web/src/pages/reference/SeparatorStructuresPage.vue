@@ -7,6 +7,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
+import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
 import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
@@ -27,8 +28,8 @@ async function loadStructures() {
   try {
     const { data } = await api.get('/api/structures')
     structuresList.value = data.sort((a, b) => a.name.localeCompare(b.name))
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось загрузить структуры', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить структуры')
   } finally {
     loading.value = false
   }
@@ -63,8 +64,8 @@ async function confirmSave() {
     saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
     crudTable.value?.clearSelection()
     await loadStructures()
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось удалить', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось удалить')
   }
 }
 
@@ -132,7 +133,7 @@ async function saveStructure() {
     resetForm()
     await loadStructures()
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка сохранения', life: 3000 })
+    toastApiError(toast, err, 'Ошибка сохранения')
   }
 }
 </script>
