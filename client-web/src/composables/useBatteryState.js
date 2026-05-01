@@ -5,6 +5,17 @@
 import { ref, reactive, computed } from 'vue'
 import api from '@/services/api'
 
+// Coerce an input value to a finite number or null. Preserves zero —
+// critical for physical measurements where 0 is a legitimate reading
+// (shorted cell OCV/ESR, zero spacers, zero-thickness spacer) rather
+// than "no data". `|| null` coerces 0 to null and drops the reading;
+// this helper is the CLAUDE.md pitfall #1 fix applied uniformly.
+function toNum(v) {
+  if (v === '' || v == null) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
 export function useBatteryState({ batteryId }) {
   const currentBatchId = ref(batteryId)
   const loading = ref(false)
@@ -71,7 +82,6 @@ export function useBatteryState({ batteryId }) {
       ocv_v: '',
       esr_mohm: '',
       qc_notes: '',
-      electrochem_notes: '',
     },
   })
 
@@ -177,10 +187,48 @@ export function useBatteryState({ batteryId }) {
     return steps[stageCode]?.[fieldKey] ?? ''
   }
 
+  // Fields that belong to each form factor's subtype config. Listed
+  // explicitly (rather than introspecting steps.config) so the clear
+  // stays surgical — header-level and shared fields never get wiped.
+  const COIN_CONFIG_FIELDS = [
+    'coin_cell_mode', 'coin_size_code', 'half_cell_type', 'coin_layout',
+    'spacer_thickness_mm', 'spacer_count', 'spacer_notes', 'li_foil_notes',
+  ]
+  const POUCH_CONFIG_FIELDS = [
+    'pouch_case_size_code', 'pouch_case_size_other', 'pouch_notes',
+  ]
+  const CYL_CONFIG_FIELDS = ['cyl_size_code', 'cyl_notes']
+
+  function _clearFormFactorSiblings(newFormFactor) {
+    // Wipe fields belonging to the OTHER form factors so their stale data
+    // doesn't silently persist in state (and doesn't accidentally get
+    // serialized to a future save if the user switches back). Matches the
+    // in-stage cascade pattern already used for pouch_case_size_code →
+    // pouch_case_size_other above.
+    if (newFormFactor !== 'coin') {
+      for (const k of COIN_CONFIG_FIELDS) steps.config[k] = ''
+    }
+    if (newFormFactor !== 'pouch') {
+      for (const k of POUCH_CONFIG_FIELDS) steps.config[k] = ''
+    }
+    if (newFormFactor !== 'cylindrical') {
+      for (const k of CYL_CONFIG_FIELDS) steps.config[k] = ''
+    }
+  }
+
   function setFieldValue(stageCode, fieldKey, value) {
     pushHistoryDebounced()
     if (stageCode === 'general') {
+      const prevFormFactor = general.form_factor
       general[fieldKey] = value
+      // Form factor changed → clear stale config fields from OTHER form
+      // factors. Otherwise switching coin→pouch→coin preserves pouch data
+      // hidden in state, which could leak into the next config save or
+      // re-appear unexpectedly if the user switches back.
+      if (fieldKey === 'form_factor' && value !== prevFormFactor) {
+        _clearFormFactorSiblings(value)
+        setDirty('config')
+      }
       setDirty('general')
       _scheduleAutoSave('general')
     } else if (steps[stageCode]) {
@@ -232,14 +280,18 @@ export function useBatteryState({ batteryId }) {
             cyl_notes: c.cyl_notes || null,
           })
         } else {
-          // Coin (default) config
+          // Coin (default) config. Numeric spacer fields go through toNum
+          // so zero (no spacer / zero-thickness spacer — legitimate for
+          // some half-cell recipes) is preserved instead of dropped by
+          // `|| null`. Enum/text fields keep `|| null` — empty string is
+          // not a meaningful "zero" for them.
           await api.patch(`/api/batteries/battery_coin_config/${id}`, {
             coin_cell_mode: c.coin_cell_mode || null,
             coin_size_code: c.coin_size_code || null,
             half_cell_type: c.half_cell_type || null,
             coin_layout: c.coin_layout || null,
-            spacer_thickness_mm: c.spacer_thickness_mm || null,
-            spacer_count: c.spacer_count || null,
+            spacer_thickness_mm: toNum(c.spacer_thickness_mm),
+            spacer_count: toNum(c.spacer_count),
             spacer_notes: c.spacer_notes || null,
             li_foil_notes: c.li_foil_notes || null,
           })
@@ -274,9 +326,16 @@ export function useBatteryState({ batteryId }) {
           coin_layout: a.separator_layout || null,
         })
       } else if (code === 'qc') {
-        // QC data saved via battery header
-        await api.patch(`/api/batteries/${id}`, {
-          battery_notes: `OCV: ${steps.qc.ocv_v || '—'} В, ESR: ${steps.qc.esr_mohm || '—'} мОм. ${steps.qc.qc_notes || ''} ${steps.qc.electrochem_notes || ''}`.trim(),
+        // QC → dedicated battery_qc table. UPSERT via POST (ON CONFLICT
+        // battery_id) is idempotent and safer than PATCH which 404s when
+        // no row exists yet. `toNum` (module-level, above) preserves
+        // legitimate zeros (shorted cell reads 0 V / 0 mΩ) while
+        // mapping empty strings and non-numeric input to null.
+        await api.post('/api/batteries/battery_qc', {
+          battery_id: id,
+          ocv_v: toNum(steps.qc.ocv_v),
+          esr_mohm: toNum(steps.qc.esr_mohm),
+          qc_notes: steps.qc.qc_notes || null,
         })
       }
 
@@ -380,6 +439,17 @@ export function useBatteryState({ batteryId }) {
           steps.electrolyte.electrolyte_id = el.electrolyte_id ?? ''
           steps.electrolyte.electrolyte_total_ul = el.electrolyte_total_ul ?? ''
           steps.electrolyte.electrolyte_notes = el.electrolyte_notes || ''
+        }
+      } catch {}
+
+      // Load QC (dedicated battery_qc table). GET returns null when no
+      // row exists — leave steps.qc defaults in that case.
+      try {
+        const { data: qc } = await api.get(`/api/batteries/battery_qc/${id}`)
+        if (qc) {
+          steps.qc.ocv_v = qc.ocv_v ?? ''
+          steps.qc.esr_mohm = qc.esr_mohm ?? ''
+          steps.qc.qc_notes = qc.qc_notes || ''
         }
       } catch {}
 

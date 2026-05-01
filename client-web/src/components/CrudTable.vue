@@ -492,11 +492,22 @@ defineExpose({ clearSelection, selectedRows, filteredData })
         :style="{ minWidth: col.minWidth || col.width || '80px', width: col.width || undefined }"
       >
         <template #header>
-          <span v-if="col.filterable !== false"
-            class="ct-col-filter-header"
-            :class="{ 'ct-col-filter-active': hasActiveFilter(col.field) }"
-            @click.stop="onHeaderFilter($event, col.field)">{{ col.header }}</span>
-          <span v-else @click.stop="emit('header-click', col.field)" style="cursor:pointer">{{ col.header }}</span>
+          <!-- Page-supplied custom header takes priority — used by
+               constructor-checkbox columns to render a master toggle
+               with reactive count + tooltip explaining the bulk
+               selection click. Slot prop `col` is the column config
+               so the page can read `col.tooltip` etc. if needed. -->
+          <slot :name="`header-${col.field}`" :col="col">
+            <span v-if="col.filterable !== false"
+              class="ct-col-filter-header"
+              :class="{ 'ct-col-filter-active': hasActiveFilter(col.field) }"
+              :title="col.tooltip || null"
+              @click.stop="onHeaderFilter($event, col.field)">{{ col.header }}</span>
+            <span v-else
+              :title="col.tooltip || null"
+              @click.stop="emit('header-click', col.field)"
+              style="cursor:pointer">{{ col.header }}</span>
+          </slot>
         </template>
         <template #body="slotProps">
           <!-- Use named slot if page provides one, otherwise render field value -->

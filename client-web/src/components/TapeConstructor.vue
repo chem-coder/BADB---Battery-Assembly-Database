@@ -12,8 +12,9 @@
  *  - Expose saveAll() for parent SaveIndicator
  *  - Emits 'dirty' when any entity has unsaved changes
  */
-import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, shallowReactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
+import { toastApiError } from '@/utils/errorClassifier'
 import { useTapeState } from '@/composables/useTapeState'
 import { TAPE_STAGES } from '@/config/tapeStages'
 import StageNavigator from '@/components/StageNavigator.vue'
@@ -35,12 +36,26 @@ const props = defineProps({
   entityType: { type: String, default: 'tape' },
 })
 
-const emit = defineEmits(['dirty', 'remove-tape'])
+const emit = defineEmits(['dirty', 'remove-tape', 'update:active-tape-id'])
 
 const toast = useToast()
 
 // ── State ──
-const tapeStates = reactive({})
+// `shallowReactive` (not `reactive`) is critical here: each value in
+// this map is a useTapeState() return — a plain object with REFS as
+// its top-level fields (`currentTapeId`, `currentRecipeLines`,
+// `loading`, `anyDirty`, …). Vue 3's `reactive()` proxy auto-unwraps
+// refs that are direct properties of a reactive object, which would
+// turn `tapeStates[tid].currentTapeId` from `Ref<number>` into `number`.
+// Then `tapeStates[tid].currentTapeId.value` (used by RecipeActualsEditor
+// and others) reads `.value` on a primitive → `undefined`, and the
+// editor falls back to "Сохраните ленту, прежде чем редактировать
+// навески" even on a fully-saved tape. `shallowReactive` keeps
+// top-level keys reactive (we only mutate via `tapeStates[tid] = ts`
+// and `delete tapeStates[tid]`) while leaving the inner objects as-is
+// so the refs stay refs. Nested reactivity (general/steps/meta) is
+// owned by the composable itself, not by this map.
+const tapeStates = shallowReactive({})
 const activeTapeId = ref(null)
 const activeStage = ref(props.stageConfigs[0]?.code || 'general_info')
 const _loadingCount = ref(0)
@@ -73,6 +88,11 @@ const anyDirty = computed(() =>
 )
 
 watch(anyDirty, (val) => emit('dirty', val))
+
+// Forward active-tape changes so the parent can mount tape-specific
+// panels (e.g. RecipeActualsEditor) without reaching into this
+// component's internals.
+watch(activeTapeId, (val) => emit('update:active-tape-id', val), { immediate: true })
 
 // ── Watch selectedTapeIds ──
 watch(
@@ -114,8 +134,8 @@ async function loadTape(id) {
       : useTapeState({ tapeId: id, refs: props.refs, authStore: props.authStore })
     tapeStates[tid] = ts
     await ts.restore()
-  } catch (e) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: `Не удалось загрузить #${id}`, life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, `Не удалось загрузить #${id}`)
     delete tapeStates[tid]
   } finally {
     _loadingCount.value--
@@ -197,8 +217,24 @@ onUnmounted(() => {
   }
 })
 
+// Programmatically switch the active stage + active tab. Used by
+// AssemblyPage's clickable capacity hints to jump straight to the
+// «Электроды» stage when the user follows a "Анод не подключён"
+// hyperlink. Defensive: ignores unknown stage codes / tab ids.
+function setActiveStage(stageCode) {
+  if (!stageCode) return
+  const found = props.stageConfigs.find(s => s.code === stageCode)
+  if (found) activeStage.value = stageCode
+}
+function setActiveTab(id) {
+  const tid = String(id)
+  if (tabOrder.value.includes(tid)) {
+    activeTapeId.value = Number(tid)
+  }
+}
+
 // Expose for parent
-defineExpose({ saveAll, discardAll, tapeStates, anyDirty, undo, redo, canUndo, canRedo })
+defineExpose({ saveAll, discardAll, tapeStates, anyDirty, undo, redo, canUndo, canRedo, setActiveStage, setActiveTab })
 
 // ── Changelog panel ──
 const showChangelog = ref(false)

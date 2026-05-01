@@ -123,12 +123,13 @@ const LABELS_BY_ENTITY = {
   },
   // Coating (нанесение)
   tape_step_coating: {
-    foil_id:          'Фольга',
-    coating_id:       'Метод нанесения',
-    gap_um:           'Зазор, мкм',
-    coat_temp_c:      'Темп. нанесения, °C',
-    coat_time_min:    'Длительность, мин',
-    method_comments:  'Параметры метода',
+    foil_id:           'Фольга',
+    coating_id:        'Метод нанесения',
+    coating_sidedness: 'Сторонность покрытия',
+    gap_um:            'Зазор, мкм',
+    coat_temp_c:       'Темп. нанесения, °C',
+    coat_time_min:     'Длительность, мин',
+    method_comments:   'Параметры метода',
   },
   // Calendering (каландрирование)
   tape_step_calendering: {

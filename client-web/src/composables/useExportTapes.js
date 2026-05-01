@@ -46,6 +46,7 @@ const SECTIONS = [
     { key: 'coating__date', label: 'Дата' },
     { key: 'coating__foil_id', label: 'Фольга' },
     { key: 'coating__coating_id', label: 'Метод нанесения' },
+    { key: 'coating__coating_sidedness', label: 'Сторонность покрытия' },
     { key: 'coating__comments', label: 'Примечания' },
   ]},
   { key: 'drying_tape', label: 'Сушка ленты', color: '#fff3e0', fields: [
@@ -149,6 +150,12 @@ async function fetchFullTapeData(tapeId) {
     if (code === 'coating') {
       row.coating__foil_id = s.foil_id ?? ''
       row.coating__coating_id = s.coating_id ?? ''
+      // Humanise the enum for spreadsheet export — users who open the CSV
+      // in Excel expect Russian, not "one_sided" / "two_sided". Blank stays
+      // blank. Mirrors public/js/3-batteries.js:formatTapeSidednessLabel.
+      row.coating__coating_sidedness =
+        s.coating_sidedness === 'one_sided' ? '1-сторонняя' :
+        s.coating_sidedness === 'two_sided' ? '2-сторонняя' : ''
     }
     if (code === 'calendering') {
       row.calendering__temp_c = s.temp_c ?? ''
