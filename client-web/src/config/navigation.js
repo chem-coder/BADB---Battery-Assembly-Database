@@ -57,6 +57,25 @@ export const workflowSections = [
     formTitles: null,
   },
   {
+    key: 'modules',
+    label: 'Модули',                     // Дали: "Модули | Сборка модулей - coming soon"
+    shortLabel: 'Модули',
+    path: '/modules',
+    apiPath: null,                       // пока нет API
+    idField: null,
+    nameField: null,
+    icon: 'pi pi-th-large',
+    listPage: () => import('@/pages/PlaceholderPage.vue'),
+    formPage: null,                      // ещё нет формы
+    formTitles: null,
+  },
+]
+
+// --- ИСПЫТАНИЯ (Vue-расширение: электрохимические тесты и аналитика) ---
+// Сюда переносится всё, что относится к тестированию готовых ячеек/модулей.
+// Задел: циклирование, GITT, EIS, rate capability, калориметрия и т.д.
+export const testSections = [
+  {
     key: 'cycling',
     label: 'Циклирование',
     shortLabel: 'Циклирование',
@@ -68,19 +87,6 @@ export const workflowSections = [
     icon: 'pi pi-sync',
     listPage: () => import('@/pages/CyclingPage.vue'),
     formPage: null,
-    formTitles: null,
-  },
-  {
-    key: 'modules',
-    label: 'Модули',                     // Дали: "Модули | Сборка модулей - coming soon"
-    shortLabel: 'Модули',
-    path: '/modules',
-    apiPath: null,                       // пока нет API
-    idField: null,
-    nameField: null,
-    icon: 'pi pi-th-large',
-    listPage: () => import('@/pages/PlaceholderPage.vue'),
-    formPage: null,                      // ещё нет формы
     formTitles: null,
   },
 ]

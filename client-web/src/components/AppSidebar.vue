@@ -2,7 +2,7 @@
 import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { workflowSections, referenceSections, adminSections } from '@/config/navigation'
+import { workflowSections, testSections, referenceSections, adminSections } from '@/config/navigation'
 import tvelLogo from '@/assets/logo/TVEL_horizontal_light.svg'
 
 const emit = defineEmits(['navigate'])
@@ -58,6 +58,10 @@ const sections = computed(() => {
     {
       section: 'СОЗДАНИЕ',
       items: workflowSections.map(mapItem),
+    },
+    {
+      section: 'ИСПЫТАНИЯ',
+      items: testSections.map(mapItem),
     },
     {
       section: 'СПРАВОЧНИКИ',
@@ -432,23 +436,22 @@ function logout() {
 .sidebar-logout { color: rgba(255, 255, 255, 0.6); }
 .sidebar-logout:hover { color: #ff6b6b; background: rgba(231, 76, 60, 0.12); }
 
-/* ── Mobile ── */
-@media (max-width: 768px) {
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    z-index: 1000;
-    height: 100vh;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
-  }
-  .sidebar.sidebar--open {
-    transform: translateX(0);
-  }
+/* ── Mobile ──
+   Drawer transform / position-fixed / overlay logic lives in
+   AppLayout.vue under `@media (max-width: 1024px)`. Single owner —
+   AppSidebar only adds the bits that are intrinsically about the
+   sidebar's own internal layout (extra top padding to clear the
+   hamburger overlay). */
+@media (max-width: 1024px) {
   .sidebar-header {
-    padding-top: 3.5rem; /* space for hamburger overlay */
+    padding-top: 3.5rem; /* clear the hamburger button */
+  }
+  /* Slightly tighter spacing on small screens. */
+  .sidebar-item {
+    padding: 0.55rem 0.75rem;
+  }
+  .sidebar-section-title {
+    padding: 0.55rem 1rem 0.25rem;
   }
 }
 </style>
