@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "concurrently \"nodemon server.js\" \"npm run dev --prefix client-web\"",
     "dev:bypass": "concurrently \"AUTH_BYPASS=true BYPASS_LOGIN=dsmenyaylov nodemon server.js\" \"npm run dev --prefix client-web\"",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "backup": "node scripts/backup.js",
     "backup:plain": "node scripts/backup.js --format=plain",
     "backup:list": "node scripts/backup.js --list",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "concurrently": "^9.0.0",
-    "nodemon": "^3.0.0"
+    "nodemon": "^3.0.0",
+    "vitest": "^2.1.8"
   }
 }
