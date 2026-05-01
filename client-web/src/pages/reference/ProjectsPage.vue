@@ -7,9 +7,11 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
+import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
 import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
+import EntityMeta from '@/components/EntityMeta.vue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
@@ -33,8 +35,8 @@ async function loadProjects() {
   try {
     const { data } = await api.get('/api/projects')
     projects.value = data
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось загрузить проекты', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить проекты')
   } finally {
     loading.value = false
   }
@@ -58,12 +60,13 @@ onMounted(() => { loadProjects(); loadUsers(); loadDepartments() })
 
 // ── Column config ──────────────────────────────────────────────────────
 const columns = [
-  { field: 'name',                header: 'Название',     minWidth: '120px' },
-  { field: 'description',         header: 'Описание',     minWidth: '150px', sortable: false },
-  { field: 'confidentiality_level', header: 'Доступ',     minWidth: '80px',  width: '150px', filterable: true },
-  { field: 'start_date',          header: 'Начало',       minWidth: '80px',  width: '120px' },
-  { field: 'due_date',            header: 'Окончание',    minWidth: '80px',  width: '120px' },
-  { field: 'status',              header: 'Статус',       minWidth: '80px',  width: '130px' },
+  { field: 'name',                  header: 'Название',     minWidth: '120px' },
+  { field: 'description',           header: 'Описание',     minWidth: '150px', sortable: false },
+  { field: 'confidentiality_level', header: 'Доступ',       minWidth: '80px',  width: '150px', filterable: true },
+  { field: 'start_date',            header: 'Начало',       minWidth: '80px',  width: '120px' },
+  { field: 'due_date',              header: 'Окончание',    minWidth: '80px',  width: '120px' },
+  { field: 'status',                header: 'Статус',       minWidth: '80px',  width: '130px' },
+  { field: 'created_by_name',       header: 'Оператор',     minWidth: '90px',  width: '130px' },
 ]
 
 // ── Save indicator (delete flow) ──────────────────────────────────────
@@ -87,8 +90,8 @@ async function confirmSave() {
     saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
     crudTable.value?.clearSelection()
     await loadProjects()
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось удалить', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось удалить')
   }
 }
 
@@ -104,10 +107,17 @@ onUnmounted(() => clearTimeout(saveTimer))
 const formVisible = ref(false)
 const mode = ref(null)
 const currentId = ref(null)
+// Full row of the entity being edited — fed to EntityMeta for the
+// "Создано: ФИО, дата" + "Изменено: ФИО, дата" read-only audit trail.
+const currentItem = ref(null)
 
+// `created_by` is NOT part of the form — backend forces it from the
+// authenticated user (routes/projects.js:159, "SECURITY: created_by
+// is always the current authenticated user"). The existing creator is
+// shown read-only via EntityMeta when available. `lead_id` (project
+// lead — different concept) IS user-pickable via its own Select below.
 const form = ref({
   name: '',
-  created_by: '',
   lead_id: '',
   description: '',
   start_date: '',
@@ -119,12 +129,13 @@ const form = ref({
 
 function resetForm() {
   form.value = {
-    name: '', created_by: '', lead_id: '', description: '',
+    name: '', lead_id: '', description: '',
     start_date: '', due_date: '', status: 'active',
     confidentiality_level: 'public', department_id: null,
   }
   mode.value = null
   currentId.value = null
+  currentItem.value = null
   formVisible.value = false
   // Clear grant form state so next open starts clean
   resetGrantForm()
@@ -142,9 +153,9 @@ function openCreate() {
 function openEdit(proj) {
   mode.value = 'edit'
   currentId.value = proj.project_id
+  currentItem.value = proj
   form.value = {
     name: proj.name || '',
-    created_by: proj.created_by || '',
     lead_id: proj.lead_id || '',
     description: proj.description || '',
     start_date: proj.start_date ? proj.start_date.slice(0, 10) : '',
@@ -185,7 +196,7 @@ async function saveProject() {
     resetForm()
     await loadProjects()
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка сохранения', life: 3000 })
+    toastApiError(toast, err, 'Ошибка сохранения')
   }
 }
 
@@ -335,12 +346,7 @@ async function grantAccess() {
       life: 2500,
     })
   } catch (err) {
-    toast.add({
-      severity: 'error',
-      summary: 'Ошибка',
-      detail: err.response?.data?.error || 'Не удалось выдать доступ',
-      life: 3000,
-    })
+    toastApiError(toast, err, 'Не удалось выдать доступ')
   }
 }
 
@@ -359,8 +365,8 @@ async function revokeAccess(entry) {
     await api.delete(url)
     await loadAccess(currentId.value)
     toast.add({ severity: 'success', summary: 'Доступ отозван', life: 2000 })
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось отозвать доступ')
   }
 }
 
@@ -402,12 +408,7 @@ async function copyAccessFromProject() {
       life: 3000,
     })
   } catch (err) {
-    toast.add({
-      severity: 'error',
-      summary: 'Ошибка',
-      detail: err.response?.data?.error || 'Не удалось скопировать',
-      life: 3000,
-    })
+    toastApiError(toast, err, 'Не удалось скопировать')
   } finally {
     copyBusy.value = false
   }
@@ -489,9 +490,6 @@ async function copyAccessFromProject() {
       <form class="form-grid" @submit.prevent="saveProject">
         <label>Название</label>
         <InputText v-model="form.name" placeholder="Название проекта" class="w-full" />
-
-        <label>Кто добавил</label>
-        <Select v-model="form.created_by" :options="activeUsers" optionLabel="name" optionValue="user_id" placeholder="— выбрать —" class="w-full" />
 
         <label>Руководитель</label>
         <Select v-model="form.lead_id" :options="activeUsers" optionLabel="name" optionValue="user_id" placeholder="— выбрать —" class="w-full" />
@@ -742,6 +740,14 @@ async function copyAccessFromProject() {
           <div v-if="!accessList.length && !accessLoading" class="access-empty">Нет явных допусков</div>
         </div>
       </div>
+
+      <EntityMeta
+        v-if="mode === 'edit' && currentItem"
+        :createdByName="currentItem.created_by_name"
+        :createdAt="currentItem.created_at"
+        :updatedByName="currentItem.updated_by_name"
+        :updatedAt="currentItem.updated_at"
+      />
 
       <template #footer>
         <Button label="Отмена" severity="secondary" outlined @click="resetForm" />

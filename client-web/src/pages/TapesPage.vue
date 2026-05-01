@@ -6,25 +6,29 @@
  * The old TapeFormPage is replaced by the inline Constructor.
  * Table has a checkbox column "В конструктор" to add tapes to the Constructor zone.
  */
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
+import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
 import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 // StatusBadge removed — status column replaced by project/operator
 import TapeConstructor from '@/components/TapeConstructor.vue'
+import RecipeActualsEditor from '@/components/RecipeActualsEditor.vue'
 import Checkbox from 'primevue/checkbox'
 import { useExportTapes } from '@/composables/useExportTapes'
 // Button removed — undo/redo now in TapeConstructor
 
 const router = useRouter()
+const route = useRoute()
 const toast = useToast()
 const authStore = useAuthStore()
 const crudTable = ref(null)
 const constructorRef = ref(null)
+const recipeActualsAnchor = ref(null)
 const { exportTapes: _doExport } = useExportTapes()
 
 // ── Data ───────────────────────────────────────────────────────────────
@@ -36,21 +40,61 @@ async function loadTapes() {
   try {
     const { data } = await api.get('/api/tapes')
     tapes.value = data
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось загрузить ленты', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить ленты')
   } finally {
     loading.value = false
   }
 }
 
-onMounted(() => {
-  loadTapes()
-  loadRefData()
+onMounted(async () => {
+  await Promise.allSettled([loadTapes(), loadRefData()])
+  // Deep-link: ?select=ID[&stage=CODE] auto-adds the tape to the
+  // constructor and (optionally) jumps to a specific stage. Used by
+  // AssemblyPage's clickable capacity hints — e.g. when the user
+  // clicks "Открыть катодную ленту" we land here with the tape
+  // already in the constructor and the «Фактические навески рецепта»
+  // panel ready.
+  const selectId = Number(route.query?.select)
+  if (Number.isInteger(selectId) && selectId > 0) {
+    if (!constructorIds.value.includes(selectId)) {
+      constructorIds.value.push(selectId)
+    }
+    const targetStage = String(route.query?.stage || '').trim()
+    // Wait two ticks so the constructor has time to instantiate the
+    // tape state + render the StageNavigator. We do this even when
+    // there's no targetStage so that setActiveTab + the scroll below
+    // work against a fully-mounted constructor.
+    await nextTick()
+    await nextTick()
+    constructorRef.value?.setActiveTab?.(selectId)
+    if (targetStage) {
+      // Note: 'recipe_actual' is not a TAPE_STAGES code (recipe-actuals
+      // editing lives in the separate <RecipeActualsEditor> below the
+      // constructor). setActiveStage silently ignores unknown codes,
+      // and we scroll the actuals editor into view below.
+      constructorRef.value?.setActiveStage?.(targetStage)
+    }
+    // Scroll the recipe-actuals editor into view if the deep-link
+    // came from a "Фактические навески" hint. The editor is below the
+    // constructor — without this the user would need to scroll
+    // manually to find it.
+    if (targetStage === 'recipe_actual') {
+      recipeActualsAnchor.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    }
+    // Strip the query so a manual reload doesn't re-trigger.
+    router.replace({ path: route.path, query: {} })
+  }
 })
 
 // ── Column config ──────────────────────────────────────────────────────
+// `_constructor` column header is rendered via the
+// `#header-_constructor` slot (master toggle button with reactive
+// count) — the `header` text here is just a fallback for accessibility
+// tools that read column metadata. `tooltip` is unused for this column
+// since the slot supplies its own tooltip.
 const columns = [
-  { field: '_constructor',  header: '🔧',         minWidth: '45px', width: '45px', sortable: false, filterable: false },
+  { field: '_constructor',  header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false },
   { field: 'name',          header: 'Название',   minWidth: '100px' },
   { field: 'project_name',  header: 'Проект',     minWidth: '80px',  width: '115px' },
   { field: 'role',          header: 'Тип',        minWidth: '80px',  width: '115px' },
@@ -74,8 +118,8 @@ async function createNewTape() {
       constructorIds.value.push(created.tape_id)
     }
     toast.add({ severity: 'success', summary: 'Создано', detail: `Лента #${created.tape_id}`, life: 2000 })
-  } catch (e) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: e.response?.data?.error || 'Не удалось создать ленту', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось создать ленту')
   }
 }
 
@@ -103,8 +147,8 @@ async function confirmSave() {
     saveState.value = 'saved'
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось сохранить', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось сохранить')
   }
 }
 
@@ -121,6 +165,17 @@ onUnmounted(() => clearTimeout(saveTimer))
 // ── Constructor: selected tapes ───────────────────────────────────────
 const constructorIds = ref([])
 const constructorDirty = ref(false)
+
+// Active tape in the constructor — forwarded via emit from TapeConstructor
+// so TapesPage can mount the per-tape RecipeActualsEditor without reaching
+// into the constructor's internals. Null when no tape is being edited.
+const activeTapeId = ref(null)
+const activeTapeState = computed(() => {
+  const tid = activeTapeId.value
+  if (tid == null) return null
+  const states = constructorRef.value?.tapeStates
+  return states?.[String(tid)] || null
+})
 
 function toggleConstructor(tapeId) {
   const idx = constructorIds.value.indexOf(tapeId)
@@ -232,14 +287,28 @@ function formatDate(dt) {
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
       @row-click="(data) => toggleConstructor(data.tape_id)"
     >
-      <!-- Constructor checkbox column -->
+      <!-- Constructor column — clickable header text + per-row
+           checkbox. Header click toggles select-all-on-page. Both
+           header and body cells are centered via `.ct-cons-cell`. -->
+      <template #header-_constructor>
+        <button
+          type="button"
+          class="ct-cons-header"
+          :class="{ 'is-active': constructorIds.length > 0 }"
+          @click.stop="toggleAllConstructor"
+        >
+          Конструктор<span v-if="constructorIds.length > 0" class="ct-cons-count">({{ constructorIds.length }})</span>
+        </button>
+      </template>
       <template #col-_constructor="{ data }">
-        <Checkbox
-          :modelValue="isInConstructor(data.tape_id)"
-          @update:modelValue="toggleConstructor(data.tape_id)"
-          :binary="true"
-          v-tooltip.right="'В конструктор'"
-        />
+        <div class="ct-cons-cell">
+          <Checkbox
+            :modelValue="isInConstructor(data.tape_id)"
+            @update:modelValue="toggleConstructor(data.tape_id)"
+            :binary="true"
+            v-tooltip.right="'Добавить/убрать из конструктора'"
+          />
+        </div>
       </template>
 
       <!-- Custom cell: Название (semibold per DS "Метка поля" 13px 600) -->
@@ -296,7 +365,19 @@ function formatDate(dt) {
       :authStore="authStore"
       @dirty="constructorDirty = $event"
       @remove-tape="toggleConstructor"
+      @update:active-tape-id="activeTapeId = $event"
     />
+
+    <!-- ── Recipe actuals editor (for the active tape in the constructor) ── -->
+    <!-- Always rendered; the editor itself handles the "no tape selected"
+         state with an inline notice, so the user always sees where it would
+         appear rather than the section jumping in and out.
+         `recipeActualsAnchor` is the smooth-scroll target used by the
+         AssemblyPage capacity-hint deep-link (/tapes?select=ID) so the
+         user lands directly on the masses table they came here to fill. -->
+    <div ref="recipeActualsAnchor">
+      <RecipeActualsEditor :tapeState="activeTapeState" />
+    </div>
 
   </div>
 </template>

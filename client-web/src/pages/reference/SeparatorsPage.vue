@@ -7,9 +7,11 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
+import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
 import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
+import EntityMeta from '@/components/EntityMeta.vue'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
@@ -21,7 +23,6 @@ const crudTable = ref(null)
 
 // ── Data ───────────────────────────────────────────────────────────────
 const separators = ref([])
-const activeUsers = ref([])
 const structures = ref([])
 const loading = ref(false)
 
@@ -30,18 +31,11 @@ async function loadSeparators() {
   try {
     const { data } = await api.get('/api/separators')
     separators.value = data
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось загрузить сепараторы', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить сепараторы')
   } finally {
     loading.value = false
   }
-}
-
-async function loadUsers() {
-  try {
-    const { data } = await api.get('/api/users')
-    activeUsers.value = data.filter(u => u.active)
-  } catch {}
 }
 
 async function loadStructures() {
@@ -51,16 +45,17 @@ async function loadStructures() {
   } catch {}
 }
 
-onMounted(() => { loadSeparators(); loadUsers(); loadStructures() })
+onMounted(() => { loadSeparators(); loadStructures() })
 
 // ── Column config ──────────────────────────────────────────────────────
 const columns = [
-  { field: 'name',         header: 'Название',     minWidth: '120px' },
-  { field: 'supplier',     header: 'Поставщик',    minWidth: '90px',  width: '130px' },
-  { field: 'brand',        header: 'Марка',         minWidth: '70px',  width: '110px' },
-  { field: 'thickness_um', header: 'Толщина, мкм',  minWidth: '80px',  width: '120px' },
-  { field: 'porosity',     header: 'Пористость, %', minWidth: '80px',  width: '120px' },
-  { field: 'status',       header: 'Статус',        minWidth: '80px',  width: '115px' },
+  { field: 'name',            header: 'Название',     minWidth: '120px' },
+  { field: 'supplier',        header: 'Поставщик',    minWidth: '90px',  width: '130px' },
+  { field: 'brand',           header: 'Марка',         minWidth: '70px',  width: '110px' },
+  { field: 'thickness_um',    header: 'Толщина, мкм',  minWidth: '80px',  width: '120px' },
+  { field: 'porosity',        header: 'Пористость, %', minWidth: '80px',  width: '120px' },
+  { field: 'status',          header: 'Статус',        minWidth: '80px',  width: '115px' },
+  { field: 'created_by_name', header: 'Оператор',      minWidth: '90px',  width: '130px' },
 ]
 
 // ── Save indicator (delete flow) ──────────────────────────────────────
@@ -84,8 +79,8 @@ async function confirmSave() {
     saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
     crudTable.value?.clearSelection()
     await loadSeparators()
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось удалить', life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось удалить')
   }
 }
 
@@ -101,10 +96,15 @@ onUnmounted(() => clearTimeout(saveTimer))
 const formVisible = ref(false)
 const mode = ref(null)
 const currentId = ref(null)
+// Full row of the entity being edited — fed to EntityMeta for the
+// "Создано: ФИО, дата" + "Изменено: ФИО, дата" read-only audit trail.
+const currentItem = ref(null)
 
+// `created_by` is NOT part of the form — backend forces it from the
+// authenticated user (req.user.userId, see routes/separators.js). The
+// existing creator is shown read-only via EntityMeta when available.
 const form = ref({
   name: '',
-  created_by: '',
   supplier: '',
   brand: '',
   batch: '',
@@ -120,12 +120,13 @@ const form = ref({
 
 function resetForm() {
   form.value = {
-    name: '', created_by: '', supplier: '', brand: '', batch: '', structure_id: '',
+    name: '', supplier: '', brand: '', batch: '', structure_id: '',
     air_perm: '', air_perm_units: '', thickness_um: '', porosity: '',
     comments: '', status: 'available', depleted_at: '',
   }
   mode.value = null
   currentId.value = null
+  currentItem.value = null
   formVisible.value = false
 }
 
@@ -138,9 +139,9 @@ function openCreate() {
 function openEdit(sep) {
   mode.value = 'edit'
   currentId.value = sep.sep_id
+  currentItem.value = sep
   form.value = {
     name: sep.name || '',
-    created_by: sep.created_by || '',
     supplier: sep.supplier || '',
     brand: sep.brand || '',
     batch: sep.batch || '',
@@ -181,7 +182,7 @@ async function saveSeparator() {
     resetForm()
     await loadSeparators()
   } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка сохранения', life: 3000 })
+    toastApiError(toast, err, 'Ошибка сохранения')
   }
 }
 
@@ -254,9 +255,6 @@ function statusLabel(status) {
         <label>Название</label>
         <InputText v-model="form.name" placeholder="Название сепаратора" class="w-full" />
 
-        <label>Кто добавил</label>
-        <Select v-model="form.created_by" :options="activeUsers" optionLabel="name" optionValue="user_id" placeholder="— выбрать —" class="w-full" />
-
         <label>Поставщик</label>
         <InputText v-model="form.supplier" placeholder="Celgard" class="w-full" />
 
@@ -298,6 +296,14 @@ function statusLabel(status) {
         <label>Комментарии</label>
         <Textarea v-model="form.comments" rows="3" placeholder="Замечания, методики" class="w-full" />
       </form>
+
+      <EntityMeta
+        v-if="mode === 'edit' && currentItem"
+        :createdByName="currentItem.created_by_name"
+        :createdAt="currentItem.created_at"
+        :updatedByName="currentItem.updated_by_name"
+        :updatedAt="currentItem.updated_at"
+      />
 
       <template #footer>
         <Button label="Отмена" severity="secondary" outlined @click="resetForm" />
