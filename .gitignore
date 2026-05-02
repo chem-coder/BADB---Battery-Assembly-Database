@@ -9,7 +9,12 @@ node_modules/
 Thumbs.db
 dist/
 build/
-.claude/
+# Claude Code: ignore runtime state, but keep source files (rules, commands, skills, agents)
+.claude/*
+!.claude/rules/
+!.claude/commands/
+!.claude/skills/
+!.claude/agents/
 .local/
 mempalace.yaml
 mempalace.yaml.old

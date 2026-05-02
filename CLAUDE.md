@@ -5,6 +5,20 @@ LIMS/ELN-lite for battery assembly R&D lab. Two developers: Dima (infrastructure
 **Main repo: `chem-coder/1_BADB---Battery-Assembly-Database` (Dalia's) — this is where all work lands.**
 Dima contributes via feature branches → Pull Requests into Dalia's main.
 
+## Hard invariants — recurring lessons
+
+These are mistakes Claude has made more than once on this codebase. Read every session.
+
+1. **Node.js 22 LTS** in CI workflows. Node 20 LTS reached EOL on 2026-04-30 — never use `node-version: '20'` in `.github/workflows/`.
+2. **`package-lock.json` conflicts** are resolved by regeneration, not manual merge. Run `rm package-lock.json && npm install` after `git rebase`, then `git add package-lock.json && git rebase --continue`.
+3. **Verify imports before `Write`.** Before creating a file that imports `./foo`, grep for `foo` to confirm it exists. "Module not found" errors after PR push cost more than the 2-second grep.
+4. **PR scope check before `gh pr create`.** Ask: "Is this small enough to be one commit in an existing open PR?" If yes, append a commit; do not open a new PR. Feedback received 2026-04-30: «не плодить PR'ы когда коммит достаточен».
+5. **Path-scoped rules apply.** When working in:
+   - `migrations/` — see `.claude/rules/migrations.md` (forward-only, naming, append-only invariants)
+   - `Документация ЕСПД/` — see `.claude/rules/techdoc.md` (Russian, ГОСТ 19, no external service mentions, version journal)
+   - These rules auto-load when files in the matching path are read; you do not need to read them upfront.
+6. **Self-review before push.** Run `/self-review` slash command (in `.claude/commands/self-review.md`) — spawns an isolated subagent that reads the diff and looks for missed migrations, broken imports, version drift in techdoc, dead test fixtures.
+
 ## Stack
 
 - **Server:** Node.js + Express 5 (modular), PostgreSQL 16 (badb_app_v1, 42 tables — Dalia's production DB)
@@ -195,6 +209,10 @@ Goes into PageHeader `#actions` slot. Two states: unsaved (ochre) / saved (green
 | `CLAUDE.md` | AI instructions | OK to update |
 | `README.md` | Project readme | OK to update |
 | `package.json` | Dependencies | OK to update |
+| `.claude/rules/` | Path-scoped Claude Code rules (markdown source) | OK to update |
+| `.claude/commands/` | Custom Claude Code slash commands (markdown source) | OK to update |
+| `.claude/skills/` | Custom Claude Code skills (markdown source) | OK to update |
+| `.claude/agents/` | Custom Claude Code subagent definitions (markdown source) | OK to update |
 
 ### FORBIDDEN in repo (blacklist) — NEVER commit these
 
@@ -208,13 +226,13 @@ Goes into PageHeader `#actions` slot. Two states: unsaved (ochre) / saved (green
 | `dist/`, `build/` (output) | Build artifacts |
 | `~$*.xl*`, `*.tmp` | Office temp files |
 | `.DS_Store`, `Thumbs.db` | OS metadata |
-| `.claude/` | Claude Code local state |
+| `.claude/cache/`, `.claude/projects/`, `.claude/sessions/`, `.claude/debug/`, `.claude/telemetry/`, `.claude/todos/`, `.claude/history.jsonl`, `.claude/settings.local.json` | Claude Code runtime state (per-user, ephemeral) — note: `.claude/rules/`, `.claude/commands/`, `.claude/skills/`, `.claude/agents/` ARE source and ARE committed |
 
 ### Pre-commit check script
 
 ```bash
 FORBIDDEN=$(git diff --cached --name-only 2>/dev/null | grep -E \
-  "obsidian_badb/|badb-vault-master/|docs/|local/|node_modules/|\.env|\.log$|dist/|build/|~\\$|\.tmp$|\.DS_Store|Thumbs\.db|\.claude/")
+  "obsidian_badb/|badb-vault-master/|docs/|local/|node_modules/|\.env|\.log$|dist/|build/|~\\$|\.tmp$|\.DS_Store|Thumbs\.db|\.claude/(cache|projects|sessions|debug|telemetry|todos|backups|hooks|ide|plugins|plans|session-env|shell-snapshots|settings\\.local\\.json|history\\.jsonl)")
 
 if [ -n "$FORBIDDEN" ]; then
   echo "BLOCKED: forbidden files in commit:"
