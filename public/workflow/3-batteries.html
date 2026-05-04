@@ -12,14 +12,11 @@
       Locked assembly inputs (electrodes saved)
       ========================================= */
 
-      #battery_created_by:disabled,
-      #battery_form_factor:disabled,
-      #coin_cell_mode:disabled,
-      #coin_size_code:disabled,
-      #cathode_tape_id:disabled,
-      #cathode_cut_batch_id:disabled,
-      #anode_tape_id:disabled,
-      #anode_cut_batch_id:disabled {
+      body[data-page="BAL"] input:not([type="checkbox"]):not([type="radio"]):disabled,
+      body[data-page="BAL"] select:disabled,
+      body[data-page="BAL"] textarea:disabled,
+      body[data-page="BAL"] input:not([type="checkbox"]):not([type="radio"])[readonly],
+      body[data-page="BAL"] textarea[readonly] {
 
         background-color: #f3f3f3;
         color: #666;
@@ -28,14 +25,11 @@
 
       }
 
-      #battery_created_by:disabled:hover,
-      #battery_form_factor:disabled:hover,
-      #coin_cell_mode:disabled:hover,
-      #coin_size_code:disabled:hover,
-      #cathode_tape_id:disabled:hover,
-      #cathode_cut_batch_id:disabled:hover,
-      #anode_tape_id:disabled:hover,
-      #anode_cut_batch_id:disabled:hover {
+      body[data-page="BAL"] input:not([type="checkbox"]):not([type="radio"]):disabled:hover,
+      body[data-page="BAL"] select:disabled:hover,
+      body[data-page="BAL"] textarea:disabled:hover,
+      body[data-page="BAL"] input:not([type="checkbox"]):not([type="radio"])[readonly]:hover,
+      body[data-page="BAL"] textarea[readonly]:hover {
 
         background-color: #f3f3f3;
 
@@ -207,7 +201,7 @@
         </div>
 
         <div id="assembly_locked_banner" class="assembly_locked_banner">
-          Электродная конфигурация сохранена — параметры батареи зафиксированы
+          Электродная конфигурация сохранена — параметры аккумулятора зафиксированы
         </div>
 
         <fieldset id="battery_meta" data-table="batteries">
@@ -332,10 +326,12 @@
                 <legend>Источник электродов <span id="dirty-electrode-sources" class="dirty_marker">Не сохранено</span></legend>
                 <div id="battery_electrode_sidedness_display" style="margin-bottom:8px; color:#555;"></div>
 
-                <label for="battery_project_filter_id">Фильтр по проекту партии</label>
-                <select id="battery_project_filter_id">
-                  <option value="">— все проекты —</option>
-                </select><br>
+                <div id="battery_project_filter_row">
+                  <label for="battery_project_filter_id">Фильтр по проекту партии</label>
+                  <select id="battery_project_filter_id">
+                    <option value="">— все проекты —</option>
+                  </select><br>
+                </div>
 
                 <div class="electrode_source" id="cathode_source_block" data-electrode-role="cathode">
                   <label for="cathode_tape_id">Катодная лента</label>
@@ -398,10 +394,10 @@
               <fieldset id="battery_stack_builder" data-stack-locked="false">
                 <legend>Формирование стека <span id="dirty-battery-stack" class="dirty_marker">Не сохранено</span></legend>
 
-                <p>Выберите электроды для данного элемента.</p>
+                <p id="battery_stack_intro">Выберите электроды для данного элемента.</p>
 
                 <div id="battery_stack_target_counts" hidden>
-                  <p>Укажите количество электродов в стеке:</p>
+                  <p id="battery_stack_target_intro">Укажите количество электродов в стеке:</p>
 
                   <label for="stack_target_cathodes">Катодов</label>
                   <input

@@ -487,33 +487,21 @@ function isBatteryConfigSectionComplete() {
 }
 
 function isBatterySourcesSectionComplete() {
-  const formFactor = state.meta.form_factor;
-  const coinMode = state.config.coin?.coin_cell_mode || null;
-  const halfCellType = state.config.coin?.half_cell_type || null;
   const sources = state.electrodeSources || {};
+  const requiredRoles = getRequiredBatterySourceRolesForContext();
+  const hasBatteryProject = normalizeProjectIds(state.meta.project_ids).length > 0;
+  const roleComplete = {
+    cathode: Boolean(sources.cathode_tape_id) && Boolean(sources.cathode_cut_batch_id),
+    anode: Boolean(sources.anode_tape_id) && Boolean(sources.anode_cut_batch_id)
+  };
 
-  const hasCathodeSource =
-    Boolean(sources.cathode_tape_id) && Boolean(sources.cathode_cut_batch_id);
-  const hasAnodeSource =
-    Boolean(sources.anode_tape_id) && Boolean(sources.anode_cut_batch_id);
+  if (requiredRoles.length === 0) return false;
 
-  if (formFactor === 'coin' && coinMode === 'half_cell') {
-    const hasBatteryProject = normalizeProjectIds(state.meta.project_ids).length > 0;
-
-    if (halfCellType === 'cathode_vs_li') {
-      return hasCathodeSource && !hasAnodeSource && hasBatteryProject;
-    }
-
-    if (halfCellType === 'anode_vs_li') {
-      return hasAnodeSource && !hasCathodeSource && hasBatteryProject;
-    }
-
-    return false;
-  }
-
-  const hasRequiredSources = hasCathodeSource && hasAnodeSource;
-
-  return hasRequiredSources && normalizeProjectIds(state.meta.project_ids).length > 0;
+  return hasBatteryProject &&
+    requiredRoles.every(role => roleComplete[role]) &&
+    Object.keys(roleComplete)
+      .filter(role => !requiredRoles.includes(role))
+      .every(role => !roleComplete[role]);
 }
 
 function isBatteryStackSectionComplete() {
@@ -610,6 +598,32 @@ function isBatterySourceSelectionCompleteForStack() {
   }
 
   return hasCathodeSource && hasAnodeSource;
+}
+
+function getBatterySourceRoleContext() {
+  return {
+    formFactor: document.getElementById('battery_form_factor')?.value || state.meta.form_factor || null,
+    coinMode: document.getElementById('coin_cell_mode')?.value || state.config.coin?.coin_cell_mode || null,
+    halfCellType: document.getElementById('coin_half_cell_type')?.value || state.config.coin?.half_cell_type || null
+  };
+}
+
+function getRequiredBatterySourceRolesForContext(context = getBatterySourceRoleContext()) {
+  if (context.formFactor === 'coin' && context.coinMode === 'half_cell') {
+    if (context.halfCellType === 'cathode_vs_li') return ['cathode'];
+    if (context.halfCellType === 'anode_vs_li') return ['anode'];
+    return [];
+  }
+
+  if (context.formFactor === 'coin' && context.coinMode === 'full_cell') {
+    return ['cathode', 'anode'];
+  }
+
+  if (context.formFactor === 'pouch' || context.formFactor === 'cylindrical') {
+    return ['cathode', 'anode'];
+  }
+
+  return [];
 }
 
 function deriveBatterySectionLifecycleState() {
@@ -1251,6 +1265,7 @@ function renderStackUiState() {
   const targets = getStackTargetCounts();
 
   renderStackTargetCountControls();
+  renderBatteryFinalizedUiCleanup(isBatteryIdentityLocked());
 
   if (stackBuilder) {
     stackBuilder.dataset.stackLocked = state.stack.readOnly ? 'true' : 'false';
@@ -1469,7 +1484,11 @@ function getBatterySectionSaveButtonId(sectionKey) {
 }
 
 function isBatteryIdentitySection(sectionKey) {
-  return sectionKey === 'battery_config' || sectionKey === 'electrode_sources';
+  return (
+    sectionKey === 'battery_meta' ||
+    sectionKey === 'battery_config' ||
+    sectionKey === 'electrode_sources'
+  );
 }
 
 function isBatteryIdentityLocked() {
@@ -1586,13 +1605,37 @@ function renderBatterySectionLifecycle() {
   });
 
   const banner = document.getElementById('assembly_locked_banner');
+  const identityLocked = isBatteryIdentityLocked();
 
   if (banner) {
     banner.classList.toggle(
       'visible',
-      isBatteryIdentityLocked()
+      identityLocked
     );
   }
+
+  renderBatteryFinalizedUiCleanup(identityLocked);
+}
+
+function renderBatteryFinalizedUiCleanup(identityLocked) {
+  const projectFilterRow = document.getElementById('battery_project_filter_row');
+  const batterySaveButton = document.getElementById('battery_create_btn');
+  const stackIntro = document.getElementById('battery_stack_intro');
+  const stackTargetIntro = document.getElementById('battery_stack_target_intro');
+  const stackTargetHint = document.getElementById('battery_stack_target_hint');
+  const stackSaveButton = document.getElementById('battery_stack_save_btn');
+  const stackSaved = Boolean(
+    state.ui.sectionState?.battery_stack?.isSaved ||
+    state.stack.readOnly ||
+    state.stack.hideSelectionBlocks
+  );
+
+  if (projectFilterRow) projectFilterRow.hidden = identityLocked;
+  if (batterySaveButton) batterySaveButton.hidden = identityLocked;
+  if (stackIntro) stackIntro.hidden = stackSaved;
+  if (stackTargetIntro) stackTargetIntro.hidden = stackSaved;
+  if (stackTargetHint) stackTargetHint.hidden = stackSaved;
+  if (stackSaveButton) stackSaveButton.hidden = stackSaved;
 }
 
 function renderWorkflowProgressionState() {
@@ -4236,11 +4279,19 @@ function renderPouchCaseSizeUi() {
 }
 
 function renderHalfCellTypeUi() {
-  const halfCellType = state.config.coin?.half_cell_type || null;
+  const context = getBatterySourceRoleContext();
+  const requiredRoles = getRequiredBatterySourceRolesForContext(context);
   const cathodeBlock = document.getElementById('cathode_source_block');
   const anodeBlock = document.getElementById('anode_source_block');
   const liFoilBlock = document.getElementById('li-foil_block');
   const shouldHideSourceBlocks = isBatteryIdentityLocked();
+  const hasResolvedHalfCellType =
+    context.formFactor === 'coin' &&
+    context.coinMode === 'half_cell' &&
+    (
+      context.halfCellType === 'cathode_vs_li' ||
+      context.halfCellType === 'anode_vs_li'
+    );
 
   if (cathodeBlock) cathodeBlock.hidden = false;
   if (anodeBlock) anodeBlock.hidden = false;
@@ -4252,15 +4303,9 @@ function renderHalfCellTypeUi() {
     return;
   }
 
-  if (halfCellType === 'cathode_vs_li') {
-    if (anodeBlock) anodeBlock.hidden = true;
-    if (liFoilBlock) liFoilBlock.hidden = false;
-  }
-
-  if (halfCellType === 'anode_vs_li') {
-    if (cathodeBlock) cathodeBlock.hidden = true;
-    if (liFoilBlock) liFoilBlock.hidden = false;
-  }
+  if (cathodeBlock) cathodeBlock.hidden = !requiredRoles.includes('cathode');
+  if (anodeBlock) anodeBlock.hidden = !requiredRoles.includes('anode');
+  if (liFoilBlock) liFoilBlock.hidden = !hasResolvedHalfCellType;
 }
 
 function trimStackSelectionForCurrentMode() {
@@ -4585,6 +4630,8 @@ async function handleBatteryCreateOrUpdate() {
 function syncAndRenderFormFactorChange() {
   syncMetaStateFromDom();
   renderFormFactorSections();
+  renderCoinCellModeUi();
+  renderHalfCellTypeUi();
 }
 
 function handleFormFactorChange() {
@@ -4596,6 +4643,7 @@ function handleFormFactorChange() {
 function syncAndRenderCoinCellModeChange() {
   syncConfigStateFromDom();
   renderCoinCellModeUi();
+  renderHalfCellTypeUi();
 }
 
 function handleCoinCellModeChange() {

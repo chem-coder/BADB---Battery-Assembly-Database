@@ -79,6 +79,8 @@ function computeElectrodeDerivedValues(electrode, capacityContext) {
   const activeFractionTheoretical = toFiniteNumberOrNull(capacityContext?.active_fraction_theoretical);
   const activeFractionActual = toFiniteNumberOrNull(capacityContext?.active_fraction_actual);
   const specificCapacity = toFiniteNumberOrNull(capacityContext?.specific_capacity_mAh_g);
+  const electrodeAreaCm2 = toFiniteNumberOrNull(capacityContext?.electrode_area_cm2);
+  const sideCount = toFiniteNumberOrNull(capacityContext?.side_count);
 
   const coatingMass =
     Number.isFinite(electrodeMass) && Number.isFinite(averageFoilMass)
@@ -107,12 +109,30 @@ function computeElectrodeDerivedValues(electrode, capacityContext) {
       ? activeMaterialMassActual * specificCapacity
       : null;
 
+  const arealCapacityTheoretical =
+    Number.isFinite(capacityTheoretical) && Number.isFinite(electrodeAreaCm2) && electrodeAreaCm2 > 0
+      ? capacityTheoretical / electrodeAreaCm2
+      : null;
+
+  const arealCapacityActual =
+    Number.isFinite(capacityActual) && Number.isFinite(electrodeAreaCm2) && electrodeAreaCm2 > 0
+      ? capacityActual / electrodeAreaCm2
+      : null;
+
+  const capacityPerSideActual =
+    Number.isFinite(arealCapacityActual) && Number.isFinite(sideCount) && sideCount > 1
+      ? arealCapacityActual / sideCount
+      : null;
+
   return {
     coating_mass_g: normalizedCoatingMass,
     active_material_mass_theoretical_g: Number.isFinite(activeMaterialMassTheoretical) ? activeMaterialMassTheoretical : null,
     active_material_mass_actual_g: Number.isFinite(activeMaterialMassActual) ? activeMaterialMassActual : null,
     capacity_theoretical_mAh: Number.isFinite(capacityTheoretical) ? capacityTheoretical : null,
-    capacity_actual_mAh: Number.isFinite(capacityActual) ? capacityActual : null
+    capacity_actual_mAh: Number.isFinite(capacityActual) ? capacityActual : null,
+    areal_capacity_theoretical_mAh_cm2: Number.isFinite(arealCapacityTheoretical) ? arealCapacityTheoretical : null,
+    areal_capacity_actual_mAh_cm2: Number.isFinite(arealCapacityActual) ? arealCapacityActual : null,
+    capacity_per_side_actual_mAh_cm2: Number.isFinite(capacityPerSideActual) ? capacityPerSideActual : null
   };
 }
 
@@ -137,11 +157,11 @@ function buildBatchCapacitySummary(electrodes, capacityContext) {
       : null;
 
   const capacityPerSideTheoretical =
-    Number.isFinite(arealCapacityTheoretical) && Number.isFinite(sideCount) && sideCount > 0
+    Number.isFinite(arealCapacityTheoretical) && Number.isFinite(sideCount) && sideCount > 1
       ? arealCapacityTheoretical / sideCount
       : null;
   const capacityPerSideActual =
-    Number.isFinite(arealCapacityActual) && Number.isFinite(sideCount) && sideCount > 0
+    Number.isFinite(arealCapacityActual) && Number.isFinite(sideCount) && sideCount > 1
       ? arealCapacityActual / sideCount
       : null;
 

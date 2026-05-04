@@ -82,13 +82,16 @@
     function getDefaultElectrodeTableColumnVisibility() {
       return {
         number: true,
-        coating_mass: true,
+        coating_mass: false,
         active_mass_theoretical: false,
         active_mass_actual: false,
-        capacity_theoretical: true,
+        capacity_theoretical: false,
         capacity_actual: true,
-        cup: true,
-        comments: true,
+        areal_capacity_theoretical: false,
+        areal_capacity_actual: false,
+        capacity_per_side_actual: false,
+        cup: false,
+        comments: false,
         status: true
       };
     }
@@ -697,7 +700,7 @@
             secondary: `Факт.: ${formatDerivedNumber(summary.areal_capacity_actual_mAh_cm2, 3, ' мАч/см²')}`
           })}
           ${renderCapacitySummaryItem({
-            label: 'Удельная ёмкость на сторону',
+            label: 'Ёмкость 1 стороны',
             title: 'Удельная ёмкость по площади, делённая на число сторон покрытия.',
             primary: `Теор.: ${formatDerivedNumber(summary.capacity_per_side_theoretical_mAh_cm2, 3, ' мАч/см²')}`,
             secondary: `Факт.: ${formatDerivedNumber(summary.capacity_per_side_actual_mAh_cm2, 3, ' мАч/см²')}`
@@ -721,6 +724,9 @@
       { key: 'active_mass_actual', label: 'Активная масса (факт.)' },
       { key: 'capacity_theoretical', label: 'Ёмкость (теор.)' },
       { key: 'capacity_actual', label: 'Ёмкость (факт.)' },
+      { key: 'areal_capacity_theoretical', label: 'Ёмкость (теор.), мАч/см²' },
+      { key: 'areal_capacity_actual', label: 'Ёмкость (факт.), мАч/см²' },
+      { key: 'capacity_per_side_actual', label: 'Ёмкость 1 стороны, мАч/см²' },
       { key: 'cup', label: 'Стаканчик №' },
       { key: 'comments', label: 'Комментарии' },
       { key: 'status', label: 'Статус' }
@@ -1619,6 +1625,18 @@
         const capacityActualCell = document.createElement('td');
         capacityActualCell.dataset.col = 'capacity_actual';
         capacityActualCell.textContent = formatDerivedNumber(e.capacity_actual_mAh, 3);
+
+        const arealCapacityTheoreticalCell = document.createElement('td');
+        arealCapacityTheoreticalCell.dataset.col = 'areal_capacity_theoretical';
+        arealCapacityTheoreticalCell.textContent = formatDerivedNumber(e.areal_capacity_theoretical_mAh_cm2, 3);
+
+        const arealCapacityActualCell = document.createElement('td');
+        arealCapacityActualCell.dataset.col = 'areal_capacity_actual';
+        arealCapacityActualCell.textContent = formatDerivedNumber(e.areal_capacity_actual_mAh_cm2, 3);
+
+        const capacityPerSideActualCell = document.createElement('td');
+        capacityPerSideActualCell.dataset.col = 'capacity_per_side_actual';
+        capacityPerSideActualCell.textContent = formatDerivedNumber(e.capacity_per_side_actual_mAh_cm2, 3);
         
         const cupCell = document.createElement('td');
         cupCell.dataset.col = 'cup';
@@ -1695,6 +1713,9 @@
         tr.appendChild(activeMassActualCell);
         tr.appendChild(capacityTheoreticalCell);
         tr.appendChild(capacityActualCell);
+        tr.appendChild(arealCapacityTheoreticalCell);
+        tr.appendChild(arealCapacityActualCell);
+        tr.appendChild(capacityPerSideActualCell);
         tr.appendChild(cupCell);
         tr.appendChild(commentCell);
         tr.appendChild(statusCell);
@@ -2168,6 +2189,18 @@
       const capacityActualTd = document.createElement('td');
       capacityActualTd.dataset.col = 'capacity_actual';
       capacityActualTd.textContent = '—';
+
+      const arealCapacityTheoreticalTd = document.createElement('td');
+      arealCapacityTheoreticalTd.dataset.col = 'areal_capacity_theoretical';
+      arealCapacityTheoreticalTd.textContent = '—';
+
+      const arealCapacityActualTd = document.createElement('td');
+      arealCapacityActualTd.dataset.col = 'areal_capacity_actual';
+      arealCapacityActualTd.textContent = '—';
+
+      const capacityPerSideActualTd = document.createElement('td');
+      capacityPerSideActualTd.dataset.col = 'capacity_per_side_actual';
+      capacityPerSideActualTd.textContent = '—';
       
       const cupTd = document.createElement('td');
       cupTd.dataset.col = 'cup';
@@ -2218,6 +2251,9 @@
       tr.appendChild(activeMassActualTd);
       tr.appendChild(capacityTheoreticalTd);
       tr.appendChild(capacityActualTd);
+      tr.appendChild(arealCapacityTheoreticalTd);
+      tr.appendChild(arealCapacityActualTd);
+      tr.appendChild(capacityPerSideActualTd);
       tr.appendChild(cupTd);
       tr.appendChild(commentTd);
       tr.appendChild(statusTd);
