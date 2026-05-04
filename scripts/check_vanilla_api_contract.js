@@ -384,6 +384,39 @@ function findHtmlScriptReferences() {
   return refs;
 }
 
+function findHtmlLinkReferences() {
+  const refs = [];
+
+  for (const file of walkHtmlFiles(PUBLIC_DIR)) {
+    const text = fs.readFileSync(file, 'utf8');
+    const rel = relative(file);
+    const linkPattern = /<a\b[^>]*\bhref\s*=\s*(['"])([^'"]+)\1[^>]*>/gi;
+    let match;
+
+    while ((match = linkPattern.exec(text)) !== null) {
+      const href = match[2];
+      if (/^(?:https?:)?\/\//i.test(href)) continue;
+      if (/^(?:mailto|tel|javascript):/i.test(href)) continue;
+
+      const cleanHref = href.split(/[?#]/)[0];
+      if (!cleanHref || cleanHref.startsWith('#')) continue;
+
+      const filePath = cleanHref.startsWith('/')
+        ? path.join(PUBLIC_DIR, cleanHref.slice(1))
+        : path.join(path.dirname(file), cleanHref);
+
+      refs.push({
+        source: rel,
+        line: lineNumberAt(text, match.index),
+        href,
+        filePath
+      });
+    }
+  }
+
+  return refs;
+}
+
 function endpointKey(method, endpointPath) {
   return `${method.toUpperCase()} ${endpointPath}`;
 }
@@ -638,10 +671,17 @@ function main() {
   const routes = parseExpressRoutes();
   const failures = validateContract(contract, calls, routes);
   const scriptRefs = findHtmlScriptReferences();
+  const linkRefs = findHtmlLinkReferences();
 
   for (const ref of scriptRefs) {
     if (!fs.existsSync(ref.filePath)) {
       failures.push(`Missing script source ${ref.src} referenced at ${ref.source}:${ref.line}`);
+    }
+  }
+
+  for (const ref of linkRefs) {
+    if (!fs.existsSync(ref.filePath)) {
+      failures.push(`Missing link target ${ref.href} referenced at ${ref.source}:${ref.line}`);
     }
   }
 
@@ -659,7 +699,7 @@ function main() {
   console.log(
     `[contract] PASS: ${calls.length} fetch call(s), ${endpointCount} endpoint method contract(s), ` +
     `${dynamicCount} dynamic fetch contract(s), ${routes.length} Express route(s), ` +
-    `${scriptRefs.length} HTML script reference(s)`
+    `${scriptRefs.length} HTML script reference(s), ${linkRefs.length} HTML link reference(s)`
   );
 }
 
