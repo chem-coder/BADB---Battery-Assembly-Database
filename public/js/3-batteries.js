@@ -2061,6 +2061,16 @@ function formatBatteryCapacity(value, digits = 3) {
   return Number.isFinite(num) ? `${num.toFixed(digits)} мАч` : '—';
 }
 
+function formatBatteryArealCapacity(value, digits = 3) {
+  const num = toFiniteBatteryNumber(value);
+  return Number.isFinite(num) ? `${num.toFixed(digits)} мАч/см²` : '—';
+}
+
+function formatBatteryElectrolyteRatio(value, digits = 3) {
+  const num = toFiniteBatteryNumber(value);
+  return Number.isFinite(num) ? `${num.toFixed(digits)} мкл/мАч` : '—';
+}
+
 function formatBatteryRatio(value, digits = 3) {
   const num = toFiniteBatteryNumber(value);
   return Number.isFinite(num) ? num.toFixed(digits) : '—';
@@ -2070,6 +2080,58 @@ function sumFiniteBatteryValues(values) {
   const numeric = (Array.isArray(values) ? values : []).filter((value) => Number.isFinite(value));
   if (!numeric.length) return null;
   return numeric.reduce((sum, value) => sum + value, 0);
+}
+
+function getBatteryElectrodeAreaCm2(row) {
+  const directArea = toFiniteBatteryNumber(row?.electrode_area_cm2);
+  if (Number.isFinite(directArea) && directArea > 0) return directArea;
+
+  const actualCapacity = toFiniteBatteryNumber(row?.capacity_actual_mAh);
+  const actualAreal = toFiniteBatteryNumber(row?.areal_capacity_actual_mAh_cm2);
+  if (Number.isFinite(actualCapacity) && actualCapacity > 0 && Number.isFinite(actualAreal) && actualAreal > 0) {
+    return actualCapacity / actualAreal;
+  }
+
+  const theoreticalCapacity = toFiniteBatteryNumber(row?.capacity_theoretical_mAh);
+  const theoreticalAreal = toFiniteBatteryNumber(row?.areal_capacity_theoretical_mAh_cm2);
+  if (
+    Number.isFinite(theoreticalCapacity) &&
+    theoreticalCapacity > 0 &&
+    Number.isFinite(theoreticalAreal) &&
+    theoreticalAreal > 0
+  ) {
+    return theoreticalCapacity / theoreticalAreal;
+  }
+
+  return null;
+}
+
+function sumBatteryElectrodeAreasCm2(rows) {
+  return sumFiniteBatteryValues(
+    (Array.isArray(rows) ? rows : []).map((row) => getBatteryElectrodeAreaCm2(row))
+  );
+}
+
+function calculateBatteryArealCapacity(capacity, area) {
+  return Number.isFinite(capacity) && capacity > 0 && Number.isFinite(area) && area > 0
+    ? capacity / area
+    : null;
+}
+
+function pickBatteryLimitingArea({ cathodeCapacity, cathodeArea, anodeCapacity, anodeArea }) {
+  if (
+    Number.isFinite(cathodeCapacity) &&
+    Number.isFinite(anodeCapacity) &&
+    Number.isFinite(cathodeArea) &&
+    Number.isFinite(anodeArea)
+  ) {
+    return cathodeCapacity <= anodeCapacity ? cathodeArea : anodeArea;
+  }
+
+  if (Number.isFinite(cathodeCapacity) && Number.isFinite(cathodeArea)) return cathodeArea;
+  if (Number.isFinite(anodeCapacity) && Number.isFinite(anodeArea)) return anodeArea;
+
+  return null;
 }
 
 function getEffectiveBatterySelections() {
@@ -2114,6 +2176,8 @@ function buildBatteryCapacitySummaryFromSelections() {
   const anodeCapacityActual = sumFiniteBatteryValues(
     anodes.map((row) => toFiniteBatteryNumber(row.capacity_actual_mAh))
   );
+  const cathodeAreaCm2 = sumBatteryElectrodeAreasCm2(cathodes);
+  const anodeAreaCm2 = sumBatteryElectrodeAreasCm2(anodes);
 
   const limitingCapacityTheoretical =
     Number.isFinite(cathodeCapacityTheoretical) && Number.isFinite(anodeCapacityTheoretical)
@@ -2147,6 +2211,25 @@ function buildBatteryCapacitySummaryFromSelections() {
       ? anodeCapacityActual / cathodeCapacityActual
       : null;
 
+  const cathodeArealCapacityTheoretical = calculateBatteryArealCapacity(cathodeCapacityTheoretical, cathodeAreaCm2);
+  const cathodeArealCapacityActual = calculateBatteryArealCapacity(cathodeCapacityActual, cathodeAreaCm2);
+  const anodeArealCapacityTheoretical = calculateBatteryArealCapacity(anodeCapacityTheoretical, anodeAreaCm2);
+  const anodeArealCapacityActual = calculateBatteryArealCapacity(anodeCapacityActual, anodeAreaCm2);
+  const limitingAreaTheoretical = pickBatteryLimitingArea({
+    cathodeCapacity: cathodeCapacityTheoretical,
+    cathodeArea: cathodeAreaCm2,
+    anodeCapacity: anodeCapacityTheoretical,
+    anodeArea: anodeAreaCm2
+  });
+  const limitingAreaActual = pickBatteryLimitingArea({
+    cathodeCapacity: cathodeCapacityActual,
+    cathodeArea: cathodeAreaCm2,
+    anodeCapacity: anodeCapacityActual,
+    anodeArea: anodeAreaCm2
+  });
+  const limitingArealCapacityTheoretical = calculateBatteryArealCapacity(limitingCapacityTheoretical, limitingAreaTheoretical);
+  const limitingArealCapacityActual = calculateBatteryArealCapacity(limitingCapacityActual, limitingAreaActual);
+
   return {
     cathode_count: cathodes.length,
     anode_count: anodes.length,
@@ -2157,7 +2240,15 @@ function buildBatteryCapacitySummaryFromSelections() {
     limiting_capacity_theoretical_mAh: limitingCapacityTheoretical,
     limiting_capacity_actual_mAh: limitingCapacityActual,
     np_theoretical: npTheoretical,
-    np_actual: npActual
+    np_actual: npActual,
+    cathode_area_cm2: cathodeAreaCm2,
+    anode_area_cm2: anodeAreaCm2,
+    cathode_areal_capacity_theoretical_mAh_cm2: cathodeArealCapacityTheoretical,
+    cathode_areal_capacity_actual_mAh_cm2: cathodeArealCapacityActual,
+    anode_areal_capacity_theoretical_mAh_cm2: anodeArealCapacityTheoretical,
+    anode_areal_capacity_actual_mAh_cm2: anodeArealCapacityActual,
+    limiting_areal_capacity_theoretical_mAh_cm2: limitingArealCapacityTheoretical,
+    limiting_areal_capacity_actual_mAh_cm2: limitingArealCapacityActual
   };
 }
 
@@ -2196,6 +2287,7 @@ function renderBatteryCapacitySummary() {
   if (!hasAnySelection) {
     root.hidden = true;
     root.innerHTML = '';
+    renderElectrolyteCapacityRatios();
     return;
   }
 
@@ -2210,6 +2302,7 @@ function renderBatteryCapacitySummary() {
       </div>
     `;
     root.hidden = false;
+    renderElectrolyteCapacityRatios();
     return;
   }
 
@@ -2239,15 +2332,79 @@ function renderBatteryCapacitySummary() {
         `теор.: ${formatBatteryRatio(summary.np_theoretical)}`,
         'Основное значение — N/P по фактическому составу. Вторичная строка — теоретическое отношение.'
       )}
+      ${renderBatteryCapacityMetric(
+        'Ёмкость на площадь',
+        formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2),
+        `теор.: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_theoretical_mAh_cm2)}`,
+        'Основное значение — лимитирующая ёмкость, нормированная на площадь лимитирующих электродов.'
+      )}
+      ${renderBatteryCapacityMetric(
+        'Катод / анод на площадь',
+        `К: ${formatBatteryArealCapacity(summary.cathode_areal_capacity_actual_mAh_cm2)} / А: ${formatBatteryArealCapacity(summary.anode_areal_capacity_actual_mAh_cm2)}`,
+        `теор.: К ${formatBatteryArealCapacity(summary.cathode_areal_capacity_theoretical_mAh_cm2)} / А ${formatBatteryArealCapacity(summary.anode_areal_capacity_theoretical_mAh_cm2)}`,
+        'Сравнение суммарной ёмкости выбранных катодов и анодов, нормированной на их суммарную площадь.'
+      )}
     </div>
   `;
   root.hidden = false;
+  renderElectrolyteCapacityRatios();
+}
+
+function renderElectrolyteCapacityRatio({ targetId, assemblyState, summary }) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+
+  const electrolyteVolume = toFiniteBatteryNumber(assemblyState?.electrolyte_total_ul);
+  if (!(Number.isFinite(electrolyteVolume) && electrolyteVolume > 0)) {
+    target.hidden = true;
+    target.textContent = '';
+    return;
+  }
+
+  const actualCapacity = toFiniteBatteryNumber(summary?.limiting_capacity_actual_mAh);
+  const theoreticalCapacity = toFiniteBatteryNumber(summary?.limiting_capacity_theoretical_mAh);
+  const actualRatio =
+    Number.isFinite(actualCapacity) && actualCapacity > 0
+      ? electrolyteVolume / actualCapacity
+      : null;
+  const theoreticalRatio =
+    Number.isFinite(theoreticalCapacity) && theoreticalCapacity > 0
+      ? electrolyteVolume / theoreticalCapacity
+      : null;
+
+  const secondary = Number.isFinite(theoreticalRatio)
+    ? `; теор.: ${formatBatteryElectrolyteRatio(theoreticalRatio)}`
+    : '';
+
+  target.textContent = `Электролит / ёмкость: ${formatBatteryElectrolyteRatio(actualRatio)}${secondary}`;
+  target.hidden = false;
+}
+
+function renderElectrolyteCapacityRatios() {
+  const summary = buildBatteryCapacitySummaryFromSelections();
+
+  renderElectrolyteCapacityRatio({
+    targetId: 'coin_electrolyte_capacity_ratio',
+    assemblyState: state.assembly.coin,
+    summary
+  });
+  renderElectrolyteCapacityRatio({
+    targetId: 'pouch_electrolyte_capacity_ratio',
+    assemblyState: state.assembly.pouch,
+    summary
+  });
+  renderElectrolyteCapacityRatio({
+    targetId: 'cyl_electrolyte_capacity_ratio',
+    assemblyState: state.assembly.cylindrical,
+    summary
+  });
 }
 
 function renderAssemblyForm() {
   populateFieldset(document.getElementById('coin_assembly'), state.assembly.coin);
   populateFieldset(document.getElementById('pouch_assembly'), state.assembly.pouch);
   populateFieldset(document.getElementById('cyl_assembly'), state.assembly.cylindrical);
+  renderElectrolyteCapacityRatios();
 }
 
 function renderQcForm() {
@@ -4347,6 +4504,7 @@ function isCoinSingleSelectionMode() {
 function renderInteractiveBatteryState() {
   renderBatteryWorkspaceVisibility();
   renderBatteryCreateButton();
+  renderElectrolyteCapacityRatios();
   refreshDirtyState();
   renderBatterySectionLifecycle();
   renderStackUiState();

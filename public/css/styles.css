@@ -310,6 +310,14 @@ body[data-page="BAL"] #exitBatteriesBtn {
   margin: 0;
 }
 
+body[data-page="tapes"] #tapesList,
+body[data-page="electrodes"] #all-cut-batches-list,
+body[data-page="BAL"] #batteriesList {
+  border-top: 1px solid #d8dee6;
+  margin-top: 1.25rem;
+  padding-top: 0.85rem;
+}
+
 .user-row {
   display: flex;
   align-items: center;

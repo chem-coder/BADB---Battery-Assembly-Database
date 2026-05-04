@@ -61,12 +61,64 @@ function sumOfFinite(values) {
   return numeric.reduce((sum, value) => sum + value, 0);
 }
 
+function getElectrodeAreaCm2(row) {
+  const directArea = toFiniteNumberOrNull(row?.electrode_area_cm2);
+  if (Number.isFinite(directArea) && directArea > 0) return directArea;
+
+  const actualCapacity = toFiniteNumberOrNull(row?.capacity_actual_mAh);
+  const actualAreal = toFiniteNumberOrNull(row?.areal_capacity_actual_mAh_cm2);
+  if (Number.isFinite(actualCapacity) && actualCapacity > 0 && Number.isFinite(actualAreal) && actualAreal > 0) {
+    return actualCapacity / actualAreal;
+  }
+
+  const theoreticalCapacity = toFiniteNumberOrNull(row?.capacity_theoretical_mAh);
+  const theoreticalAreal = toFiniteNumberOrNull(row?.areal_capacity_theoretical_mAh_cm2);
+  if (
+    Number.isFinite(theoreticalCapacity) &&
+    theoreticalCapacity > 0 &&
+    Number.isFinite(theoreticalAreal) &&
+    theoreticalAreal > 0
+  ) {
+    return theoreticalCapacity / theoreticalAreal;
+  }
+
+  return null;
+}
+
+function sumElectrodeAreasCm2(rows) {
+  return sumOfFinite((Array.isArray(rows) ? rows : []).map((row) => getElectrodeAreaCm2(row)));
+}
+
+function calculateArealCapacity(capacity, area) {
+  return Number.isFinite(capacity) && capacity > 0 && Number.isFinite(area) && area > 0
+    ? capacity / area
+    : null;
+}
+
+function pickLimitingArea({ cathodeCapacity, cathodeArea, anodeCapacity, anodeArea }) {
+  if (
+    Number.isFinite(cathodeCapacity) &&
+    Number.isFinite(anodeCapacity) &&
+    Number.isFinite(cathodeArea) &&
+    Number.isFinite(anodeArea)
+  ) {
+    return cathodeCapacity <= anodeCapacity ? cathodeArea : anodeArea;
+  }
+
+  if (Number.isFinite(cathodeCapacity) && Number.isFinite(cathodeArea)) return cathodeArea;
+  if (Number.isFinite(anodeCapacity) && Number.isFinite(anodeArea)) return anodeArea;
+
+  return null;
+}
+
 function computeElectrodeDerivedValues(electrode, capacityContext) {
   const electrodeMass = toFiniteNumberOrNull(electrode?.electrode_mass_g);
   const averageFoilMass = toFiniteNumberOrNull(capacityContext?.average_foil_mass_g);
   const activeFractionTheoretical = toFiniteNumberOrNull(capacityContext?.active_fraction_theoretical);
   const activeFractionActual = toFiniteNumberOrNull(capacityContext?.active_fraction_actual);
   const specificCapacity = toFiniteNumberOrNull(capacityContext?.specific_capacity_mAh_g);
+  const electrodeAreaCm2 = toFiniteNumberOrNull(capacityContext?.electrode_area_cm2);
+  const sideCount = toFiniteNumberOrNull(capacityContext?.side_count);
 
   const coatingMass =
     Number.isFinite(electrodeMass) && Number.isFinite(averageFoilMass)
@@ -95,12 +147,23 @@ function computeElectrodeDerivedValues(electrode, capacityContext) {
       ? activeMaterialMassActual * specificCapacity
       : null;
 
+  const arealCapacityTheoretical = calculateArealCapacity(capacityTheoretical, electrodeAreaCm2);
+  const arealCapacityActual = calculateArealCapacity(capacityActual, electrodeAreaCm2);
+  const capacityPerSideActual =
+    Number.isFinite(arealCapacityActual) && Number.isFinite(sideCount) && sideCount > 1
+      ? arealCapacityActual / sideCount
+      : null;
+
   return {
     coating_mass_g: normalizedCoatingMass,
     active_material_mass_theoretical_g: Number.isFinite(activeMaterialMassTheoretical) ? activeMaterialMassTheoretical : null,
     active_material_mass_actual_g: Number.isFinite(activeMaterialMassActual) ? activeMaterialMassActual : null,
     capacity_theoretical_mAh: Number.isFinite(capacityTheoretical) ? capacityTheoretical : null,
-    capacity_actual_mAh: Number.isFinite(capacityActual) ? capacityActual : null
+    capacity_actual_mAh: Number.isFinite(capacityActual) ? capacityActual : null,
+    electrode_area_cm2: Number.isFinite(electrodeAreaCm2) ? electrodeAreaCm2 : null,
+    areal_capacity_theoretical_mAh_cm2: Number.isFinite(arealCapacityTheoretical) ? arealCapacityTheoretical : null,
+    areal_capacity_actual_mAh_cm2: Number.isFinite(arealCapacityActual) ? arealCapacityActual : null,
+    capacity_per_side_actual_mAh_cm2: Number.isFinite(capacityPerSideActual) ? capacityPerSideActual : null
   };
 }
 
@@ -286,6 +349,8 @@ function buildBatteryCapacitySummary(rows) {
   const cathodeCapacityActual = sumOfFinite(cathodes.map((row) => toFiniteNumberOrNull(row.capacity_actual_mAh)));
   const anodeCapacityTheoretical = sumOfFinite(anodes.map((row) => toFiniteNumberOrNull(row.capacity_theoretical_mAh)));
   const anodeCapacityActual = sumOfFinite(anodes.map((row) => toFiniteNumberOrNull(row.capacity_actual_mAh)));
+  const cathodeAreaCm2 = sumElectrodeAreasCm2(cathodes);
+  const anodeAreaCm2 = sumElectrodeAreasCm2(anodes);
 
   const limitingCapacityTheoretical =
     Number.isFinite(cathodeCapacityTheoretical) && Number.isFinite(anodeCapacityTheoretical)
@@ -319,6 +384,25 @@ function buildBatteryCapacitySummary(rows) {
       ? anodeCapacityActual / cathodeCapacityActual
       : null;
 
+  const cathodeArealCapacityTheoretical = calculateArealCapacity(cathodeCapacityTheoretical, cathodeAreaCm2);
+  const cathodeArealCapacityActual = calculateArealCapacity(cathodeCapacityActual, cathodeAreaCm2);
+  const anodeArealCapacityTheoretical = calculateArealCapacity(anodeCapacityTheoretical, anodeAreaCm2);
+  const anodeArealCapacityActual = calculateArealCapacity(anodeCapacityActual, anodeAreaCm2);
+  const limitingAreaTheoretical = pickLimitingArea({
+    cathodeCapacity: cathodeCapacityTheoretical,
+    cathodeArea: cathodeAreaCm2,
+    anodeCapacity: anodeCapacityTheoretical,
+    anodeArea: anodeAreaCm2
+  });
+  const limitingAreaActual = pickLimitingArea({
+    cathodeCapacity: cathodeCapacityActual,
+    cathodeArea: cathodeAreaCm2,
+    anodeCapacity: anodeCapacityActual,
+    anodeArea: anodeAreaCm2
+  });
+  const limitingArealCapacityTheoretical = calculateArealCapacity(limitingCapacityTheoretical, limitingAreaTheoretical);
+  const limitingArealCapacityActual = calculateArealCapacity(limitingCapacityActual, limitingAreaActual);
+
   return {
     cathode_count: cathodes.length,
     anode_count: anodes.length,
@@ -329,7 +413,15 @@ function buildBatteryCapacitySummary(rows) {
     limiting_capacity_theoretical_mAh: limitingCapacityTheoretical,
     limiting_capacity_actual_mAh: limitingCapacityActual,
     np_theoretical: npTheoretical,
-    np_actual: npActual
+    np_actual: npActual,
+    cathode_area_cm2: cathodeAreaCm2,
+    anode_area_cm2: anodeAreaCm2,
+    cathode_areal_capacity_theoretical_mAh_cm2: cathodeArealCapacityTheoretical,
+    cathode_areal_capacity_actual_mAh_cm2: cathodeArealCapacityActual,
+    anode_areal_capacity_theoretical_mAh_cm2: anodeArealCapacityTheoretical,
+    anode_areal_capacity_actual_mAh_cm2: anodeArealCapacityActual,
+    limiting_areal_capacity_theoretical_mAh_cm2: limitingArealCapacityTheoretical,
+    limiting_areal_capacity_actual_mAh_cm2: limitingArealCapacityActual
   };
 }
 
