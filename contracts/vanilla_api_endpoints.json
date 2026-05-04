@@ -581,11 +581,19 @@
     },
     {
       "path": "/api/departments",
-      "methods": ["GET"],
-      "auth": "auth",
-      "request": "none",
+      "methods": ["GET", "POST"],
+      "auth": "GET auth; POST auth plus admin",
+      "request": "GET none; POST department payload",
       "response": "department list JSON",
-      "sources": ["public/js/projects.js", "public/js/users.js"]
+      "sources": ["public/js/departments.js", "public/js/projects.js", "public/js/users.js"]
+    },
+    {
+      "path": "/api/departments/:param",
+      "methods": ["PUT"],
+      "auth": "auth plus admin",
+      "request": "department update payload",
+      "response": "updated department JSON",
+      "sources": ["public/js/departments.js"]
     },
     {
       "path": "/api/users",
@@ -598,6 +606,7 @@
         "public/js/2-electrodes.js",
         "public/js/3-batteries.js",
         "public/js/electrolytes.js",
+        "public/js/departments.js",
         "public/js/projects.js",
         "public/js/recipes.js",
         "public/js/separators.js",

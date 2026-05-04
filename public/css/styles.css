@@ -359,6 +359,52 @@ body[data-page="BAL"] #batteriesList {
   font-size: 0.9rem;
 }
 
+.departments-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-top: 1px solid #d8dee6;
+  margin-top: 1.25rem;
+}
+
+.departments-table th,
+.departments-table td {
+  border-bottom: 1px solid #e5e9ef;
+  padding: 0.55rem 0.4rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.departments-table th {
+  color: #5f6b7a;
+  font-weight: 600;
+}
+
+.departments-table td:first-child,
+.departments-table th:first-child {
+  width: 5rem;
+  color: #667085;
+}
+
+.departments-table td:last-child,
+.departments-table th:last-child {
+  width: 12rem;
+}
+
+.departments-table input,
+.departments-table select {
+  width: min(100%, 26rem);
+}
+
+td.departments-edit-actions button {
+  border: 1px solid #cdd5df;
+  background: #f8fafc;
+  padding: 0.28rem 0.55rem;
+}
+
+.add-row-button {
+  margin-top: 0.85rem;
+}
+
 #badb-auth-badge {
   position: fixed;
   top: 0.7rem;

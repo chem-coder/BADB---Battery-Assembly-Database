@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0" />
+    <title>Отделы</title>
+    <link rel="stylesheet" type="text/css" href="/css/styles.css">
+  </head>
+
+  <body data-page="departments">
+    <header class="page-header">
+      <a href="/index.html" aria-label="Главная" class="home-link"><img src="/icons/house-regular.svg" alt=""></a>
+      <h1>Отделы</h1>
+    </header>
+
+    <div class="status-feedback" aria-live="polite"></div>
+
+    <table class="departments-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Название</th>
+          <th>Руководитель</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody id="departmentsTableBody"></tbody>
+    </table>
+
+    <button id="addDepartmentBtn" type="button" class="add-row-button">+ Добавить отдел</button>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/departments.js"></script>
+  </body>
+</html>
