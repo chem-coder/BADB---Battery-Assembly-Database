@@ -103,6 +103,79 @@
         </div>
       </fieldset>
 
+      <fieldset id="project-department-access-section" hidden>
+        <legend>Доступ к проекту</legend>
+
+        <div class="form-grid cols-3">
+          <div class="form-field">
+            <label for="project-access-department-id">Отдел</label>
+            <select id="project-access-department-id">
+              <option value="">— выбрать отдел —</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label for="project-access-expires-at">Доступ до</label>
+            <input id="project-access-expires-at" type="date">
+          </div>
+
+          <div class="form-field">
+            <label>&nbsp;</label>
+            <button id="grantDepartmentAccessBtn" type="button">Добавить отдел</button>
+          </div>
+        </div>
+
+        <table class="project-access-table">
+          <thead>
+            <tr>
+              <th>Отдел</th>
+              <th>Уровень</th>
+              <th>Доступ до</th>
+              <th>Выдал</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="projectDepartmentAccessBody"></tbody>
+        </table>
+
+        <h3>Пользователи с доступом</h3>
+        <table class="project-access-table">
+          <thead>
+            <tr>
+              <th>Пользователь</th>
+              <th>Отдел</th>
+              <th>Источник</th>
+              <th>Уровень</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="projectUserAccessBody"></tbody>
+        </table>
+
+        <div class="form-grid cols-3 project-user-access-add">
+          <div class="form-field">
+            <label for="project-access-user-id">Дополнительный пользователь</label>
+            <select id="project-access-user-id">
+              <option value="">— выбрать пользователя —</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label for="project-user-access-level">Уровень доступа</label>
+            <select id="project-user-access-level">
+              <option value="view">просмотр</option>
+              <option value="edit">редактирование</option>
+              <option value="admin">администратор проекта</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label>&nbsp;</label>
+            <button id="grantUserAccessBtn" type="button">Добавить пользователя</button>
+          </div>
+        </div>
+      </fieldset>
+
       <button id="saveBtn" type="button">Сохранить запись</button>
       <button id="clearBtn" type="button">Очистить форму</button>
       <button id="exitBtn" type="button">Выход</button><br>

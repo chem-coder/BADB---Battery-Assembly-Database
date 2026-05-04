@@ -13,10 +13,25 @@ const leadSelect = document.getElementById('project-lead-id');
 const confidentialitySelect = document.getElementById('project-confidentiality-level');
 const departmentBlock = document.getElementById('project-department-block');
 const departmentSelect = document.getElementById('project-department-id');
+const projectDepartmentAccessSection = document.getElementById('project-department-access-section');
+const projectAccessDepartmentSelect = document.getElementById('project-access-department-id');
+const projectAccessExpiresAt = document.getElementById('project-access-expires-at');
+const grantDepartmentAccessBtn = document.getElementById('grantDepartmentAccessBtn');
+const projectDepartmentAccessBody = document.getElementById('projectDepartmentAccessBody');
+const projectUserAccessBody = document.getElementById('projectUserAccessBody');
+const projectAccessUserSelect = document.getElementById('project-access-user-id');
+const projectUserAccessLevel = document.getElementById('project-user-access-level');
+const grantUserAccessBtn = document.getElementById('grantUserAccessBtn');
 
 let mode = null; // 'create' | 'edit'
 let currentId = null;
+let currentProjectLeadId = null;
 let initialFormState = null;
+let currentUsers = [];
+let currentDepartments = [];
+let currentAccessGrants = [];
+let currentDepartmentAccess = [];
+let currentUserAccess = [];
 
 function showForm() {
   form.hidden = false;
@@ -55,9 +70,11 @@ function hasUnsavedChanges() {
 function resetForm() {
   form.reset();
   updateDepartmentVisibility();
+  resetProjectAccessSection();
   title.textContent = '';
   mode = null;
   currentId = null;
+  currentProjectLeadId = null;
   initialFormState = null;
   hideForm();
 }
@@ -92,8 +109,28 @@ function confidentialityLabel(level) {
     'все';
 }
 
+function accessLevelLabel(level) {
+  return level === 'admin' ? 'администратор' :
+    level === 'edit' ? 'редактирование' :
+    'просмотр';
+}
+
+function accessLevelRank(level) {
+  return level === 'admin' ? 3 :
+    level === 'edit' ? 2 :
+    1;
+}
+
+function strongerAccessLevel(a, b) {
+  return accessLevelRank(a) >= accessLevelRank(b) ? a : b;
+}
+
 function formatDate(value) {
   return value ? new Date(value).toLocaleDateString('ru-RU') : '';
+}
+
+function formatDateTime(value) {
+  return value ? new Date(value).toLocaleDateString('ru-RU') : '—';
 }
 
 function updateDepartmentVisibility() {
@@ -156,6 +193,392 @@ async function deleteProject(id) {
   }
 }
 
+async function fetchProjectAccess(projectId) {
+  const res = await fetch(`/api/projects/${projectId}/access`);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка загрузки доступа');
+  }
+
+  return res.json();
+}
+
+async function grantDepartmentAccess(projectId, departmentId, expiresAt) {
+  const payload = {
+    department_id: departmentId,
+    access_level: 'view',
+    expires_at: expiresAt || null
+  };
+
+  const res = await fetch(`/api/projects/${projectId}/access`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка добавления доступа');
+  }
+
+  return res.json();
+}
+
+async function revokeDepartmentAccess(projectId, departmentId) {
+  const res = await fetch(`/api/projects/${projectId}/access/department/${departmentId}`, {
+    method: 'DELETE'
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка удаления доступа');
+  }
+
+  return res.json();
+}
+
+async function grantUserAccess(projectId, userId, accessLevel) {
+  const res = await fetch(`/api/projects/${projectId}/access`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_id: userId,
+      access_level: accessLevel
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка добавления пользователя');
+  }
+
+  return res.json();
+}
+
+async function revokeUserAccess(projectId, userId) {
+  const res = await fetch(`/api/projects/${projectId}/access/user/${userId}`, {
+    method: 'DELETE'
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка удаления доступа пользователя');
+  }
+
+  return res.json();
+}
+
+function resetProjectAccessSection() {
+  projectDepartmentAccessSection.hidden = true;
+  currentAccessGrants = [];
+  currentDepartmentAccess = [];
+  currentUserAccess = [];
+  projectDepartmentAccessBody.innerHTML = '';
+  projectUserAccessBody.innerHTML = '';
+  projectAccessDepartmentSelect.value = '';
+  projectAccessExpiresAt.value = '';
+  projectAccessUserSelect.value = '';
+  projectUserAccessLevel.value = 'view';
+}
+
+function populateAccessDepartmentSelect() {
+  const prevAccessDepartment = projectAccessDepartmentSelect.value;
+
+  projectAccessDepartmentSelect.replaceChildren(new Option('— выбрать отдел —', ''));
+  currentDepartments.forEach(department => {
+    projectAccessDepartmentSelect.add(new Option(department.name, department.department_id));
+  });
+
+  projectAccessDepartmentSelect.value = prevAccessDepartment;
+}
+
+function populateAccessUserSelect(visibleUserIds = new Set()) {
+  const prevAccessUser = projectAccessUserSelect.value;
+
+  projectAccessUserSelect.replaceChildren(new Option('— выбрать пользователя —', ''));
+  currentUsers
+    .filter(user => user.active && !visibleUserIds.has(Number(user.user_id)))
+    .forEach(user => {
+      const departmentText = user.department_name ? ` — ${user.department_name}` : '';
+      projectAccessUserSelect.add(new Option(`${user.name}${departmentText}`, user.user_id));
+    });
+
+  projectAccessUserSelect.value = prevAccessUser;
+}
+
+function renderProjectDepartmentAccess() {
+  projectDepartmentAccessBody.innerHTML = '';
+
+  if (currentDepartmentAccess.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.className = 'empty-table-message';
+    cell.textContent = 'Отделы не добавлены';
+    row.appendChild(cell);
+    projectDepartmentAccessBody.appendChild(row);
+    return;
+  }
+
+  currentDepartmentAccess.forEach(grant => {
+    const row = document.createElement('tr');
+    if (grant.is_expired) row.className = 'access-expired';
+
+    const departmentCell = document.createElement('td');
+    departmentCell.textContent = grant.grantee_name || grant.department_name || `Отдел #${grant.grantee_id}`;
+
+    const levelCell = document.createElement('td');
+    levelCell.textContent = accessLevelLabel(grant.access_level);
+
+    const expiresCell = document.createElement('td');
+    expiresCell.textContent = grant.expires_at ? formatDateTime(grant.expires_at) : 'без срока';
+
+    const grantedByCell = document.createElement('td');
+    grantedByCell.textContent = grant.granted_by_name || '—';
+
+    const actionsCell = document.createElement('td');
+    actionsCell.className = 'actions';
+
+    const revokeBtn = document.createElement('button');
+    revokeBtn.type = 'button';
+    revokeBtn.textContent = 'Убрать';
+    revokeBtn.title = 'Убрать доступ отдела';
+    revokeBtn.addEventListener('click', async () => {
+      if (!confirm(`Убрать доступ отдела "${departmentCell.textContent}"?`)) return;
+
+      try {
+        await revokeDepartmentAccess(currentId, grant.grantee_id);
+        showStatus('Доступ отдела убран');
+        await loadProjectAccess();
+      } catch (err) {
+        showStatus(err.message, true);
+      }
+    });
+
+    actionsCell.appendChild(revokeBtn);
+    row.append(departmentCell, levelCell, expiresCell, grantedByCell, actionsCell);
+    projectDepartmentAccessBody.appendChild(row);
+  });
+}
+
+function getDepartmentName(departmentId) {
+  const department = currentDepartments.find(item => Number(item.department_id) === Number(departmentId));
+  return department?.name || '';
+}
+
+function getInheritedProjectAccessByUser() {
+  const inherited = new Map();
+  const baseDepartmentId = form.elements['confidentiality_level'].value === 'department'
+    ? Number(form.elements['department_id'].value)
+    : null;
+
+  function addInheritedUsers(departmentId, level, sourceLabel) {
+    if (!Number.isInteger(Number(departmentId))) return;
+
+    currentUsers
+      .filter(user => user.active && Number(user.department_id) === Number(departmentId))
+      .forEach(user => {
+        const userId = Number(user.user_id);
+        const existing = inherited.get(userId);
+        inherited.set(userId, {
+          level: existing ? strongerAccessLevel(existing.level, level) : level,
+          sources: existing ? [...existing.sources, sourceLabel] : [sourceLabel]
+        });
+      });
+  }
+
+  const leadUserId = Number(currentProjectLeadId || form.elements['lead_id'].value);
+  if (Number.isInteger(leadUserId)) {
+    const leadUser = currentUsers.find(user => Number(user.user_id) === leadUserId);
+    if (leadUser) {
+      inherited.set(leadUserId, {
+        level: 'admin',
+        sources: ['руководитель проекта (администратор проекта)']
+      });
+    }
+  }
+
+  if (baseDepartmentId) {
+    addInheritedUsers(baseDepartmentId, 'view', 'отдел проекта (просмотр)');
+  }
+
+  currentDepartmentAccess
+    .filter(grant => !grant.is_expired)
+    .forEach(grant => {
+      const departmentName = grant.grantee_name || grant.department_name || getDepartmentName(grant.grantee_id);
+      const inheritedLevel = grant.access_level || 'view';
+      addInheritedUsers(
+        grant.grantee_id,
+        inheritedLevel,
+        `отдел: ${departmentName || `#${grant.grantee_id}`} (${accessLevelLabel(inheritedLevel)})`
+      );
+    });
+
+  return inherited;
+}
+
+function buildAccessLevelSelect(userRow) {
+  const select = document.createElement('select');
+  select.name = 'access_level';
+
+  if (userRow.isProjectLead) {
+    select.add(new Option('администратор проекта', 'admin'));
+    select.value = 'admin';
+    select.disabled = true;
+    select.title = 'Доступ задан ролью руководителя проекта';
+    return select;
+  }
+
+  if (userRow.inherited) {
+    select.add(new Option('по отделу', 'department'));
+  }
+
+  select.add(new Option('просмотр', 'view'));
+  select.add(new Option('редактирование', 'edit'));
+  select.add(new Option('администратор проекта', 'admin'));
+  select.value = userRow.personalLevel || (userRow.inherited ? 'department' : userRow.effectiveLevel);
+
+  select.addEventListener('change', async () => {
+    try {
+      if (select.value === 'department') {
+        await revokeUserAccess(currentId, userRow.user.user_id);
+        showStatus('Личный доступ убран, действует доступ отдела');
+      } else {
+        await grantUserAccess(currentId, userRow.user.user_id, select.value);
+        showStatus('Доступ пользователя обновлён');
+      }
+
+      await loadProjectAccess();
+    } catch (err) {
+      showStatus(err.message, true);
+      await loadProjectAccess().catch(() => {});
+    }
+  });
+
+  return select;
+}
+
+function renderProjectUserAccess() {
+  projectUserAccessBody.innerHTML = '';
+
+  const inheritedByUser = getInheritedProjectAccessByUser();
+  const personalByUser = new Map(
+    currentUserAccess.map(grant => [Number(grant.grantee_id), grant])
+  );
+  const visibleUserIds = new Set([...inheritedByUser.keys(), ...personalByUser.keys()]);
+  const userRows = [...visibleUserIds]
+    .map(userId => {
+      const user = currentUsers.find(item => Number(item.user_id) === userId);
+      if (!user) return null;
+
+      const inherited = inheritedByUser.get(userId);
+      const personal = personalByUser.get(userId);
+      const inheritedLevel = inherited?.level || null;
+      const personalLevel = personal?.access_level || null;
+      const isProjectLead = Number(currentProjectLeadId || form.elements['lead_id'].value) === userId;
+      const effectiveLevel = isProjectLead ? 'admin' : (personalLevel || inheritedLevel || 'view');
+
+      return {
+        user,
+        inherited,
+        personal,
+        inheritedLevel,
+        personalLevel,
+        effectiveLevel,
+        isProjectLead
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const departmentCompare = (a.user.department_name || '').localeCompare(b.user.department_name || '', 'ru');
+      if (departmentCompare !== 0) return departmentCompare;
+      return (a.user.name || '').localeCompare(b.user.name || '', 'ru');
+    });
+
+  if (userRows.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.className = 'empty-table-message';
+    cell.textContent = 'Пользователи не добавлены';
+    row.appendChild(cell);
+    projectUserAccessBody.appendChild(row);
+  }
+
+  userRows.forEach(userRow => {
+    const row = document.createElement('tr');
+
+    const userCell = document.createElement('td');
+    userCell.textContent = userRow.user.name || `Пользователь #${userRow.user.user_id}`;
+
+    const departmentCell = document.createElement('td');
+    departmentCell.textContent = userRow.user.department_name || '—';
+
+    const sourceCell = document.createElement('td');
+    if (userRow.isProjectLead) {
+      sourceCell.textContent = 'руководитель проекта';
+    } else {
+      const sourceParts = [];
+      if (userRow.inherited) sourceParts.push(...userRow.inherited.sources);
+      if (userRow.personal) sourceParts.push('личный доступ');
+      sourceCell.textContent = sourceParts.join(', ') || 'личный доступ';
+    }
+
+    const levelCell = document.createElement('td');
+    levelCell.appendChild(buildAccessLevelSelect(userRow));
+
+    const actionsCell = document.createElement('td');
+    actionsCell.className = 'actions';
+
+    if (userRow.personal && !userRow.isProjectLead) {
+      const revokeBtn = document.createElement('button');
+      revokeBtn.type = 'button';
+      revokeBtn.textContent = userRow.inherited ? 'Убрать личный' : 'Убрать';
+      revokeBtn.title = userRow.inherited ? 'Убрать личный доступ' : 'Убрать доступ пользователя';
+      revokeBtn.addEventListener('click', async () => {
+        const message = userRow.inherited
+          ? `Убрать личный доступ пользователя "${userCell.textContent}"? Доступ отдела останется.`
+          : `Убрать доступ пользователя "${userCell.textContent}"?`;
+        if (!confirm(message)) return;
+
+        try {
+          await revokeUserAccess(currentId, userRow.user.user_id);
+          showStatus(userRow.inherited ? 'Личный доступ убран' : 'Доступ пользователя убран');
+          await loadProjectAccess();
+        } catch (err) {
+          showStatus(err.message, true);
+        }
+      });
+      actionsCell.appendChild(revokeBtn);
+    } else {
+      actionsCell.textContent = '—';
+    }
+
+    row.append(userCell, departmentCell, sourceCell, levelCell, actionsCell);
+    projectUserAccessBody.appendChild(row);
+  });
+
+  populateAccessUserSelect(visibleUserIds);
+}
+
+async function loadProjectAccess() {
+  if (!currentId) {
+    resetProjectAccessSection();
+    return;
+  }
+
+  projectDepartmentAccessSection.hidden = false;
+  if (currentUsers.length === 0) await loadUsers();
+  if (currentDepartments.length === 0) await loadDepartments();
+
+  currentAccessGrants = await fetchProjectAccess(currentId);
+  currentDepartmentAccess = currentAccessGrants.filter(grant => grant.grantee_type === 'department');
+  currentUserAccess = currentAccessGrants.filter(grant => grant.grantee_type === 'user');
+  renderProjectDepartmentAccess();
+  renderProjectUserAccess();
+}
+
 
 // -------- Rendering --------
 
@@ -209,6 +632,7 @@ function renderProjects(projects) {
     editBtn.onclick = () => {
       mode = 'edit';
       currentId = proj.project_id;
+      currentProjectLeadId = proj.lead_id || null;
       
       // show form
       showForm();
@@ -233,6 +657,7 @@ function renderProjects(projects) {
       }
 
       markFormPristine();
+      loadProjectAccess().catch(err => showStatus(err.message, true));
     };
     
     const duplicateBtn = document.createElement('button');
@@ -272,6 +697,7 @@ function renderProjects(projects) {
 function duplicateProject(proj) {
   mode = 'create';
   currentId = null;
+  currentProjectLeadId = null;
   
   showForm();
   
@@ -289,6 +715,7 @@ function duplicateProject(proj) {
   form.elements['confidentiality_level'].value = proj.confidentiality_level || 'public';
   form.elements['department_id'].value = proj.department_id || '';
   updateDepartmentVisibility();
+  resetProjectAccessSection();
   
   // IMPORTANT: reset things that must be new
   createdBySelect.value = '';
@@ -320,7 +747,7 @@ async function loadUsers() {
   const prevLead = leadSelect.value;
   
   const res = await fetch('/api/users');
-  const users = await res.json();
+  currentUsers = await res.json();
   
   createdBySelect.replaceChildren(new Option(
     window.BADB_AUTH?.getAuditUserPlaceholder?.() || '— автоматически —',
@@ -328,39 +755,54 @@ async function loadUsers() {
   ));
   leadSelect.innerHTML = '<option value="">— выбрать пользователя —</option>';
   
-  users.forEach(u => {
+  currentUsers.forEach(u => {
     createdBySelect.add(new Option(u.name, u.user_id));
   });
 
-  users.filter(u => u.active).forEach(u => {
+  currentUsers.filter(u => u.active).forEach(u => {
     leadSelect.add(new Option(u.name, u.user_id));
   });
   
   createdBySelect.value = prevCreated;
   leadSelect.value = prevLead;
+  populateAccessUserSelect();
 }
 
 async function loadDepartments() {
   const prevDepartment = departmentSelect.value;
   const res = await fetch('/api/departments');
-  const departments = await res.json();
+  currentDepartments = await res.json();
 
   departmentSelect.replaceChildren(new Option('— выбрать отдел —', ''));
 
-  departments.forEach(department => {
+  currentDepartments.forEach(department => {
     departmentSelect.add(new Option(department.name, department.department_id));
   });
 
   departmentSelect.value = prevDepartment;
+  populateAccessDepartmentSelect();
   updateDepartmentVisibility();
 }
 
 // Refresh reference dropdowns on focus
 leadSelect.addEventListener('focus', loadUsers);
+leadSelect.addEventListener('change', () => {
+  if (!projectDepartmentAccessSection.hidden) {
+    renderProjectUserAccess();
+  }
+});
 createdBySelect.addEventListener('focus', loadUsers);
 departmentSelect.addEventListener('focus', loadDepartments);
 confidentialitySelect.addEventListener('change', () => {
   updateDepartmentVisibility();
+  if (!projectDepartmentAccessSection.hidden) {
+    renderProjectUserAccess();
+  }
+});
+departmentSelect.addEventListener('change', () => {
+  if (!projectDepartmentAccessSection.hidden) {
+    renderProjectUserAccess();
+  }
 });
 
 
@@ -378,12 +820,14 @@ addInput.addEventListener('keydown', (e) => {
   
   mode = 'create';
   currentId = null;
+  currentProjectLeadId = null;
   
   title.textContent = name;
   nameInput.value = name;
   form.elements['status'].value = 'active';
   form.elements['confidentiality_level'].value = 'public';
   updateDepartmentVisibility();
+  resetProjectAccessSection();
   
   showForm();
   
@@ -436,6 +880,46 @@ exitBtn.addEventListener('click', () => {
 
   if (confirm('Выйти без сохранения изменений?')) {
     resetForm();
+  }
+});
+
+grantDepartmentAccessBtn.addEventListener('click', async () => {
+  if (!currentId) return;
+
+  const departmentId = projectAccessDepartmentSelect.value;
+  if (!departmentId) {
+    showStatus('Выберите отдел', true);
+    return;
+  }
+
+  try {
+    await grantDepartmentAccess(currentId, Number(departmentId), projectAccessExpiresAt.value);
+    projectAccessDepartmentSelect.value = '';
+    projectAccessExpiresAt.value = '';
+    showStatus('Доступ отдела добавлен');
+    await loadProjectAccess();
+  } catch (err) {
+    showStatus(err.message, true);
+  }
+});
+
+grantUserAccessBtn.addEventListener('click', async () => {
+  if (!currentId) return;
+
+  const userId = projectAccessUserSelect.value;
+  if (!userId) {
+    showStatus('Выберите пользователя', true);
+    return;
+  }
+
+  try {
+    await grantUserAccess(currentId, Number(userId), projectUserAccessLevel.value);
+    projectAccessUserSelect.value = '';
+    projectUserAccessLevel.value = 'view';
+    showStatus('Доступ пользователя добавлен');
+    await loadProjectAccess();
+  } catch (err) {
+    showStatus(err.message, true);
   }
 });
 

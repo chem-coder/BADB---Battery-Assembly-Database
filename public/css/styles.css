@@ -366,15 +366,24 @@ body[data-page="BAL"] #batteriesList {
   margin-top: 1.25rem;
 }
 
+.project-access-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.9rem;
+}
+
 .departments-table th,
-.departments-table td {
+.departments-table td,
+.project-access-table th,
+.project-access-table td {
   border-bottom: 1px solid #e5e9ef;
   padding: 0.55rem 0.4rem;
   text-align: left;
   vertical-align: middle;
 }
 
-.departments-table th {
+.departments-table th,
+.project-access-table th {
   color: #5f6b7a;
   font-weight: 600;
 }
@@ -395,6 +404,23 @@ body[data-page="BAL"] #batteriesList {
   width: min(100%, 26rem);
 }
 
+.empty-table-message {
+  color: #667085;
+}
+
+.project-access-table select {
+  width: min(100%, 14rem);
+}
+
+.project-user-access-add {
+  margin-top: 0.9rem;
+}
+
+.access-expired {
+  color: #98a2b3;
+}
+
+.project-access-table .actions button,
 td.departments-edit-actions button {
   border: 1px solid #cdd5df;
   background: #f8fafc;

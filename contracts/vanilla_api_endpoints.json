@@ -322,6 +322,30 @@
       "sources": ["public/js/projects.js"]
     },
     {
+      "path": "/api/projects/:param/access",
+      "methods": ["GET", "POST"],
+      "auth": "GET auth plus project view policy; POST auth plus project modify policy",
+      "request": "GET none; POST department access payload",
+      "response": "project access list or grant status",
+      "sources": ["public/js/projects.js"]
+    },
+    {
+      "path": "/api/projects/:param/access/department/:param",
+      "methods": ["DELETE"],
+      "auth": "auth plus project modify policy",
+      "request": "none",
+      "response": "revoke status",
+      "sources": ["public/js/projects.js"]
+    },
+    {
+      "path": "/api/projects/:param/access/user/:param",
+      "methods": ["DELETE"],
+      "auth": "auth plus project modify policy",
+      "request": "none",
+      "response": "revoke status",
+      "sources": ["public/js/projects.js"]
+    },
+    {
       "path": "/api/recipes",
       "methods": ["GET", "POST"],
       "auth": "auth",

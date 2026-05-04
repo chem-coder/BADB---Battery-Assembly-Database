@@ -19,19 +19,64 @@ router.get('/test', async (req, res) => {
 
 const VALID_CONFIDENTIALITY = ['public', 'department', 'confidential'];
 
+function normalizeOptionalInteger(value) {
+  if (value === '' || value == null) return null;
+  const num = Number(value);
+  return Number.isInteger(num) ? num : null;
+}
+
+async function setProjectUserAccess(db, projectId, userId, accessLevel, changedBy) {
+  if (!Number.isInteger(Number(userId))) return;
+
+  await db.query(
+    `INSERT INTO user_project_access (user_id, project_id, granted_by, access_level, expires_at)
+     VALUES ($1, $2, $3, $4, NULL)
+     ON CONFLICT (user_id, project_id) DO UPDATE SET
+       access_level = EXCLUDED.access_level,
+       granted_by   = EXCLUDED.granted_by,
+       granted_at   = now(),
+       expires_at   = NULL`,
+    [Number(userId), projectId, changedBy, accessLevel]
+  );
+}
+
+async function syncProjectLeadAccess(db, projectId, previousLeadId, nextLeadId, changedBy) {
+  const previousLead = normalizeOptionalInteger(previousLeadId);
+  const nextLead = normalizeOptionalInteger(nextLeadId);
+
+  if (previousLead && previousLead !== nextLead) {
+    await setProjectUserAccess(db, projectId, previousLead, 'view', changedBy);
+    await logAccessChanges(db, projectId, changedBy, 'project_lead_demote', {
+      userIds: [previousLead],
+      access_level: 'view'
+    });
+  }
+
+  if (nextLead) {
+    await setProjectUserAccess(db, projectId, nextLead, 'admin', changedBy);
+    await logAccessChanges(db, projectId, changedBy, 'project_lead_admin', {
+      userIds: [nextLead],
+      access_level: 'admin'
+    });
+  }
+}
+
 // ── Authorization helpers ─────────────────────────────────────────────
 // Determines who can MODIFY a project (edit, delete, manage access).
-// Returns: { exists: boolean, level: 'admin'|'director'|'owner'|'project-admin'|null }
+// Returns: { exists: boolean, level: 'admin'|'director'|'owner'|'project-lead'|'project-admin'|null }
 async function checkModifyPermission(db, projectId, user) {
   // First verify the project exists (needed even for admins so we return 404 not 500)
-  const projCheck = await db.query('SELECT created_by FROM projects WHERE project_id = $1', [projectId]);
+  const projCheck = await db.query('SELECT created_by, lead_id FROM projects WHERE project_id = $1', [projectId]);
   if (projCheck.rowCount === 0) {
     return { exists: false, level: null };
   }
   const projCreatedBy = projCheck.rows[0].created_by;
+  const projLeadId = projCheck.rows[0].lead_id;
 
   // Admins can always modify (but only existing projects)
   if (user.role === 'admin') return { exists: true, level: 'admin' };
+  // Project lead has project-admin privileges
+  if (Number(projLeadId) === Number(user.userId)) return { exists: true, level: 'project-lead' };
 
   // Fetch user context + explicit access level
   const r = await db.query(`
@@ -70,6 +115,7 @@ async function checkViewPermission(db, projectId, user) {
       p.confidentiality_level,
       p.department_id AS project_dept,
       p.created_by,
+      p.lead_id,
       u.department_id AS user_dept,
       u.position,
       (SELECT 1 FROM user_project_access upa
@@ -93,6 +139,8 @@ async function checkViewPermission(db, projectId, user) {
 
   // Director
   if ((row.position || '').toLowerCase().includes('директор')) return { exists: true, allowed: true };
+  // Project lead has project-admin privileges
+  if (Number(row.lead_id) === Number(user.userId)) return { exists: true, allowed: true };
   // Public project
   if (row.confidentiality_level === 'public') return { exists: true, allowed: true };
   // Department project matching user's dept
@@ -199,14 +247,17 @@ router.post('/', auth, async (req, res) => {
   // Enforce: department_id only meaningful for 'department' level
   const finalDeptId = confLevel === 'department' ? deptId : null;
 
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
     // NOTE: `status` is NOT NULL in the schema with DEFAULT 'active'. If the
     // frontend ever sends `null` explicitly (e.g. an empty Select bound to
     // null instead of undefined), PG treats that as "user chose NULL" and
     // rejects with a not-null violation instead of falling back to the
     // default. COALESCE to 'active' enum value is the same defense already
     // used for `start_date` above.
-    const result = await pool.query(
+    const result = await client.query(
       `
       INSERT INTO projects
         (name, created_by, lead_id, start_date, due_date, status, description,
@@ -231,10 +282,16 @@ router.post('/', auth, async (req, res) => {
       ]
     );
 
+    await syncProjectLeadAccess(client, result.rows[0].project_id, null, leadId, req.user.userId);
+
+    await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
+  } finally {
+    client.release();
   }
 });
 
@@ -297,6 +354,7 @@ router.get('/', auth, async (req, res) => {
       LEFT JOIN users u_updated ON u_updated.user_id = p.updated_by
       WHERE
         p.confidentiality_level = 'public'
+        OR p.lead_id = $2
         OR (p.confidentiality_level = 'department' AND p.department_id = $1)
         OR EXISTS (
           SELECT 1 FROM user_project_access upa
@@ -358,12 +416,21 @@ router.put('/:id', auth, requireModify, async (req, res) => {
     return res.status(400).json({ error: 'Укажите отдел для уровня «Отдел»' });
   }
 
+  const normalizedLeadId = normalizeOptionalInteger(lead_id);
+  if (lead_id !== undefined && lead_id !== '' && lead_id !== null && normalizedLeadId === null) {
+    return res.status(400).json({ error: 'Некорректный руководитель' });
+  }
+
+  const client = await pool.connect();
   try {
-    const current = await pool.query(
+    await client.query('BEGIN');
+
+    const current = await client.query(
       'SELECT name, lead_id, start_date, due_date, status, description, confidentiality_level, department_id FROM projects WHERE project_id = $1',
       [id]
     );
     if (current.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Проект не найден' });
     }
 
@@ -381,7 +448,7 @@ router.put('/:id', auth, requireModify, async (req, res) => {
 
     const newVals = {
       name: name.trim(),
-      lead_id: lead_id || null,
+      lead_id: normalizedLeadId,
       start_date: start_date || current.rows[0].start_date,
       due_date: due_date || null,
       status: status || 'active',
@@ -390,7 +457,7 @@ router.put('/:id', auth, requireModify, async (req, res) => {
       department_id: finalDeptId,
     };
 
-    const result = await pool.query(
+    const result = await client.query(
       `
       UPDATE projects
       SET
@@ -422,15 +489,21 @@ router.put('/:id', auth, requireModify, async (req, res) => {
     );
 
     if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Проект не найден' });
     }
 
-    await trackChanges(pool, 'project', 'projects', 'project_id', Number(id), current.rows[0], newVals, req.user.userId);
+    await syncProjectLeadAccess(client, id, current.rows[0].lead_id, newVals.lead_id, req.user.userId);
+    await trackChanges(client, 'project', 'projects', 'project_id', Number(id), current.rows[0], newVals, req.user.userId);
 
+    await client.query('COMMIT');
     res.json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
+  } finally {
+    client.release();
   }
 });
 
