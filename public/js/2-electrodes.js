@@ -1432,9 +1432,10 @@
         const count = Number(batch.electrode_count) || 0;
         const targetText = formatCutBatchTarget(batch);
         const geometryText = formatCutBatchGeometry(batch);
+        const sidednessText = formatElectrodesSidednessLabel(batch.tape_coating_sidedness);
 
         title.textContent =
-          `Партия ${batch.cut_batch_id} | ${batch.tape_name || '—'}${targetText ? ` | ${targetText}` : ''}${geometryText ? ` | ${geometryText}` : ''} | ${count} эл. | ${batchStatusLabel(batch)}`;
+          `Партия ${batch.cut_batch_id} | ${batch.tape_name || '—'}${sidednessText ? ` | ${sidednessText}` : ''}${targetText ? ` | ${targetText}` : ''}${geometryText ? ` | ${geometryText}` : ''} | ${count} эл. | ${batchStatusLabel(batch)}`;
 
         const meta = document.createElement('small');
         meta.style.color = '#666';
