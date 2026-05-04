@@ -10,6 +10,9 @@ const createdBySelect = document.getElementById('project-created-by');
 const projectsList = document.getElementById('projectsList');
 const statusSelect = form.querySelector('select[name="status"]');
 const leadSelect = document.getElementById('project-lead-id');
+const confidentialitySelect = document.getElementById('project-confidentiality-level');
+const departmentBlock = document.getElementById('project-department-block');
+const departmentSelect = document.getElementById('project-department-id');
 
 let mode = null; // 'create' | 'edit'
 let currentId = null;
@@ -34,7 +37,9 @@ function captureFormState() {
     start_date: form.elements['start_date'].value,
     due_date: form.elements['due_date'].value,
     description: form.elements['description'].value,
-    status: form.elements['status'].value
+    status: form.elements['status'].value,
+    confidentiality_level: form.elements['confidentiality_level'].value,
+    department_id: form.elements['department_id']?.value || ''
   });
 }
 
@@ -49,6 +54,7 @@ function hasUnsavedChanges() {
 
 function resetForm() {
   form.reset();
+  updateDepartmentVisibility();
   title.textContent = '';
   mode = null;
   currentId = null;
@@ -58,6 +64,47 @@ function resetForm() {
 
 function formDataToObject(form) {
   return Object.fromEntries(new FormData(form));
+}
+
+function normalizeProjectPayload(data) {
+  const next = { ...data };
+  next.confidentiality_level = next.confidentiality_level || 'public';
+
+  if (next.confidentiality_level !== 'department') {
+    next.department_id = null;
+  } else {
+    next.department_id = next.department_id || null;
+  }
+
+  return next;
+}
+
+function statusLabel(status) {
+  return status === 'active' ? 'активный' :
+    status === 'paused' ? 'приостановлен' :
+    status === 'completed' ? 'завершён' :
+    'архивирован';
+}
+
+function confidentialityLabel(level) {
+  return level === 'department' ? 'отдел' :
+    level === 'confidential' ? 'выборочно' :
+    'все';
+}
+
+function formatDate(value) {
+  return value ? new Date(value).toLocaleDateString('ru-RU') : '';
+}
+
+function updateDepartmentVisibility() {
+  const requiresDepartment = confidentialitySelect.value === 'department';
+  departmentBlock.hidden = !requiresDepartment;
+  departmentSelect.disabled = !requiresDepartment;
+  departmentSelect.required = requiresDepartment;
+
+  if (!requiresDepartment) {
+    departmentSelect.value = '';
+  }
 }
 
 
@@ -123,18 +170,35 @@ function renderProjects(projects) {
     info.className = 'user-info';
     
     const nameSpan = document.createElement('span');
+    nameSpan.className = 'project-list-title';
     nameSpan.textContent = proj.name;
     
     const statusSpan = document.createElement('span');
     statusSpan.className = 'status';
-    statusSpan.textContent =
-    proj.status === 'active' ? 'активный' :
-    proj.status === 'paused' ? 'приостановлен' :
-    proj.status === 'completed' ? 'завершен' :
-    'архивирован';
+    statusSpan.textContent = statusLabel(proj.status);
+
+    const meta = document.createElement('div');
+    meta.className = 'project-list-meta';
+    const accessText = confidentialityLabel(proj.confidentiality_level);
+    const departmentText = proj.confidentiality_level === 'department' && proj.department_name
+      ? ` · ${proj.department_name}`
+      : '';
+    const leadText = proj.lead_name ? `Руководитель: ${proj.lead_name}` : '';
+    const dateParts = [
+      formatDate(proj.start_date) ? `начало: ${formatDate(proj.start_date)}` : '',
+      formatDate(proj.due_date) ? `план: ${formatDate(proj.due_date)}` : ''
+    ].filter(Boolean).join(' · ');
+    const createdText = proj.created_by_name ? `создал: ${proj.created_by_name}` : '';
+    meta.textContent = [
+      `доступ: ${accessText}${departmentText}`,
+      leadText,
+      dateParts,
+      createdText
+    ].filter(Boolean).join(' — ');
     
     info.appendChild(nameSpan);
     info.appendChild(statusSpan);
+    info.appendChild(meta);
     
     const actions = document.createElement('div');
     actions.className = 'actions';
@@ -159,6 +223,9 @@ function renderProjects(projects) {
       form.elements['due_date'].value = proj.due_date ? proj.due_date.slice(0,10) : '';
       form.elements['description'].value = proj.description || '';
       form.elements['status'].value = proj.status || 'active';
+      form.elements['confidentiality_level'].value = proj.confidentiality_level || 'public';
+      form.elements['department_id'].value = proj.department_id || '';
+      updateDepartmentVisibility();
       
       // user (if present in list)
       if (proj.created_by) {
@@ -219,6 +286,9 @@ function duplicateProject(proj) {
   form.elements['due_date'].value = proj.due_date ? proj.due_date.slice(0,10) : '';
   form.elements['description'].value = proj.description || '';  
   form.elements['status'].value = proj.status || 'active';
+  form.elements['confidentiality_level'].value = proj.confidentiality_level || 'public';
+  form.elements['department_id'].value = proj.department_id || '';
+  updateDepartmentVisibility();
   
   // IMPORTANT: reset things that must be new
   createdBySelect.value = '';
@@ -270,9 +340,28 @@ async function loadUsers() {
   leadSelect.value = prevLead;
 }
 
+async function loadDepartments() {
+  const prevDepartment = departmentSelect.value;
+  const res = await fetch('/api/departments');
+  const departments = await res.json();
+
+  departmentSelect.replaceChildren(new Option('— выбрать отдел —', ''));
+
+  departments.forEach(department => {
+    departmentSelect.add(new Option(department.name, department.department_id));
+  });
+
+  departmentSelect.value = prevDepartment;
+  updateDepartmentVisibility();
+}
+
 // Refresh reference dropdowns on focus
 leadSelect.addEventListener('focus', loadUsers);
 createdBySelect.addEventListener('focus', loadUsers);
+departmentSelect.addEventListener('focus', loadDepartments);
+confidentialitySelect.addEventListener('change', () => {
+  updateDepartmentVisibility();
+});
 
 
 // -------- Events --------
@@ -292,6 +381,9 @@ addInput.addEventListener('keydown', (e) => {
   
   title.textContent = name;
   nameInput.value = name;
+  form.elements['status'].value = 'active';
+  form.elements['confidentiality_level'].value = 'public';
+  updateDepartmentVisibility();
   
   showForm();
   
@@ -300,6 +392,11 @@ addInput.addEventListener('keydown', (e) => {
 });
 
 function validateRequiredFields() {
+  if (form.elements['confidentiality_level'].value === 'department' && !form.elements['department_id'].value) {
+    showStatus('Укажите отдел проекта', true);
+    return false;
+  }
+
   return true;
 }
 
@@ -308,7 +405,7 @@ saveBtn.addEventListener('click', async () => {
   
   if (!validateRequiredFields()) return;
   
-  const data = formDataToObject(form);
+  const data = normalizeProjectPayload(formDataToObject(form));
   delete data.created_by;
   data.name = title.textContent;
   
@@ -375,5 +472,7 @@ async function loadProjects() {
 }
 
 hideForm();
+updateDepartmentVisibility();
 loadUsers();
+loadDepartments();
 loadProjects();

@@ -585,7 +585,7 @@
       "auth": "auth",
       "request": "none",
       "response": "department list JSON",
-      "sources": ["public/js/users.js"]
+      "sources": ["public/js/projects.js", "public/js/users.js"]
     },
     {
       "path": "/api/users",

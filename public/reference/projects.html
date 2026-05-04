@@ -66,23 +66,41 @@
           placeholder="Единицы измерения, методики (Гурли и т.п.), особые замечания"
         ></textarea>
 
-        <label>Дата начала</label>
-        <input type="date" name="start_date">
+        <label for="project-start-date">Дата начала</label>
+        <input id="project-start-date" type="date" name="start_date">
 
-        <label>Плановая дата окончания</label>
-        <input type="date" name="due_date">
+        <label for="project-due-date">Плановая дата окончания</label>
+        <input id="project-due-date" type="date" name="due_date">
       </fieldset>
 
       <fieldset id="project-status">
         <legend>Статус</legend>
 
-        <label>Статус</label>
-        <select name="status">
+        <label for="project-status-select">Статус</label>
+        <select id="project-status-select" name="status">
           <option value="active">активный</option>
           <option value="paused">приостановлен</option>
           <option value="completed">завершен</option>
           <option value="archived">архивирован</option>
         </select>
+      </fieldset>
+
+      <fieldset id="project-access">
+        <legend>Доступ</legend>
+
+        <label for="project-confidentiality-level">Видимость</label>
+        <select id="project-confidentiality-level" name="confidentiality_level">
+          <option value="public">Все</option>
+          <option value="department">Отдел</option>
+          <option value="confidential">Выборочно</option>
+        </select><br>
+
+        <div id="project-department-block" hidden>
+          <label for="project-department-id">Отдел</label>
+          <select id="project-department-id" name="department_id">
+            <option value="">— выбрать отдел —</option>
+          </select>
+        </div>
       </fieldset>
 
       <button id="saveBtn" type="button">Сохранить запись</button>

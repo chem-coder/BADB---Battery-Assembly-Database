@@ -312,6 +312,7 @@ body[data-page="BAL"] #exitBatteriesBtn {
 
 body[data-page="tapes"] #tapesList,
 body[data-page="electrodes"] #all-cut-batches-list,
+body[data-page="projectsList"] #projectsList,
 body[data-page="BAL"] #batteriesList {
   border-top: 1px solid #d8dee6;
   margin-top: 1.25rem;
@@ -327,6 +328,17 @@ body[data-page="BAL"] #batteriesList {
 
 .user-info {
   flex: 1;
+}
+
+.project-list-title {
+  font-weight: 700;
+}
+
+.project-list-meta {
+  margin-top: 0.18rem;
+  color: #667085;
+  font-size: 0.92em;
+  line-height: 1.35;
 }
 
 .user-meta {
