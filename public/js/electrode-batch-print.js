@@ -62,25 +62,23 @@ function formatGeometry(batch) {
   return '—';
 }
 
-function formatMass(value, digits = 4) {
+function formatNumber(value, digits = 3, unit = '') {
   if (value == null || value === '') return '—';
   const num = Number(value);
   if (!Number.isFinite(num)) return '—';
-  return `${num.toFixed(digits)} г`;
+  return `${num.toFixed(digits)}${unit ? ` ${unit}` : ''}`;
+}
+
+function formatMass(value, digits = 4) {
+  return formatNumber(value, digits, 'г');
 }
 
 function formatCapacity(value, digits = 3) {
-  if (value == null || value === '') return '—';
-  const num = Number(value);
-  if (!Number.isFinite(num)) return '—';
-  return `${num.toFixed(digits)} мАч`;
+  return formatNumber(value, digits, 'мАч');
 }
 
 function formatArealCapacity(value, digits = 3) {
-  if (value == null || value === '') return '—';
-  const num = Number(value);
-  if (!Number.isFinite(num)) return '—';
-  return `${num.toFixed(digits)} мАч/см²`;
+  return formatNumber(value, digits, 'мАч/см²');
 }
 
 function formatFraction(value, digits = 2) {
@@ -132,21 +130,33 @@ function formatElectrodeStatus(electrode) {
   return '—';
 }
 
-function renderRow(label, value) {
-  return `<div class="report_row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value ?? '—')}</div>`;
-}
+function renderRow(label, value, options = {}) {
+  const fieldClass = options.wide ? ' report_field_wide' : '';
+  const valueClass = [
+    'report_value',
+    options.numeric ? 'report_number' : '',
+    options.text ? 'report_text_value' : ''
+  ].filter(Boolean).join(' ');
 
-function renderCompactLine(value) {
-  return `<div class="report_compact">${escapeHtml(value ?? '—')}</div>`;
-}
-
-function renderDualMetric(label, theoreticalValue, actualValue) {
   return `
-    <div class="report_dual_metric">
-      <div class="report_dual_label">${escapeHtml(label)}</div>
-      <div class="report_dual_primary">Теор.: ${escapeHtml(theoreticalValue ?? '—')}</div>
-      <div class="report_dual_secondary">Факт.: ${escapeHtml(actualValue ?? '—')}</div>
+    <div class="report_field${fieldClass}">
+      <span class="report_label">${escapeHtml(label)}</span>
+      <span class="${valueClass}">${escapeHtml(value ?? '—')}</span>
     </div>
+  `;
+}
+
+function renderFieldGrid(rows) {
+  return `<div class="report_field_grid">${rows.join('')}</div>`;
+}
+
+function renderMetricRow(label, theoreticalValue, actualValue) {
+  return `
+    <tr>
+      <td class="report_metric_label">${escapeHtml(label)}</td>
+      <td class="report_number">${escapeHtml(theoreticalValue ?? '—')}</td>
+      <td class="report_number">${escapeHtml(actualValue ?? '—')}</td>
+    </tr>
   `;
 }
 
@@ -173,8 +183,10 @@ function renderFoilMassSection(foilMasses) {
   return `
     <section class="report_section">
       <h2>Масса фольги</h2>
-      ${renderRow('Среднее', average)}
-      ${renderCompactLine(allValues)}
+      ${renderFieldGrid([
+        renderRow('Среднее', average, { numeric: true }),
+        renderRow('Измерения', allValues, { wide: true })
+      ])}
     </section>
   `;
 }
@@ -205,9 +217,11 @@ function renderDryingSection(batch) {
   return `
     <section class="report_section">
       <h2>Сушка партии</h2>
-      ${renderCompactLine(timeLine)}
-      ${detailParts.length ? renderCompactLine(detailParts.join(', ')) : ''}
-      ${renderRow('Длительность', formatDryingSummary(batch))}
+      ${renderFieldGrid([
+        renderRow('Период', timeLine),
+        renderRow('Длительность', formatDryingSummary(batch), { numeric: true }),
+        renderRow('Параметры', detailParts.join(', ') || '—', { wide: true, text: true })
+      ])}
     </section>
   `;
 }
@@ -222,63 +236,59 @@ function renderCapacitySection(summary) {
   return `
     <section class="report_section">
       <h2>Расчёт ёмкости</h2>
-      <div class="report_dual_grid">
-        ${renderDualMetric(
-          'Активный материал',
-          summary.active_material_name || '—',
-          summary.coating_sidedness ? formatTapeSidedness(summary.coating_sidedness) : '—'
-        )}
-        ${renderDualMetric(
-          'Удельная ёмкость материала',
-          formatCapacity(summary.specific_capacity_mAh_g, 2).replace(' мАч', ''),
-          formatCapacity(summary.specific_capacity_mAh_g, 2).replace(' мАч', '')
-        )}
-        ${renderDualMetric(
-          'Доля активного вещества',
-          formatFraction(summary.active_fraction_theoretical, 2),
-          actualFractionText
-        )}
-        ${renderDualMetric(
-          'Средняя масса фольги',
-          formatMass(summary.average_foil_mass_g, 4),
-          summary.foil_measurement_count ? `${summary.foil_measurement_count} изм.` : '—'
-        )}
-        ${renderDualMetric(
-          'Площадь электрода',
-          summary.electrode_area_cm2 != null ? `${Number(summary.electrode_area_cm2).toFixed(3)} см²` : '—',
-          summary.electrode_area_mm2 != null ? `${Number(summary.electrode_area_mm2).toFixed(2)} мм²` : '—'
-        )}
-        ${renderDualMetric(
-          'Средняя масса покрытия',
-          formatMass(summary.average_coating_mass_g, 4),
-          '—'
-        )}
-        ${renderDualMetric(
-          'Средняя масса активного материала',
-          formatMass(summary.average_active_material_mass_theoretical_g, 4),
-          formatMass(summary.average_active_material_mass_actual_g, 4)
-        )}
-        ${renderDualMetric(
-          'Средняя ёмкость партии',
-          formatCapacity(summary.average_capacity_theoretical_mAh, 3),
-          formatCapacity(summary.average_capacity_actual_mAh, 3)
-        )}
-        ${renderDualMetric(
-          'Удельная ёмкость по площади',
-          formatArealCapacity(summary.areal_capacity_theoretical_mAh_cm2, 3),
-          formatArealCapacity(summary.areal_capacity_actual_mAh_cm2, 3)
-        )}
-        ${renderDualMetric(
-          'Удельная ёмкость на сторону',
-          formatArealCapacity(summary.capacity_per_side_theoretical_mAh_cm2, 3),
-          formatArealCapacity(summary.capacity_per_side_actual_mAh_cm2, 3)
-        )}
-        ${renderDualMetric(
-          'В расчёте участвовало',
-          `${summary.included_capacity_theoretical_count ?? 0} шт.`,
-          `${summary.included_capacity_actual_count ?? 0} шт.`
-        )}
-      </div>
+      <p class="report_count_line">
+        В расчёте: ${escapeHtml(summary.included_electrode_count ?? 0)} эл. ·
+        ёмкость теор.: ${escapeHtml(summary.included_capacity_theoretical_count ?? 0)} ·
+        ёмкость факт.: ${escapeHtml(summary.included_capacity_actual_count ?? 0)}
+      </p>
+      ${renderFieldGrid([
+        renderRow('Активный материал', summary.active_material_name || '—'),
+        renderRow('Покрытие', summary.coating_sidedness ? formatTapeSidedness(summary.coating_sidedness) : '—'),
+        renderRow('Удельная ёмкость', formatNumber(summary.specific_capacity_mAh_g, 2, 'мАч/г'), { numeric: true }),
+        renderRow('Доля АМ', `теор.: ${formatFraction(summary.active_fraction_theoretical, 2)} / факт.: ${actualFractionText}`),
+        renderRow('Средняя фольга', `${formatMass(summary.average_foil_mass_g, 4)} · ${summary.foil_measurement_count ?? 0} изм.`, { numeric: true }),
+        renderRow(
+          'Площадь',
+          `${formatNumber(summary.electrode_area_cm2, 3, 'см²')} / ${formatNumber(summary.electrode_area_mm2, 2, 'мм²')}`,
+          { numeric: true }
+        )
+      ])}
+      <table class="report_table report_summary_table">
+        <thead>
+          <tr>
+            <th>Показатель</th>
+            <th>Теория</th>
+            <th>Факт</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderMetricRow(
+            'Средняя масса покрытия',
+            formatMass(summary.average_coating_mass_g, 4),
+            '—'
+          )}
+          ${renderMetricRow(
+            'Средняя масса активного материала',
+            formatMass(summary.average_active_material_mass_theoretical_g, 4),
+            formatMass(summary.average_active_material_mass_actual_g, 4)
+          )}
+          ${renderMetricRow(
+            'Средняя ёмкость партии',
+            formatCapacity(summary.average_capacity_theoretical_mAh, 3),
+            formatCapacity(summary.average_capacity_actual_mAh, 3)
+          )}
+          ${renderMetricRow(
+            'Удельная ёмкость по площади',
+            formatArealCapacity(summary.areal_capacity_theoretical_mAh_cm2, 3),
+            formatArealCapacity(summary.areal_capacity_actual_mAh_cm2, 3)
+          )}
+          ${renderMetricRow(
+            'Удельная ёмкость на сторону',
+            formatArealCapacity(summary.capacity_per_side_theoretical_mAh_cm2, 3),
+            formatArealCapacity(summary.capacity_per_side_actual_mAh_cm2, 3)
+          )}
+        </tbody>
+      </table>
     </section>
   `;
 }
@@ -293,19 +303,21 @@ function renderElectrodesSection(electrodes) {
   return `
     <section class="report_section">
       <h2>Электроды в партии</h2>
-      ${renderRow('Всего', total ? `${total} | новые ${available} | в батареях ${used} | списано ${scrapped}` : '0')}
+      <p class="report_count_line">
+        Всего: ${escapeHtml(total)} · новые: ${escapeHtml(available)} · в батареях: ${escapeHtml(used)} · списано: ${escapeHtml(scrapped)}
+      </p>
       ${rows.length === 0 ? '<p class="muted">Электроды не сохранены.</p>' : `
         <table class="report_table">
           <thead>
             <tr>
-              <th>№</th>
-              <th>ID</th>
-              <th>m, г</th>
-              <th>Покрытие, г</th>
-              <th>Активная масса (теор.), г</th>
-              <th>Активная масса (факт.), г</th>
-              <th>Ёмкость (теор.), мАч</th>
-              <th>Ёмкость (факт.), мАч</th>
+              <th class="report_number">№</th>
+              <th class="report_number">ID</th>
+              <th class="report_number">m, г</th>
+              <th class="report_number">Покрытие, г</th>
+              <th class="report_number">АМ теор., г</th>
+              <th class="report_number">АМ факт., г</th>
+              <th class="report_number">C теор., мАч</th>
+              <th class="report_number">C факт., мАч</th>
               <th>Стаканчик</th>
               <th>Статус</th>
             </tr>
@@ -313,14 +325,14 @@ function renderElectrodesSection(electrodes) {
           <tbody>
             ${rows.map(row => `
               <tr>
-                <td>${escapeHtml(row.number_in_batch ?? '—')}</td>
-                <td>${escapeHtml(row.electrode_id ?? '—')}</td>
-                <td>${escapeHtml(formatMass(row.electrode_mass_g))}</td>
-                <td>${escapeHtml(formatMass(row.coating_mass_g))}</td>
-                <td>${escapeHtml(formatMass(row.active_material_mass_theoretical_g))}</td>
-                <td>${escapeHtml(formatMass(row.active_material_mass_actual_g))}</td>
-                <td>${escapeHtml(formatCapacity(row.capacity_theoretical_mAh))}</td>
-                <td>${escapeHtml(formatCapacity(row.capacity_actual_mAh))}</td>
+                <td class="report_number">${escapeHtml(row.number_in_batch ?? '—')}</td>
+                <td class="report_number">${escapeHtml(row.electrode_id ?? '—')}</td>
+                <td class="report_number">${escapeHtml(formatMass(row.electrode_mass_g))}</td>
+                <td class="report_number">${escapeHtml(formatMass(row.coating_mass_g))}</td>
+                <td class="report_number">${escapeHtml(formatMass(row.active_material_mass_theoretical_g))}</td>
+                <td class="report_number">${escapeHtml(formatMass(row.active_material_mass_actual_g))}</td>
+                <td class="report_number">${escapeHtml(formatCapacity(row.capacity_theoretical_mAh))}</td>
+                <td class="report_number">${escapeHtml(formatCapacity(row.capacity_actual_mAh))}</td>
                 <td>${escapeHtml(row.cup_number ?? '—')}</td>
                 <td>${escapeHtml(formatElectrodeStatus(row))}</td>
               </tr>
@@ -363,16 +375,16 @@ function renderCommentsSection(batch, electrodes) {
         <table class="report_table">
           <thead>
             <tr>
-              <th>№</th>
-              <th>ID</th>
+              <th class="report_number">№</th>
+              <th class="report_number">ID</th>
               <th>Комментарий</th>
             </tr>
           </thead>
           <tbody>
             ${electrodeComments.map(row => `
               <tr>
-                <td>${escapeHtml(row.number_in_batch ?? '—')}</td>
-                <td>${escapeHtml(row.electrode_id ?? '—')}</td>
+                <td class="report_number">${escapeHtml(row.number_in_batch ?? '—')}</td>
+                <td class="report_number">${escapeHtml(row.electrode_id ?? '—')}</td>
                 <td>${escapeHtml(row.comments)}</td>
               </tr>
             `).join('')}
@@ -406,21 +418,32 @@ function renderReport(report) {
   ].filter(Boolean).join(' | ');
 
   root.innerHTML = `
-    <h1 class="report_title">Протокол вырезания</h1>
-    <h2 class="report_subtitle">Партия электродов #${escapeHtml(batch.cut_batch_id || '—')}</h2>
+    <header class="report_header">
+      <div>
+        <p class="report_title">Протокол вырезания</p>
+        <h1 class="report_subtitle">Партия электродов #${escapeHtml(batch.cut_batch_id || '—')}</h1>
+      </div>
+      <div class="report_status_box">
+        <span class="report_status_label">Тип</span>
+        <span class="report_status_value">${escapeHtml(formatRole(batch.tape_role))}</span>
+      </div>
+    </header>
     <div class="report_meta">
-      <div class="report_row"><strong>Проект:</strong> ${escapeHtml(batch.project_name || '—')}</div>
-      <div class="report_row"><strong>Оператор:</strong> ${escapeHtml(batch.created_by_name || '—')}</div>
-      <div class="report_row"><strong>Создана:</strong> ${escapeHtml(formatDateTime(batch.created_at))}</div>
-      <div class="report_row"><strong>Обновлена:</strong> ${escapeHtml(formatDateTime(batch.updated_at))}</div>
+      ${renderRow('Проект', batch.project_names || batch.project_name || '—')}
+      ${renderRow('Оператор', batch.created_by_name || '—')}
+      ${renderRow('Создана', formatDateTime(batch.created_at), { numeric: true })}
+      ${renderRow('Обновлена', formatDateTime(batch.updated_at), { numeric: true })}
     </div>
 
     <section class="report_section">
       <h2>Источник и параметры партии</h2>
-      ${renderCompactLine(sourceTapeLine || '—')}
-      ${renderRow('Рецепт', batch.tape_recipe_name || '—')}
-      ${renderRow('Назначение', formatTarget(batch))}
-      ${renderRow('Геометрия', formatGeometry(batch))}
+      ${renderFieldGrid([
+        renderRow('Лента', sourceTapeLine || '—', { wide: true }),
+        renderRow('Рецепт', batch.tape_recipe_name || '—'),
+        renderRow('Назначение', formatTarget(batch)),
+        renderRow('Геометрия', formatGeometry(batch)),
+        renderRow('Покрытие', batch.tape_coating_sidedness ? formatTapeSidedness(batch.tape_coating_sidedness) : '—')
+      ])}
     </section>
 
     ${renderFoilMassSection(foilMasses)}

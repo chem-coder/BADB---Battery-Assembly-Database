@@ -2061,6 +2061,11 @@ function formatBatteryCapacity(value, digits = 3) {
   return Number.isFinite(num) ? `${num.toFixed(digits)} мАч` : '—';
 }
 
+function formatBatteryArea(value, digits = 3) {
+  const num = toFiniteBatteryNumber(value);
+  return Number.isFinite(num) ? `${num.toFixed(digits)} см²` : '—';
+}
+
 function formatBatteryArealCapacity(value, digits = 3) {
   const num = toFiniteBatteryNumber(value);
   return Number.isFinite(num) ? `${num.toFixed(digits)} мАч/см²` : '—';
@@ -2271,6 +2276,190 @@ function renderBatteryCapacityMetric(label, primary, secondary, title = '') {
   `;
 }
 
+function hasPositiveBatteryValue(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0;
+}
+
+function renderBatteryCapacityNestedList(lines) {
+  const safeLines = lines.filter(Boolean);
+  if (!safeLines.length) return '';
+
+  return `
+    <ul>
+      ${safeLines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}
+    </ul>
+  `;
+}
+
+function renderBatteryCapacityFormulaLine(formula) {
+  return `<li><span class="battery-capacity-formula">${escapeHtml(formula)}</span></li>`;
+}
+
+function renderBatteryCapacityStep(title, bodyHtml) {
+  if (!bodyHtml) return '';
+
+  return `
+    <li>
+      <strong>${escapeHtml(title)}</strong>
+      ${bodyHtml}
+    </li>
+  `;
+}
+
+function getBatteryElectrodeSideCount(row) {
+  const directSideCount = toFiniteBatteryNumber(row?.side_count);
+  if (Number.isFinite(directSideCount) && directSideCount > 0) return directSideCount;
+
+  return row?.coating_sidedness === 'two_sided' ? 2 : 1;
+}
+
+function getBatteryGroupSideCount(rows) {
+  const sideCounts = (Array.isArray(rows) ? rows : [])
+    .map(getBatteryElectrodeSideCount)
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (!sideCounts.length) return 1;
+  return Math.max(...sideCounts);
+}
+
+function describeBatteryElectrodeSidedness(sideCount) {
+  return sideCount > 1 ? 'двусторонние' : 'односторонние';
+}
+
+function getBatteryLimitingRole(summary, cathodes, anodes) {
+  if (
+    cathodes.length &&
+    anodes.length &&
+    hasPositiveBatteryValue(summary.cathode_capacity_actual_mAh) &&
+    hasPositiveBatteryValue(summary.anode_capacity_actual_mAh)
+  ) {
+    return summary.cathode_capacity_actual_mAh <= summary.anode_capacity_actual_mAh ? 'cathode' : 'anode';
+  }
+
+  if (cathodes.length && hasPositiveBatteryValue(summary.cathode_capacity_actual_mAh)) return 'cathode';
+  if (anodes.length && hasPositiveBatteryValue(summary.anode_capacity_actual_mAh)) return 'anode';
+  return null;
+}
+
+function renderElectrodeGroupCapacityStep(label, rows, capacity, recipeCapacity, area, arealCapacity) {
+  if (!rows.length || !hasPositiveBatteryValue(capacity)) return '';
+
+  const sideCount = getBatteryGroupSideCount(rows);
+  const sidednessText = describeBatteryElectrodeSidedness(sideCount);
+  const areaText = hasPositiveBatteryValue(area) ? formatBatteryArea(area) : '—';
+  const arealText = hasPositiveBatteryValue(arealCapacity) ? formatBatteryArealCapacity(arealCapacity) : '—';
+  const perElectrodeCapacity = capacity / rows.length;
+  const perElectrodeCapacityText = formatBatteryCapacity(perElectrodeCapacity);
+  const perSideCapacity = sideCount > 1 ? perElectrodeCapacity / sideCount : null;
+  const perSideArealCapacity = sideCount > 1 && hasPositiveBatteryValue(arealCapacity)
+    ? arealCapacity / sideCount
+    : null;
+  const lines = [
+    `Выбрано электродов: ${rows.length}; тип покрытия: ${sidednessText}.`,
+    `Ёмкость одного электрода: ${perElectrodeCapacityText}.`
+  ];
+
+  if (hasPositiveBatteryValue(perSideCapacity)) {
+    lines.push(`Ёмкость одной стороны одного электрода: ${formatBatteryCapacity(perSideCapacity)} = ${perElectrodeCapacityText} / ${sideCount}.`);
+  }
+
+  lines.push(`Суммарная ёмкость выбранных электродов: ${formatBatteryCapacity(capacity)}.`);
+
+  if (hasPositiveBatteryValue(recipeCapacity)) {
+    lines.push(`Суммарная ёмкость по рецепту: ${formatBatteryCapacity(recipeCapacity)}.`);
+  }
+
+  if (hasPositiveBatteryValue(area)) {
+    lines.push(`Суммарная геометрическая площадь выбранных электродов: ${areaText}.`);
+  }
+
+  if (hasPositiveBatteryValue(area) && hasPositiveBatteryValue(arealCapacity)) {
+    lines.push(`Ёмкость на площадь электрода: ${arealText} = ${formatBatteryCapacity(capacity)} / ${areaText}.`);
+  }
+
+  if (hasPositiveBatteryValue(perSideArealCapacity)) {
+    lines.push(`Ёмкость на площадь одной стороны: ${formatBatteryArealCapacity(perSideArealCapacity)} = ${arealText} / ${sideCount}.`);
+  }
+
+  return renderBatteryCapacityStep(label, renderBatteryCapacityNestedList(lines));
+}
+
+function renderBatteryCapacityDetails(summary, cathodes, anodes) {
+  const steps = [
+    renderBatteryCapacityStep(
+      'Ёмкость одного электрода',
+      `
+        <ul>
+          ${renderBatteryCapacityFormulaLine('масса покрытия = масса электрода − средняя масса фольги')}
+          ${renderBatteryCapacityFormulaLine('масса активного материала = масса покрытия × массовая доля активного материала')}
+          ${renderBatteryCapacityFormulaLine('ёмкость электрода = масса активного материала × удельная ёмкость активного материала')}
+          ${renderBatteryCapacityFormulaLine('ёмкость на площадь = ёмкость электрода / геометрическая площадь электрода')}
+          ${renderBatteryCapacityFormulaLine('для двустороннего покрытия: ёмкость на площадь одной стороны = ёмкость на площадь электрода / 2')}
+          <li>${escapeHtml('Это расчётная ёмкость из масс электродов, а не измеренная ёмкость после циклирования.')}</li>
+        </ul>
+      `
+    ),
+    renderElectrodeGroupCapacityStep(
+      'Катоды',
+      cathodes,
+      summary.cathode_capacity_actual_mAh,
+      summary.cathode_capacity_theoretical_mAh,
+      summary.cathode_area_cm2,
+      summary.cathode_areal_capacity_actual_mAh_cm2
+    ),
+    renderElectrodeGroupCapacityStep(
+      'Аноды',
+      anodes,
+      summary.anode_capacity_actual_mAh,
+      summary.anode_capacity_theoretical_mAh,
+      summary.anode_area_cm2,
+      summary.anode_areal_capacity_actual_mAh_cm2
+    )
+  ].filter(Boolean);
+
+  const stackLines = [];
+  if (
+    cathodes.length &&
+    anodes.length &&
+    hasPositiveBatteryValue(summary.cathode_capacity_actual_mAh) &&
+    hasPositiveBatteryValue(summary.anode_capacity_actual_mAh)
+  ) {
+    const limitingRole = getBatteryLimitingRole(summary, cathodes, anodes);
+    const limitingLabel = limitingRole === 'cathode' ? 'катоды' : 'аноды';
+    const limitingArea = limitingRole === 'cathode' ? summary.cathode_area_cm2 : summary.anode_area_cm2;
+    stackLines.push(`Лимитирующая ёмкость: ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} = меньшее из суммарной ёмкости катодов и анодов; в этом стеке ограничивают ${limitingLabel}.`);
+    if (hasPositiveBatteryValue(summary.np_actual)) {
+      stackLines.push(`N/P: ${formatBatteryRatio(summary.np_actual)} = суммарная ёмкость анодов / суммарная ёмкость катодов.`);
+    }
+    if (hasPositiveBatteryValue(summary.limiting_areal_capacity_actual_mAh_cm2) && hasPositiveBatteryValue(limitingArea)) {
+      stackLines.push(`Лимитирующая ёмкость на площадь: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2)} = ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} / ${formatBatteryArea(limitingArea)}.`);
+    }
+  } else if (hasPositiveBatteryValue(summary.limiting_capacity_actual_mAh)) {
+    const limitingRole = getBatteryLimitingRole(summary, cathodes, anodes);
+    const limitingArea = limitingRole === 'cathode' ? summary.cathode_area_cm2 : summary.anode_area_cm2;
+    stackLines.push(`Лимитирующая ёмкость: ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} = ёмкость выбранной стороны.`);
+    if (hasPositiveBatteryValue(summary.limiting_areal_capacity_actual_mAh_cm2) && hasPositiveBatteryValue(limitingArea)) {
+      stackLines.push(`Лимитирующая ёмкость на площадь: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2)} = ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} / ${formatBatteryArea(limitingArea)}.`);
+    }
+  }
+
+  if (stackLines.length) {
+    steps.push(renderBatteryCapacityStep('Итог для стека', renderBatteryCapacityNestedList(stackLines)));
+  }
+
+  if (!steps.length) return '';
+
+  return `
+    <details class="battery-capacity-details">
+      <summary>Показать расчёт</summary>
+      <ol>
+        ${steps.join('')}
+      </ol>
+    </details>
+  `;
+}
+
 function renderBatteryCapacitySummary() {
   const root = document.getElementById('battery_capacity_summary');
   if (!root) return;
@@ -2306,45 +2495,40 @@ function renderBatteryCapacitySummary() {
     return;
   }
 
+  const metricCards = [];
+
+  if (hasPositiveBatteryValue(summary.limiting_capacity_actual_mAh)) {
+    metricCards.push(renderBatteryCapacityMetric(
+      'Расчётная ёмкость',
+      formatBatteryCapacity(summary.limiting_capacity_actual_mAh),
+      `по рецепту: ${formatBatteryCapacity(summary.limiting_capacity_theoretical_mAh)}`,
+      'Расчёт по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования.'
+    ));
+  }
+
+  if (hasPositiveBatteryValue(summary.limiting_areal_capacity_actual_mAh_cm2)) {
+    metricCards.push(renderBatteryCapacityMetric(
+      'На площадь',
+      formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2),
+      `по рецепту: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_theoretical_mAh_cm2)}`,
+      'Расчётная лимитирующая ёмкость, нормированная на площадь лимитирующих электродов.'
+    ));
+  }
+
+  if (cathodes.length && anodes.length && hasPositiveBatteryValue(summary.np_actual)) {
+    metricCards.push(renderBatteryCapacityMetric(
+      'N/P',
+      formatBatteryRatio(summary.np_actual),
+      `по рецепту: ${formatBatteryRatio(summary.np_theoretical)}`,
+      'N/P по фактически введённым массам электродов. Вторичная строка — расчётное отношение по рецепту.'
+    ));
+  }
+
   root.innerHTML = `
     <div class="battery-capacity-grid">
-      ${renderBatteryCapacityMetric(
-        'Σ катодов',
-        `расч. по факт. массе: ${formatBatteryCapacity(summary.cathode_capacity_actual_mAh)}`,
-        `по рецепту: ${formatBatteryCapacity(summary.cathode_capacity_theoretical_mAh)}`,
-        'Основное значение — расчёт по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования. Вторичная строка — расчёт по рецепту.'
-      )}
-      ${renderBatteryCapacityMetric(
-        'Σ анодов',
-        `расч. по факт. массе: ${formatBatteryCapacity(summary.anode_capacity_actual_mAh)}`,
-        `по рецепту: ${formatBatteryCapacity(summary.anode_capacity_theoretical_mAh)}`,
-        'Основное значение — расчёт по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования. Вторичная строка — расчёт по рецепту.'
-      )}
-      ${renderBatteryCapacityMetric(
-        'Лимитирующая ёмкость',
-        `расч. по факт. массе: ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)}`,
-        `по рецепту: ${formatBatteryCapacity(summary.limiting_capacity_theoretical_mAh)}`,
-        'Основное значение — лимитирующая ёмкость по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования. Вторичная строка — расчёт по рецепту.'
-      )}
-      ${renderBatteryCapacityMetric(
-        'N/P',
-        `по факт. массе: ${formatBatteryRatio(summary.np_actual)}`,
-        `по рецепту: ${formatBatteryRatio(summary.np_theoretical)}`,
-        'Основное значение — N/P по фактически введённым массам электродов. Вторичная строка — расчётное отношение по рецепту.'
-      )}
-      ${renderBatteryCapacityMetric(
-        'Ёмкость на площадь',
-        `расч. по факт. массе: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2)}`,
-        `по рецепту: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_theoretical_mAh_cm2)}`,
-        'Основное значение — расчётная лимитирующая ёмкость по фактически введённым массам, нормированная на площадь лимитирующих электродов.'
-      )}
-      ${renderBatteryCapacityMetric(
-        'Катод / анод на площадь',
-        `по факт. массе: К ${formatBatteryArealCapacity(summary.cathode_areal_capacity_actual_mAh_cm2)} / А ${formatBatteryArealCapacity(summary.anode_areal_capacity_actual_mAh_cm2)}`,
-        `по рецепту: К ${formatBatteryArealCapacity(summary.cathode_areal_capacity_theoretical_mAh_cm2)} / А ${formatBatteryArealCapacity(summary.anode_areal_capacity_theoretical_mAh_cm2)}`,
-        'Сравнение расчётной суммарной ёмкости выбранных катодов и анодов, нормированной на их суммарную площадь.'
-      )}
+      ${metricCards.join('')}
     </div>
+    ${renderBatteryCapacityDetails(summary, cathodes, anodes)}
   `;
   root.hidden = false;
   renderElectrolyteCapacityRatios();
