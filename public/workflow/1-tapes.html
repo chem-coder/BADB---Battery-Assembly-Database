@@ -92,6 +92,19 @@
       .actual-derived-info.is-warning {
         color: #8a5b10;
       }
+
+      .slurry-solids-summary {
+        margin: 0.75rem 0 0.85rem;
+        font-weight: 700;
+        color: #2f3947;
+      }
+
+      .slurry-solids-summary small {
+        display: block;
+        margin-top: 0.15rem;
+        font-weight: 400;
+        color: #667085;
+      }
     </style>
   </head>
 
@@ -301,6 +314,8 @@
               <!-- строки будут генерироваться из recipe lines -->
             </tbody>
           </table>
+
+          <div id="slurry-solids-summary" class="slurry-solids-summary" aria-live="polite" hidden></div>
           
           <button type="button" id="1-weighing-save-btn">Сохранить этап замеса</button>
           <span class="inline-save-status" aria-live="polite"></span>

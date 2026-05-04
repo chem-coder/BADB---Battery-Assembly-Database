@@ -19,6 +19,7 @@ const projectMultiSelectTrigger = document.getElementById('project-multiselect-t
 const projectMultiSelectOptions = document.getElementById('project-multiselect-options');
 const tapeTypeSelect  = document.getElementById('tape_type');
 const recipeSelect    = document.getElementById('tape-recipe-id'); // already added in HTML
+const pendingInstanceComponentLoads = new Set();
 
 const tapePageState = window.tapePageState = {
   form: {
@@ -779,6 +780,180 @@ function formatActualDerivedInfo({ measureMode, rawValue, density }) {
     text: `≈ ${(numericValue / density).toFixed(4)} мл`,
     tone: 'derived'
   };
+}
+
+function formatTapeMass(value) {
+  return Number.isFinite(value) ? value.toFixed(4).replace(/\.?0+$/, '') : '—';
+}
+
+function getEffectiveActualMassForLine(line) {
+  const actual = state.workflow.weighing.actualsByLineId[line.recipe_line_id] || getDefaultWeighingActual();
+  const measureMode = actual.measure_mode || getDefaultActualModeForLine(line);
+
+  if (measureMode === 'volume') {
+    const volume = toFiniteTapeNumber(actual.actual_volume_ml);
+    const density = getSelectedInstanceDensityForLine(line);
+
+    if (!(Number.isFinite(volume) && volume > 0)) {
+      return { mass: null, missingDensity: false };
+    }
+
+    if (!(Number.isFinite(density) && density > 0)) {
+      return { mass: null, missingDensity: true };
+    }
+
+    return { mass: volume * density, missingDensity: false };
+  }
+
+  const mass = toFiniteTapeNumber(actual.actual_mass_g);
+  return {
+    mass: Number.isFinite(mass) && mass > 0 ? mass : null,
+    missingDensity: false
+  };
+}
+
+function getActualSolidsContributionForLine(line, actualMass) {
+  if (line.recipe_role === 'solvent') {
+    return { solidsMass: 0, pendingComposition: false };
+  }
+
+  const selectedInstanceId = state.recipe.selectedInstancesByLineId[line.recipe_line_id];
+  const hasCompositionCache = selectedInstanceId
+    ? Object.prototype.hasOwnProperty.call(state.recipe.instanceComponentsCache, selectedInstanceId)
+    : false;
+
+  if (selectedInstanceId && !hasCompositionCache) {
+    ensureInstanceComponentsLoadedForSlurrySolids(selectedInstanceId);
+    return { solidsMass: null, pendingComposition: true };
+  }
+
+  let components = hasCompositionCache
+    ? state.recipe.instanceComponentsCache[selectedInstanceId]
+    : null;
+
+  if (!Array.isArray(components) || components.length === 0) {
+    components = [{
+      material_id: Number(line.material_id),
+      material_role: line.recipe_role === 'solvent' ? 'solvent' : null,
+      mass_fraction: 1
+    }];
+  }
+
+  const solidsMass = components.reduce((sum, component) => {
+    if (component.material_role === 'solvent') return sum;
+
+    const fraction = toFiniteTapeNumber(component.mass_fraction);
+    if (!(Number.isFinite(fraction) && fraction > 0)) return sum;
+
+    return sum + actualMass * fraction;
+  }, 0);
+
+  return { solidsMass, pendingComposition: false };
+}
+
+function ensureInstanceComponentsLoadedForSlurrySolids(instanceId) {
+  if (!instanceId || pendingInstanceComponentLoads.has(String(instanceId))) return;
+
+  pendingInstanceComponentLoads.add(String(instanceId));
+
+  fetchInstanceComponents(instanceId)
+    .then((components) => {
+      setInstanceComponentsCache({
+        ...state.recipe.instanceComponentsCache,
+        [instanceId]: components
+      });
+      renderSlurrySolidsSummary();
+    })
+    .catch(console.error)
+    .finally(() => {
+      pendingInstanceComponentLoads.delete(String(instanceId));
+    });
+}
+
+function computeSlurrySolidsSummary() {
+  let totalWetMass = 0;
+  let totalSolidsMass = 0;
+  let hasActualMass = false;
+  let missingDensity = false;
+  let pendingComposition = false;
+
+  state.recipe.currentLines.forEach((line) => {
+    const massResult = getEffectiveActualMassForLine(line);
+
+    if (massResult.missingDensity) {
+      missingDensity = true;
+      return;
+    }
+
+    if (!(Number.isFinite(massResult.mass) && massResult.mass > 0)) {
+      return;
+    }
+
+    hasActualMass = true;
+    totalWetMass += massResult.mass;
+
+    const solidsResult = getActualSolidsContributionForLine(line, massResult.mass);
+    if (solidsResult.pendingComposition) {
+      pendingComposition = true;
+      return;
+    }
+
+    if (Number.isFinite(solidsResult.solidsMass)) {
+      totalSolidsMass += solidsResult.solidsMass;
+    }
+  });
+
+  if (!hasActualMass || !(totalWetMass > 0)) {
+    return {
+      status: 'empty',
+      text: 'Содержание твердых компонентов: —',
+      detail: 'Введите фактические значения для расчёта.'
+    };
+  }
+
+  if (missingDensity) {
+    return {
+      status: 'incomplete',
+      text: 'Содержание твердых компонентов: —',
+      detail: 'Для расчёта массы из объёма нужна плотность выбранного экземпляра материала.'
+    };
+  }
+
+  if (pendingComposition) {
+    return {
+      status: 'incomplete',
+      text: 'Содержание твердых компонентов: —',
+      detail: 'Загружается состав выбранных экземпляров материалов.'
+    };
+  }
+
+  const solidsPercent = (totalSolidsMass / totalWetMass) * 100;
+  return {
+    status: 'complete',
+    text: `Содержание твердых компонентов: ${solidsPercent.toFixed(2)} %`,
+    detail: `масса сухих компонентов ${formatTapeMass(totalSolidsMass)} г / общая масса ${formatTapeMass(totalWetMass)} г`
+  };
+}
+
+function renderSlurrySolidsSummary() {
+  const el = document.getElementById('slurry-solids-summary');
+  if (!el) return;
+
+  if (!state.recipe.currentLines.length) {
+    el.hidden = true;
+    el.replaceChildren();
+    return;
+  }
+
+  const summary = computeSlurrySolidsSummary();
+  const main = document.createElement('div');
+  main.textContent = summary.text;
+
+  const detail = document.createElement('small');
+  detail.textContent = summary.detail;
+
+  el.replaceChildren(main, detail);
+  el.hidden = false;
 }
 
 function getDefaultWorkflowState() {
@@ -1942,6 +2117,7 @@ function renderRecipeLines() {
         : { measure_mode: nextMode, actual_volume_ml: '' });
       valueInput.value = nextValue;
       updateDerivedInfo();
+      renderSlurrySolidsSummary();
     });
 
     valueInput.addEventListener('input', () => {
@@ -1950,12 +2126,14 @@ function renderRecipeLines() {
         ? { measure_mode: measureMode, actual_volume_ml: valueInput.value }
         : { measure_mode: measureMode, actual_mass_g: valueInput.value });
       updateDerivedInfo();
+      renderSlurrySolidsSummary();
     });
 
     updateDerivedInfo();
 
   });
 
+  renderSlurrySolidsSummary();
   applyDefaultCoatingFoil();
 }
 
@@ -2019,6 +2197,7 @@ function renderDerivedState() {
   });
 
   renderExpandedCalculation();
+  renderSlurrySolidsSummary();
 }
 
 function renderExpandedCalculation() {
