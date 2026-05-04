@@ -49,6 +49,7 @@
       return {
         selection: {
           currentCutBatchId: null,
+          isCreatingCutBatch: false,
           currentTapeDryBoxState: null,
           currentCutBatchDetails: null
         },
@@ -118,6 +119,13 @@
 
     function setCurrentCutBatchId(cutBatchId) {
       state.selection.currentCutBatchId = cutBatchId ?? null;
+      if (cutBatchId != null) {
+        state.selection.isCreatingCutBatch = false;
+      }
+    }
+
+    function setCutBatchCreationMode(isCreating) {
+      state.selection.isCreatingCutBatch = Boolean(isCreating);
     }
 
     function setCurrentTapeDryBoxState(nextState) {
@@ -823,9 +831,12 @@
 
     function renderElectrodeWorkflowVisibility() {
       const shouldShowWorkflow = shouldShowElectrodeWorkflow();
+      const hasActiveWorkspace = Boolean(
+        state.selection.currentCutBatchId || state.selection.isCreatingCutBatch
+      );
       workflow.hidden = !shouldShowWorkflow;
       addCutBatchBtn.hidden = !shouldShowWorkflow;
-      workspace.hidden = !state.selection.currentCutBatchId && batchTitle.textContent !== 'Новая партия';
+      workspace.hidden = !hasActiveWorkspace;
       if (printElectrodeBatchBtn) {
         printElectrodeBatchBtn.hidden = !state.selection.currentCutBatchId;
       }
@@ -838,7 +849,11 @@
       if (!list || !msg) return;
 
       list.innerHTML = '';
-      batchTitle.textContent = state.selection.currentCutBatchId ? batchTitle.textContent : '';
+      if (state.selection.isCreatingCutBatch) {
+        batchTitle.textContent = 'Новая партия';
+      } else if (!state.selection.currentCutBatchId) {
+        batchTitle.textContent = '';
+      }
 
       if (!state.form.filters.tape_id || !state.lists.cutBatches.length) {
         msg.style.display = 'block';
@@ -1292,6 +1307,7 @@
     
     function clearElectrodeWorkspace() {
       setCurrentCutBatchId(null);
+      setCutBatchCreationMode(false);
       setCurrentTapeDryBoxState(null);
       setCurrentCutBatchDetails(null);
       setCurrentBatchElectrodes([]);
@@ -1819,9 +1835,8 @@
     }
     
     addCutBatchBtn.addEventListener('click', () => {
-      setCurrentCutBatchId(null);
-      setCurrentCutBatchDetails(null);
       clearElectrodeWorkspace();
+      setCutBatchCreationMode(true);
       setBatchProjectIds(getDefaultBatchProjectIds(), { render: false });
       workspace.hidden = false;
       batchTitle.textContent = 'Новая партия';

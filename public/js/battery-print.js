@@ -50,58 +50,93 @@ function formatHalfCellType(value) {
   return value || '—';
 }
 
+function formatSpacer(config = {}) {
+  const parts = [];
+  if (config.spacer_thickness_mm != null) parts.push(`${config.spacer_thickness_mm} мм`);
+  if (config.spacer_count != null) parts.push(`${config.spacer_count} шт.`);
+  return parts.join(' · ') || '—';
+}
+
 function formatBatchGeometry(batch) {
   if (!batch) return '—';
   if (batch.shape === 'circle' && batch.diameter_mm != null) {
-    return `${batch.diameter_mm} mm`;
+    return `${batch.diameter_mm} мм`;
   }
   if (batch.length_mm != null && batch.width_mm != null) {
-    return `${batch.length_mm}×${batch.width_mm} mm`;
+    return `${batch.length_mm}×${batch.width_mm} мм`;
   }
-  if (batch.length_mm != null) return `${batch.length_mm} mm`;
-  if (batch.width_mm != null) return `${batch.width_mm} mm`;
+  if (batch.length_mm != null) return `${batch.length_mm} мм`;
+  if (batch.width_mm != null) return `${batch.width_mm} мм`;
   return '—';
 }
 
 function formatBatchTarget(batch) {
   if (!batch) return '—';
+  const formFactor = batch.target_form_factor ? formatFormFactor(batch.target_form_factor) : '';
 
   if (batch.target_config_code === 'other' && batch.target_config_other) {
-    return `${batch.target_form_factor || ''} ${batch.target_config_other}`.trim();
+    return `${formFactor} ${batch.target_config_other}`.trim();
   }
 
-  return [batch.target_form_factor, batch.target_config_code].filter(Boolean).join(' ') || '—';
+  return [formFactor, batch.target_config_code].filter(Boolean).join(' ') || '—';
 }
 
-function renderRow(label, value) {
-  return `<div class="report_row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value ?? '—')}</div>`;
+function formatElectrodeRole(value) {
+  if (value === 'cathode') return 'Катод';
+  if (value === 'anode') return 'Анод';
+  return value || '—';
+}
+
+function renderRow(label, value, options = {}) {
+  const fieldClass = options.wide ? ' report_field_wide' : '';
+  const valueClass = [
+    'report_value',
+    options.numeric ? 'report_number' : '',
+    options.text ? 'report_text_value' : ''
+  ].filter(Boolean).join(' ');
+
+  return `
+    <div class="report_field${fieldClass}">
+      <span class="report_label">${escapeHtml(label)}</span>
+      <span class="${valueClass}">${escapeHtml(value ?? '—')}</span>
+    </div>
+  `;
+}
+
+function renderFieldGrid(rows, className = '') {
+  const gridClass = className ? ` ${className}` : '';
+  return `<div class="report_field_grid${gridClass}">${rows.join('')}</div>`;
+}
+
+function formatNumber(value, digits = 3, unit = '') {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '—';
+  return `${num.toFixed(digits)}${unit ? ` ${unit}` : ''}`;
 }
 
 function formatCapacity(value, digits = 3) {
-  const num = Number(value);
-  return Number.isFinite(num) ? `${num.toFixed(digits)} мАч` : '—';
+  return formatNumber(value, digits, 'мАч');
+}
+
+function formatMass(value, digits = 4) {
+  return formatNumber(value, digits, 'г');
+}
+
+function formatArealCapacity(value, digits = 3) {
+  return formatNumber(value, digits, 'мАч/см²');
 }
 
 function formatRatio(value, digits = 3) {
-  const num = Number(value);
-  return Number.isFinite(num) ? num.toFixed(digits) : '—';
+  return formatNumber(value, digits);
 }
 
-function renderDualMetric(label, factualValue, theoreticalValue) {
+function renderMetricRow(label, factualValue, theoreticalValue) {
   return `
-    <div class="report_dual_metric">
-      <div class="report_dual_label">${escapeHtml(label)}</div>
-      <div class="report_dual_values">
-        <div class="report_dual_col">
-          <span class="report_dual_col_label fact">По факту</span>
-          <div class="report_dual_fact">${escapeHtml(factualValue)}</div>
-        </div>
-        <div class="report_dual_col">
-          <span class="report_dual_col_label theor">Теоретически</span>
-          <div class="report_dual_theor">${escapeHtml(theoreticalValue)}</div>
-        </div>
-      </div>
-    </div>
+    <tr>
+      <td class="report_metric_label">${escapeHtml(label)}</td>
+      <td class="report_number">${escapeHtml(factualValue)}</td>
+      <td class="report_number">${escapeHtml(theoreticalValue)}</td>
+    </tr>
   `;
 }
 
@@ -113,14 +148,15 @@ function renderConfigSection(report) {
     return `
       <section class="report_section">
         <h2>Конфигурация элемента</h2>
-        ${renderRow('Тип элемента', formatCoinMode(config.coin_cell_mode))}
-        ${renderRow('Размер монетки', config.coin_size_code || '—')}
-        ${renderRow('Тип полуячейки', formatHalfCellType(config.half_cell_type))}
-        ${renderRow('Li-фольга', config.li_foil_notes || '—')}
-        ${renderRow('Схема', config.coin_layout || '—')}
-        ${renderRow('Толщина спэйсера', config.spacer_thickness_mm != null ? `${config.spacer_thickness_mm} мм` : '—')}
-        ${renderRow('Количество спэйсеров', config.spacer_count ?? '—')}
-        ${renderRow('Заметки по спэйсеру', config.spacer_notes || '—')}
+        ${renderFieldGrid([
+          renderRow('Тип элемента', formatCoinMode(config.coin_cell_mode)),
+          renderRow('Размер', config.coin_size_code || '—'),
+          renderRow('Полуячейка', formatHalfCellType(config.half_cell_type)),
+          renderRow('Li-фольга', config.li_foil_notes || '—'),
+          renderRow('Схема', config.coin_layout || '—'),
+          renderRow('Спэйсер', formatSpacer(config)),
+          renderRow('Заметки по спэйсеру', config.spacer_notes || '—', { wide: true, text: true })
+        ])}
       </section>
     `;
   }
@@ -133,8 +169,10 @@ function renderConfigSection(report) {
     return `
       <section class="report_section">
         <h2>Конфигурация элемента</h2>
-        ${renderRow('Размер', pouchSize)}
-        ${renderRow('Заметки', config.pouch_notes || '—')}
+        ${renderFieldGrid([
+          renderRow('Размер', pouchSize),
+          renderRow('Заметки', config.pouch_notes || '—', { wide: true, text: true })
+        ])}
       </section>
     `;
   }
@@ -144,8 +182,10 @@ function renderConfigSection(report) {
     return `
       <section class="report_section">
         <h2>Конфигурация элемента</h2>
-        ${renderRow('Размер цилиндра', config.cyl_size_code || '—')}
-        ${renderRow('Заметки', config.cyl_notes || '—')}
+        ${renderFieldGrid([
+          renderRow('Размер цилиндра', config.cyl_size_code || '—'),
+          renderRow('Заметки', config.cyl_notes || '—', { wide: true, text: true })
+        ])}
       </section>
     `;
   }
@@ -166,22 +206,29 @@ function renderSourcesSection(report) {
   }
 
   const blocks = sources.map(source => {
-    const roleLabel = source.role === 'cathode' ? 'Катод' : 'Анод';
+    const roleLabel = formatElectrodeRole(source.role);
     const tapeLabel = source.tape_id
       ? `#${source.tape_id} | ${source.tape_name || '—'}`
       : '—';
     const batchLabel = source.cut_batch_id
       ? `#${source.cut_batch_id} | ${formatBatchTarget(source)} | ${formatBatchGeometry(source)}`
       : '—';
+    const batchMeta = [
+      source.electrode_count != null ? `${source.electrode_count} эл.` : null,
+      source.cut_batch_created_by_name
+    ].filter(Boolean).join(' · ') || '—';
 
     return `
       <div class="report_subsection">
         <h3>${escapeHtml(roleLabel)}</h3>
-        ${renderRow('Лента', tapeLabel)}
-        ${renderRow('Проект ленты', source.tape_project_name || '—')}
-        ${renderRow('Рецепт', source.tape_recipe_name || '—')}
-        ${renderRow('Партия вырезанных электродов', batchLabel)}
-        ${renderRow('Заметки', source.source_notes || '—')}
+        ${renderFieldGrid([
+          renderRow('Лента', tapeLabel),
+          renderRow('Проект ленты', source.tape_project_name || '—'),
+          renderRow('Рецепт', source.tape_recipe_name || '—'),
+          renderRow('Партия', batchLabel),
+          renderRow('Детали', batchMeta),
+          renderRow('Заметки', source.source_notes || '—', { text: true })
+        ], 'narrow')}
       </div>
     `;
   }).join('');
@@ -189,7 +236,7 @@ function renderSourcesSection(report) {
   return `
     <section class="report_section">
       <h2>Источники электродов</h2>
-      ${blocks}
+      <div class="report_two_col">${blocks}</div>
     </section>
   `;
 }
@@ -204,21 +251,25 @@ function renderStackSection(report) {
         <table class="report_table">
           <thead>
             <tr>
-              <th>Позиция</th>
-              <th>ID электрода</th>
+              <th class="report_number">Поз.</th>
               <th>Роль</th>
-              <th>m, g</th>
+              <th>ID электрода</th>
               <th>ID партии</th>
+              <th class="report_number">m, г</th>
+              <th class="report_number">C факт, мАч</th>
+              <th class="report_number">C теор, мАч</th>
             </tr>
           </thead>
           <tbody>
             ${rows.map(row => `
               <tr>
-                <td>${escapeHtml(row.position_index)}</td>
-                <td>${escapeHtml(row.electrode_id)}</td>
-                <td>${escapeHtml(row.role === 'cathode' ? 'Катод' : row.role === 'anode' ? 'Анод' : row.role)}</td>
-                <td>${escapeHtml(row.electrode_mass_g ?? '—')}</td>
+                <td class="report_number">${escapeHtml(row.position_index ?? '—')}</td>
+                <td>${escapeHtml(formatElectrodeRole(row.role))}</td>
+                <td>${escapeHtml(row.electrode_id ?? '—')}</td>
                 <td>${escapeHtml(row.cut_batch_id ?? '—')}</td>
+                <td class="report_number">${escapeHtml(formatMass(row.electrode_mass_g))}</td>
+                <td class="report_number">${escapeHtml(formatCapacity(row.capacity_actual_mAh))}</td>
+                <td class="report_number">${escapeHtml(formatCapacity(row.capacity_theoretical_mAh))}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -231,29 +282,41 @@ function renderStackSection(report) {
 function renderAssemblySection(report) {
   const separator = report.separator || {};
   const electrolyte = report.electrolyte || {};
-  const formFactor = report?.battery?.form_factor;
-  const activeConfig =
-    formFactor === 'coin' ? (report.coin_config || {})
-    : formFactor === 'pouch' ? (report.pouch_config || {})
-    : formFactor === 'cylindrical' ? (report.cyl_config || {})
-    : {};
-
-  const spacerFields = formFactor === 'coin' ? `
-        ${renderRow('Толщина спэйсера', activeConfig.spacer_thickness_mm != null ? `${activeConfig.spacer_thickness_mm} мм` : '—')}
-        ${renderRow('Количество спэйсеров', activeConfig.spacer_count ?? '—')}
-        ${renderRow('Заметки по спэйсеру', activeConfig.spacer_notes || '—')}
-  ` : '';
+  const separatorDetails = [
+    separator.separator_supplier,
+    separator.separator_brand,
+    separator.separator_batch
+  ].filter(Boolean).join(' · ') || '—';
+  const electrolyteDetails = [
+    electrolyte.solvent_system,
+    electrolyte.salts,
+    electrolyte.concentration,
+    electrolyte.additives
+  ].filter(Boolean).join(' · ') || '—';
 
   return `
     <section class="report_section">
       <h2>Параметры сборки</h2>
-      ${renderRow('Сепаратор', separator.separator_id ? `#${separator.separator_id} | ${separator.separator_name || '—'}` : '—')}
-      ${renderRow('Заметки по сепаратору', separator.separator_notes || '—')}
-      ${renderRow('Электролит', electrolyte.electrolyte_id ? `#${electrolyte.electrolyte_id} | ${electrolyte.electrolyte_name || '—'}` : '—')}
-      ${renderRow('Заметки по электролиту', electrolyte.electrolyte_notes || '—')}
-      ${renderRow('Общий объём электролита', electrolyte.electrolyte_total_ul != null ? `${electrolyte.electrolyte_total_ul} мкл` : '—')}
-      ${renderRow('Схема сепаратора/электролита', activeConfig.coin_layout || '—')}
-      ${spacerFields}
+      <div class="report_two_col">
+        <div class="report_subsection">
+          <h3>Сепаратор</h3>
+          ${renderFieldGrid([
+            renderRow('Материал', separator.separator_id ? `#${separator.separator_id} | ${separator.separator_name || '—'}` : '—'),
+            renderRow('Партия', separatorDetails),
+            renderRow('Толщина', separator.separator_thickness_um != null ? `${separator.separator_thickness_um} мкм` : '—'),
+            renderRow('Заметки', separator.separator_notes || '—', { text: true })
+          ], 'narrow')}
+        </div>
+        <div class="report_subsection">
+          <h3>Электролит</h3>
+          ${renderFieldGrid([
+            renderRow('Материал', electrolyte.electrolyte_id ? `#${electrolyte.electrolyte_id} | ${electrolyte.electrolyte_name || '—'}` : '—'),
+            renderRow('Состав', electrolyteDetails),
+            renderRow('Объём', electrolyte.electrolyte_total_ul != null ? `${electrolyte.electrolyte_total_ul} мкл` : '—', { numeric: true }),
+            renderRow('Заметки', electrolyte.electrolyte_notes || '—', { text: true })
+          ], 'narrow')}
+        </div>
+      </div>
     </section>
   `;
 }
@@ -263,10 +326,12 @@ function renderQcSection(report) {
   return `
     <section class="report_section">
       <h2>Выходной контроль</h2>
-      ${renderRow('НРЦ', qc.ocv_v != null ? `${qc.ocv_v} В` : '—')}
-      ${renderRow('ESR', qc.esr_mohm != null ? `${qc.esr_mohm} мОм` : '—')}
-      ${renderRow('Статус', formatStatus(report?.battery?.status))}
-      ${renderRow('Заметки', qc.qc_notes || '—')}
+      ${renderFieldGrid([
+        renderRow('НРЦ', qc.ocv_v != null ? `${qc.ocv_v} В` : '—', { numeric: true }),
+        renderRow('ESR', qc.esr_mohm != null ? `${qc.esr_mohm} мОм` : '—', { numeric: true }),
+        renderRow('Статус', formatStatus(report?.battery?.status)),
+        renderRow('Заметки', qc.qc_notes || '—', { wide: true, text: true })
+      ])}
     </section>
   `;
 }
@@ -283,7 +348,7 @@ function renderElectrochemSection(report) {
             <tr>
               <th>Файл</th>
               <th>Заметки</th>
-              <th>Загружен</th>
+              <th class="report_number">Загружен</th>
             </tr>
           </thead>
           <tbody>
@@ -291,7 +356,7 @@ function renderElectrochemSection(report) {
               <tr>
                 <td>${entry.file_link ? `<a href="${escapeHtml(entry.file_link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(entry.file_name || entry.file_link)}</a>` : escapeHtml(entry.file_name || '—')}</td>
                 <td>${escapeHtml(entry.electrochem_notes || '—')}</td>
-                <td>${escapeHtml(formatDateTime(entry.uploaded_at))}</td>
+                <td class="report_number">${escapeHtml(formatDateTime(entry.uploaded_at))}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -324,28 +389,55 @@ function renderCapacitySection(report) {
   return `
     <section class="report_section">
       <h2>Электрохимическая сводка</h2>
-      <div class="report_dual_grid">
-        ${renderDualMetric(
+      <p class="report_count_line">
+        Катодов: ${escapeHtml(summary.cathode_count ?? 0)} · Анодов: ${escapeHtml(summary.anode_count ?? 0)}
+      </p>
+      <table class="report_table report_summary_table">
+        <thead>
+          <tr>
+            <th>Показатель</th>
+            <th>Факт</th>
+            <th>Теория</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderMetricRow(
           'Σ катодов',
           formatCapacity(summary.cathode_capacity_actual_mAh),
           formatCapacity(summary.cathode_capacity_theoretical_mAh)
         )}
-        ${renderDualMetric(
+          ${renderMetricRow(
           'Σ анодов',
           formatCapacity(summary.anode_capacity_actual_mAh),
           formatCapacity(summary.anode_capacity_theoretical_mAh)
         )}
-        ${renderDualMetric(
+          ${renderMetricRow(
           'Лимитирующая ёмкость',
           formatCapacity(summary.limiting_capacity_actual_mAh),
           formatCapacity(summary.limiting_capacity_theoretical_mAh)
         )}
-        ${renderDualMetric(
+          ${renderMetricRow(
           'N/P',
           formatRatio(summary.np_actual),
           formatRatio(summary.np_theoretical)
         )}
-      </div>
+          ${renderMetricRow(
+          'Ёмкость/площадь катодов',
+          formatArealCapacity(summary.cathode_areal_capacity_actual_mAh_cm2),
+          formatArealCapacity(summary.cathode_areal_capacity_theoretical_mAh_cm2)
+        )}
+          ${renderMetricRow(
+          'Ёмкость/площадь анодов',
+          formatArealCapacity(summary.anode_areal_capacity_actual_mAh_cm2),
+          formatArealCapacity(summary.anode_areal_capacity_theoretical_mAh_cm2)
+        )}
+          ${renderMetricRow(
+          'Лимитирующая ёмкость/площадь',
+          formatArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2),
+          formatArealCapacity(summary.limiting_areal_capacity_theoretical_mAh_cm2)
+        )}
+        </tbody>
+      </table>
     </section>
   `;
 }
@@ -353,29 +445,40 @@ function renderCapacitySection(report) {
 function renderReport(report) {
   const battery = report.battery || {};
   const root = document.getElementById('reportRoot');
+  const batteryNotesSection = battery.battery_notes ? `
+    <section class="report_section">
+      <h2>Заметки</h2>
+      ${renderFieldGrid([
+        renderRow('Комментарий', battery.battery_notes, { wide: true, text: true })
+      ])}
+    </section>
+  ` : '';
 
   root.innerHTML = `
-    <h1 class="report_title">Протокол сборки</h1>
-    <h2 class="report_subtitle">Аккумулятор #${escapeHtml(battery.battery_id || '—')}</h2>
+    <header class="report_header">
+      <div>
+        <p class="report_title">Протокол сборки</p>
+        <h1 class="report_subtitle">Аккумулятор #${escapeHtml(battery.battery_id || '—')}</h1>
+      </div>
+      <div class="report_status_box">
+        <span class="report_status_label">Статус</span>
+        <span class="report_status_value">${escapeHtml(formatStatus(battery.status))}</span>
+      </div>
+    </header>
     <div class="report_meta">
-      <div class="report_row"><strong>Проект:</strong> ${escapeHtml(battery.project_name || '—')}</div>
-      <div class="report_row"><strong>Форм-фактор:</strong> ${escapeHtml(formatFormFactor(battery.form_factor))}</div>
-      <div class="report_row"><strong>Оператор:</strong> ${escapeHtml(battery.created_by_name || '—')}</div>
-      <div class="report_row"><strong>Статус:</strong> ${escapeHtml(formatStatus(battery.status))}</div>
-      <div class="report_row"><strong>Создан:</strong> ${escapeHtml(formatDateTime(battery.created_at))}</div>
-      <div class="report_row"><strong>Обновлён:</strong> ${escapeHtml(formatDateTime(battery.updated_at))}</div>
+      ${renderRow('Проект', battery.project_names || battery.project_name || '—')}
+      ${renderRow('Форм-фактор', formatFormFactor(battery.form_factor))}
+      ${renderRow('Оператор', battery.created_by_name || '—')}
+      ${renderRow('Создан', formatDateTime(battery.created_at), { numeric: true })}
+      ${renderRow('Обновлён', formatDateTime(battery.updated_at), { numeric: true })}
     </div>
 
-    <section class="report_section">
-      <h2>Общая информация</h2>
-      ${renderRow('Заметки', battery.battery_notes || '—')}
-    </section>
-
+    ${batteryNotesSection}
+    ${renderCapacitySection(report)}
     ${renderConfigSection(report)}
+    ${renderAssemblySection(report)}
     ${renderSourcesSection(report)}
     ${renderStackSection(report)}
-    ${renderCapacitySection(report)}
-    ${renderAssemblySection(report)}
     ${renderQcSection(report)}
     ${renderElectrochemSection(report)}
   `;

@@ -2310,39 +2310,39 @@ function renderBatteryCapacitySummary() {
     <div class="battery-capacity-grid">
       ${renderBatteryCapacityMetric(
         'Σ катодов',
-        formatBatteryCapacity(summary.cathode_capacity_actual_mAh),
-        `теор.: ${formatBatteryCapacity(summary.cathode_capacity_theoretical_mAh)}`,
-        'Основное значение — расчёт по фактическому составу. Вторичная строка — теоретическое значение по рецепту.'
+        `расч. по факт. массе: ${formatBatteryCapacity(summary.cathode_capacity_actual_mAh)}`,
+        `по рецепту: ${formatBatteryCapacity(summary.cathode_capacity_theoretical_mAh)}`,
+        'Основное значение — расчёт по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования. Вторичная строка — расчёт по рецепту.'
       )}
       ${renderBatteryCapacityMetric(
         'Σ анодов',
-        formatBatteryCapacity(summary.anode_capacity_actual_mAh),
-        `теор.: ${formatBatteryCapacity(summary.anode_capacity_theoretical_mAh)}`,
-        'Основное значение — расчёт по фактическому составу. Вторичная строка — теоретическое значение по рецепту.'
+        `расч. по факт. массе: ${formatBatteryCapacity(summary.anode_capacity_actual_mAh)}`,
+        `по рецепту: ${formatBatteryCapacity(summary.anode_capacity_theoretical_mAh)}`,
+        'Основное значение — расчёт по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования. Вторичная строка — расчёт по рецепту.'
       )}
       ${renderBatteryCapacityMetric(
         'Лимитирующая ёмкость',
-        formatBatteryCapacity(summary.limiting_capacity_actual_mAh),
-        `теор.: ${formatBatteryCapacity(summary.limiting_capacity_theoretical_mAh)}`,
-        'Основное значение — лимитирующая ёмкость по фактическому составу. Вторичная строка — теоретическое значение.'
+        `расч. по факт. массе: ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)}`,
+        `по рецепту: ${formatBatteryCapacity(summary.limiting_capacity_theoretical_mAh)}`,
+        'Основное значение — лимитирующая ёмкость по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования. Вторичная строка — расчёт по рецепту.'
       )}
       ${renderBatteryCapacityMetric(
         'N/P',
-        formatBatteryRatio(summary.np_actual),
-        `теор.: ${formatBatteryRatio(summary.np_theoretical)}`,
-        'Основное значение — N/P по фактическому составу. Вторичная строка — теоретическое отношение.'
+        `по факт. массе: ${formatBatteryRatio(summary.np_actual)}`,
+        `по рецепту: ${formatBatteryRatio(summary.np_theoretical)}`,
+        'Основное значение — N/P по фактически введённым массам электродов. Вторичная строка — расчётное отношение по рецепту.'
       )}
       ${renderBatteryCapacityMetric(
         'Ёмкость на площадь',
-        formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2),
-        `теор.: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_theoretical_mAh_cm2)}`,
-        'Основное значение — лимитирующая ёмкость, нормированная на площадь лимитирующих электродов.'
+        `расч. по факт. массе: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2)}`,
+        `по рецепту: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_theoretical_mAh_cm2)}`,
+        'Основное значение — расчётная лимитирующая ёмкость по фактически введённым массам, нормированная на площадь лимитирующих электродов.'
       )}
       ${renderBatteryCapacityMetric(
         'Катод / анод на площадь',
-        `К: ${formatBatteryArealCapacity(summary.cathode_areal_capacity_actual_mAh_cm2)} / А: ${formatBatteryArealCapacity(summary.anode_areal_capacity_actual_mAh_cm2)}`,
-        `теор.: К ${formatBatteryArealCapacity(summary.cathode_areal_capacity_theoretical_mAh_cm2)} / А ${formatBatteryArealCapacity(summary.anode_areal_capacity_theoretical_mAh_cm2)}`,
-        'Сравнение суммарной ёмкости выбранных катодов и анодов, нормированной на их суммарную площадь.'
+        `по факт. массе: К ${formatBatteryArealCapacity(summary.cathode_areal_capacity_actual_mAh_cm2)} / А ${formatBatteryArealCapacity(summary.anode_areal_capacity_actual_mAh_cm2)}`,
+        `по рецепту: К ${formatBatteryArealCapacity(summary.cathode_areal_capacity_theoretical_mAh_cm2)} / А ${formatBatteryArealCapacity(summary.anode_areal_capacity_theoretical_mAh_cm2)}`,
+        'Сравнение расчётной суммарной ёмкости выбранных катодов и анодов, нормированной на их суммарную площадь.'
       )}
     </div>
   `;
@@ -2373,10 +2373,10 @@ function renderElectrolyteCapacityRatio({ targetId, assemblyState, summary }) {
       : null;
 
   const secondary = Number.isFinite(theoreticalRatio)
-    ? `; теор.: ${formatBatteryElectrolyteRatio(theoreticalRatio)}`
+    ? `; по рецепту: ${formatBatteryElectrolyteRatio(theoreticalRatio)}`
     : '';
 
-  target.textContent = `Электролит / ёмкость: ${formatBatteryElectrolyteRatio(actualRatio)}${secondary}`;
+  target.textContent = `Электролит / ёмкость: расч. по факт. массе ${formatBatteryElectrolyteRatio(actualRatio)}${secondary}`;
   target.hidden = false;
 }
 

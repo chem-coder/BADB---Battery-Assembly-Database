@@ -53,8 +53,34 @@ function formatCalcMode(value) {
   return value || '—';
 }
 
-function renderRow(label, value) {
-  return `<div class="report_row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value ?? '—')}</div>`;
+function renderRow(label, value, options = {}) {
+  const fieldClass = options.wide ? ' report_field_wide' : '';
+  const valueClass = [
+    'report_value',
+    options.numeric ? 'report_number' : '',
+    options.text ? 'report_text_value' : ''
+  ].filter(Boolean).join(' ');
+
+  return `
+    <div class="report_field${fieldClass}">
+      <span class="report_label">${escapeHtml(label)}</span>
+      <span class="${valueClass}">${escapeHtml(value ?? '—')}</span>
+    </div>
+  `;
+}
+
+function renderFieldGrid(rows) {
+  return `<div class="report_field_grid">${rows.join('')}</div>`;
+}
+
+function formatNumber(value, digits = 3, unit = '') {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '—';
+  return `${num.toFixed(digits)}${unit ? ` ${unit}` : ''}`;
+}
+
+function formatMass(value, digits = 4) {
+  return formatNumber(value, digits, 'г');
 }
 
 function hasMeaningfulText(value) {
@@ -238,10 +264,7 @@ function renderRecipeSection(report) {
   }
 
   function formatMassValue(value) {
-    if (value == null) return '—';
-    const num = Number(value);
-    if (!Number.isFinite(num)) return '—';
-    return `${num.toFixed(4)} г`;
+    return formatMass(value);
   }
 
   function formatSignedGrams(value) {
@@ -260,6 +283,10 @@ function renderRecipeSection(report) {
     return `${num > 0 ? '+' : ''}${num.toFixed(2)}%`;
   }
 
+  function formatPercentValue(value) {
+    return formatNumber(value, 2);
+  }
+
   return `
     <section class="report_section">
       <h2>Рецепт и фактические данные</h2>
@@ -272,7 +299,7 @@ function renderRecipeSection(report) {
                 <th>Материал</th>
                 <th>Роль</th>
                 <th>В расчёте</th>
-                <th>План, %</th>
+                <th class="report_number">План, %</th>
               </tr>
             </thead>
             <tbody>
@@ -281,7 +308,7 @@ function renderRecipeSection(report) {
                   <td>${escapeHtml(row.material_name || '—')}</td>
                   <td>${escapeHtml(formatRecipeRole(row.recipe_role))}</td>
                   <td>${escapeHtml(row.include_in_pct ? 'Да' : 'Нет')}</td>
-                  <td>${escapeHtml(row.slurry_percent != null ? row.slurry_percent : '—')}</td>
+                  <td class="report_number">${escapeHtml(formatPercentValue(row.slurry_percent))}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -294,20 +321,20 @@ function renderRecipeSection(report) {
             <thead>
               <tr>
                 <th>Экземпляр</th>
-                <th>Целевая навеска</th>
-                <th>Факт</th>
-                <th>Разница</th>
-                <th>Ошибка, %</th>
+                <th class="report_number">Целевая навеска</th>
+                <th class="report_number">Факт</th>
+                <th class="report_number">Разница</th>
+                <th class="report_number">Ошибка, %</th>
               </tr>
             </thead>
             <tbody>
               ${mixtureRows.map((row) => `
                 <tr>
                   <td>${escapeHtml(row.instance_display || '—')}</td>
-                  <td>${escapeHtml(formatMassValue(row.target_quantity_g))}</td>
-                  <td>${escapeHtml(formatActualValue(row))}</td>
-                  <td>${escapeHtml(formatSignedGrams(row.difference_g))}</td>
-                  <td>${escapeHtml(formatPercentError(row.percent_error))}</td>
+                  <td class="report_number">${escapeHtml(formatMassValue(row.target_quantity_g))}</td>
+                  <td class="report_number">${escapeHtml(formatActualValue(row))}</td>
+                  <td class="report_number">${escapeHtml(formatSignedGrams(row.difference_g))}</td>
+                  <td class="report_number">${escapeHtml(formatPercentError(row.percent_error))}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -515,28 +542,40 @@ function renderReport(report) {
   const tape = report.tape || {};
   const workflowStatus = report.workflow_status || {};
   const root = document.getElementById('reportRoot');
+  const statusLabel = workflowStatus.workflow_status_label || tape.status || '—';
+  const notesSection = tape.notes ? `
+    <section class="report_section">
+      <h2>Заметки</h2>
+      ${renderFieldGrid([
+        renderRow('Комментарий', tape.notes, { wide: true, text: true })
+      ])}
+    </section>
+  ` : '';
 
   root.innerHTML = `
-    <h1 class="report_title">Протокол приготовления</h1>
-    <h2 class="report_subtitle">Лента #${escapeHtml(tape.tape_id || '—')}</h2>
+    <header class="report_header">
+      <div>
+        <p class="report_title">Протокол приготовления</p>
+        <h1 class="report_subtitle">Лента #${escapeHtml(tape.tape_id || '—')}</h1>
+      </div>
+      <div class="report_status_box">
+        <span class="report_status_label">Статус</span>
+        <span class="report_status_value">${escapeHtml(statusLabel)}</span>
+      </div>
+    </header>
     <div class="report_meta">
-      <div class="report_row"><strong>Название:</strong> ${escapeHtml(tape.name || '—')}</div>
-      <div class="report_row"><strong>Проект:</strong> ${escapeHtml(tape.project_name || '—')}</div>
-      <div class="report_row"><strong>Тип:</strong> ${escapeHtml(formatRole(tape.role))}</div>
-      <div class="report_row"><strong>Рецепт:</strong> ${escapeHtml(tape.recipe_name || '—')}</div>
-      <div class="report_row"><strong>Оператор:</strong> ${escapeHtml(tape.created_by_name || '—')}</div>
-      <div class="report_row"><strong>Статус:</strong> ${escapeHtml(workflowStatus.workflow_status_label || tape.status || '—')}</div>
-      <div class="report_row"><strong>Расчёт:</strong> ${escapeHtml(formatCalcMode(tape.calc_mode))}</div>
-      <div class="report_row"><strong>Целевая масса активного материала:</strong> ${escapeHtml(tape.target_mass_g != null ? `${tape.target_mass_g} г` : '—')}</div>
-      <div class="report_row"><strong>Создана:</strong> ${escapeHtml(formatDateTime(tape.created_at))}</div>
-      <div class="report_row"><strong>Обновлена:</strong> ${escapeHtml(formatDateTime(tape.updated_at))}</div>
+      ${renderRow('Название', tape.name || '—', { wide: true })}
+      ${renderRow('Проект', tape.project_names || tape.project_name || '—')}
+      ${renderRow('Тип', formatRole(tape.role))}
+      ${renderRow('Рецепт', tape.recipe_name || '—')}
+      ${renderRow('Оператор', tape.created_by_name || '—')}
+      ${renderRow('Расчёт', formatCalcMode(tape.calc_mode))}
+      ${renderRow('Цель АМ', tape.target_mass_g != null ? formatMass(tape.target_mass_g) : '—', { numeric: true })}
+      ${renderRow('Создана', formatDateTime(tape.created_at), { numeric: true })}
+      ${renderRow('Обновлена', formatDateTime(tape.updated_at), { numeric: true })}
     </div>
 
-    <section class="report_section">
-      <h2>Общая информация</h2>
-      ${renderRow('Примечания', tape.notes || '—')}
-    </section>
-
+    ${notesSection}
     ${renderRecipeSection(report)}
     ${renderStepsSection(report)}
   `;
