@@ -129,19 +129,9 @@ async function listTapesForElectrodes(pool) {
       r.role,
       r.name AS recipe_name,
       u.name AS created_by,
-      TO_CHAR(MAX(ps.started_at), 'YYYY-MM-DD') AS finished_at,
+      TO_CHAR(coating_step.started_at, 'YYYY-MM-DD') AS finished_at,
       t.availability_status,
-      (
-        SELECT c.coating_sidedness
-        FROM tape_process_steps ts_coating
-        JOIN operation_types ot_coating
-          ON ot_coating.operation_type_id = ts_coating.operation_type_id
-        JOIN tape_step_coating c
-          ON c.step_id = ts_coating.step_id
-        WHERE ts_coating.tape_id = t.tape_id
-          AND ot_coating.code = 'coating'
-        LIMIT 1
-      ) AS coating_sidedness
+      coating_step.coating_sidedness
 
     FROM tapes t
 
@@ -151,25 +141,24 @@ async function listTapesForElectrodes(pool) {
     LEFT JOIN users u
       ON u.user_id = t.created_by
 
-    LEFT JOIN tape_process_steps ps
-      ON ps.tape_id = t.tape_id
+    JOIN LATERAL (
+      SELECT
+        ps.started_at,
+        c.coating_sidedness
+      FROM tape_process_steps ps
+      JOIN operation_types ot
+        ON ot.operation_type_id = ps.operation_type_id
+      JOIN tape_step_coating c
+        ON c.step_id = ps.step_id
+      WHERE ps.tape_id = t.tape_id
+        AND ot.code = 'coating'
+      ORDER BY ps.started_at DESC NULLS LAST, ps.step_id DESC
+      LIMIT 1
+    ) coating_step ON TRUE
 
-    LEFT JOIN tape_step_drying sd
-      ON sd.step_id = ps.step_id
+    WHERE t.availability_status IS DISTINCT FROM 'depleted'
 
-    WHERE sd.step_id IS NOT NULL
-      AND t.availability_status IS DISTINCT FROM 'depleted'
-
-    GROUP BY
-      t.tape_id,
-      t.name,
-      t.project_id,
-      r.role,
-      r.name,
-      u.name,
-      t.availability_status
-
-    ORDER BY finished_at DESC NULLS LAST, t.tape_id DESC;
+    ORDER BY coating_step.started_at DESC NULLS LAST, t.tape_id DESC;
   `);
 
   return attachTapeProjects(pool, result.rows);

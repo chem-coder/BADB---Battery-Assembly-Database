@@ -131,6 +131,27 @@ function normalizeCutBatchGeometry({
   };
 }
 
+async function assertTapeReadyForElectrodeCutting(queryable, tapeId) {
+  const result = await queryable.query(
+    `
+    SELECT 1
+    FROM tape_process_steps ps
+    JOIN operation_types ot
+      ON ot.operation_type_id = ps.operation_type_id
+    JOIN tape_step_coating c
+      ON c.step_id = ps.step_id
+    WHERE ps.tape_id = $1
+      AND ot.code = 'coating'
+    LIMIT 1
+    `,
+    [tapeId]
+  );
+
+  if (!result.rowCount) {
+    throw statusError('Сначала сохраните этап нанесения ленты', 400);
+  }
+}
+
 async function listElectrodeCutBatches(pool) {
   const result = await pool.query(
     `
@@ -213,6 +234,8 @@ async function createElectrodeCutBatch(pool, payload, createdBy) {
     if (tapeResult.rows[0].availability_status === 'depleted') {
       throw statusError('Лента отмечена как израсходованная', 400);
     }
+
+    await assertTapeReadyForElectrodeCutting(client, tapeId);
 
     const payloadProjectIds = getPayloadProjectIds(payload);
     const projectIds = payloadProjectIds !== null
