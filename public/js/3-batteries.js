@@ -721,6 +721,8 @@ function markRestoredBatterySectionsSaved(data) {
 
 function hasUnsavedBatteryChanges() {
   if (state.ui.isRestoringBattery) return false;
+  syncAllSectionStateFromDom();
+  refreshDirtyState();
   return BATTERY_SECTION_KEYS.some(sectionKey => Boolean(state.ui.sectionState?.[sectionKey]?.isDirty));
 }
 
@@ -996,26 +998,36 @@ function syncAllSectionStateFromDom() {
   syncStackTargetCountStateFromDom();
 }
 
+function shouldIncludeDirtySnapshotField(el) {
+  // System-managed fields can still sync/save normally without making their parent section dirty.
+  return Boolean(
+    el?.name &&
+    !el.closest('[data-dirty-ignore]')
+  );
+}
+
 function captureNamedState(root) {
   
   if (!root) return 'null';
   
-  const fields = Array.from(root.querySelectorAll('[name]')).map(el => {
-    if (el.type === 'checkbox' || el.type === 'radio') {
+  const fields = Array.from(root.querySelectorAll('[name]'))
+    .filter(shouldIncludeDirtySnapshotField)
+    .map(el => {
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        return {
+          name: el.name,
+          type: el.type,
+          value: el.value,
+          checked: el.checked
+        };
+      }
+
       return {
         name: el.name,
         type: el.type,
-        value: el.value,
-        checked: el.checked
+        value: el.value ?? ''
       };
-    }
-
-    return {
-      name: el.name,
-      type: el.type,
-      value: el.value ?? ''
-    };
-  });
+    });
 
   return JSON.stringify(fields);
 }
@@ -2797,6 +2809,7 @@ function clearBatteryInlineStatus(buttonId) {
   statusEl.textContent = '';
   statusEl.classList.remove('is_error');
   statusEl.classList.remove('is_saving');
+  statusEl.classList.remove('is-saved');
 }
 
 function showBatteryInlineStatus(buttonId, message, isError = false, options = {}) {
@@ -2811,6 +2824,7 @@ function showBatteryInlineStatus(buttonId, message, isError = false, options = {
   statusEl.textContent = message || '';
   statusEl.classList.toggle('is_error', Boolean(isError));
   statusEl.classList.toggle('is_saving', Boolean(options.isSaving));
+  statusEl.classList.toggle('is-saved', Boolean(message && !isError && !options.isSaving));
 
   const clearAfterMs = options.clearAfterMs ?? (isError ? 7000 : 4000);
 
@@ -3891,8 +3905,9 @@ function renderBatteriesList() {
     editBtn.textContent = '✏️';
     editBtn.title = 'Открыть аккумулятор';
 
-    editBtn.addEventListener('click', () => {
-      populateBatteryForm(b);
+    editBtn.addEventListener('click', async () => {
+      await populateBatteryForm(b);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
     actions.appendChild(editBtn);
@@ -4736,7 +4751,6 @@ async function handleBatteryStatusChange() {
       ...(updatedBattery || {}),
       status: state.qc.status || null
     });
-    markSectionsSaved(['battery_qc']);
     renderBatteryStatusControl();
     refreshDirtyState();
     showBatteryInlineStatus(statusTargetId, 'Статус батареи сохранён.');

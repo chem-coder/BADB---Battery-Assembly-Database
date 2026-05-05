@@ -62,7 +62,7 @@ function normalizeCutBatchGeometry({
   }
 
   if (!normalizedTargetFormFactor || !ALLOWED_TARGET_FORM_FACTORS.has(normalizedTargetFormFactor)) {
-    return { error: 'Необходимо выбрать семейство элемента' };
+    return { error: 'Необходимо выбрать форм-фактор элемента' };
   }
 
   if (!normalizedTargetConfigCode || !ALLOWED_TARGET_CONFIG_CODES.has(normalizedTargetConfigCode)) {
@@ -70,7 +70,7 @@ function normalizeCutBatchGeometry({
   }
 
   if (!TARGET_CONFIG_CODES_BY_FORM_FACTOR[normalizedTargetFormFactor].has(normalizedTargetConfigCode)) {
-    return { error: 'Конфигурация не соответствует выбранному семейству элемента' };
+    return { error: 'Конфигурация не соответствует выбранному форм-фактору элемента' };
   }
 
   if (
@@ -307,6 +307,7 @@ async function createElectrodeCutBatch(pool, payload, createdBy) {
       LEFT JOIN LATERAL (
         SELECT
           s.started_at,
+          s.ended_at,
           d.temperature_c,
           d.atmosphere,
           d.other_parameters
@@ -320,6 +321,8 @@ async function createElectrodeCutBatch(pool, payload, createdBy) {
         ORDER BY s.started_at DESC NULLS LAST, s.step_id DESC
         LIMIT 1
       ) final_dry ON TRUE
+      WHERE ds.tape_id IS NOT NULL
+         OR final_dry.ended_at IS NOT NULL
       ON CONFLICT (tape_id)
       DO UPDATE SET
         started_at = COALESCE(tape_dry_box_state.started_at, EXCLUDED.started_at),

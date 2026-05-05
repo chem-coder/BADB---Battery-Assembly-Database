@@ -8,96 +8,6 @@
     <title>Протокол сборки аккумуляторов</title>
     <link rel="stylesheet" type="text/css" href="/css/styles.css">
     <style>
-      /* =========================================
-      Locked assembly inputs (electrodes saved)
-      ========================================= */
-
-      body[data-page="BAL"] input:not([type="checkbox"]):not([type="radio"]):disabled,
-      body[data-page="BAL"] select:disabled,
-      body[data-page="BAL"] textarea:disabled,
-      body[data-page="BAL"] input:not([type="checkbox"]):not([type="radio"])[readonly],
-      body[data-page="BAL"] textarea[readonly] {
-
-        background-color: #f3f3f3;
-        color: #666;
-        border-color: #ccc;
-        cursor: not-allowed;
-
-      }
-
-      body[data-page="BAL"] input:not([type="checkbox"]):not([type="radio"]):disabled:hover,
-      body[data-page="BAL"] select:disabled:hover,
-      body[data-page="BAL"] textarea:disabled:hover,
-      body[data-page="BAL"] input:not([type="checkbox"]):not([type="radio"])[readonly]:hover,
-      body[data-page="BAL"] textarea[readonly]:hover {
-
-        background-color: #f3f3f3;
-
-      }
-
-      /* =========================================
-        Assembly locked indicator
-        ========================================= */
-
-      .assembly_locked_banner {
-        margin-top: 6px;
-        padding: 6px 10px;
-        font-size: 12px;
-        border-radius: 4px;
-        background: #f3f3f3;
-        border: 1px solid #ddd;
-        color: #444;
-        display: none;
-      }
-
-      .assembly_locked_banner.visible {
-        display: inline-block;
-      }
-
-      .assembly_locked_banner::before {
-        content: "🔒 ";
-      }
-
-      .dirty_marker {
-        display: none;
-        margin-left: 8px;
-        padding: 2px 8px;
-        border-radius: 999px;
-        background: #fff0f0;
-        border: 1px solid #e0b4b4;
-        color: #8f2f2f;
-        font-size: 12px;
-        font-weight: 600;
-        vertical-align: middle;
-      }
-
-      .dirty_marker.visible {
-        display: inline-block;
-      }
-
-      .inline_status {
-        display: inline-block;
-        max-width: min(52rem, 70vw);
-        margin-left: 10px;
-        font-size: 12px;
-        line-height: 1.35;
-        color: #3d6b2f;
-        vertical-align: middle;
-      }
-
-      .inline_status.is_error {
-        color: #8f2f2f;
-      }
-
-      .inline_status.is_saving {
-        color: #59616d;
-      }
-
-      button[data-saving="true"] {
-        cursor: wait;
-        opacity: 0.72;
-      }
-
       #battery_stack_builder.locked {
         opacity: 0.7;
       }
@@ -833,7 +743,7 @@
             ></textarea><br>
 
             <label for="battery_status">Статус аккумулятора</label>
-            <select id="battery_status" name="status" disabled>
+            <select id="battery_status" name="status" data-dirty-ignore disabled>
               <option value="">В сборке</option>
               <option value="assembled">Собран</option>
               <option value="testing">На тестировании</option>

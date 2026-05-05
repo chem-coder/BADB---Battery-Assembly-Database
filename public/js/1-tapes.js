@@ -2768,6 +2768,7 @@ function renderTapesList() {
         const restoreData = await fetchTapeRestoreData(t);
         normalizeTapeRestoreDataIntoState(restoreData);
         await renderTapeRestoreFromState(restoreData);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       } catch (err) {
         console.error(err);
         showStatus('Ошибка загрузки ленты', true);
@@ -3140,11 +3141,14 @@ function showStatus(msg, isError = false) {
   if (!statusBox) return;
 
   statusBox.textContent = msg;
-  statusBox.style.color = isError ? '#b00020' : 'darkcyan';
+  statusBox.classList.toggle('is-error', Boolean(isError));
+  statusBox.classList.toggle('is-saved', Boolean(msg && !isError));
 
   setTimeout(() => {
     if (statusBox.textContent === msg) {
       statusBox.textContent = '';
+      statusBox.classList.remove('is-error');
+      statusBox.classList.remove('is-saved');
     }
   }, 1200);
 }
@@ -3171,6 +3175,7 @@ function showInlineStatus(buttonId, msg, isError = false, options = {}) {
   statusEl.textContent = msg;
   statusEl.classList.toggle('is-error', Boolean(isError));
   statusEl.classList.toggle('is-saving', Boolean(options.isSaving));
+  statusEl.classList.toggle('is-saved', Boolean(msg && !isError && !options.isSaving));
 
   const existingTimeout = inlineStatusTimeouts.get(statusEl);
   if (existingTimeout) {
@@ -3185,6 +3190,7 @@ function showInlineStatus(buttonId, msg, isError = false, options = {}) {
       statusEl.textContent = '';
       statusEl.classList.remove('is-error');
       statusEl.classList.remove('is-saving');
+      statusEl.classList.remove('is-saved');
     }
     inlineStatusTimeouts.delete(statusEl);
   }, clearAfterMs);

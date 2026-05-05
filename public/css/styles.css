@@ -261,6 +261,20 @@ body[data-page="electrodes"] .electrode-project-filter select {
   min-width: min(24rem, 100%);
 }
 
+body[data-page="electrodes"] .electrode-section > fieldset {
+  margin-top: 0.55rem;
+}
+
+body[data-page="electrodes"] .electrode-section > fieldset:last-child {
+  margin-bottom: 0;
+}
+
+body[data-page="electrodes"] .electrode-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 body[data-page] button {
   padding: 0.34rem 0.7rem;
   border: 1px solid #cdd5df;
@@ -434,6 +448,7 @@ body[data-page] [id^="dirty-"] {
 
 .status-feedback,
 body[data-page] .inline-save-status,
+body[data-page] .electrode-inline-status,
 body[data-page] .inline_status,
 body[data-page] .save_message,
 body[data-page] .autosave-message {
@@ -445,6 +460,7 @@ body[data-page] .autosave-message {
 }
 
 body[data-page] .inline-save-status,
+body[data-page] .electrode-inline-status,
 body[data-page] .inline_status {
   display: inline-block;
   max-width: min(52rem, 70vw);
@@ -455,6 +471,8 @@ body[data-page] .inline_status {
 .status-feedback.is-saving,
 body[data-page] .inline-save-status.is-saving,
 body[data-page] .inline-save-status.is_saving,
+body[data-page] .electrode-inline-status.is-saving,
+body[data-page] .electrode-inline-status.is_saving,
 body[data-page] .inline_status.is-saving,
 body[data-page] .inline_status.is_saving,
 body[data-page] .save_message.is-saving,
@@ -469,6 +487,9 @@ body[data-page] .autosave-message.is_saving {
 body[data-page] .inline-save-status.is-saved,
 body[data-page] .inline-save-status.is-success,
 body[data-page] .inline-save-status.is_saved,
+body[data-page] .electrode-inline-status.is-saved,
+body[data-page] .electrode-inline-status.is-success,
+body[data-page] .electrode-inline-status.is_saved,
 body[data-page] .inline_status.is-saved,
 body[data-page] .inline_status.is-success,
 body[data-page] .inline_status.is_saved,
@@ -484,6 +505,8 @@ body[data-page] .autosave-message.is_saved {
 .status-feedback.is-error,
 body[data-page] .inline-save-status.is-error,
 body[data-page] .inline-save-status.is_error,
+body[data-page] .electrode-inline-status.is-error,
+body[data-page] .electrode-inline-status.is_error,
 body[data-page] .inline_status.is-error,
 body[data-page] .inline_status.is_error,
 body[data-page] .save_message.is-error,

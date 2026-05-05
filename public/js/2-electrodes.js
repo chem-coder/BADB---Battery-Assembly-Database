@@ -98,11 +98,12 @@
     }
 
     const state = getDefaultElectrodePageState();
-    const ELECTRODE_SECTION_KEYS = ['filters', 'batch', 'drying', 'drafts'];
+    const ELECTRODE_SECTION_KEYS = ['filters', 'batch', 'foilMasses', 'electrodeDrafts', 'drying'];
     const ELECTRODE_DIRTY_MARKER_IDS = {
       filters: 'dirty-electrode-filters',
       batch: 'dirty-electrode-batch',
-      drafts: 'dirty-electrode-drafts',
+      foilMasses: 'dirty-electrode-foil-masses',
+      electrodeDrafts: 'dirty-electrode-masses',
       drying: 'dirty-electrode-drying'
     };
 
@@ -279,11 +280,10 @@
           return cloneElectrodeSnapshot(state.form.batch);
         case 'drying':
           return cloneElectrodeSnapshot(state.form.drying);
-        case 'drafts':
-          return cloneElectrodeSnapshot({
-            foilMasses: state.drafts.foilMasses,
-            electrodes: state.drafts.electrodes
-          });
+        case 'foilMasses':
+          return cloneElectrodeSnapshot(state.drafts.foilMasses);
+        case 'electrodeDrafts':
+          return cloneElectrodeSnapshot(state.drafts.electrodes);
         default:
           return null;
       }
@@ -404,6 +404,11 @@
     function syncElectrodeDraftStateFromDom() {
       setFoilMassDraftState(getFoilMassDraftsFromDom());
       setElectrodeDraftRowsState(getElectrodeDraftRowsFromDom());
+    }
+
+    function refreshElectrodeDraftDirtyStateFromDom() {
+      syncElectrodeDraftStateFromDom();
+      refreshElectrodeDirtyState();
     }
 
     function syncElectrodePageStateFromDom() {
@@ -780,17 +785,41 @@
       });
     }
 
+    function hasEstablishedTapeDryBoxStorage(dryBoxState) {
+      return Boolean(dryBoxState?.has_final_dry_box_storage);
+    }
+
     function tapeDryBoxStatusLabel(dryBoxState) {
       if (!dryBoxState) return '';
-      return dryBoxState.availability_status === 'in_dry_box'
-        ? 'Лента находится в сушильном шкафу'
-        : dryBoxState.availability_status === 'depleted'
+      const hasEstablishedStorage = hasEstablishedTapeDryBoxStorage(dryBoxState);
+
+      if (dryBoxState.availability_status === 'in_dry_box') {
+        return hasEstablishedStorage
+          ? 'Лента находится в сушильном шкафу'
+          : 'Лента помещена в сушильный шкаф';
+      }
+
+      if (dryBoxState.availability_status === 'depleted') {
+        return hasEstablishedStorage
           ? 'Лента отмечена как израсходованная'
-          : 'Лента находится вне сушильного шкафа';
+          : 'Лента списана';
+      }
+
+      return 'Лента находится вне сушильного шкафа';
     }
 
     function tapeDryBoxDetailLabel(dryBoxState) {
       if (!dryBoxState) return '';
+      const hasEstablishedStorage = hasEstablishedTapeDryBoxStorage(dryBoxState);
+
+      if (!hasEstablishedStorage) {
+        return dryBoxState.availability_status === 'in_dry_box'
+          ? 'По записи в системе остаток ленты сохранён в сушильном шкафу.'
+          : dryBoxState.availability_status === 'depleted'
+            ? 'По записи в системе остаток ленты списан.'
+            : 'Эта лента не проходила финальное хранение в сушильном шкафу. После вырезания электродов укажите, что сделать с остатком ленты.';
+      }
+
       return dryBoxState.availability_status === 'in_dry_box'
         ? 'По записи в системе лента уже возвращена в сушильный шкаф.'
         : dryBoxState.availability_status === 'depleted'
@@ -819,8 +848,12 @@
         return;
       }
 
+      const hasEstablishedStorage = hasEstablishedTapeDryBoxStorage(dryBoxState);
+
       status.textContent = tapeDryBoxStatusLabel(dryBoxState);
       detail.textContent = tapeDryBoxDetailLabel(dryBoxState);
+      returnBtn.textContent = hasEstablishedStorage ? 'Вернуть в шкаф сейчас' : 'Поместить в сушильный шкаф';
+      depleteBtn.textContent = hasEstablishedStorage ? 'Лента израсходована' : 'Списать ленту';
       returnBtn.disabled = dryBoxState.availability_status !== 'out_of_dry_box';
       depleteBtn.disabled = dryBoxState.availability_status === 'depleted';
     }
@@ -951,6 +984,7 @@
       if (!statusEl) return;
       statusEl.textContent = '';
       statusEl.classList.remove('is-error');
+      statusEl.classList.remove('is-saved');
     }
 
     function showElectrodeInlineStatus(buttonId, message, isError = false) {
@@ -959,6 +993,7 @@
 
       statusEl.textContent = message || '';
       statusEl.classList.toggle('is-error', Boolean(isError));
+      statusEl.classList.toggle('is-saved', Boolean(message && !isError));
 
       if (electrodeInlineStatusTimers[buttonId]) {
         clearTimeout(electrodeInlineStatusTimers[buttonId]);
@@ -1482,6 +1517,7 @@
 
           await loadCutBatches(Number(batch.tape_id));
           await selectBatch(batch);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         };
 
         actions.appendChild(openBtn);
@@ -2085,11 +2121,13 @@
       
       input.addEventListener('input', recalculateFoilMassAverage);
       input.addEventListener('input', syncElectrodeDraftStateFromDom);
+      input.addEventListener('change', refreshElectrodeDraftDirtyStateFromDom);
       
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           appendFoilMassRow();
+          refreshElectrodeDraftDirtyStateFromDom();
           const rows = foilMassBody.querySelectorAll('.foil-mass-value');
           rows[rows.length - 1].focus();
         }
@@ -2100,12 +2138,13 @@
         
         if (!foilMassBody.querySelector('tr')) {
           appendFoilMassRow();
+          refreshElectrodeDraftDirtyStateFromDom();
           return;
         }
         
         renumberFoilMassRows();
         recalculateFoilMassAverage();
-        syncElectrodeDraftStateFromDom();
+        refreshElectrodeDraftDirtyStateFromDom();
       });
       
       return tr;
@@ -2127,7 +2166,7 @@
     
     addFoilMassRowBtn.addEventListener('click', () => {
       appendFoilMassRow();
-      syncElectrodeDraftStateFromDom();
+      refreshElectrodeDraftDirtyStateFromDom();
       const rows = foilMassBody.querySelectorAll('.foil-mass-value');
       rows[rows.length - 1].focus();
     });
@@ -2185,6 +2224,7 @@
         tr.dataset.mass = massInput.value;
         syncElectrodeDraftStateFromDom();
       });
+      massInput.addEventListener('change', refreshElectrodeDraftDirtyStateFromDom);
 
       const coatingMassTd = document.createElement('td');
       coatingMassTd.dataset.col = 'coating_mass';
@@ -2234,6 +2274,7 @@
         tr.dataset.cup = cupInput.value;
         syncElectrodeDraftStateFromDom();
       });
+      cupInput.addEventListener('change', refreshElectrodeDraftDirtyStateFromDom);
       
       const commentTd = document.createElement('td');
       commentTd.dataset.col = 'comments';
@@ -2249,6 +2290,7 @@
         tr.dataset.comments = commentInput.value;
         syncElectrodeDraftStateFromDom();
       });
+      commentInput.addEventListener('change', refreshElectrodeDraftDirtyStateFromDom);
       
       const statusTd = document.createElement('td');
       statusTd.dataset.col = 'status';
@@ -2284,6 +2326,7 @@
         if (e.key === 'Enter') {
           e.preventDefault();
           appendElectrodeRow();
+          refreshElectrodeDraftDirtyStateFromDom();
           const inputs = electrodesBody.querySelectorAll('.electrode-mass');
           inputs[inputs.length - 1].focus();
         }
@@ -2294,11 +2337,12 @@
         
         if (!electrodesBody.querySelector('tr')) {
           appendElectrodeRow();
+          refreshElectrodeDraftDirtyStateFromDom();
           return;
         }
         
         renumberElectrodeRows();
-        syncElectrodeDraftStateFromDom();
+        refreshElectrodeDraftDirtyStateFromDom();
       });
       
     }
@@ -2306,7 +2350,7 @@
     addElectrodeRowBtn.addEventListener('click', () => {
       
       appendElectrodeRow();
-      syncElectrodeDraftStateFromDom();
+      refreshElectrodeDraftDirtyStateFromDom();
       
       const inputs = electrodesBody.querySelectorAll('.electrode-mass');
       
@@ -2442,6 +2486,7 @@
     /* ---------- CHECK UNSAVED DATA ---------- */
     
     function hasUnsavedChanges() {
+      syncElectrodePageStateFromDom();
       return Object.values(state.ui.dirtySections).some(Boolean);
     }
 
@@ -2455,7 +2500,9 @@
     }
 
     function getPendingTapeDryBoxDecisionMessage() {
-      return 'Для ленты ещё не указано, что делать дальше: вернуть в сушильный шкаф или отметить как израсходованную. Выйти всё равно?';
+      return hasEstablishedTapeDryBoxStorage(state.selection.currentTapeDryBoxState)
+        ? 'Для ленты ещё не указано, что делать дальше: вернуть в сушильный шкаф или отметить как израсходованную. Выйти всё равно?'
+        : 'Для ленты ещё не указано, что сделать с остатком: поместить в сушильный шкаф или списать. Выйти всё равно?';
     }
 
     function confirmElectrodeLogout() {
@@ -2557,6 +2604,8 @@
       msg.style.display = 'block';
 
       renderElectrodePage();
+      syncElectrodePageStateFromDom();
+      markAllElectrodeSectionsSaved();
       
     });
     
@@ -2717,29 +2766,43 @@
 
     document.getElementById('electrodes-return-tape-btn').addEventListener('click', async () => {
       const tapeId = Number(state.form.filters.tape_id);
+      const hasEstablishedStorage = hasEstablishedTapeDryBoxStorage(state.selection.currentTapeDryBoxState);
 
       if (!tapeId) {
         showElectrodeInlineStatus('electrodes-return-tape-btn', 'Не выбрана лента', true);
         return;
       }
 
-      const res = await fetch(`/api/tapes/${tapeId}/dry-box-state/return-now`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      });
+      const res = hasEstablishedStorage
+        ? await fetch(`/api/tapes/${tapeId}/dry-box-state/return-now`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        })
+        : await fetch(`/api/tapes/${tapeId}/dry-box-state/place-now`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
 
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        showElectrodeInlineStatus('electrodes-return-tape-btn', data.error || 'Ошибка возврата ленты в шкаф', true);
+        showElectrodeInlineStatus(
+          'electrodes-return-tape-btn',
+          data.error || (hasEstablishedStorage ? 'Ошибка возврата ленты в шкаф' : 'Ошибка помещения ленты в шкаф'),
+          true
+        );
         return;
       }
 
       setCurrentTapeDryBoxState(data);
       await loadTapes();
       renderElectrodePage();
-      showElectrodeInlineStatus('electrodes-return-tape-btn', 'Лента возвращена в шкаф');
+      showElectrodeInlineStatus(
+        'electrodes-return-tape-btn',
+        hasEstablishedStorage ? 'Лента возвращена в шкаф' : 'Лента помещена в шкаф'
+      );
     });
 
     document.getElementById('electrodes-deplete-tape-btn').addEventListener('click', async () => {
@@ -2759,14 +2822,17 @@
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        showElectrodeInlineStatus('electrodes-deplete-tape-btn', data.error || 'Ошибка изменения статуса ленты', true);
+        showElectrodeInlineStatus('electrodes-deplete-tape-btn', data.error || 'Ошибка списания ленты', true);
         return;
       }
 
       setCurrentTapeDryBoxState(data);
       await loadTapes();
       renderElectrodePage();
-      showElectrodeInlineStatus('electrodes-deplete-tape-btn', 'Лента отмечена как израсходованная');
+      showElectrodeInlineStatus(
+        'electrodes-deplete-tape-btn',
+        hasEstablishedTapeDryBoxStorage(data) ? 'Лента отмечена как израсходованная' : 'Лента списана'
+      );
     });
     
     

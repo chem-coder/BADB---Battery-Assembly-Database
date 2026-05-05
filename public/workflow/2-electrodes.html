@@ -23,17 +23,6 @@
         width: 32px;
       }
 
-      .electrode-inline-status {
-        display: inline-block;
-        margin-left: 8px;
-        font-size: 0.95em;
-        color: #2f6f44;
-      }
-
-      .electrode-inline-status.is-error {
-        color: #a33;
-      }
-
       .electrode-capacity-summary {
         margin-top: 10px;
         padding: 12px 14px;
@@ -134,243 +123,251 @@
         <form name="electrodes-cut_batch-form" autocomplete="on">
           <div id="electrode-workspace" hidden>
             
-            <!-- user & comments block -->
-            <fieldset>
-              <label for="electrodes-created_by">Создал</label>
-              <select id="electrodes-created_by" disabled>
-                <option value="">— автоматически —</option>
-              </select><br>
-
-              <label for="electrode-batch-project-multiselect-trigger">Проекты партии</label>
-              <div id="electrode-batch-project-multiselect" class="multi-select">
-                <button
-                  type="button"
-                  id="electrode-batch-project-multiselect-trigger"
-                  class="multi-select-trigger"
-                  aria-expanded="false"
-                  aria-controls="electrode-batch-project-multiselect-options"
-                >— выбрать проекты —</button>
-                <div id="electrode-batch-project-multiselect-options" class="multi-select-options" hidden></div>
-              </div><br>
+            <details class="electrode-section" open>
+              <summary>Партия и геометрия <span id="dirty-electrode-batch" class="dirty_marker">Не сохранено</span></summary>
               
-              <label for="electrodes-comments">Заметки/комментарии: </label>
-              <textarea id="electrodes-comments" name="electrodes-comments" placeholder="Комментарии о вырезании электродов"></textarea>
-              <div id="electrode-sidedness-display" style="margin-top:8px; color:#555;"></div>
-            </fieldset>
-            
-            <!-- geometry block -->
-            <fieldset id="geometry-block">
-              <legend>Геометрия электродов <span id="dirty-electrode-batch" class="dirty_marker">Не сохранено</span></legend>
-              <label for="electrodes-target_form_factor">Семейство элемента</label>
-              <select id="electrodes-target_form_factor" name="electrodes-target_form_factor">
-                <option value="">— выбрать —</option>
-                <option value="coin">Монеточный</option>
-                <option value="pouch">Пакетный</option>
-                <option value="cylindrical">Цилиндрический</option>
-              </select><br>
+              <!-- user & comments block -->
+              <fieldset aria-label="Общая информация о партии электродов">
+                <label for="electrodes-created_by">Создал</label>
+                <select id="electrodes-created_by" disabled>
+                  <option value="">— автоматически —</option>
+                </select><br>
 
-              <label for="electrodes-target_config_code">Конфигурация</label>
-              <select id="electrodes-target_config_code" name="electrodes-target_config_code" disabled>
-                <option value="">— выбрать семейство —</option>
-              </select><br>
-
-              <div id="electrodes-target_config_other_block" hidden>
-                <label for="electrodes-target_config_other">Другая конфигурация</label>
-                <input
-                  id="electrodes-target_config_other"
-                  type="text"
-                  name="electrodes-target_config_other"
-                  placeholder="Введите другую конфигурацию"
-                ><br>
-              </div>
-
-              <div hidden aria-hidden="true">
-                <input type="radio"
-                name="electrodes-shape"
-                value="circle"
-                data-params-target="electrodes-geom-circle">
-                <input type="radio"
-                name="electrodes-shape"
-                value="rectangle"
-                data-params-target="electrodes-geom-rect">
-              </div>
-              
-              <!-- Для круглых электродов -->
-              <div id="electrodes-geom-circle" hidden>
-                <label for="electrodes-diameter">Диаметр электрода, мм: </label>
-                <input id="electrodes-diameter" type="number" step="0.01" min="0" name="electrodes-diameter"><br>
-              </div>
-              
-              <!-- Для прямоугольных электродов -->
-              <div id="electrodes-geom-rect" hidden>
-                <label for="electrodes-length">Длина электрода, мм: </label>
-                <input id="electrodes-length" type="number" step="0.01" min="0" name="electrodes-length"><br>
+                <label for="electrode-batch-project-multiselect-trigger">Проекты партии</label>
+                <div id="electrode-batch-project-multiselect" class="multi-select">
+                  <button
+                    type="button"
+                    id="electrode-batch-project-multiselect-trigger"
+                    class="multi-select-trigger"
+                    aria-expanded="false"
+                    aria-controls="electrode-batch-project-multiselect-options"
+                  >— выбрать проекты —</button>
+                  <div id="electrode-batch-project-multiselect-options" class="multi-select-options" hidden></div>
+                </div><br>
                 
-                <label for="electrodes-width">Ширина электрода, мм: </label>
-                <input id="electrodes-width" type="number" step="0.01" min="0" name="electrodes-width"><br>
-              </div>
+                <label for="electrodes-comments">Заметки/комментарии: </label>
+                <textarea id="electrodes-comments" name="electrodes-comments" placeholder="Комментарии о вырезании электродов"></textarea>
+                <div id="electrode-sidedness-display" style="margin-top:8px; color:#555;"></div>
+              </fieldset>
               
-              <!-- Площадь катода (рассчитывается автоматически) -->
-              <label>Площадь электрода, мм²: <span id="electrodes-area" class="computed-field"></span></label>
-            </fieldset>
+              <!-- geometry block -->
+              <fieldset id="geometry-block" aria-label="Геометрия электродов">
+                <label for="electrodes-target_form_factor">Форм-фактор элемента</label>
+                <select id="electrodes-target_form_factor" name="electrodes-target_form_factor">
+                  <option value="">— выбрать —</option>
+                  <option value="coin">Монеточный</option>
+                  <option value="pouch">Пакетный</option>
+                  <option value="cylindrical">Цилиндрический</option>
+                </select><br>
+
+                <label for="electrodes-target_config_code">Конфигурация</label>
+                <select id="electrodes-target_config_code" name="electrodes-target_config_code" disabled>
+                  <option value="">— выбрать семейство —</option>
+                </select><br>
+
+                <div id="electrodes-target_config_other_block" hidden>
+                  <label for="electrodes-target_config_other">Другая конфигурация</label>
+                  <input
+                    id="electrodes-target_config_other"
+                    type="text"
+                    name="electrodes-target_config_other"
+                    placeholder="Введите другую конфигурацию"
+                  ><br>
+                </div>
+
+                <div hidden aria-hidden="true">
+                  <input type="radio"
+                  name="electrodes-shape"
+                  value="circle"
+                  data-params-target="electrodes-geom-circle">
+                  <input type="radio"
+                  name="electrodes-shape"
+                  value="rectangle"
+                  data-params-target="electrodes-geom-rect">
+                </div>
+                
+                <!-- Для круглых электродов -->
+                <div id="electrodes-geom-circle" hidden>
+                  <label for="electrodes-diameter">Диаметр электрода, мм: </label>
+                  <input id="electrodes-diameter" type="number" step="0.01" min="0" name="electrodes-diameter"><br>
+                </div>
+                
+                <!-- Для прямоугольных электродов -->
+                <div id="electrodes-geom-rect" hidden>
+                  <label for="electrodes-length">Длина электрода, мм: </label>
+                  <input id="electrodes-length" type="number" step="0.01" min="0" name="electrodes-length"><br>
+                  
+                  <label for="electrodes-width">Ширина электрода, мм: </label>
+                  <input id="electrodes-width" type="number" step="0.01" min="0" name="electrodes-width"><br>
+                </div>
+                
+                <!-- Площадь катода (рассчитывается автоматически) -->
+                <label>Площадь электрода, мм²: <span id="electrodes-area" class="computed-field"></span></label>
+              </fieldset>
+            </details>
             
             <!-- foil mass block -->
-            <fieldset id="mass-block">
-              <legend>Масса фольги и черновик электродов <span id="dirty-electrode-drafts" class="dirty_marker">Не сохранено</span></legend>
-              
-              <label for="foil-mass">Средняя масса фольги одного электрода, г: </label>
-              <input
-              id="foil-mass"
-              type="number"
-              step="0.0001"
-              min="0"
-              name="foil-mass"
-              disabled
-              ><br><br>
-              
-              <table id="foil-mass-table" border="1" cellpadding="6">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Масса, г</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="foil-mass-body"></tbody>
-              </table>
-              
-              <button type="button" id="add-foil-mass-row-btn">+</button>
-            </fieldset>
+            <details class="electrode-section" open>
+              <summary>Масса фольги и черновик электродов <span id="dirty-electrode-foil-masses" class="dirty_marker">Не сохранено</span></summary>
+              <fieldset id="mass-block" aria-label="Масса фольги и черновик электродов">
+                <label for="foil-mass">Средняя масса фольги одного электрода, г: </label>
+                <input
+                id="foil-mass"
+                type="number"
+                step="0.0001"
+                min="0"
+                name="foil-mass"
+                disabled
+                ><br><br>
+                
+                <table id="foil-mass-table" border="1" cellpadding="6">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Масса, г</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="foil-mass-body"></tbody>
+                </table>
+                
+                <button type="button" id="add-foil-mass-row-btn">+</button>
+              </fieldset>
+            </details>
             
             <!--BUGS-->
             <!--Add an "are you sure?" on the trashcan - I accidentally deleted an electrode -->
             
             <!-- electrodes table -->
-            <fieldset id="electrodes-table-block">
-              <legend> Масса электродов </legend>
-
-              <div id="electrode-capacity-summary" class="electrode-capacity-summary" hidden></div>
-              <div id="electrode-column-controls" class="electrode-column-controls" hidden></div>
-              
-              
-              <div class="electrodes-table-wrapper">
-                <table id="electrodes-table" border="1" cellpadding="6">
-                  <thead>
-                    <tr>
-                      <th class="row-index"></th>
-                      <th data-col="number">№</th>
-                      <th>Масса, г</th>
-                      <th data-col="coating_mass">Масса покрытия, г</th>
-                      <th data-col="active_mass_theoretical">Масса активн. мат. (теор.), г</th>
-                      <th data-col="active_mass_actual">Масса активн. мат. (факт.), г</th>
-                      <th data-col="capacity_theoretical">Ёмкость (теор.), мАч</th>
-                      <th data-col="capacity_actual">Ёмкость (факт.), мАч</th>
-                      <th data-col="areal_capacity_theoretical">Ёмкость (теор.), мАч/см²</th>
-                      <th data-col="areal_capacity_actual">Ёмкость (факт.), мАч/см²</th>
-                      <th data-col="capacity_per_side_actual">Ёмкость 1 стороны, мАч/см²</th>
-                      <th data-col="cup">Стаканчик №</th>
-                      <th data-col="comments">Комментарии</th>
-                      <th data-col="status">Статус</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody id="electrodes-body"></tbody>
-                </table>
-              </div>
-              
-              <button type="button" id="add-electrode-row-btn">+</button>
-              
-            </fieldset>
+            <details class="electrode-section" open>
+              <summary>Масса электродов <span id="dirty-electrode-masses" class="dirty_marker">Не сохранено</span></summary>
+              <fieldset id="electrodes-table-block" aria-label="Масса электродов">
+                <div id="electrode-capacity-summary" class="electrode-capacity-summary" hidden></div>
+                <div id="electrode-column-controls" class="electrode-column-controls" hidden></div>
+                
+                
+                <div class="electrodes-table-wrapper">
+                  <table id="electrodes-table" border="1" cellpadding="6">
+                    <thead>
+                      <tr>
+                        <th class="row-index"></th>
+                        <th data-col="number">№</th>
+                        <th>Масса, г</th>
+                        <th data-col="coating_mass">Масса покрытия, г</th>
+                        <th data-col="active_mass_theoretical">Масса активн. мат. (теор.), г</th>
+                        <th data-col="active_mass_actual">Масса активн. мат. (факт.), г</th>
+                        <th data-col="capacity_theoretical">Ёмкость (теор.), мАч</th>
+                        <th data-col="capacity_actual">Ёмкость (факт.), мАч</th>
+                        <th data-col="areal_capacity_theoretical">Ёмкость (теор.), мАч/см²</th>
+                        <th data-col="areal_capacity_actual">Ёмкость (факт.), мАч/см²</th>
+                        <th data-col="capacity_per_side_actual">Ёмкость 1 стороны, мАч/см²</th>
+                        <th data-col="cup">Стаканчик №</th>
+                        <th data-col="comments">Комментарии</th>
+                        <th data-col="status">Статус</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="electrodes-body"></tbody>
+                  </table>
+                </div>
+                
+                <button type="button" id="add-electrode-row-btn">+</button>
+                
+              </fieldset>
+            </details>
             
             <!-- drying the batch -->
-            <fieldset id="electrodes-drying">
-              <legend>Сушка готовой партии электродов <span id="dirty-electrode-drying" class="dirty_marker">Не сохранено</span></legend>
+            <details class="electrode-section">
+              <summary>Сушка готовой партии электродов <span id="dirty-electrode-drying" class="dirty_marker">Не сохранено</span></summary>
+              <fieldset id="electrodes-drying" aria-label="Сушка готовой партии электродов">
+                <label for="electrodes-drying-start-date">Дата начала: </label>
+                <input
+                id="electrodes-drying-start-date"
+                type="date"
+                name="electrodes-drying-start-date"
+                >
+                
+                <label for="electrodes-drying-start-time">Время начала: </label>
+                <input
+                id="electrodes-drying-start-time"
+                type="time"
+                name="electrodes-drying-start-time"
+                >
+                
+                <button
+                type="button"
+                class="date-time-now-button"
+                id="electrodes-drying-start-now-button"
+                >
+                Сейчас
+              </button>
+              <br>
               
-              <label for="electrodes-drying-start-date">Дата начала: </label>
+              <label for="electrodes-drying-end-date">Дата окончания: </label>
               <input
-              id="electrodes-drying-start-date"
+              id="electrodes-drying-end-date"
               type="date"
-              name="electrodes-drying-start-date"
+              name="electrodes-drying-end-date"
               >
               
-              <label for="electrodes-drying-start-time">Время начала: </label>
+              <label for="electrodes-drying-end-time">Время окончания: </label>
               <input
-              id="electrodes-drying-start-time"
+              id="electrodes-drying-end-time"
               type="time"
-              name="electrodes-drying-start-time"
+              name="electrodes-drying-end-time"
               >
               
               <button
               type="button"
               class="date-time-now-button"
-              id="electrodes-drying-start-now-button"
+              id="electrodes-drying-end-now-button"
               >
               Сейчас
             </button>
             <br>
             
-            <label for="electrodes-drying-end-date">Дата окончания: </label>
+            <label for="electrodes-drying-temperature">Температура, °C: </label>
             <input
-            id="electrodes-drying-end-date"
-            type="date"
-            name="electrodes-drying-end-date"
+            id="electrodes-drying-temperature"
+            type="number"
+            step="0.1"
+            min="-273"
+            name="electrodes-drying-temperature"
+            placeholder="Температура сушки"
             >
+            <br>
             
-            <label for="electrodes-drying-end-time">Время окончания: </label>
-            <input
-            id="electrodes-drying-end-time"
-            type="time"
-            name="electrodes-drying-end-time"
-            >
+            <label for="electrodes-drying-other-parameters">Дополнительные параметры: </label>
+            <textarea
+            id="electrodes-drying-other-parameters"
+            name="electrodes-drying-other-parameters"
+            placeholder="Например: вакуум, сухая комната, номер шкафа"
+            ></textarea>
+            <br>
             
-            <button
-            type="button"
-            class="date-time-now-button"
-            id="electrodes-drying-end-now-button"
-            >
-            Сейчас
-          </button>
-          <br>
-          
-          <label for="electrodes-drying-temperature">Температура, °C: </label>
-          <input
-          id="electrodes-drying-temperature"
-          type="number"
-          step="0.1"
-          min="-273"
-          name="electrodes-drying-temperature"
-          placeholder="Температура сушки"
-          >
-          <br>
-          
-          <label for="electrodes-drying-other-parameters">Дополнительные параметры: </label>
-          <textarea
-          id="electrodes-drying-other-parameters"
-          name="electrodes-drying-other-parameters"
-          placeholder="Например: вакуум, сухая комната, номер шкафа"
-          ></textarea>
-          <br>
-          
-          <label for="electrodes-drying-comments">Комментарии: </label>
-          <textarea
-          id="electrodes-drying-comments"
-          name="electrodes-drying-comments"
-          placeholder="Комментарии по сушке партии"
-          ></textarea>
-        </fieldset>
+            <label for="electrodes-drying-comments">Комментарии: </label>
+            <textarea
+            id="electrodes-drying-comments"
+            name="electrodes-drying-comments"
+            placeholder="Комментарии по сушке партии"
+            ></textarea>
+          </fieldset>
+        </details>
         
         <!-- save button -->           
         <!-- I'm not sure what is saves though - the electrodes or the batch drying information? What is the right workflow here? -->
-        <button type="button" id="saveBtn">Сохранить партию</button>
-        <button type="button" id="printElectrodeBatchBtn" hidden>Печать</button>
-        <button type="button" id="exitBatchBtn">Выйти</button>
+        <div class="form-actions electrode-batch-actions">
+          <button type="button" id="saveBtn">Сохранить партию</button>
+          <button type="button" id="printElectrodeBatchBtn" hidden>Печать</button>
+          <button type="button" id="exitBatchBtn">Выйти</button>
+        </div>
 
         <fieldset id="electrodes-tape-dry-box" hidden>
           <legend>Что дальше с лентой?</legend>
           <div id="electrodes-tape-dry-box-status" aria-live="polite"></div>
           <div id="electrodes-tape-dry-box-detail" style="margin:6px 0 10px; color:#666;"></div>
-          <button type="button" id="electrodes-return-tape-btn">Вернуть в шкаф сейчас</button>
-          <button type="button" id="electrodes-deplete-tape-btn">Лента израсходована</button>
+          <button type="button" id="electrodes-return-tape-btn">Поместить в сушильный шкаф</button>
+          <button type="button" id="electrodes-deplete-tape-btn">Списать ленту</button>
         </fieldset>
         
       </div>

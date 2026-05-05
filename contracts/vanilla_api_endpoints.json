@@ -530,6 +530,14 @@
       "sources": ["public/js/1-tapes.js"]
     },
     {
+      "path": "/api/tapes/:param/dry-box-state/place-now",
+      "methods": ["POST"],
+      "auth": "auth",
+      "request": "optional timestamp payload; updated_by is server-derived",
+      "response": "updated dry-box state JSON",
+      "sources": ["public/js/2-electrodes.js"]
+    },
+    {
       "path": "/api/tapes/:param/dry-box-state/return-now",
       "methods": ["POST"],
       "auth": "auth",

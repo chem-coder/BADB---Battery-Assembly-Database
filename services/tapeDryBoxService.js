@@ -14,7 +14,7 @@ async function fetchTapeDryBoxState(queryable, tapeId) {
   const result = await queryable.query(
     `
     SELECT
-      ds.tape_id,
+      t.tape_id,
       ds.started_at,
       ds.removed_at,
       ds.temperature_c,
@@ -24,10 +24,22 @@ async function fetchTapeDryBoxState(queryable, tapeId) {
       ds.updated_by,
       ds.updated_at,
       t.availability_status,
+      final_dry.ended_at AS final_drying_ended_at,
+      (final_dry.ended_at IS NOT NULL) AS has_final_dry_box_storage,
       u.name AS updated_by_name
     FROM tapes t
     LEFT JOIN tape_dry_box_state ds
       ON ds.tape_id = t.tape_id
+    LEFT JOIN LATERAL (
+      SELECT s.ended_at
+      FROM tape_process_steps s
+      JOIN operation_types ot
+        ON ot.operation_type_id = s.operation_type_id
+      WHERE s.tape_id = t.tape_id
+        AND ot.code = 'drying_pressed_tape'
+      ORDER BY s.started_at DESC NULLS LAST, s.step_id DESC
+      LIMIT 1
+    ) final_dry ON TRUE
     LEFT JOIN users u
       ON u.user_id = ds.updated_by
     WHERE t.tape_id = $1
@@ -267,6 +279,37 @@ async function returnTapeToDryBox(pool, tapeId, payload, updatedBy) {
   return fetchTapeDryBoxState(pool, tapeId);
 }
 
+async function placeTapeInDryBox(pool, tapeId, payload, updatedBy) {
+  await runInTransaction(pool, async (client) => {
+    await assertTapeExists(client, tapeId);
+
+    const currentState = await fetchTapeDryBoxState(client, tapeId);
+    const nextStartedAt = payload.started_at || new Date().toISOString();
+
+    await upsertTapeDryBoxState(client, {
+      tapeId,
+      startedAt: nextStartedAt,
+      removedAt: null,
+      temperatureC: getFiniteTemperatureOrFallback(payload.temperature_c, currentState?.temperature_c),
+      atmosphere: payload.atmosphere || currentState?.atmosphere || null,
+      otherParameters: payload.other_parameters ?? currentState?.other_parameters ?? null,
+      comments: payload.comments ?? currentState?.comments ?? null,
+      updatedBy
+    });
+
+    await client.query(
+      `
+      UPDATE tapes
+      SET availability_status = 'in_dry_box'
+      WHERE tape_id = $1
+      `,
+      [tapeId]
+    );
+  });
+
+  return fetchTapeDryBoxState(pool, tapeId);
+}
+
 async function removeTapeFromDryBox(pool, tapeId, updatedBy) {
   await runInTransaction(pool, async (client) => {
     await assertTapeExists(client, tapeId);
@@ -345,6 +388,7 @@ module.exports = {
   isBeforeIso,
   normalizeDryingOperationCode,
   removeTapeFromDryBox,
+  placeTapeInDryBox,
   returnTapeToDryBox,
   saveTapeDryBoxParameters,
   upsertTapeDryBoxState

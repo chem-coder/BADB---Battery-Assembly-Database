@@ -12,6 +12,7 @@ const {
   fetchTapeDryingStepByCode,
   normalizeDryingOperationCode,
   removeTapeFromDryBox,
+  placeTapeInDryBox,
   returnTapeToDryBox,
   saveTapeDryBoxParameters
 } = require('../services/tapeDryBoxService');
@@ -380,6 +381,24 @@ router.post('/:id/dry-box-state/return-now', auth, async (req, res) => {
     }
     console.error(err);
     res.status(500).json({ error: 'Ошибка возврата ленты в сушильный шкаф' });
+  }
+});
+
+router.post('/:id/dry-box-state/place-now', auth, async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Некорректный ID' });
+  }
+
+  try {
+    res.json(await placeTapeInDryBox(pool, id, req.body || {}, req.user.userId));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка помещения ленты в сушильный шкаф' });
   }
 });
 
