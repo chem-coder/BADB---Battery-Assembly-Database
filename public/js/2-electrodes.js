@@ -858,6 +858,35 @@
       depleteBtn.disabled = dryBoxState.availability_status === 'depleted';
     }
 
+    function getElectrodeBatchPrintReportUrl(cutBatchId) {
+      return `/workflow/electrode-batch-print.html?cut_batch_id=${encodeURIComponent(cutBatchId)}`;
+    }
+
+    function openElectrodeBatchPrintReport(cutBatchId) {
+      if (!cutBatchId) return;
+      window.open(getElectrodeBatchPrintReportUrl(cutBatchId), '_blank', 'noopener');
+    }
+
+    async function openElectrodeBatchRecord(batch, { applyFilters = false } = {}) {
+      if (applyFilters) {
+        const projectSelect = document.getElementById('electrodes-project_id');
+
+        roleSelect.value = batch.tape_role || '';
+        projectSelect.value = batch.project_id || '';
+        renderTapeOptions();
+        tapeSelect.value = String(batch.tape_id);
+        syncElectrodeFiltersStateFromDom();
+
+        workflow.hidden = false;
+        addCutBatchBtn.hidden = false;
+
+        await loadCutBatches(Number(batch.tape_id));
+      }
+
+      await selectBatch(batch);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     function shouldShowElectrodeWorkflow() {
       return Boolean(state.form.filters.tape_id && state.form.filters.project_id);
     }
@@ -897,11 +926,13 @@
 
       state.lists.cutBatches.forEach(batch => {
         const li = document.createElement('li');
+        li.className = 'user-row';
 
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.style.textAlign = 'left';
-        btn.style.width = '100%';
+        const info = document.createElement('button');
+        info.type = 'button';
+        info.className = 'user-info record-open-button';
+        info.title = 'Открыть партию';
+        info.setAttribute('aria-label', `Открыть партию электродов ${batch.cut_batch_id}`);
 
         let status = '🟡 в работе';
 
@@ -927,12 +958,28 @@
         const sidednessText = formatElectrodesSidednessLabel(batch.tape_coating_sidedness);
         const projectsText = batch.project_names || batch.project_name || '';
 
-        btn.textContent =
+        info.textContent =
           `Партия ${batch.cut_batch_id}${sidednessText ? ` — ${sidednessText}` : ''}${targetText ? ` — ${targetText}` : ''}${geometryText ? ` — ${geometryText}` : ''}${projectsText ? ` — ${projectsText}` : ''} — ${dateText} — ${count} ${electrodeWord} — ${status}`;
 
-        btn.onclick = () => selectBatch(batch);
+        info.addEventListener('click', async () => {
+          await openElectrodeBatchRecord(batch);
+        });
 
-        li.appendChild(btn);
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const printBtn = document.createElement('button');
+        printBtn.type = 'button';
+        printBtn.textContent = '🖨️';
+        printBtn.title = 'Печать отчёта';
+        printBtn.setAttribute('aria-label', `Печать отчёта партии электродов ${batch.cut_batch_id}`);
+        printBtn.addEventListener('click', () => {
+          openElectrodeBatchPrintReport(batch.cut_batch_id);
+        });
+
+        actions.appendChild(printBtn);
+        li.appendChild(info);
+        li.appendChild(actions);
         list.appendChild(li);
       });
     }
@@ -1473,8 +1520,11 @@
         const li = document.createElement('li');
         li.className = 'user-row';
 
-        const info = document.createElement('div');
-        info.className = 'user-info';
+        const info = document.createElement('button');
+        info.type = 'button';
+        info.className = 'user-info record-open-button';
+        info.title = 'Открыть партию';
+        info.setAttribute('aria-label', `Открыть партию электродов ${batch.cut_batch_id}`);
 
         const title = document.createElement('strong');
         const dateText = batch.created_at
@@ -1496,31 +1546,23 @@
         info.appendChild(title);
         info.appendChild(meta);
 
+        info.addEventListener('click', async () => {
+          await openElectrodeBatchRecord(batch, { applyFilters: true });
+        });
+
         const actions = document.createElement('div');
         actions.className = 'actions';
 
-        const openBtn = document.createElement('button');
-        openBtn.type = 'button';
-        openBtn.textContent = '✏️';
-        openBtn.title = 'Открыть партию';
-        openBtn.onclick = async () => {
-          const projectSelect = document.getElementById('electrodes-project_id');
+        const printBtn = document.createElement('button');
+        printBtn.type = 'button';
+        printBtn.textContent = '🖨️';
+        printBtn.title = 'Печать отчёта';
+        printBtn.setAttribute('aria-label', `Печать отчёта партии электродов ${batch.cut_batch_id}`);
+        printBtn.addEventListener('click', () => {
+          openElectrodeBatchPrintReport(batch.cut_batch_id);
+        });
 
-          roleSelect.value = batch.tape_role || '';
-          projectSelect.value = batch.project_id || '';
-          renderTapeOptions();
-          tapeSelect.value = String(batch.tape_id);
-          syncElectrodeFiltersStateFromDom();
-
-          workflow.hidden = false;
-          addCutBatchBtn.hidden = false;
-
-          await loadCutBatches(Number(batch.tape_id));
-          await selectBatch(batch);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        };
-
-        actions.appendChild(openBtn);
+        actions.appendChild(printBtn);
 
         li.appendChild(info);
         li.appendChild(actions);
@@ -2756,11 +2798,7 @@
     if (printElectrodeBatchBtn) {
       printElectrodeBatchBtn.addEventListener('click', () => {
         if (!state.selection.currentCutBatchId) return;
-        window.open(
-          `/workflow/electrode-batch-print.html?cut_batch_id=${encodeURIComponent(state.selection.currentCutBatchId)}`,
-          '_blank',
-          'noopener'
-        );
+        openElectrodeBatchPrintReport(state.selection.currentCutBatchId);
       });
     }
 

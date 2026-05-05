@@ -3722,6 +3722,20 @@ function finalizeRestoredBatteryPage(data) {
   markRestoredBatterySectionsSaved(data);
 }
 
+function getBatteryPrintReportUrl(batteryId) {
+  return `/workflow/battery-print.html?battery_id=${encodeURIComponent(batteryId)}`;
+}
+
+function openBatteryPrintReport(batteryId) {
+  if (!batteryId) return;
+  window.open(getBatteryPrintReportUrl(batteryId), '_blank', 'noopener');
+}
+
+async function openBatteryRecord(battery) {
+  await populateBatteryForm(battery);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 // Load a battery for editing
 async function loadBatteryAssembly(batteryId) {
   setIsRestoringBattery(true);
@@ -3859,8 +3873,11 @@ function renderBatteriesList() {
           : '';
     const materialsInfo = formatActiveMaterials(b);
 
-    const info = document.createElement('div');
-    info.className = 'user-info';
+    const info = document.createElement('button');
+    info.type = 'button';
+    info.className = 'user-info record-open-button';
+    info.title = 'Открыть аккумулятор';
+    info.setAttribute('aria-label', `Открыть аккумулятор #${b.battery_id}`);
 
     const title = document.createElement('strong');
     title.textContent =
@@ -3897,20 +3914,23 @@ function renderBatteriesList() {
     info.appendChild(sizeSpan);
     info.appendChild(creatorSpan);
 
+    info.addEventListener('click', async () => {
+      await openBatteryRecord(b);
+    });
+
     const actions = document.createElement('div');
     actions.className = 'actions';
 
-    const editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.textContent = '✏️';
-    editBtn.title = 'Открыть аккумулятор';
-
-    editBtn.addEventListener('click', async () => {
-      await populateBatteryForm(b);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    const printBtn = document.createElement('button');
+    printBtn.type = 'button';
+    printBtn.textContent = '🖨️';
+    printBtn.title = 'Печать отчёта';
+    printBtn.setAttribute('aria-label', `Печать отчёта аккумулятора #${b.battery_id}`);
+    printBtn.addEventListener('click', () => {
+      openBatteryPrintReport(b.battery_id);
     });
 
-    actions.appendChild(editBtn);
+    actions.appendChild(printBtn);
     li.appendChild(info);
     li.appendChild(actions);
     list.appendChild(li);
@@ -5144,8 +5164,7 @@ const printBatteryBtn = document.getElementById('printBatteryBtn');
 
 printBatteryBtn.addEventListener('click', () => {
   if (!state.selection.currentBatteryId) return;
-  const targetUrl = `/workflow/battery-print.html?battery_id=${state.selection.currentBatteryId}`;
-  window.open(targetUrl, '_blank');
+  openBatteryPrintReport(state.selection.currentBatteryId);
 });
 
 const exitBatteriesBtn = document.getElementById('exitBatteriesBtn');

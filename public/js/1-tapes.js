@@ -2706,13 +2706,23 @@ function renderTapesList() {
     tapesList.appendChild(li);
     return;
   }
+
+  async function openTapeRecord(tape) {
+    const restoreData = await fetchTapeRestoreData(tape);
+    normalizeTapeRestoreDataIntoState(restoreData);
+    await renderTapeRestoreFromState(restoreData);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
   
   state.tapes.items.forEach(t => {
     const li = document.createElement('li');
     li.className = 'user-row';
     
-    const info = document.createElement('div');
-    info.className = 'user-info';
+    const info = document.createElement('button');
+    info.type = 'button';
+    info.className = 'user-info record-open-button';
+    info.title = 'Открыть ленту';
+    info.setAttribute('aria-label', `Открыть ленту #${t.tape_id}`);
 
     const coatingSidednessLabel =
       t.coating_sidedness === 'one_sided'
@@ -2756,27 +2766,30 @@ function renderTapesList() {
     info.appendChild(dateSpan);
     info.appendChild(creatorSpan);
     info.appendChild(projectsSpan);
-    
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-    
-    const editBtn = document.createElement('button');
-    editBtn.textContent = '✏️';
 
-    editBtn.onclick = async() => {
+    info.addEventListener('click', async () => {
       try {
-        const restoreData = await fetchTapeRestoreData(t);
-        normalizeTapeRestoreDataIntoState(restoreData);
-        await renderTapeRestoreFromState(restoreData);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        await openTapeRecord(t);
       } catch (err) {
         console.error(err);
         showStatus('Ошибка загрузки ленты', true);
       }
-    };
+    });
     
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const printRowBtn = document.createElement('button');
+    printRowBtn.type = 'button';
+    printRowBtn.textContent = '🖨️';
+    printRowBtn.title = 'Печать отчёта';
+    printRowBtn.setAttribute('aria-label', `Печать отчёта ленты #${t.tape_id}`);
+    printRowBtn.addEventListener('click', () => {
+      openTapePrintReport(t.tape_id);
+    });
     
     const duplicateBtn = document.createElement('button');
+    duplicateBtn.type = 'button';
     duplicateBtn.textContent = '📄';
     
     duplicateBtn.onclick = () => {
@@ -2797,6 +2810,7 @@ function renderTapesList() {
     };
     
     const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
     deleteBtn.textContent = '🗑';
     
     deleteBtn.onclick = async () => {
@@ -2810,7 +2824,7 @@ function renderTapesList() {
       }
     };
     
-    actions.appendChild(editBtn);
+    actions.appendChild(printRowBtn);
     actions.appendChild(duplicateBtn);
     actions.appendChild(deleteBtn);
     
@@ -2819,6 +2833,15 @@ function renderTapesList() {
     
     tapesList.appendChild(li);
   });
+}
+
+function getTapePrintReportUrl(tapeId) {
+  return `/workflow/tape-print.html?tape_id=${encodeURIComponent(tapeId)}`;
+}
+
+function openTapePrintReport(tapeId) {
+  if (!tapeId) return;
+  window.open(getTapePrintReportUrl(tapeId), '_blank', 'noopener');
 }
 
 async function fetchTapeRestoreData(tape) {
@@ -3972,8 +3995,7 @@ printBtn.addEventListener('click', () => {
     return;
   }
 
-  const url = `/workflow/tape-print.html?tape_id=${encodeURIComponent(state.selection.currentTapeId)}`;
-  window.open(url, '_blank', 'noopener');
+  openTapePrintReport(state.selection.currentTapeId);
 });
 
 recipeMaterialsSaveBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('0-recipe-materials-save-btn', async () => {
