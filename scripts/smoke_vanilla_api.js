@@ -879,6 +879,18 @@ async function runWriteSmoke(client, seed) {
       cup_number: 3,
       comments: 'smoke anode electrode'
     })).electrode_id;
+    made.lifecycleElectrodeId = (await client.post('/api/electrodes', {
+      cut_batch_id: made.cutBatchId,
+      electrode_mass_g: 0.1237,
+      cup_number: 4,
+      comments: 'smoke lifecycle cathode electrode'
+    })).electrode_id;
+    made.lifecycleAnodeElectrodeId = (await client.post('/api/electrodes', {
+      cut_batch_id: made.cutBatchId,
+      electrode_mass_g: 0.1238,
+      cup_number: 5,
+      comments: 'smoke lifecycle anode electrode'
+    })).electrode_id;
     await client.put(`/api/electrodes/${made.electrodeId}`, {
       electrode_mass_g: 0.1235,
       cup_number: 2,
@@ -924,6 +936,7 @@ async function runWriteSmoke(client, seed) {
       anode_cut_batch_id: null,
       anode_source_notes: null
     });
+    await client.request('DELETE', `/api/batteries/${identityBattery.battery_id}`);
     if (made.projectId) {
       await client.post('/api/batteries', {
         project_id: made.projectId,
@@ -1007,6 +1020,62 @@ async function runWriteSmoke(client, seed) {
       cyl_notes: 'smoke cylindrical update'
     });
     client.assertEqual(cylConfig.cyl_size_code, '21700', 'cylindrical config update persists size code');
+
+    const lifecycleBattery = await client.post('/api/batteries', {
+      project_id: projectId,
+      project_ids: [projectId],
+      form_factor: 'coin',
+      battery_notes: `Codex Smoke Battery ${suffix} Lifecycle`
+    });
+    await client.post('/api/batteries/battery_coin_config', {
+      battery_id: lifecycleBattery.battery_id,
+      coin_cell_mode: 'full_cell',
+      coin_size_code: '2032',
+      coin_layout: 'SE'
+    });
+    await client.post('/api/batteries/battery_electrode_sources', {
+      battery_id: lifecycleBattery.battery_id,
+      cathode_tape_id: made.tapeId,
+      cathode_cut_batch_id: made.cutBatchId,
+      anode_tape_id: made.tapeId,
+      anode_cut_batch_id: made.cutBatchId
+    });
+    await client.put(`/api/batteries/battery_electrodes/${lifecycleBattery.battery_id}`, [
+      {
+        electrode_id: made.lifecycleElectrodeId,
+        role: 'cathode',
+        position_index: 1
+      },
+      {
+        electrode_id: made.lifecycleAnodeElectrodeId,
+        role: 'anode',
+        position_index: 2
+      }
+    ]);
+    const blockedBatteryDeleteCheck = await client.get(`/api/batteries/${lifecycleBattery.battery_id}/delete-check`);
+    client.assertEqual(blockedBatteryDeleteCheck.can_delete, false, 'battery delete preflight blocks active stack');
+    await client.expectDependencyConflict('DELETE', `/api/batteries/${lifecycleBattery.battery_id}`);
+    const disassembled = await client.post(`/api/batteries/${lifecycleBattery.battery_id}/disassemble`);
+    client.assertEqual(disassembled.status, 'disassembled', 'battery disassembly sets status');
+    client.assertEqual(
+      disassembled.scrapped_electrode_ids.map(Number).includes(Number(made.lifecycleElectrodeId)),
+      true,
+      'battery disassembly returns cathode electrode id'
+    );
+    const lifecycleElectrode = (await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/electrodes`))
+      .find((electrode) => Number(electrode.electrode_id) === Number(made.lifecycleElectrodeId));
+    client.assertEqual(lifecycleElectrode?.status_code, 3, 'disassembled battery scraps returned electrode');
+    client.assertEqual(lifecycleElectrode?.used_in_battery_id, null, 'disassembled battery clears electrode battery link');
+    await client.put(`/api/electrodes/${made.lifecycleElectrodeId}/status`, {
+      status_code: 1,
+      used_in_battery_id: null,
+      scrapped_reason: null
+    });
+    const restoredLifecycleElectrode = (await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/electrodes`))
+      .find((electrode) => Number(electrode.electrode_id) === Number(made.lifecycleElectrodeId));
+    client.assertEqual(restoredLifecycleElectrode?.status_code, 1, 'scrapped electrode can be restored when safe');
+    await client.request('DELETE', `/api/batteries/${lifecycleBattery.battery_id}`);
+
     await client.post('/api/batteries/battery_sep_config', {
       battery_id: made.batteryId,
       separator_id: made.separatorId,
@@ -1060,6 +1129,10 @@ async function runWriteSmoke(client, seed) {
       anode_cut_batch_id: made.cutBatchId,
       anode_source_notes: 'smoke source dependency check'
     });
+    const blockedTapeDeleteCheck = await client.get(`/api/tapes/${made.tapeId}/delete-check`);
+    client.assertEqual(blockedTapeDeleteCheck.can_delete, false, 'tape delete preflight blocks electrode dependencies');
+    const blockedBatchDeleteCheck = await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/delete-check`);
+    client.assertEqual(blockedBatchDeleteCheck.can_delete, false, 'cut batch delete preflight blocks electrode/source dependencies');
     await client.expectDependencyConflict('DELETE', `/api/tapes/${made.tapeId}`);
     await client.expectDependencyConflict('DELETE', `/api/electrodes/electrode-cut-batches/${made.cutBatchId}`);
     await client.patch(`/api/batteries/battery_electrode_sources/${made.batteryId}`, {
@@ -1107,6 +1180,7 @@ async function runWriteSmoke(client, seed) {
       anode_cut_batch_id: null,
       anode_source_notes: null
     });
+    await client.expectDependencyConflict('DELETE', `/api/electrodes/electrode-cut-batches/${made.cutBatchId}`);
     await client.put(`/api/electrodes/${made.electrodeId}/status`, {
       status_code: 1,
       used_in_battery_id: null,
@@ -1131,6 +1205,8 @@ async function cleanupCreatedData(client, made) {
   }
 
   const cleanup = [
+    made.lifecycleAnodeElectrodeId && ['DELETE', `/api/electrodes/${made.lifecycleAnodeElectrodeId}`],
+    made.lifecycleElectrodeId && ['DELETE', `/api/electrodes/${made.lifecycleElectrodeId}`],
     made.anodeElectrodeId && ['DELETE', `/api/electrodes/${made.anodeElectrodeId}`],
     made.electrodeId && ['DELETE', `/api/electrodes/${made.electrodeId}`],
     made.cutBatchId && ['DELETE', `/api/electrodes/electrode-cut-batches/${made.cutBatchId}`],

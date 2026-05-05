@@ -8,6 +8,7 @@ const title = form.querySelector('h2');
 const saveBtn = document.getElementById('saveBtn');
 const printBtn = document.getElementById('printBtn');
 const clearBtn = document.getElementById('clearBtn');
+const deleteTapeBtn = document.getElementById('deleteTapeBtn');
 const recipeMaterialsSaveBtn = document.getElementById('0-recipe-materials-save-btn');
 const tapesList = document.getElementById('tapesList');
 
@@ -246,6 +247,9 @@ function renderTapeForm() {
     saveBtn.textContent = state.form.mode === 'edit'
       ? 'Сохранить изменения'
       : 'Создать ленту';
+  }
+  if (deleteTapeBtn) {
+    deleteTapeBtn.hidden = state.form.mode !== 'edit' || !state.selection.currentTapeId;
   }
   renderFormVisibility();
   renderSectionState();
@@ -1688,9 +1692,10 @@ async function deleteTape(id) {
   });
   
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Ошибка удаления');
+    await throwResponseError(res, 'Ошибка удаления ленты');
   }
+
+  return res.json();
 }
 
 async function fetchDryingStep(tapeId, operationCode) {
@@ -2790,7 +2795,9 @@ function renderTapesList() {
     
     const duplicateBtn = document.createElement('button');
     duplicateBtn.type = 'button';
-    duplicateBtn.textContent = '📄';
+    duplicateBtn.textContent = '📑';
+    duplicateBtn.title = 'Дублировать ленту';
+    duplicateBtn.setAttribute('aria-label', `Дублировать ленту #${t.tape_id}`);
     
     duplicateBtn.onclick = () => {
       clearCurrentTapeSelection();
@@ -2809,24 +2816,8 @@ function renderTapesList() {
       setNameEditing(false);
     };
     
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.textContent = '🗑';
-    
-    deleteBtn.onclick = async () => {
-      if (!confirm(`Удалить ленту "${t.name}"?`)) return;
-      
-      try {
-        await deleteTape(t.tape_id);
-        loadTapes();
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    
     actions.appendChild(printRowBtn);
     actions.appendChild(duplicateBtn);
-    actions.appendChild(deleteBtn);
     
     li.appendChild(info);
     li.appendChild(actions);
@@ -3205,7 +3196,7 @@ function showInlineStatus(buttonId, msg, isError = false, options = {}) {
     clearTimeout(existingTimeout);
   }
 
-  const clearAfterMs = options.clearAfterMs ?? (isError ? 7000 : 2200);
+  const clearAfterMs = options.clearAfterMs ?? (isError ? 18000 : 2200);
   if (!clearAfterMs) return;
 
   const timeoutId = setTimeout(() => {
@@ -3988,6 +3979,47 @@ clearBtn.addEventListener('click', async () => {
   
   resetForm();
 });
+
+deleteTapeBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('deleteTapeBtn', async () => {
+  const tapeId = state.selection.currentTapeId;
+
+  if (!tapeId) {
+    showInlineStatus('deleteTapeBtn', 'Сначала откройте ленту', true);
+    return;
+  }
+
+  if (anyDirty()) {
+    const ok = confirm('Есть несохранённые изменения. Удалить ленту без сохранения?');
+    if (!ok) return;
+  }
+
+  const checkRes = await fetch(`/api/tapes/${tapeId}/delete-check`);
+  const check = await checkRes.json().catch(() => ({}));
+
+  if (!checkRes.ok || !check.can_delete) {
+    showInlineStatus(
+      'deleteTapeBtn',
+      formatSaveError(check, 'Лента пока не готова к удалению'),
+      true,
+      { clearAfterMs: 18000 }
+    );
+    return;
+  }
+
+  const phrase = `DELETE TAPE ${tapeId}`;
+  const typed = prompt(`Для удаления ленты введите: ${phrase}`);
+
+  if (typed !== phrase) {
+    showInlineStatus('deleteTapeBtn', 'Удаление отменено.', true, { clearAfterMs: 4000 });
+    return;
+  }
+
+  await deleteTape(tapeId);
+  clearAllDirtySteps();
+  resetForm();
+  await loadTapes();
+  showStatus(`Лента #${tapeId} удалена.`);
+}, 'Ошибка удаления ленты')));
 
 printBtn.addEventListener('click', () => {
   if (!state.selection.currentTapeId) {

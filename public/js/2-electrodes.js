@@ -5,6 +5,7 @@
     const workspace = document.getElementById('electrode-workspace');
     const batchTitle = document.getElementById('batch-title');
     const printElectrodeBatchBtn = document.getElementById('printElectrodeBatchBtn');
+    const deleteElectrodeBatchBtn = document.getElementById('deleteElectrodeBatchBtn');
     const batchProjectMultiSelect = document.getElementById('electrode-batch-project-multiselect');
     const batchProjectMultiSelectTrigger = document.getElementById('electrode-batch-project-multiselect-trigger');
     const batchProjectMultiSelectOptions = document.getElementById('electrode-batch-project-multiselect-options');
@@ -902,6 +903,9 @@
       if (printElectrodeBatchBtn) {
         printElectrodeBatchBtn.hidden = !state.selection.currentCutBatchId;
       }
+      if (deleteElectrodeBatchBtn) {
+        deleteElectrodeBatchBtn.hidden = !state.selection.currentCutBatchId;
+      }
     }
 
     function renderCurrentTapeCutBatchList() {
@@ -1034,7 +1038,7 @@
       statusEl.classList.remove('is-saved');
     }
 
-    function showElectrodeInlineStatus(buttonId, message, isError = false) {
+    function showElectrodeInlineStatus(buttonId, message, isError = false, options = {}) {
       const statusEl = ensureElectrodeInlineStatusElement(buttonId);
       if (!statusEl) return;
 
@@ -1046,10 +1050,12 @@
         clearTimeout(electrodeInlineStatusTimers[buttonId]);
       }
 
-      if (!isError && message) {
+      const clearAfterMs = options.clearAfterMs ?? (isError ? 18000 : 2500);
+
+      if (message && clearAfterMs) {
         electrodeInlineStatusTimers[buttonId] = setTimeout(() => {
           clearElectrodeInlineStatus(buttonId);
-        }, 2500);
+        }, clearAfterMs);
       }
     }
 
@@ -1783,6 +1789,19 @@
           
           actionCell.appendChild(scrapBtn);
         }
+
+        if (e.status_code === 3) {
+          const restoreBtn = document.createElement('button');
+          restoreBtn.type = 'button';
+          restoreBtn.textContent = '↩';
+          restoreBtn.title = 'Вернуть в доступные';
+
+          restoreBtn.onclick = async () => {
+            await restoreScrappedElectrode(e);
+          };
+
+          actionCell.appendChild(restoreBtn);
+        }
         
         /* DELETE button */
         
@@ -1874,6 +1893,88 @@
       
       return res.json();
     }
+
+    function formatElectrodeDependencySummary(dependencies) {
+      if (!Array.isArray(dependencies) || dependencies.length === 0) {
+        return '';
+      }
+
+      return dependencies
+        .map((dependency) => {
+          const label = dependency.label || dependency.key || 'Связанные записи';
+          const count = dependency.count ?? dependency.records?.length ?? 0;
+          return `${label}: ${count}`;
+        })
+        .join('; ');
+    }
+
+    function formatElectrodeDeleteCheckMessage(payload, fallback) {
+      const message = payload?.error || fallback;
+      const dependencySummary = formatElectrodeDependencySummary(payload?.dependencies);
+
+      return dependencySummary
+        ? `${message}. Блокирующие записи: ${dependencySummary}`
+        : message;
+    }
+
+    async function deleteCurrentElectrodeBatch() {
+      const cutBatchId = state.selection.currentCutBatchId;
+
+      if (!cutBatchId) return;
+
+      if (hasUnsavedChanges()) {
+        const proceed = confirm('Есть несохранённые изменения. Удалить партию без сохранения?');
+        if (!proceed) return;
+      }
+
+      const checkRes = await fetch(`/api/electrodes/electrode-cut-batches/${cutBatchId}/delete-check`);
+      const check = await checkRes.json().catch(() => ({}));
+
+      if (!checkRes.ok || !check.can_delete) {
+        showElectrodeInlineStatus(
+          'deleteElectrodeBatchBtn',
+          formatElectrodeDeleteCheckMessage(check, 'Партия электродов пока не готова к удалению'),
+          true,
+          { clearAfterMs: 18000 }
+        );
+        return;
+      }
+
+      const phrase = `DELETE BATCH ${cutBatchId}`;
+      const typed = prompt(`Для удаления партии введите: ${phrase}`);
+
+      if (typed !== phrase) {
+        showElectrodeInlineStatus('deleteElectrodeBatchBtn', 'Удаление отменено.', true, { clearAfterMs: 4000 });
+        return;
+      }
+
+      const res = await fetch(`/api/electrodes/electrode-cut-batches/${cutBatchId}`, {
+        method: 'DELETE'
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const dependencyDetail = Array.isArray(err.dependencies) && err.dependencies.length
+          ? ` (${err.dependencies.map(dep => dep.label || dep.key).join('; ')})`
+          : '';
+        showElectrodeInlineStatus(
+          'deleteElectrodeBatchBtn',
+          `${err.error || 'Ошибка удаления партии'}${dependencyDetail}`,
+          true
+        );
+        return;
+      }
+
+      clearElectrodeWorkspace();
+      await loadAllCutBatches();
+      if (state.form.filters.tape_id) {
+        await loadCutBatches(Number(state.form.filters.tape_id));
+      }
+      renderElectrodePage();
+      syncElectrodePageStateFromDom();
+      markAllElectrodeSectionsSaved();
+      showElectrodeInlineStatus('deleteElectrodeBatchBtn', 'Партия удалена.');
+    }
     
     async function scrapElectrode(electrode) {
       
@@ -1900,6 +2001,31 @@
       await loadElectrodes(electrode.cut_batch_id);
       showElectrodeInlineStatus('saveBtn', 'Электрод списан.');
       
+    }
+
+    async function restoreScrappedElectrode(electrode) {
+      const ok = confirm(`Вернуть электрод ${electrode.electrode_id} в доступные?`);
+
+      if (!ok) return;
+
+      const res = await fetch(`/api/electrodes/${electrode.electrode_id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status_code: 1,
+          used_in_battery_id: null,
+          scrapped_reason: null
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showElectrodeInlineStatus('saveBtn', err.error || 'Ошибка возврата электрода в доступные', true);
+        return;
+      }
+
+      await loadElectrodes(electrode.cut_batch_id);
+      showElectrodeInlineStatus('saveBtn', 'Электрод возвращён в доступные.');
     }
     
     async function selectBatch(batch) {
@@ -2800,6 +2926,10 @@
         if (!state.selection.currentCutBatchId) return;
         openElectrodeBatchPrintReport(state.selection.currentCutBatchId);
       });
+    }
+
+    if (deleteElectrodeBatchBtn) {
+      deleteElectrodeBatchBtn.addEventListener('click', deleteCurrentElectrodeBatch);
     }
 
     document.getElementById('electrodes-return-tape-btn').addEventListener('click', async () => {

@@ -28,6 +28,7 @@ const {
   collectTapeDeleteDependencies,
   createTape,
   deleteTape,
+  getTapeDeleteCheck,
   listTapes,
   updateTape
 } = require('../services/tapeCatalogService');
@@ -148,6 +149,24 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
+router.get('/:id/delete-check', auth, requireRole('admin', 'lead'), async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Некорректный tape_id' });
+  }
+
+  try {
+    res.json(await getTapeDeleteCheck(pool, id));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка проверки удаления ленты' });
+  }
+});
+
 // DELETE
 // Restricted to admin/lead: employees should not be able to destroy
 // arbitrary tapes owned by other users. Before this guard, any authenticated
@@ -173,6 +192,9 @@ router.delete('/:id', auth, requireRole('admin', 'lead'), async (req, res) => {
 
     res.json(await deleteTape(pool, id));
   } catch (err) {
+    if (err.statusCode === 409 && err.dependencies) {
+      return sendDependencyConflict(res, err.message, err.dependencies);
+    }
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message });
     }

@@ -803,8 +803,12 @@
         
       </form>
 
-      <button type="button" id="printBatteryBtn" hidden>Печать</button>
-      <button type="button" id="exitBatteriesBtn" hidden>Выйти</button>
+      <div class="form-actions battery-form-actions">
+        <button type="button" id="printBatteryBtn" hidden>Печать</button>
+        <button type="button" id="exitBatteriesBtn" hidden>Выйти</button>
+        <button type="button" id="disassembleBatteryBtn" hidden>Разобрать аккумулятор</button>
+        <button type="button" id="deleteBatteryBtn" class="button-danger" hidden>Удалить запись</button>
+      </div>
       <div class="save_message" aria-live="polite"></div>
 
       <ul id="batteriesList" class="users-list"></ul>

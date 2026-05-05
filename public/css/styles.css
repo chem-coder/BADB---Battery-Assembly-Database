@@ -325,6 +325,25 @@ body[data-page] button[data-saving="true"] {
   opacity: 0.72;
 }
 
+body[data-page] .button-danger {
+  border-color: rgba(231, 76, 60, 0.38);
+  background: #fff7f6;
+  color: var(--badb-danger-text);
+}
+
+body[data-page] .button-danger:hover,
+body[data-page] .button-danger:focus-visible {
+  background: #fdecea;
+  border-color: rgba(231, 76, 60, 0.58);
+}
+
+body[data-page] .button-danger:disabled,
+body[data-page] .button-danger:disabled:hover {
+  border-color: #d9e0e7;
+  background: var(--badb-disabled-bg);
+  color: var(--badb-disabled-text);
+}
+
 body[data-page] a {
   color: #315f86;
   text-decoration-color: rgba(49, 95, 134, 0.38);

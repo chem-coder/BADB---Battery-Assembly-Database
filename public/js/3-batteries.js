@@ -1690,6 +1690,8 @@ function renderBatteryWorkspaceVisibility() {
   const electrochemSection = document.getElementById('battery_electrochem');
   const printBtn = document.getElementById('printBatteryBtn');
   const exitBtn = document.getElementById('exitBatteriesBtn');
+  const disassembleBtn = document.getElementById('disassembleBatteryBtn');
+  const deleteBtn = document.getElementById('deleteBatteryBtn');
 
   if (form) {
     form.hidden = !isFormOpen;
@@ -1719,6 +1721,15 @@ function renderBatteryWorkspaceVisibility() {
 
   if (exitBtn) {
     exitBtn.hidden = !isFormOpen;
+  }
+
+  if (disassembleBtn) {
+    disassembleBtn.hidden = !isFormOpen || !hasBattery;
+    disassembleBtn.disabled = state.selection.currentBattery?.status === 'disassembled';
+  }
+
+  if (deleteBtn) {
+    deleteBtn.hidden = !isFormOpen || !hasBattery;
   }
 }
 
@@ -2826,7 +2837,7 @@ function showBatteryInlineStatus(buttonId, message, isError = false, options = {
   statusEl.classList.toggle('is_saving', Boolean(options.isSaving));
   statusEl.classList.toggle('is-saved', Boolean(message && !isError && !options.isSaving));
 
-  const clearAfterMs = options.clearAfterMs ?? (isError ? 7000 : 4000);
+  const clearAfterMs = options.clearAfterMs ?? (isError ? 18000 : 4000);
 
   if (message && clearAfterMs) {
     batteryInlineStatusTimers[buttonId] = setTimeout(() => {
@@ -4814,6 +4825,95 @@ async function handleExitBatteryPage() {
   await loadBatteries();
 }
 
+async function handleDisassembleBatteryClick() {
+  const batteryId = state.selection.currentBatteryId;
+
+  if (!batteryId) return;
+
+  if (hasUnsavedBatteryChanges()) {
+    const proceed = confirm('Есть несохранённые изменения. Разобрать аккумулятор без сохранения?');
+    if (!proceed) return;
+  }
+
+  const confirmed = confirm(
+    `Разобрать аккумулятор #${batteryId}?\n\n` +
+    'Электроды будут возвращены в партию как списанные. Запись аккумулятора останется в базе.'
+  );
+
+  if (!confirmed) return;
+
+  const result = await withBatteryInlineSaveStatus('disassembleBatteryBtn', async () => {
+    const res = await fetch(`/api/batteries/${batteryId}/disassemble`, {
+      method: 'POST'
+    });
+
+    if (!res.ok) {
+      await throwBatteryResponseError(res, 'Ошибка разборки аккумулятора');
+    }
+
+    return res.json();
+  }, 'Ошибка разборки аккумулятора');
+
+  if (!result) return;
+
+  await loadBatteries();
+  await loadBatteryAssembly(batteryId);
+  showBatteryInlineStatus(
+    'disassembleBatteryBtn',
+    `Аккумулятор разобран. Списано электродов: ${result.scrapped_electrode_ids?.length || 0}.`
+  );
+}
+
+async function handleDeleteBatteryClick() {
+  const batteryId = state.selection.currentBatteryId;
+
+  if (!batteryId) return;
+
+  if (hasUnsavedBatteryChanges()) {
+    const proceed = confirm('Есть несохранённые изменения. Удалить запись без сохранения?');
+    if (!proceed) return;
+  }
+
+  const checkRes = await fetch(`/api/batteries/${batteryId}/delete-check`);
+  const check = await checkRes.json().catch(() => ({}));
+
+  if (!checkRes.ok || !check.can_delete) {
+    showBatteryInlineStatus(
+      'deleteBatteryBtn',
+      formatBatterySaveError(check, 'Аккумулятор пока не готов к удалению'),
+      true,
+      { clearAfterMs: 18000 }
+    );
+    return;
+  }
+
+  const phrase = `DELETE BATTERY ${batteryId}`;
+  const typed = prompt(`Для удаления записи аккумулятора введите: ${phrase}`);
+
+  if (typed !== phrase) {
+    showBatteryInlineStatus('deleteBatteryBtn', 'Удаление отменено.', true, { clearAfterMs: 4000 });
+    return;
+  }
+
+  const result = await withBatteryInlineSaveStatus('deleteBatteryBtn', async () => {
+    const res = await fetch(`/api/batteries/${batteryId}`, {
+      method: 'DELETE'
+    });
+
+    if (!res.ok) {
+      await throwBatteryResponseError(res, 'Ошибка удаления аккумулятора');
+    }
+
+    return res.json();
+  }, 'Ошибка удаления аккумулятора');
+
+  if (!result) return;
+
+  resetBatteryPageState();
+  await loadBatteries();
+  showBatteryInlineStatus('deleteBatteryBtn', `Аккумулятор #${batteryId} удалён.`);
+}
+
 function handleAddBatteryClick() {
   resetBatteryPageState({ openForm: true });
 }
@@ -5171,6 +5271,18 @@ const exitBatteriesBtn = document.getElementById('exitBatteriesBtn');
 
 exitBatteriesBtn.addEventListener('click', async () => {
   await handleExitBatteryPage();
+});
+
+const disassembleBatteryBtn = document.getElementById('disassembleBatteryBtn');
+
+disassembleBatteryBtn.addEventListener('click', async () => {
+  await handleDisassembleBatteryClick();
+});
+
+const deleteBatteryBtn = document.getElementById('deleteBatteryBtn');
+
+deleteBatteryBtn.addEventListener('click', async () => {
+  await handleDeleteBatteryClick();
 });
 
 const addBatteryBtn = document.getElementById('addBatteryBtn');

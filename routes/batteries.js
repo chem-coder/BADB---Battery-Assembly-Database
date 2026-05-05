@@ -1,13 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const { auth } = require('../middleware/auth');
+const { auth, requireRole } = require('../middleware/auth');
+const {
+  sendDependencyConflict,
+  sendForeignKeyConflict
+} = require('../utils/dependencyConflicts');
 const {
   createBattery,
   getBattery,
   listBatteries,
   updateBattery
 } = require('../services/batteryCatalogService');
+const {
+  deleteBatteryRecord,
+  disassembleBattery,
+  getBatteryDeleteCheck
+} = require('../services/batteryLifecycleService');
 const {
   fetchCompatibleElectrodeCutBatches
 } = require('../services/batteryCompatibleCutBatchService');
@@ -170,6 +179,69 @@ router.patch('/:id', auth, async (req, res) => {
 
   }
 
+});
+
+router.post('/:id/disassemble', auth, async (req, res) => {
+  const batteryId = Number(req.params.id);
+
+  if (!Number.isInteger(batteryId)) {
+    return res.status(400).json({ error: 'Некорректный ID батареи' });
+  }
+
+  try {
+    res.json(await disassembleBattery(pool, batteryId, req.user.userId));
+  } catch (err) {
+    if (err.statusCode === 409 && err.dependencies) {
+      return sendDependencyConflict(res, err.message, err.dependencies);
+    }
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка разборки аккумулятора' });
+  }
+});
+
+router.get('/:id/delete-check', auth, requireRole('admin', 'lead'), async (req, res) => {
+  const batteryId = Number(req.params.id);
+
+  if (!Number.isInteger(batteryId)) {
+    return res.status(400).json({ error: 'Некорректный ID батареи' });
+  }
+
+  try {
+    res.json(await getBatteryDeleteCheck(pool, batteryId));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка проверки удаления аккумулятора' });
+  }
+});
+
+router.delete('/:id', auth, requireRole('admin', 'lead'), async (req, res) => {
+  const batteryId = Number(req.params.id);
+
+  if (!Number.isInteger(batteryId)) {
+    return res.status(400).json({ error: 'Некорректный ID батареи' });
+  }
+
+  try {
+    res.json(await deleteBatteryRecord(pool, batteryId, req.user.userId));
+  } catch (err) {
+    if (err.statusCode === 409 && err.dependencies) {
+      return sendDependencyConflict(res, err.message, err.dependencies);
+    }
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    if (sendForeignKeyConflict(res, err, 'Нельзя удалить аккумулятор: он связан с другими записями')) {
+      return;
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка удаления аккумулятора' });
+  }
 });
 
 

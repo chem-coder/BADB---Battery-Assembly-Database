@@ -27,10 +27,26 @@
     },
     {
       "path": "/api/batteries/:param",
-      "methods": ["PATCH", "POST"],
+      "methods": ["PATCH", "POST", "DELETE"],
       "auth": "auth",
-      "request": "PATCH updates a battery by id; POST represents dynamic battery section create routes",
-      "response": "updated or created section JSON",
+      "request": "PATCH updates a battery by id; POST represents dynamic battery section create routes; DELETE removes a safe empty/error record",
+      "response": "updated/created section JSON or delete status",
+      "sources": ["public/js/3-batteries.js"]
+    },
+    {
+      "path": "/api/batteries/:param/disassemble",
+      "methods": ["POST"],
+      "auth": "auth",
+      "request": "none",
+      "response": "disassembly status and returned/scrapped electrode IDs",
+      "sources": ["public/js/3-batteries.js"]
+    },
+    {
+      "path": "/api/batteries/:param/delete-check",
+      "methods": ["GET"],
+      "auth": "auth plus admin/lead",
+      "request": "none",
+      "response": "delete eligibility and dependency blockers",
       "sources": ["public/js/3-batteries.js"]
     },
     {
@@ -123,10 +139,10 @@
     },
     {
       "path": "/api/electrodes/electrode-cut-batches/:param",
-      "methods": ["GET", "PUT"],
+      "methods": ["GET", "PUT", "DELETE"],
       "auth": "auth",
-      "request": "GET none; PUT cut batch update payload; updated_by is server-derived",
-      "response": "cut batch JSON",
+      "request": "GET/DELETE none; PUT cut batch update payload; updated_by is server-derived",
+      "response": "cut batch JSON or delete status",
       "sources": ["public/js/2-electrodes.js"]
     },
     {
@@ -135,6 +151,14 @@
       "auth": "auth",
       "request": "GET none; POST electrode drying payload",
       "response": "drying state JSON",
+      "sources": ["public/js/2-electrodes.js"]
+    },
+    {
+      "path": "/api/electrodes/electrode-cut-batches/:param/delete-check",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "delete eligibility and dependency blockers",
       "sources": ["public/js/2-electrodes.js"]
     },
     {
@@ -512,6 +536,14 @@
       "request": "GET none; PUT dry-box state payload; updated_by is server-derived",
       "response": "dry-box state JSON",
       "sources": ["public/js/1-tapes.js", "public/js/2-electrodes.js"]
+    },
+    {
+      "path": "/api/tapes/:param/delete-check",
+      "methods": ["GET"],
+      "auth": "auth plus admin/lead",
+      "request": "none",
+      "response": "delete eligibility and dependency blockers",
+      "sources": ["public/js/1-tapes.js"]
     },
     {
       "path": "/api/tapes/:param/dry-box-state/deplete",

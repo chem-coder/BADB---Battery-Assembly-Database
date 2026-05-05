@@ -86,6 +86,19 @@ async function updateElectrodeStatus(pool, electrodeId, payload, userId) {
     scrapped_reason: payload.scrapped_reason || null
   };
 
+  if (newVals.status_code === 1 || newVals.status_code === 3) {
+    const conflict = await getElectrodeDeleteConflict(pool, electrodeId);
+
+    if (conflict) {
+      throw statusError(
+        newVals.status_code === 1
+          ? 'Нельзя вернуть электрод в доступные: он связан с аккумулятором'
+          : 'Нельзя списать электрод: он связан с аккумулятором',
+        409
+      );
+    }
+  }
+
   const result = await pool.query(
     `
     UPDATE electrodes

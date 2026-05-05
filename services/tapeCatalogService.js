@@ -273,20 +273,55 @@ async function collectTapeDeleteDependencies(pool, tapeId) {
   ]);
 }
 
+async function getTapeDeleteCheck(pool, tapeId) {
+  const tapeResult = await pool.query(
+    'SELECT tape_id FROM tapes WHERE tape_id = $1',
+    [tapeId]
+  );
+
+  if (tapeResult.rowCount === 0) {
+    throw statusError('Лента не найдена', 404);
+  }
+
+  const dependencies = await collectTapeDeleteDependencies(pool, tapeId);
+
+  return {
+    can_delete: dependencies.length === 0,
+    error: dependencies.length > 0
+      ? 'Нельзя удалить ленту: она связана с партиями электродов или аккумуляторами'
+      : null,
+    dependencies
+  };
+}
+
 async function deleteTape(pool, tapeId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    const tapeResult = await client.query(
+      'SELECT tape_id FROM tapes WHERE tape_id = $1',
+      [tapeId]
+    );
+
+    if (tapeResult.rowCount === 0) {
+      throw statusError('Лента не найдена', 404);
+    }
+
+    const dependencies = await collectTapeDeleteDependencies(client, tapeId);
+
+    if (dependencies.length > 0) {
+      const err = statusError('Нельзя удалить ленту: она связана с партиями электродов или аккумуляторами', 409);
+      err.dependencies = dependencies;
+      throw err;
+    }
+
     await client.query('DELETE FROM tape_projects WHERE tape_id = $1', [tapeId]);
 
     const result = await client.query(
       `DELETE FROM tapes WHERE tape_id = $1`,
       [tapeId]
     );
-
-    if (result.rowCount === 0) {
-      throw statusError('Лента не найдена', 404);
-    }
 
     await client.query('COMMIT');
     return { success: true };
@@ -302,6 +337,7 @@ module.exports = {
   collectTapeDeleteDependencies,
   createTape,
   deleteTape,
+  getTapeDeleteCheck,
   listTapes,
   updateTape
 };

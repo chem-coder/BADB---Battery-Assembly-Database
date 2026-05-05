@@ -657,6 +657,18 @@ async function getElectrodeCutBatchReport(pool, cutBatchId) {
 async function collectCutBatchDeleteDependencies(pool, cutBatchId) {
   return collectDependencyConflicts(pool, [
     {
+      key: 'electrodes',
+      label: 'электроды, которые ещё находятся в этой партии',
+      query: `
+        SELECT electrode_id AS id, number_in_batch AS name
+        FROM electrodes
+        WHERE cut_batch_id = $1
+        ORDER BY number_in_batch ASC, electrode_id ASC
+        LIMIT 25
+      `,
+      params: [cutBatchId]
+    },
+    {
       key: 'battery_electrode_sources',
       label: 'аккумуляторы, где эта партия выбрана как источник электродов',
       query: `
@@ -686,11 +698,64 @@ async function collectCutBatchDeleteDependencies(pool, cutBatchId) {
   ]);
 }
 
+async function assertCutBatchCanBeDeleted(queryable, cutBatchId) {
+  const batchResult = await queryable.query(
+    'SELECT cut_batch_id FROM electrode_cut_batches WHERE cut_batch_id = $1',
+    [cutBatchId]
+  );
+
+  if (batchResult.rowCount === 0) {
+    throw statusError('Партия электродов не найдена', 404);
+  }
+
+  const dependencies = await collectCutBatchDeleteDependencies(queryable, cutBatchId);
+
+  if (dependencies.length > 0) {
+    const err = statusError('Нельзя удалить партию электродов: сначала удалите связанные электроды и аккумуляторные связи', 409);
+    err.dependencies = dependencies;
+    throw err;
+  }
+}
+
+async function getElectrodeCutBatchDeleteCheck(pool, cutBatchId) {
+  const batchResult = await pool.query(
+    'SELECT cut_batch_id FROM electrode_cut_batches WHERE cut_batch_id = $1',
+    [cutBatchId]
+  );
+
+  if (batchResult.rowCount === 0) {
+    throw statusError('Партия электродов не найдена', 404);
+  }
+
+  const dependencies = await collectCutBatchDeleteDependencies(pool, cutBatchId);
+
+  return {
+    can_delete: dependencies.length === 0,
+    error: dependencies.length > 0
+      ? 'Нельзя удалить партию электродов: сначала удалите связанные электроды и аккумуляторные связи'
+      : null,
+    dependencies
+  };
+}
+
 async function deleteElectrodeCutBatch(pool, cutBatchId) {
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
+
+    await assertCutBatchCanBeDeleted(client, cutBatchId);
+
+    await client.query(
+      'DELETE FROM foil_mass_measurements WHERE cut_batch_id = $1',
+      [cutBatchId]
+    );
+
+    await client.query(
+      'DELETE FROM electrode_drying WHERE cut_batch_id = $1',
+      [cutBatchId]
+    );
+
     await client.query(
       'DELETE FROM electrode_cut_batch_projects WHERE cut_batch_id = $1',
       [cutBatchId]
@@ -719,6 +784,7 @@ module.exports = {
   collectCutBatchDeleteDependencies,
   createElectrodeCutBatch,
   deleteElectrodeCutBatch,
+  getElectrodeCutBatchDeleteCheck,
   getElectrodeCutBatch,
   getElectrodeCutBatchReport,
   listElectrodeCutBatches,

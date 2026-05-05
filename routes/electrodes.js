@@ -10,6 +10,7 @@ const {
   collectCutBatchDeleteDependencies,
   createElectrodeCutBatch,
   deleteElectrodeCutBatch,
+  getElectrodeCutBatchDeleteCheck,
   getElectrodeCutBatch,
   getElectrodeCutBatchReport,
   listElectrodeCutBatches,
@@ -131,7 +132,27 @@ router.get('/electrode-cut-batches/:id/report', auth, async (req, res) => {
   }
 });
 
-// DELETE cut batch (and cascade delete electrodes and measurements)
+router.get('/electrode-cut-batches/:id/delete-check', auth, async (req, res) => {
+  const cutBatchId = Number(req.params.id);
+
+  if (!Number.isInteger(cutBatchId)) {
+    return res.status(400).json({ error: 'Некорректный ID' });
+  }
+
+  try {
+    res.json(await getElectrodeCutBatchDeleteCheck(pool, cutBatchId));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка проверки удаления партии электродов' });
+  }
+});
+
+// DELETE cut batch.
+// Electrode records must be deleted intentionally first; batch deletion should
+// never be used as a hidden cascade path for removing electrodes.
 router.delete('/electrode-cut-batches/:id', auth, async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
@@ -145,13 +166,16 @@ router.delete('/electrode-cut-batches/:id', auth, async (req, res) => {
     if (dependencies.length > 0) {
       return sendDependencyConflict(
         res,
-        'Нельзя удалить партию электродов: она используется в аккумуляторах',
+        'Нельзя удалить партию электродов: сначала удалите связанные электроды и аккумуляторные связи',
         dependencies
       );
     }
 
     res.json(await deleteElectrodeCutBatch(pool, cutBatchId));
   } catch (err) {
+    if (err.statusCode === 409 && err.dependencies) {
+      return sendDependencyConflict(res, err.message, err.dependencies);
+    }
     if (err.statusCode) {
       return res.status(err.statusCode).json({ error: err.message });
     }
@@ -330,6 +354,18 @@ router.put('/:id/status', auth, async (req, res) => {
 
   if (status_code === 2 && !used_in_battery_id) {
     return res.status(400).json({ error: 'Нужно указать батарею' });
+  }
+
+  if (status_code === 1 && (used_in_battery_id || scrapped_reason)) {
+    return res.status(400).json({ error: 'Доступный электрод не должен быть связан с батареей или причиной списания' });
+  }
+
+  if (status_code === 2 && scrapped_reason) {
+    return res.status(400).json({ error: 'Использованный электрод не должен иметь причину списания' });
+  }
+
+  if (status_code === 3 && used_in_battery_id) {
+    return res.status(400).json({ error: 'Списанный электрод не должен быть связан с батареей' });
   }
   
   try {
