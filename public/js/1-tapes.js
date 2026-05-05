@@ -9,6 +9,10 @@ const saveBtn = document.getElementById('saveBtn');
 const printBtn = document.getElementById('printBtn');
 const clearBtn = document.getElementById('clearBtn');
 const deleteTapeBtn = document.getElementById('deleteTapeBtn');
+const tapeStickyHeader = document.getElementById('tape_sticky_header');
+const tapeStickyLabel = document.getElementById('tape_sticky_label');
+const tapeStickyMeta = document.getElementById('tape_sticky_meta');
+const tapeGlobalDirty = document.getElementById('tape-global-dirty');
 const recipeMaterialsSaveBtn = document.getElementById('0-recipe-materials-save-btn');
 const tapesList = document.getElementById('tapesList');
 
@@ -240,6 +244,55 @@ function renderDelayState() {
   }
 }
 
+function formatTapeRoleLabel(role) {
+  if (role === 'cathode') return 'Катод';
+  if (role === 'anode') return 'Анод';
+  return role || '';
+}
+
+function getTapeProjectNamesFromState() {
+  const selectedProjectIds = new Set(normalizeProjectIds(state.form.fields.project_ids));
+  const selectedNames = state.reference.projects
+    .filter((project) => selectedProjectIds.has(String(project.project_id)))
+    .map((project) => project.name);
+
+  return selectedNames.join(', ') ||
+    state.selection.currentTape?.project_names ||
+    state.selection.currentTape?.project_name ||
+    '';
+}
+
+function renderTapeStickyHeader() {
+  if (!tapeStickyHeader || !tapeStickyLabel || !tapeStickyMeta) return;
+
+  const isFormOpen = Boolean(state.form.mode);
+  tapeStickyHeader.hidden = !isFormOpen;
+
+  if (!isFormOpen) return;
+
+  const tapeName = (state.form.fields.name || state.selection.currentTape?.name || '').trim();
+  tapeStickyLabel.textContent = state.selection.currentTapeId
+    ? `Лента #${state.selection.currentTapeId}${tapeName ? ` | ${tapeName}` : ''}`
+    : `Новая лента${tapeName ? ` | ${tapeName}` : ''}`;
+
+  const roleText = formatTapeRoleLabel(state.form.fields.tape_type || state.selection.currentTape?.role);
+  const statusText = state.selection.currentTape?.workflow_status_label || '';
+  const projectsText = getTapeProjectNamesFromState();
+  const creatorText =
+    state.selection.currentTape?.created_by_name ||
+    createdBySelect?.selectedOptions?.[0]?.textContent ||
+    '';
+  const metaParts = [roleText, statusText, projectsText, creatorText]
+    .filter((part) => part && part !== '— автоматически —');
+
+  tapeStickyMeta.textContent = metaParts.join(' — ') || '—';
+
+  if (tapeGlobalDirty) {
+    const hasDirtySteps = Object.values(state.ui.dirtySteps || {}).some(Boolean);
+    tapeGlobalDirty.classList.toggle('visible', hasDirtySteps);
+  }
+}
+
 function renderTapeForm() {
   writeTopLevelFormStateToDom();
   renderCalcModeLabel();
@@ -248,6 +301,9 @@ function renderTapeForm() {
       ? 'Сохранить изменения'
       : 'Создать ленту';
   }
+  if (printBtn) {
+    printBtn.hidden = !state.selection.currentTapeId;
+  }
   if (deleteTapeBtn) {
     deleteTapeBtn.hidden = state.form.mode !== 'edit' || !state.selection.currentTapeId;
   }
@@ -255,6 +311,7 @@ function renderTapeForm() {
   renderSectionState();
   renderPanelState();
   renderTapeWorkflowProgressionState();
+  renderTapeStickyHeader();
 }
 
 function setMode(nextMode, { render = true } = {}) {
@@ -3290,6 +3347,7 @@ function renderDirtyState() {
   Object.keys(dirtySteps).forEach((stepCode) => {
     updateDirtyMarker(stepCode);
   });
+  renderTapeStickyHeader();
 }
 
 function refreshParentDirtyStates() {

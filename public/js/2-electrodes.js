@@ -4,6 +4,10 @@
     const addCutBatchBtn = document.getElementById('add-cut-batch-btn');
     const workspace = document.getElementById('electrode-workspace');
     const batchTitle = document.getElementById('batch-title');
+    const electrodeStickyHeader = document.getElementById('electrode_sticky_header');
+    const electrodeStickyLabel = document.getElementById('electrode_sticky_label');
+    const electrodeStickyMeta = document.getElementById('electrode_sticky_meta');
+    const electrodeGlobalDirty = document.getElementById('electrode-global-dirty');
     const printElectrodeBatchBtn = document.getElementById('printElectrodeBatchBtn');
     const deleteElectrodeBatchBtn = document.getElementById('deleteElectrodeBatchBtn');
     const batchProjectMultiSelect = document.getElementById('electrode-batch-project-multiselect');
@@ -326,6 +330,7 @@
         if (!el) return;
         el.style.display = state.ui.dirtySections?.[sectionKey] ? 'inline' : 'none';
       });
+      renderElectrodeStickyHeader();
     }
 
     function markElectrodeSectionSaved(sectionKey) {
@@ -868,6 +873,101 @@
       window.open(getElectrodeBatchPrintReportUrl(cutBatchId), '_blank', 'noopener');
     }
 
+    function getCurrentCutBatchRecord() {
+      const cutBatchId = state.selection.currentCutBatchId;
+      if (!cutBatchId) return null;
+
+      return state.reference.allCutBatches.find(
+        batch => String(batch.cut_batch_id) === String(cutBatchId)
+      ) || state.lists.cutBatches.find(
+        batch => String(batch.cut_batch_id) === String(cutBatchId)
+      ) || null;
+    }
+
+    function formatElectrodeTapeBatchContext({ batch = null } = {}) {
+      const currentBatch = batch || getCurrentCutBatchRecord();
+      const selectedTape = getSelectedTape();
+      const tapeId = selectedTape?.tape_id || currentBatch?.tape_id || state.form.filters.tape_id || '';
+      const tapeName = selectedTape?.name || currentBatch?.tape_name || '';
+      const tapeLabel = tapeId
+        ? `Лента #${tapeId}${tapeName ? ` | ${tapeName}` : ''}`
+        : tapeName
+          ? `Лента | ${tapeName}`
+          : '';
+
+      const batchId = state.selection.currentCutBatchId || currentBatch?.cut_batch_id || '';
+
+      if (state.selection.isCreatingCutBatch) {
+        return tapeLabel ? `${tapeLabel}. Новая партия электродов` : 'Новая партия электродов';
+      }
+
+      if (batchId) {
+        return tapeLabel
+          ? `${tapeLabel}. Текущая партия: #${batchId}`
+          : `Текущая партия электродов: #${batchId}`;
+      }
+
+      return tapeLabel;
+    }
+
+    function getElectrodeProjectNames(projectIds) {
+      const ids = new Set(normalizeProjectIds(projectIds));
+      if (!ids.size) return '';
+
+      return state.reference.projects
+        .filter(project => ids.has(String(project.project_id)))
+        .map(project => project.name)
+        .join(', ');
+    }
+
+    function getElectrodeStickyBatchSnapshot() {
+      return {
+        ...(getCurrentCutBatchRecord() || {}),
+        ...state.form.batch
+      };
+    }
+
+    function renderElectrodeStickyHeader() {
+      if (!electrodeStickyHeader || !electrodeStickyLabel || !electrodeStickyMeta) return;
+
+      const hasActiveWorkspace = Boolean(
+        state.selection.currentCutBatchId || state.selection.isCreatingCutBatch
+      );
+      electrodeStickyHeader.hidden = !hasActiveWorkspace;
+
+      if (!hasActiveWorkspace) return;
+
+      const selectedTape = getSelectedTape();
+      const currentBatch = getCurrentCutBatchRecord();
+      const batchSnapshot = getElectrodeStickyBatchSnapshot();
+      electrodeStickyLabel.textContent = formatElectrodeTapeBatchContext({ batch: currentBatch });
+
+      const projectsText =
+        currentBatch?.project_names ||
+        currentBatch?.project_name ||
+        getElectrodeProjectNames(state.form.batch.project_ids);
+      const targetText = formatCutBatchTarget(batchSnapshot);
+      const geometryText = formatCutBatchGeometry(batchSnapshot);
+      const roleText = selectedTape?.role
+        ? roleLabel(selectedTape.role)
+        : currentBatch?.tape_role
+          ? roleLabel(currentBatch.tape_role)
+          : '';
+      const metaParts = [
+        roleText,
+        projectsText,
+        targetText,
+        geometryText
+      ];
+
+      electrodeStickyMeta.textContent = metaParts.filter(Boolean).join(' — ') || '—';
+
+      if (electrodeGlobalDirty) {
+        const hasDirtySections = Object.values(state.ui.dirtySections || {}).some(Boolean);
+        electrodeGlobalDirty.classList.toggle('visible', hasDirtySections);
+      }
+    }
+
     async function openElectrodeBatchRecord(batch, { applyFilters = false } = {}) {
       if (applyFilters) {
         const projectSelect = document.getElementById('electrodes-project_id');
@@ -900,12 +1000,16 @@
       workflow.hidden = !shouldShowWorkflow;
       addCutBatchBtn.hidden = !shouldShowWorkflow;
       workspace.hidden = !hasActiveWorkspace;
+      if (electrodeStickyHeader) {
+        electrodeStickyHeader.hidden = !hasActiveWorkspace;
+      }
       if (printElectrodeBatchBtn) {
         printElectrodeBatchBtn.hidden = !state.selection.currentCutBatchId;
       }
       if (deleteElectrodeBatchBtn) {
         deleteElectrodeBatchBtn.hidden = !state.selection.currentCutBatchId;
       }
+      renderElectrodeStickyHeader();
     }
 
     function renderCurrentTapeCutBatchList() {
@@ -915,11 +1019,7 @@
       if (!list || !msg) return;
 
       list.innerHTML = '';
-      if (state.selection.isCreatingCutBatch) {
-        batchTitle.textContent = 'Новая партия';
-      } else if (!state.selection.currentCutBatchId) {
-        batchTitle.textContent = '';
-      }
+      batchTitle.textContent = formatElectrodeTapeBatchContext();
 
       if (!state.form.filters.tape_id || !state.lists.cutBatches.length) {
         msg.style.display = 'block';
@@ -1012,6 +1112,7 @@
     }
 
     const electrodeInlineStatusTimers = {};
+    let electrodePageStatusTimer = null;
 
     function ensureElectrodeInlineStatusElement(buttonId) {
       const button = document.getElementById(buttonId);
@@ -1055,6 +1156,29 @@
       if (message && clearAfterMs) {
         electrodeInlineStatusTimers[buttonId] = setTimeout(() => {
           clearElectrodeInlineStatus(buttonId);
+        }, clearAfterMs);
+      }
+    }
+
+    function showElectrodePageStatus(message, isError = false, options = {}) {
+      const statusEl = document.querySelector('body[data-page="electrodes"] .autosave-message');
+      if (!statusEl) return;
+
+      if (electrodePageStatusTimer) {
+        clearTimeout(electrodePageStatusTimer);
+      }
+
+      statusEl.textContent = message || '';
+      statusEl.classList.toggle('is-error', Boolean(isError));
+      statusEl.classList.toggle('is-saved', Boolean(message && !isError));
+
+      const clearAfterMs = options.clearAfterMs ?? (isError ? 18000 : 5000);
+
+      if (message && clearAfterMs) {
+        electrodePageStatusTimer = setTimeout(() => {
+          statusEl.textContent = '';
+          statusEl.classList.remove('is-error');
+          statusEl.classList.remove('is-saved');
         }, clearAfterMs);
       }
     }
@@ -1585,7 +1709,7 @@
       workspace.hidden = false;
       setCurrentCutBatchId(batch.cut_batch_id);
       setCurrentCutBatchDetails(null);
-      batchTitle.textContent = `Batch ${batch.cut_batch_id}`;
+      batchTitle.textContent = formatElectrodeTapeBatchContext({ batch });
 
       setElectrodeFiltersState({
         ...state.form.filters,
@@ -1973,7 +2097,7 @@
       renderElectrodePage();
       syncElectrodePageStateFromDom();
       markAllElectrodeSectionsSaved();
-      showElectrodeInlineStatus('deleteElectrodeBatchBtn', 'Партия удалена.');
+      showElectrodePageStatus('Партия удалена.');
     }
     
     async function scrapElectrode(electrode) {
@@ -2043,7 +2167,7 @@
       setCutBatchCreationMode(true);
       setBatchProjectIds(getDefaultBatchProjectIds(), { render: false });
       workspace.hidden = false;
-      batchTitle.textContent = 'Новая партия';
+      batchTitle.textContent = formatElectrodeTapeBatchContext();
       renderElectrodePage();
       markElectrodeSectionSaved('batch');
     });

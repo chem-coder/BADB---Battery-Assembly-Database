@@ -106,7 +106,13 @@
       </form>
     `;
 
-    document.body.appendChild(badge);
+    const pageHeader = document.querySelector('header.page-header');
+    if (pageHeader) {
+      badge.classList.add('badb-auth-badge-in-header');
+      pageHeader.appendChild(badge);
+    } else {
+      document.body.appendChild(badge);
+    }
     document.body.appendChild(overlay);
 
     authUi = {

@@ -118,6 +118,22 @@
           <option value="">— выбрать ленту —</option>
         </select><br>
       </fieldset>
+
+      <div id="electrode_sticky_header" class="record-sticky-header" hidden>
+        <div class="record-sticky-info">
+          <div class="record-sticky-title">
+            <span id="electrode_sticky_label">Партия электродов</span>
+            <span id="electrode-global-dirty" class="badb-dirty-flag">Не сохранено</span>
+          </div>
+          <div id="electrode_sticky_meta" class="record-sticky-meta">—</div>
+        </div>
+        <div class="form-actions record-sticky-actions electrode-batch-actions">
+          <button type="button" id="saveBtn">Сохранить партию</button>
+          <button type="button" id="printElectrodeBatchBtn" hidden>Печать</button>
+          <button type="button" id="exitBatchBtn">Выйти</button>
+          <button type="button" id="deleteElectrodeBatchBtn" class="button-danger" hidden>Удалить партию</button>
+        </div>
+      </div>
       
       <div id="cutting-workflow" hidden>
         <form name="electrodes-cut_batch-form" autocomplete="on">
@@ -354,15 +370,6 @@
           </fieldset>
         </details>
         
-        <!-- save button -->           
-        <!-- I'm not sure what is saves though - the electrodes or the batch drying information? What is the right workflow here? -->
-        <div class="form-actions electrode-batch-actions">
-          <button type="button" id="saveBtn">Сохранить партию</button>
-          <button type="button" id="printElectrodeBatchBtn" hidden>Печать</button>
-          <button type="button" id="exitBatchBtn">Выйти</button>
-          <button type="button" id="deleteElectrodeBatchBtn" class="button-danger" hidden>Удалить партию</button>
-        </div>
-
         <fieldset id="electrodes-tape-dry-box" hidden>
           <legend>Что дальше с лентой?</legend>
           <div id="electrodes-tape-dry-box-status" aria-live="polite"></div>
@@ -393,7 +400,7 @@
     </div>
 
     <script src="/js/auth.js"></script>
-    <script src="/js/2-electrodes.js"></script>
+    <script src="/js/2-electrodes.js?v=electrode-sticky-header-20260505a"></script>
 
   </body>
 

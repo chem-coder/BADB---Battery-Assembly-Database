@@ -129,6 +129,22 @@
       </header>
 
       <button type="button" id="addBatteryBtn">+ Добавить аккумулятор</button>
+
+      <div id="battery_sticky_header" class="record-sticky-header" hidden>
+        <div class="record-sticky-info">
+          <div class="record-sticky-title">
+            <span id="battery_sticky_label">Аккумулятор</span>
+            <span id="battery-global-dirty" class="badb-dirty-flag">Не сохранено</span>
+          </div>
+          <div id="battery_sticky_meta" class="record-sticky-meta">—</div>
+        </div>
+        <div class="form-actions record-sticky-actions battery-form-actions">
+          <button type="button" id="printBatteryBtn" hidden>Печать</button>
+          <button type="button" id="exitBatteriesBtn" hidden>Выйти</button>
+          <button type="button" id="disassembleBatteryBtn" hidden>Разобрать аккумулятор</button>
+          <button type="button" id="deleteBatteryBtn" class="button-danger" hidden>Удалить запись</button>
+        </div>
+      </div>
       
       <form name="battery_assembly_log_form" autocomplete="on" hidden>
 
@@ -803,19 +819,13 @@
         
       </form>
 
-      <div class="form-actions battery-form-actions">
-        <button type="button" id="printBatteryBtn" hidden>Печать</button>
-        <button type="button" id="exitBatteriesBtn" hidden>Выйти</button>
-        <button type="button" id="disassembleBatteryBtn" hidden>Разобрать аккумулятор</button>
-        <button type="button" id="deleteBatteryBtn" class="button-danger" hidden>Удалить запись</button>
-      </div>
       <div class="save_message" aria-live="polite"></div>
 
       <ul id="batteriesList" class="users-list"></ul>
     </div>
     
     <script src="/js/auth.js"></script>
-    <script src="/js/3-batteries.js?v=battery-stack-rework-20260430i"></script>
+    <script src="/js/3-batteries.js?v=battery-sticky-header-20260505a"></script>
     
   </body>
 </html>

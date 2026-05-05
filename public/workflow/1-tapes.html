@@ -101,16 +101,24 @@
     autocomplete="off"
     required
     />
-    
-    <form name="tape-form" hidden autocomplete="on" data-state-root="tapePageState">
-      
-      <div class="form-actions" style="display:flex; gap:.5rem; align-items:center; margin:.5rem 0 1rem 0;">
+
+    <div id="tape_sticky_header" class="record-sticky-header" hidden>
+      <div class="record-sticky-info">
+        <div class="record-sticky-title">
+          <span id="tape_sticky_label">Лента</span>
+          <span id="tape-global-dirty" class="badb-dirty-flag">Не сохранено</span>
+        </div>
+        <div id="tape_sticky_meta" class="record-sticky-meta">—</div>
+      </div>
+      <div class="form-actions record-sticky-actions tape-form-actions">
         <button type="button" id="printBtn">Печать</button>
         <button type="button" id="clearBtn">Выход</button>
         <button type="button" id="deleteTapeBtn" class="button-danger" hidden>Удалить ленту</button>
+        <span class="inline-save-status" aria-live="polite"></span>
       </div>
-      <div class="status-feedback" aria-live="polite"></div>
-      
+    </div>
+    <div class="status-feedback" aria-live="polite"></div>
+    <form name="tape-form" hidden autocomplete="on" data-state-root="tapePageState">
       <input
       type="text"
       name="name"

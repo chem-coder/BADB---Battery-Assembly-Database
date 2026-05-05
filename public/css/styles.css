@@ -46,12 +46,14 @@ a:focus-visible {
 
 header.page-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.7rem;
 }
 
 header.page-header h1 {
   margin: 0;
+  min-width: 0;
 }
 
 .home-link {
@@ -365,6 +367,68 @@ body[data-page] .form-actions {
   gap: 0.75rem !important;
 }
 
+body[data-page] .record-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin: 0.85rem 0 1rem;
+  padding: 0.58rem 0.7rem;
+  border: 1px solid var(--badb-border);
+  border-radius: 8px;
+  background: rgba(252, 252, 251, 0.96);
+  box-shadow: 0 6px 18px rgba(18, 27, 40, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+body[data-page] .record-sticky-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+body[data-page] .record-sticky-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.15rem;
+  color: var(--badb-text-strong);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+body[data-page] .record-sticky-meta {
+  margin-top: 0.14rem;
+  color: var(--badb-muted);
+  font-size: 0.86rem;
+  line-height: 1.25;
+}
+
+body[data-page] .record-sticky-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0 !important;
+  gap: 0.45rem !important;
+}
+
+body[data-page] .record-sticky-actions button {
+  margin: 0 !important;
+}
+
+body[data-page] .record-sticky-actions .inline_status,
+body[data-page] .record-sticky-actions .inline-save-status,
+body[data-page] .record-sticky-actions .electrode-inline-status {
+  flex-basis: 100%;
+  max-width: min(46rem, 72vw);
+  margin: 0.1rem 0 0;
+  text-align: right;
+}
+
 body[data-page="tapes"] #printBtn,
 body[data-page="tapes"] #clearBtn,
 body[data-page="electrodes"] #printElectrodeBatchBtn,
@@ -395,6 +459,30 @@ body[data-page="BAL"] #batteriesList {
   border-top: 1px solid #d8dee6;
   margin-top: 1.25rem;
   padding-top: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  body[data-page] .record-sticky-header {
+    align-items: flex-start;
+  }
+
+  body[data-page] .record-sticky-actions {
+    flex: 1 0 100%;
+    justify-content: flex-start;
+  }
+
+  body[data-page] .record-sticky-actions .inline_status,
+  body[data-page] .record-sticky-actions .inline-save-status,
+  body[data-page] .record-sticky-actions .electrode-inline-status {
+    max-width: 100%;
+    text-align: left;
+  }
+}
+
+@media print {
+  body[data-page] .record-sticky-header {
+    display: none !important;
+  }
 }
 
 .user-row {
@@ -653,6 +741,17 @@ td.departments-edit-actions button {
   font-size: 0.86rem;
   font-weight: 400;
   line-height: 1.2;
+}
+
+#badb-auth-badge.badb-auth-badge-in-header {
+  position: static;
+  z-index: auto;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: min(100%, 32rem);
+  margin-left: auto;
+  text-align: right;
 }
 
 #badb-auth-badge button,

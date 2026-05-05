@@ -676,6 +676,8 @@ function renderBatteryDirtyMarkers() {
       );
     }
   });
+
+  renderBatteryStickyHeader();
 }
 
 function markSectionSaved(sectionKey) {
@@ -1677,11 +1679,81 @@ function ensureSelectOption(select, value, label) {
   select.appendChild(option);
 }
 
+function getBatteryProjectLabel() {
+  const battery = state.selection.currentBattery;
+  const projectIds = normalizeProjectIds(state.meta.project_ids);
+
+  return (
+    battery?.project_names ||
+    projectIds.map(getProjectNameById).filter(Boolean).join(', ') ||
+    battery?.project_name ||
+    ''
+  );
+}
+
+function getBatteryStatusLabel(status) {
+  const statusLabels = {
+    '': 'В сборке',
+    assembled: 'Собран',
+    testing: 'На тестировании',
+    completed: 'Завершён',
+    failed: 'Брак',
+    disassembled: 'Разобран'
+  };
+
+  return statusLabels[status || ''] || status || '';
+}
+
+function renderBatteryStickyHeader() {
+  const header = document.getElementById('battery_sticky_header');
+  const labelEl = document.getElementById('battery_sticky_label');
+  const metaEl = document.getElementById('battery_sticky_meta');
+  const dirtyEl = document.getElementById('battery-global-dirty');
+
+  if (!header || !labelEl || !metaEl) return;
+
+  const isFormOpen = Boolean(state.ui.isFormOpen);
+  const hasBattery = Boolean(state.selection.currentBatteryId);
+
+  header.hidden = !isFormOpen;
+
+  if (!isFormOpen) return;
+
+  if (hasBattery) {
+    const projectLabel = getBatteryProjectLabel();
+    labelEl.textContent = `Аккумулятор #${state.selection.currentBatteryId}${projectLabel ? ` | ${projectLabel}` : ''}`;
+  } else {
+    labelEl.textContent = 'Новый аккумулятор';
+  }
+
+  const metaParts = hasBattery
+    ? [
+      getSelectedLabel('battery_form_factor', state.meta.form_factor || ''),
+      getBatteryStatusLabel(state.selection.currentBattery?.status),
+      state.selection.currentBattery?.created_by_name || getSelectedLabel('battery_created_by', '')
+    ]
+    : ['Заполните общую информацию, затем создайте запись'];
+
+  metaEl.textContent = metaParts.filter(Boolean).join(' — ') || '—';
+
+  if (dirtyEl) {
+    const hasDirtySections = BATTERY_SECTION_KEYS.some(sectionKey =>
+      Boolean(state.ui.sectionState?.[sectionKey]?.isDirty)
+    );
+
+    dirtyEl.classList.toggle(
+      'visible',
+      !state.ui.isRestoringBattery && hasDirtySections
+    );
+  }
+}
+
 function renderBatteryWorkspaceVisibility() {
   const isFormOpen = Boolean(state.ui.isFormOpen);
   const hasBattery = Boolean(state.selection.currentBatteryId);
   const form = document.querySelector('form[name="battery_assembly_log_form"]');
   const addBtn = document.getElementById('addBatteryBtn');
+  const stickyHeader = document.getElementById('battery_sticky_header');
   const header = document.getElementById('battery_header');
   const workspace = document.getElementById('battery_workspace');
   const stackBuilder = document.getElementById('battery_stack_builder');
@@ -1699,6 +1771,10 @@ function renderBatteryWorkspaceVisibility() {
 
   if (addBtn) {
     addBtn.hidden = isFormOpen || state.ui.isRestoringBattery;
+  }
+
+  if (stickyHeader) {
+    stickyHeader.hidden = !isFormOpen;
   }
 
   if (header) {
@@ -1731,6 +1807,8 @@ function renderBatteryWorkspaceVisibility() {
   if (deleteBtn) {
     deleteBtn.hidden = !isFormOpen || !hasBattery;
   }
+
+  renderBatteryStickyHeader();
 }
 
 function renderBatteryHeader() {
@@ -2741,6 +2819,7 @@ async function autoSaveAssembledStatusTransition() {
 }
 
 const batteryInlineStatusTimers = {};
+let batteryPageStatusTimer = null;
 
 function formatBatteryDependencySummary(dependencies) {
   if (!Array.isArray(dependencies) || dependencies.length === 0) {
@@ -2823,6 +2902,22 @@ function clearBatteryInlineStatus(buttonId) {
   statusEl.classList.remove('is-saved');
 }
 
+function clearBatteryInlineStatuses() {
+  [
+    'printBatteryBtn',
+    'exitBatteriesBtn',
+    'disassembleBatteryBtn',
+    'deleteBatteryBtn'
+  ].forEach((buttonId) => {
+    if (batteryInlineStatusTimers[buttonId]) {
+      clearTimeout(batteryInlineStatusTimers[buttonId]);
+      delete batteryInlineStatusTimers[buttonId];
+    }
+
+    clearBatteryInlineStatus(buttonId);
+  });
+}
+
 function showBatteryInlineStatus(buttonId, message, isError = false, options = {}) {
   const statusEl = ensureBatteryInlineStatusElement(buttonId);
 
@@ -2842,6 +2937,30 @@ function showBatteryInlineStatus(buttonId, message, isError = false, options = {
   if (message && clearAfterMs) {
     batteryInlineStatusTimers[buttonId] = setTimeout(() => {
       clearBatteryInlineStatus(buttonId);
+    }, clearAfterMs);
+  }
+}
+
+function showBatteryPageStatus(message, isError = false, options = {}) {
+  const statusEl = document.querySelector('.save_message');
+
+  if (!statusEl) return;
+
+  if (batteryPageStatusTimer) {
+    clearTimeout(batteryPageStatusTimer);
+  }
+
+  statusEl.textContent = message || '';
+  statusEl.classList.toggle('is_error', Boolean(isError));
+  statusEl.classList.toggle('is-saved', Boolean(message && !isError));
+
+  const clearAfterMs = options.clearAfterMs ?? (isError ? 18000 : 5000);
+
+  if (message && clearAfterMs) {
+    batteryPageStatusTimer = setTimeout(() => {
+      statusEl.textContent = '';
+      statusEl.classList.remove('is_error');
+      statusEl.classList.remove('is-saved');
     }, clearAfterMs);
   }
 }
@@ -4803,6 +4922,7 @@ function resetBatteryPageState({ openForm = false } = {}) {
   setBatteryCreateButtonMode('create');
   resetBatterySectionState();
   state.snapshots.savedSectionStates = {};
+  clearBatteryInlineStatuses();
 
   document.querySelector('form[name="battery_assembly_log_form"]').reset();
 
@@ -4911,7 +5031,7 @@ async function handleDeleteBatteryClick() {
 
   resetBatteryPageState();
   await loadBatteries();
-  showBatteryInlineStatus('deleteBatteryBtn', `Аккумулятор #${batteryId} удалён.`);
+  showBatteryPageStatus(`Аккумулятор #${batteryId} удалён.`);
 }
 
 function handleAddBatteryClick() {
