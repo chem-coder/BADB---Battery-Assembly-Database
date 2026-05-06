@@ -1,6 +1,17 @@
 # Battery Electrode Stack Design
 
-Source of truth: `/Users/Dalia/Developer/RENERA/prompts_and_logic/electrodes mess/electrodes-logic.txt`.
+Created: 2026-04-30
+Edited: 2026-05-06
+Status: superseded
+
+Superseded by:
+
+- `docs/rules/electrode_stack_rules.md`
+- `docs/current/batteries.md`
+- `docs/current/electrodes.md`
+
+This archived note is historical context only. If it conflicts with current
+code, migrations, smoke tests, or canonical docs, the current sources win.
 
 ## Purpose
 
@@ -70,8 +81,8 @@ After the stack is saved:
 
 - selected electrodes are marked used by the backend;
 - the stack becomes read-only;
-- the source tape and batch selections are frozen;
-- comments and project assignment may remain editable;
+- the source tape and batch selections are frozen with other identity-defining fields according to the current UI identity-lock rules;
+- the stack may be corrected while the battery form remains open in the first stack-editing session, but after close/reload the saved stack is locked;
 - lower assembly/QC/electrochem sections remain editable according to their own save rules.
 
 ## Backend Enforcement
@@ -85,6 +96,10 @@ It validates:
 - half-cell/full-cell/pouch/cylindrical role counts match the battery configuration;
 - each electrode belongs to the source batch saved for that role;
 - unavailable electrodes cannot be taken because the existing status update only succeeds for available electrodes or electrodes already assigned to the same battery.
+
+The database trigger `validate_battery_stack()` is aligned by migration `d031_harden_battery_stack_validate_trigger.sql`. That migration is already applied on the local `badb_app_v1` database. Pouch/cylindrical stacks may have equal cathode/anode counts or one extra anode, but never one extra cathode.
+
+`validate_battery_stack()` is a row-level trigger, so the backend does not insert stack rows in caller-supplied order. `saveBatteryElectrodeStack()` inserts trigger-safe anode-before-cathode pairs while preserving the original `position_index` values. A cathode-first valid API payload is therefore safe under `d031`, and the saved display order still follows the user's positions.
 
 ## Important Anti-Pattern
 

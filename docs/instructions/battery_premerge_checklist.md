@@ -1,5 +1,11 @@
 # Battery Page Pre-Merge Checklist
 
+Created: 2026-05-06
+Edited: 2026-05-06
+Status: instruction
+Verified against code: light check 2026-05-06
+Source paths: `public/workflow/3-batteries.html`, `public/js/3-batteries.js`, `routes/batteries.js`, `services/batteryCatalogService.js`, `services/batteryElectrodeStackService.js`, `scripts/smoke_vanilla_api.js`
+
 Purpose: verify the vanilla Batteries page is stable enough to merge before adding more features.
 
 Scope: `/public/workflow/3-batteries.html` through battery creation, project assignment, electrode source selection, electrode stack selection, stack save, and reload behavior.
@@ -114,6 +120,8 @@ Do not test future features here. If a new idea appears, write it down separatel
 - [ ] Enter invalid target counts where anodes are not equal to cathodes or cathodes + 1.
 - [ ] Confirm electrode checkboxes remain disabled or validation prevents stack save.
 - [ ] Enter valid target counts.
+- [ ] If testing through API/dev tools, submit a valid cathode-first stack payload and confirm it saves.
+- [ ] Confirm saved stack display preserves the original `position_index` order.
 - [ ] Select electrodes until the target count is reached.
 - [ ] Confirm remaining unselected electrodes become disabled after the target count is reached.
 - [ ] Uncheck one selected electrode.
@@ -169,6 +177,7 @@ node --check services/batteryCatalogService.js
 node --check services/batteryProjectService.js
 node --check services/batteryElectrodeSourceService.js
 node --check services/batteryElectrodeStackService.js
+node --check scripts/smoke_vanilla_api.js
 ```
 
 - [ ] Run contract check:
@@ -195,6 +204,7 @@ git diff --check
 - [ ] Half-cell anode-vs-Li works through stack save.
 - [ ] Coin full-cell works through stack save, if test data exists.
 - [ ] Pouch or cylindrical target-count behavior works, if test data exists.
+- [ ] Cathode-first valid pouch/cylindrical payloads save under `d031`; backend insert order is trigger-safe and saved positions are preserved.
 - [ ] Saved batteries reload correctly.
 - [ ] Unsaved-change guard behaves normally.
 - [ ] No red console errors appear during the tested flows.

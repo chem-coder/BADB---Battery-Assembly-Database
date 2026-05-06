@@ -1,5 +1,16 @@
 # Координационный центр — Dashboard Specification
 
+Updated: 2026-05-06
+
+Status: product/design specification with partial implementation. Current
+backend routes include `/api/dashboard/kpi`, `/api/dashboard/filter-options`,
+`/api/dashboard/activity`, `/api/dashboard/production`, `/api/dashboard/graph`,
+`/api/dashboard/funnel`, and `/api/dashboard/materials-usage`. Vue components
+such as `DashboardGraph.vue`, `DashboardPipeline.vue`, and
+`DashboardAnalytics.vue` exist, but this document still contains aspirational
+UX details. Treat it as a design direction, not a proof that every described
+control is implemented.
+
 > **Цель:** превратить Главную из "витрины последних записей" в командный центр лаборатории — единую точку для обзора, навигации и принятия решений по всем проектам и образцам.
 
 ## 1. Проблема

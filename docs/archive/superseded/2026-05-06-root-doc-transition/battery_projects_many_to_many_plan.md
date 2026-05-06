@@ -1,6 +1,11 @@
-# Battery Projects Many-To-Many Plan
+# Battery Projects Many-To-Many Implementation Note
 
-Updated: 2026-04-29
+Updated: 2026-05-06
+
+Status: implemented for the vanilla battery workflow. The original plan is
+kept here because it explains the design, but the current code already includes
+`d030_battery_projects_many_to_many.sql`, `batteryProjectService.js`, API
+contract updates, and smoke coverage.
 
 Scope: vanilla battery workflow under `public/workflow/3-batteries.html`,
 `public/js/3-batteries.js`, related Express routes, services, and migrations.
@@ -17,11 +22,12 @@ battery projects.
 ## Current Behavior
 
 - `batteries.project_id` is `NOT NULL`.
-- The battery page asks for project first, before electrode batches are chosen.
-- Battery creation currently saves only the header first.
-- Electrode source selection is saved later.
+- The vanilla battery page derives allowed battery projects from selected
+  electrode source batches.
+- Battery creation saves identity/config/source/project data in one flow.
 - Tape and electrode batch project relationships are now many-to-many.
-- Batteries still have only one `project_id`.
+- Batteries have compatibility `project_id` plus many-to-many
+  `battery_projects`.
 - Some battery sections become locked after being saved/completed, which makes
   later editing harder than the physical workflow requires.
 
@@ -71,9 +77,9 @@ buttons over permanent automatic locking.
 - The user may not select unrelated projects.
 - Backend validation must enforce the same rules as the UI.
 
-## Schema Plan
+## Schema
 
-Create migration:
+Implemented migration:
 
 - `migrations/d030_battery_projects_many_to_many.sql`
 - `migrations_ASCII/d030_battery_projects_many_to_many.sql`
@@ -98,9 +104,9 @@ Important:
 - Keep `batteries.project_id` as the first selected/primary display project.
 - Do not drop or nullable-convert `batteries.project_id` in this step.
 
-## Backend Plan
+## Backend
 
-Add a battery project service, likely:
+Implemented battery project service:
 
 - `services/batteryProjectService.js`
 
@@ -132,7 +138,7 @@ Update battery edit/save behavior:
 - Backend rejects invalid or empty `project_ids`.
 - Backend rejects project IDs not tied to the selected battery source batches.
 
-## UI Plan
+## UI
 
 ### Layout
 
@@ -208,18 +214,16 @@ Update:
 - `contracts/vanilla_api_endpoints.json`
 - `scripts/smoke_vanilla_api.js`
 
-## Implementation Steps
+## Implementation State
 
-1. Add migration `d030` and migration log entries.
-2. Add `batteryProjectService`.
-3. Update battery catalog reads to include project arrays.
-4. Update create/update backend paths with transaction-safe project validation.
-5. Update source/config save flow only as needed for the new create model.
-6. Move battery UI project selection to the electrode-source area.
-7. Add project multi-select and allowed-project derivation in `3-batteries.js`.
-8. Adjust battery list labels to show multiple projects cleanly.
-9. Update smoke/contract tests.
-10. Run syntax, contract, and smoke checks.
+Implemented:
+
+- migration `d030` and ASCII mirror;
+- `batteryProjectService`;
+- battery catalog reads with project arrays;
+- create/update backend paths with project validation;
+- vanilla project multi-select derived from electrode source batches;
+- contract and smoke coverage.
 
 ## Testing Checklist
 

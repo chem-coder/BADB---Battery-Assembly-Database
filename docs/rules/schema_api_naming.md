@@ -1,6 +1,10 @@
-# Schema/API Naming Notes
+# Schema And API Naming Rules
 
 Created: 2026-04-26
+Edited: 2026-05-06
+Status: rule
+Verified against code: light check 2026-05-06
+Source paths: `services/materialInfoService.js`, `public/js/material-details.js`, `public/reference/separators.html`, `public/js/separators.js`, `public/js/serapators.js`, `contracts/vanilla_api_endpoints.json`, `scripts/smoke_vanilla_api.js`
 
 This file records naming compatibility decisions between the PostgreSQL schema,
 the Express API, and the vanilla `public/` UI.

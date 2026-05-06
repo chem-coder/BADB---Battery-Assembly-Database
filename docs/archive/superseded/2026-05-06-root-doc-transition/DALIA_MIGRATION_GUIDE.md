@@ -1,14 +1,25 @@
 # Гайд для Дали: миграция Form Pages на PrimeVue
 
+Updated: 2026-05-06
+
+Status: historical/partial guide. Do not use this as a current work order.
+`ElectrodeFormPage.vue` already uses PrimeVue components. The old file names
+`AssemblyFormPage.vue` and `TapeFormPage.vue` are not present in the current
+`client-web/src/pages` tree; current pages are `AssemblyPage.vue` and
+`TapesPage.vue`. Any future PrimeVue cleanup must inspect the current page
+files directly and preserve existing behavior.
+
 > **Цель:** заменить native HTML form elements (`<select>`, `<input>`, `<textarea>`) на PrimeVue компоненты (Select, InputText, Textarea) для единого стиля с остальным приложением.
 >
 > **Принцип:** ни одна строка логики не меняется. Только шаблон (template) и CSS. Данные, API, валидация — всё остаётся.
 
 ## Порядок миграции
 
-1. **ElectrodeFormPage.vue** — самый маленький (~35 замен), минимум рисков
-2. **AssemblyFormPage.vue** — средний (~100 замен), есть нюанс с checkbox
-3. **TapeFormPage.vue** — самый большой (~130 замен), нужна аккуратность с `$event.target.value`
+Current reality:
+
+1. **ElectrodeFormPage.vue** — already migrated enough to PrimeVue for the current Vue electrode form.
+2. **AssemblyPage.vue** — current Vue assembly page; do not follow the obsolete `AssemblyFormPage.vue` instructions blindly.
+3. **TapesPage.vue** — current Vue tapes page; do not follow the obsolete `TapeFormPage.vue` instructions blindly.
 
 ## Что нужно импортировать
 

@@ -1,5 +1,13 @@
 # Cycling Module — Technical Specification
 
+Updated: 2026-05-06
+
+Status: partially implemented. The current implementation lives in
+`routes/cycling.js`, `scripts/parse_cycling.py`, `client-web/src/pages/CyclingPage.vue`,
+`client-web/src/components/CyclingCharts.vue`, and migrations `015`, `019`, `020`.
+This document describes the implemented shape first; future/aspirational items
+are explicitly marked.
+
 ## Overview
 
 Battery cycling (charge/discharge testing) module for BADB. Covers the full
@@ -33,6 +41,7 @@ One row per test run (one file upload = one session).
 | uploaded_at | TIMESTAMP DEFAULT now() | |
 | notes | TEXT | |
 | created_at | TIMESTAMP DEFAULT now() | |
+| active_mass_mg | DOUBLE PRECISION | Optional; used for mAh/g plots and Excel export |
 
 ### 1.2 cycling_datapoints
 
@@ -72,6 +81,9 @@ Pre-computed per-cycle metrics for fast chart rendering.
 | min_voltage_v | DOUBLE PRECISION | |
 | avg_temperature_c | DOUBLE PRECISION | Nullable |
 | duration_s | DOUBLE PRECISION | Cycle duration |
+| energy_efficiency | DOUBLE PRECISION | Added by migration 019 |
+| avg_charge_voltage_v | DOUBLE PRECISION | Added by migration 019 |
+| avg_discharge_voltage_v | DOUBLE PRECISION | Added by migration 019 |
 
 **Unique:** `(session_id, cycle_number)`
 
@@ -198,6 +210,10 @@ Response: [{ session_id, battery_id, equipment_type, file_name,
 GET /api/cycling/sessions/:id
 Response: { ...session, uploader_name }
 
+PATCH /api/cycling/sessions/:id
+Body: { channel?, protocol?, notes?, active_mass_mg? }
+Response: { session_id, channel, protocol, notes, active_mass_mg }
+
 DELETE /api/cycling/sessions/:id
 Auth: admin or uploader
 ```
@@ -226,6 +242,11 @@ GET /api/cycling/sessions/:id/export
   ?format=csv|xlsx
   ?cycles=0-10          # optional range
 Response: file download
+
+GET /api/cycling/export/xlsx
+  ?session_ids=1,2,3
+  ?label=optional_export_name
+Response: multi-sheet Excel workbook
 ```
 
 ---
@@ -286,26 +307,26 @@ Shown when a session is selected:
 
 ## 6. Implementation Phases
 
-### Phase 1: Foundation (this sprint)
+### Phase 1: Foundation (implemented)
 - Migration (3 tables + indexes)
 - Python parser (generic CSV format)
 - API: upload, sessions list, summary, cycle data
 - CyclingPage: session table + upload dialog + capacity chart
 
-### Phase 2: Charts & UX
+### Phase 2: Charts & UX (partly implemented)
 - Voltage profile chart with cycle selector
 - Coulombic efficiency chart
 - Chart export (PNG)
 - Data export (CSV/XLSX)
 - Multi-session comparison
 
-### Phase 3: Equipment-specific parsers
+### Phase 3: Equipment-specific parsers (future)
 - Neware BTS format handler
 - Arbin format handler
 - BioLogic .mpt handler
 - Auto-detect format
 
-### Phase 4: Advanced analytics
+### Phase 4: Advanced analytics (future)
 - dQ/dV differential capacity
 - Rate capability comparison
 - Impedance data (if available)

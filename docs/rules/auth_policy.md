@@ -1,6 +1,10 @@
 # Vanilla API Auth And Ownership Policy
 
-Updated: 2026-04-25
+Created: 2026-05-06
+Edited: 2026-05-06
+Status: rule
+Verified against code: light check 2026-05-06
+Source paths: `server.js`, `routes/batteries.js`, `routes/tapes.js`, `routes/projects.js`, `routes/users.js`, `contracts/vanilla_api_endpoints.json`, `scripts/smoke_vanilla_api.js`
 
 Scope: the vanilla app under `public/` and the Express routes it calls.
 
@@ -13,8 +17,12 @@ Scope: the vanilla app under `public/` and the Express routes it calls.
   `tape_process_steps.performed_by`, remain explicit payload fields.
 - Auth bypass is development-only. `server.js` refuses to start in production
   when `AUTH_BYPASS=true`.
-- Print/report endpoints that intentionally remain unauthenticated are listed
-  below so they are not mistaken for accidental gaps.
+- Guided battery delete is intentionally `auth`-only: any authenticated user can
+  run the approved delete workflow after preflight, hard-block checks, typed
+  confirmation, electrode disposition selection, and audit logging.
+- Auth bootstrap endpoints such as login and public password-change routes are
+  intentionally unauthenticated. Vanilla workflow/report endpoints listed below
+  are authenticated unless this document says otherwise.
 
 ## Server-Owned Audit Fields
 
@@ -46,9 +54,11 @@ Scope: the vanilla app under `public/` and the Express routes it calls.
 | Reference/read lists used by vanilla forms | Auth required unless documented otherwise in `contracts/vanilla_api_endpoints.json`. |
 | Mutating vanilla routes | Auth required. |
 | `/api/tapes/:id/dry-box-state*` | Auth required; `updated_by` is now derived from `req.user`. |
-| `/api/tapes/:id/report` | Currently public report endpoint. |
-| `/api/batteries/:id/report` | Currently public report endpoint. |
-| `/api/batteries/:id/electrode-cut-batches` | Currently public compatibility/read endpoint. |
+| `/api/batteries/:id/delete-check` and `DELETE /api/batteries/:id` | Auth required; no `admin`/`lead` role gate by approved design. |
+| `/api/tapes/:id/report` | Auth required. |
+| `/api/electrodes/electrode-cut-batches/:id/report` | Auth required. |
+| `/api/batteries/:id/report` | Auth required. |
+| `/api/batteries/:id/electrode-cut-batches` | Auth required compatibility/read endpoint. |
 
 ## Smoke Coverage
 
