@@ -1,14 +1,14 @@
 {
   "version": 1,
   "scope": "public/js/**/*.js",
-  "updatedAt": "2026-04-29",
+  "updatedAt": "2026-05-06",
   "normalization": {
     "pathParams": ":param",
     "query": "?:query"
   },
   "defaults": {
     "auth": "see route middleware",
-    "request": "GET/DELETE have no JSON body; POST/PUT/PATCH use the vanilla form payload for that route",
+    "request": "GET has no JSON body; DELETE is bodyless unless the route documents a confirmation body; POST/PUT/PATCH use the vanilla form payload for that route",
     "response": "JSON unless the route is a print/report endpoint or returns 204"
   },
   "notes": [
@@ -29,24 +29,16 @@
       "path": "/api/batteries/:param",
       "methods": ["PATCH", "POST", "DELETE"],
       "auth": "auth",
-      "request": "PATCH updates a battery by id; POST represents dynamic battery section create routes; DELETE removes a safe empty/error record",
+      "request": "PATCH updates a battery by id; POST represents dynamic battery section create routes; DELETE requires { confirmation: 'DELETE BATTERY <id>', electrode_disposition?: 'available'|'scrapped', scrapped_reason?: string }",
       "response": "updated/created section JSON or delete status",
-      "sources": ["public/js/3-batteries.js"]
-    },
-    {
-      "path": "/api/batteries/:param/disassemble",
-      "methods": ["POST"],
-      "auth": "auth",
-      "request": "none",
-      "response": "disassembly status and returned/scrapped electrode IDs",
       "sources": ["public/js/3-batteries.js"]
     },
     {
       "path": "/api/batteries/:param/delete-check",
       "methods": ["GET"],
-      "auth": "auth plus admin/lead",
+      "auth": "auth",
       "request": "none",
-      "response": "delete eligibility and dependency blockers",
+      "response": "delete eligibility with hard_blockers, confirmable_owned_data, linked_electrodes, and can_delete",
       "sources": ["public/js/3-batteries.js"]
     },
     {
@@ -87,6 +79,14 @@
       "auth": "auth",
       "request": "battery electrochem file/data payload",
       "response": "created electrochem JSON",
+      "sources": ["public/js/3-batteries.js"]
+    },
+    {
+      "path": "/api/batteries/battery_electrochem/:param",
+      "methods": ["DELETE"],
+      "auth": "auth",
+      "request": "none",
+      "response": "delete status for one electrochem file/data row",
       "sources": ["public/js/3-batteries.js"]
     },
     {
@@ -199,6 +199,14 @@
       "auth": "auth",
       "request": "PUT electrolyte update payload with updated_by server-derived; DELETE none",
       "response": "updated electrolyte JSON or delete status",
+      "sources": ["public/js/electrolytes.js"]
+    },
+    {
+      "path": "/api/electrolytes/:param/delete-check",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "delete eligibility and dependency blockers",
       "sources": ["public/js/electrolytes.js"]
     },
     {

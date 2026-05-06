@@ -26,6 +26,22 @@
       required
     />
     
+    <div id="electrolyte_sticky_header" class="record-sticky-header" hidden>
+      <div class="record-sticky-info">
+        <div class="record-sticky-title">
+          <span id="electrolyte_sticky_title">Новый электролит</span>
+          <span id="electrolyte-global-dirty" class="badb-dirty-flag">Не сохранено</span>
+        </div>
+        <div id="electrolyte_sticky_meta" class="record-sticky-meta">—</div>
+      </div>
+      <div class="form-actions record-sticky-actions">
+        <button id="saveBtn" type="button">Сохранить запись</button>
+        <button id="clearBtn" type="button">Выход</button>
+        <button id="deleteElectrolyteBtn" type="button" class="button-danger" hidden>Удалить электролит</button>
+        <span id="electrolyte-sticky-status" class="inline_status" aria-live="polite"></span>
+      </div>
+    </div>
+
     <!-- Form hidden by default; shown on create/edit -->
     <form name="electrolyte-form" autocomplete="on" hidden>
 
@@ -123,17 +139,16 @@
           multiple
         />
         <button id="saveFilesBtn" type="button" hidden>Сохранить файлы</button>
+        <span id="electrolyte-files-status" class="inline_status" aria-live="polite"></span>
         <div id="electrolyte-files-saved"></div>
       </fieldset>
-
-      <button id="saveBtn" type="button">Сохранить запись</button>
-      <button id="clearBtn" type="button">Выход</button><br>
 
     </form>
     <div class="status-feedback" aria-live="polite"></div>
     <ul id="electrolytesList" class="users-list"></ul>
 
     <script src="/js/auth.js"></script>
-    <script src="/js/electrolytes.js"></script>
+    <script src="/js/badb-ui.js?v=badb-ui-20260505a"></script>
+    <script src="/js/electrolytes.js?v=electrolyte-feedback-20260505a"></script>
   </body>
 </html>

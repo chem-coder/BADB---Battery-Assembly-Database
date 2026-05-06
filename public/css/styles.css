@@ -372,6 +372,7 @@ body[data-page] .record-sticky-header {
   top: 0;
   z-index: 35;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem 1rem;
@@ -385,7 +386,7 @@ body[data-page] .record-sticky-header {
 }
 
 body[data-page] .record-sticky-info {
-  flex: 1 1 auto;
+  flex: 1 1 18rem;
   min-width: 0;
 }
 
@@ -408,25 +409,71 @@ body[data-page] .record-sticky-meta {
 
 body[data-page] .record-sticky-actions {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 30rem;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
+  min-width: 0;
+  max-width: 100%;
   margin: 0 !important;
   gap: 0.45rem !important;
 }
 
 body[data-page] .record-sticky-actions button {
+  max-width: 100%;
   margin: 0 !important;
+  white-space: normal;
 }
 
 body[data-page] .record-sticky-actions .inline_status,
 body[data-page] .record-sticky-actions .inline-save-status,
 body[data-page] .record-sticky-actions .electrode-inline-status {
   flex-basis: 100%;
-  max-width: min(46rem, 72vw);
+  max-width: 100%;
   margin: 0.1rem 0 0;
   text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+body[data-page] .record-delete-flow {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(231, 76, 60, 0.24);
+  border-radius: 8px;
+  background: #fffafa;
+  box-shadow: 0 4px 14px rgba(18, 27, 40, 0.05);
+}
+
+body[data-page] .record-delete-flow[hidden] {
+  display: none !important;
+}
+
+body[data-page] .record-delete-flow h3 {
+  margin-top: 0;
+  margin-bottom: 0.45rem;
+}
+
+body[data-page] .record-delete-flow p {
+  margin: 0.35rem 0;
+}
+
+body[data-page] .record-delete-flow ul {
+  margin: 0.45rem 0 0.7rem 1.2rem;
+}
+
+body[data-page] .record-delete-flow label {
+  display: block;
+  margin: 0.45rem 0;
+}
+
+body[data-page] .record-delete-flow .form-actions {
+  margin: 0.75rem 0 0 !important;
+}
+
+body[data-page] .record-delete-warning {
+  color: var(--badb-danger-text);
+  font-weight: 700;
 }
 
 body[data-page="tapes"] #printBtn,
@@ -454,6 +501,7 @@ body[data-page="BAL"] #exitBatteriesBtn {
 
 body[data-page="tapes"] #tapesList,
 body[data-page="electrodes"] #all-cut-batches-list,
+body[data-page="electrolytes"] #electrolytesList,
 body[data-page="projectsList"] #projectsList,
 body[data-page="BAL"] #batteriesList {
   border-top: 1px solid #d8dee6;
@@ -496,6 +544,19 @@ body[data-page="BAL"] #batteriesList {
   flex: 1;
 }
 
+.record-list-title,
+.project-list-title {
+  font-weight: 700;
+}
+
+.record-list-meta,
+.project-list-meta {
+  margin-top: 0.18rem;
+  color: #667085;
+  font-size: 0.92em;
+  line-height: 1.35;
+}
+
 body[data-page] .record-open-button {
   display: block;
   width: 100%;
@@ -510,17 +571,6 @@ body[data-page] .record-open-button {
 body[data-page] .record-open-button:hover,
 body[data-page] .record-open-button:focus-visible {
   background: #f5f8fb;
-}
-
-.project-list-title {
-  font-weight: 700;
-}
-
-.project-list-meta {
-  margin-top: 0.18rem;
-  color: #667085;
-  font-size: 0.92em;
-  line-height: 1.35;
 }
 
 .user-meta {

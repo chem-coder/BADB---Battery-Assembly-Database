@@ -16,6 +16,48 @@ router.get('/test', async (req, res) => {
 
 // ---------- ELECTROLYTES ----------
 
+async function collectElectrolyteDeleteDependencies(db, electrolyteId) {
+  return collectDependencyConflicts(db, [
+    {
+      key: 'battery_electrolyte',
+      label: 'аккумуляторы с этим электролитом',
+      query: `
+        SELECT b.battery_id AS id, b.battery_notes AS name
+        FROM battery_electrolyte be
+        JOIN batteries b ON b.battery_id = be.battery_id
+        WHERE be.electrolyte_id = $1
+        ORDER BY b.battery_id
+        LIMIT 25
+      `,
+      params: [electrolyteId]
+    }
+  ]);
+}
+
+async function getElectrolyteDeleteCheck(db, electrolyteId) {
+  const exists = await db.query(
+    'SELECT electrolyte_id FROM electrolytes WHERE electrolyte_id = $1',
+    [electrolyteId]
+  );
+
+  if (exists.rowCount === 0) {
+    const err = new Error('Электролит не найден');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const dependencies = await collectElectrolyteDeleteDependencies(db, electrolyteId);
+
+  return {
+    electrolyte_id: electrolyteId,
+    can_delete: dependencies.length === 0,
+    message: dependencies.length > 0
+      ? 'Нельзя удалить электролит: он используется в аккумуляторах.'
+      : '',
+    dependencies
+  };
+}
+
 // CREATE electrolyte
 // POST /api/electrolytes
 router.post('/', auth, async (req, res) => {
@@ -357,6 +399,24 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
+router.get('/:id/delete-check', auth, async (req, res) => {
+  const electrolyteId = Number(req.params.id);
+
+  if (!Number.isInteger(electrolyteId)) {
+    return res.status(400).json({ error: 'Некорректный electrolyte_id' });
+  }
+
+  try {
+    res.json(await getElectrolyteDeleteCheck(pool, electrolyteId));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка проверки удаления электролита' });
+  }
+});
+
 // DELETE electrolyte
 // DELETE /api/electrolytes/:id
 router.delete('/:id', auth, async (req, res) => {
@@ -367,21 +427,7 @@ router.delete('/:id', auth, async (req, res) => {
   }
 
   try {
-    const dependencies = await collectDependencyConflicts(pool, [
-      {
-        key: 'battery_electrolyte',
-        label: 'аккумуляторы с этим электролитом',
-        query: `
-          SELECT b.battery_id AS id, b.battery_notes AS name
-          FROM battery_electrolyte be
-          JOIN batteries b ON b.battery_id = be.battery_id
-          WHERE be.electrolyte_id = $1
-          ORDER BY b.battery_id
-          LIMIT 25
-        `,
-        params: [electrolyteId]
-      }
-    ]);
+    const dependencies = await collectElectrolyteDeleteDependencies(pool, electrolyteId);
 
     if (dependencies.length > 0) {
       return sendDependencyConflict(

@@ -84,6 +84,16 @@ function getDefaultElectrochemState() {
   };
 }
 
+function getDefaultBatteryDeleteFlowState() {
+  return {
+    step: 'idle',
+    check: null,
+    electrodeDisposition: 'available',
+    scrappedReason: '',
+    confirmation: ''
+  };
+}
+
 const state = {
   selection: {
     currentBatteryId: null,
@@ -117,7 +127,8 @@ const state = {
     isRestoringBattery: false,
     isFormOpen: false,
     createButtonMode: 'create',
-    sectionState: {}
+    sectionState: {},
+    deleteFlow: getDefaultBatteryDeleteFlowState()
   },
   snapshots: {
     savedSectionStates: {}
@@ -1509,6 +1520,55 @@ function isBatteryIdentityLocked() {
   return Boolean(state.stack.readOnly || state.stack.hideSelectionBlocks);
 }
 
+function parseBatterySnapshot(snapshot) {
+  if (!snapshot) return null;
+
+  try {
+    return JSON.parse(snapshot);
+  } catch {
+    return null;
+  }
+}
+
+function hasSavedNamedFieldValue(sectionKey, fieldNames) {
+  const fields = parseBatterySnapshot(state.snapshots.savedSectionStates[sectionKey]);
+
+  if (!Array.isArray(fields)) return false;
+
+  return fields.some(field =>
+    fieldNames.includes(field.name) &&
+    hasMeaningfulValue(field.value)
+  );
+}
+
+function hasSavedBatteryStackLinks() {
+  const stack = parseBatterySnapshot(state.snapshots.savedSectionStates.battery_stack);
+
+  if (!stack) return false;
+
+  return (
+    (Array.isArray(stack.selectedCathodes) && stack.selectedCathodes.length > 0) ||
+    (Array.isArray(stack.selectedAnodes) && stack.selectedAnodes.length > 0)
+  );
+}
+
+function hasSavedBatteryLifecycleLinks() {
+  return (
+    hasSavedNamedFieldValue('electrode_sources', [
+      'cathode_tape_id',
+      'cathode_cut_batch_id',
+      'anode_tape_id',
+      'anode_cut_batch_id'
+    ]) ||
+    hasSavedBatteryStackLinks() ||
+    hasSavedNamedFieldValue('battery_assembly', [
+      'separator_id',
+      'electrolyte_id',
+      'electrolyte_total_ul'
+    ])
+  );
+}
+
 function shouldDisableBatteryControl(sectionKey, el) {
   const isPhaseTwoSection = BATTERY_PHASE_TWO_SECTIONS.has(sectionKey);
   const hasBattery = Boolean(state.selection.currentBatteryId);
@@ -1800,8 +1860,9 @@ function renderBatteryWorkspaceVisibility() {
   }
 
   if (disassembleBtn) {
-    disassembleBtn.hidden = !isFormOpen || !hasBattery;
-    disassembleBtn.disabled = state.selection.currentBattery?.status === 'disassembled';
+    disassembleBtn.hidden = true;
+    disassembleBtn.disabled = true;
+    disassembleBtn.title = '';
   }
 
   if (deleteBtn) {
@@ -2709,6 +2770,7 @@ function renderElectrochemForm() {
   }
 
   renderElectrochemSavedFiles(state.electrochem.savedEntries);
+  updateBatteryElectrochemFilesButtonVisibility();
 }
 
 function renderBatteryPage() {
@@ -2732,6 +2794,7 @@ function renderBatteryPage() {
   renderStackTables();
   renderBatteryCapacitySummary();
   renderBatteryWorkspaceVisibility();
+  renderBatteryDeleteFlow();
   renderBatteryHeader();
   renderBatteryCreateButton();
   renderBatteryStatusControl();
@@ -2792,7 +2855,7 @@ async function autoSaveAssembledStatusTransition() {
 
   const currentStatus = state.selection.currentBattery?.status || null;
 
-  if (currentStatus) {
+  if (currentStatus && currentStatus !== 'disassembled') {
     return false;
   }
 
@@ -2842,7 +2905,9 @@ function formatBatterySaveError(err, fallback = 'Ошибка сохранени
     payload?.message ||
     err?.message ||
     fallback;
-  const dependencySummary = formatBatteryDependencySummary(payload?.dependencies);
+  const dependencySummary = formatBatteryDependencySummary(
+    payload?.hard_blockers || payload?.dependencies
+  );
 
   return dependencySummary
     ? `${message}. Блокирующие записи: ${dependencySummary}`
@@ -2991,6 +3056,324 @@ async function withBatteryInlineSaveStatus(buttonId, task, fallbackError = 'Ош
       button.removeAttribute('aria-disabled');
     }
   }
+}
+
+function getBatteryDeleteFlowElement() {
+  return document.getElementById('battery_delete_flow');
+}
+
+function getBatteryDeleteHardBlockers(check = state.ui.deleteFlow?.check) {
+  return Array.isArray(check?.hard_blockers)
+    ? check.hard_blockers
+    : Array.isArray(check?.dependencies)
+      ? check.dependencies
+      : [];
+}
+
+function getBatteryDeleteOwnedData(check = state.ui.deleteFlow?.check) {
+  return Array.isArray(check?.confirmable_owned_data)
+    ? check.confirmable_owned_data
+    : [];
+}
+
+function getBatteryDeleteLinkedElectrodes(check = state.ui.deleteFlow?.check) {
+  return Array.isArray(check?.linked_electrodes)
+    ? check.linked_electrodes
+    : [];
+}
+
+function resetBatteryDeleteFlow({ render = false } = {}) {
+  state.ui.deleteFlow = getDefaultBatteryDeleteFlowState();
+
+  if (render) {
+    renderBatteryDeleteFlow();
+  }
+}
+
+function setBatteryDeleteFlow(nextFlow) {
+  state.ui.deleteFlow = {
+    ...getDefaultBatteryDeleteFlowState(),
+    ...(state.ui.deleteFlow || {}),
+    ...nextFlow
+  };
+  renderBatteryDeleteFlow();
+}
+
+function formatBatteryDeleteDependencyRecords(records) {
+  const visibleRecords = (Array.isArray(records) ? records : []).slice(0, 4);
+
+  if (visibleRecords.length === 0) {
+    return '';
+  }
+
+  const names = visibleRecords.map((record) => {
+    const name = record.name || record.file_name || record.id || '';
+    return name ? String(name) : 'запись';
+  });
+
+  const remainingCount = Math.max(0, (records?.length || 0) - visibleRecords.length);
+  return remainingCount > 0
+    ? `${names.join(', ')} и ещё ${remainingCount}`
+    : names.join(', ');
+}
+
+function renderBatteryDeleteDependencyList(dependencies, emptyMessage) {
+  if (!Array.isArray(dependencies) || dependencies.length === 0) {
+    return `<p>${escapeHtml(emptyMessage)}</p>`;
+  }
+
+  return `
+    <ul>
+      ${dependencies.map((dependency) => {
+        const records = formatBatteryDeleteDependencyRecords(dependency.records);
+        const count = dependency.count ?? dependency.records?.length ?? 0;
+        return `
+          <li>
+            <strong>${escapeHtml(dependency.label || dependency.key || 'Связанные записи')}</strong>
+            ${count ? `(${escapeHtml(count)})` : ''}
+            ${records ? ` — ${escapeHtml(records)}` : ''}
+          </li>
+        `;
+      }).join('')}
+    </ul>
+  `;
+}
+
+function formatBatteryDeleteElectrodeLabel(electrode) {
+  const roleLabels = {
+    cathode: 'катод',
+    anode: 'анод'
+  };
+  const parts = [
+    `электрод #${electrode.electrode_id}`,
+    electrode.number_in_batch != null ? `№ ${electrode.number_in_batch}` : '',
+    roleLabels[electrode.role] || electrode.role || '',
+    electrode.cut_batch_id != null ? `партия ${electrode.cut_batch_id}` : ''
+  ];
+
+  return parts.filter(Boolean).join(' — ');
+}
+
+function renderBatteryDeleteElectrodeList(electrodes) {
+  if (!Array.isArray(electrodes) || electrodes.length === 0) {
+    return '<p>Связанных электродов нет.</p>';
+  }
+
+  return `
+    <ul>
+      ${electrodes.map((electrode) => `
+        <li>${escapeHtml(formatBatteryDeleteElectrodeLabel(electrode))}</li>
+      `).join('')}
+    </ul>
+  `;
+}
+
+function renderBatteryDeleteBlocked(flowEl, check) {
+  flowEl.innerHTML = `
+    <h3>Аккумулятор пока нельзя удалить</h3>
+    <p>Сначала уберите блокирующие связи. Подтверждение удаления пока не требуется.</p>
+    ${renderBatteryDeleteDependencyList(
+      getBatteryDeleteHardBlockers(check),
+      'Блокирующих связей не найдено.'
+    )}
+    <div class="form-actions">
+      <button type="button" data-battery-delete-action="cancel">Закрыть</button>
+    </div>
+  `;
+}
+
+function renderBatteryDeleteDispositionStep(flowEl, flow) {
+  const disposition = flow.electrodeDisposition || 'available';
+  const showReason = disposition === 'scrapped';
+
+  flowEl.innerHTML = `
+    <h3>Удаление аккумулятора #${escapeHtml(state.selection.currentBatteryId)}</h3>
+    <p>Выберите, что сделать с электродами, которые сейчас связаны с аккумулятором.</p>
+    ${renderBatteryDeleteElectrodeList(getBatteryDeleteLinkedElectrodes(flow.check))}
+    <label>
+      <input
+        type="radio"
+        name="battery_delete_electrode_disposition"
+        value="available"
+        ${disposition === 'available' ? 'checked' : ''}
+      >
+      Вернуть электроды в партию как доступные
+    </label>
+    <label>
+      <input
+        type="radio"
+        name="battery_delete_electrode_disposition"
+        value="scrapped"
+        ${disposition === 'scrapped' ? 'checked' : ''}
+      >
+      Вернуть электроды в партию как списанные
+    </label>
+    <label ${showReason ? '' : 'hidden'}>
+      Причина списания
+      <input
+        type="text"
+        id="battery_delete_scrapped_reason"
+        value="${escapeHtml(flow.scrappedReason || '')}"
+        placeholder="возвращен из аккумулятора #${escapeHtml(state.selection.currentBatteryId)} при удалении записи"
+      >
+    </label>
+    <div class="form-actions">
+      <button type="button" data-battery-delete-action="summary">Дальше</button>
+      <button type="button" data-battery-delete-action="cancel">Отмена</button>
+    </div>
+  `;
+}
+
+function renderBatteryDeleteSummaryStep(flowEl, flow) {
+  const batteryId = state.selection.currentBatteryId;
+  const phrase = `DELETE BATTERY ${batteryId}`;
+  const electrodes = getBatteryDeleteLinkedElectrodes(flow.check);
+  const dispositionText =
+    electrodes.length === 0
+      ? 'Связанных электродов нет.'
+      : flow.electrodeDisposition === 'scrapped'
+        ? 'Электроды будут возвращены в партии как списанные.'
+        : 'Электроды будут возвращены в партии как доступные.';
+
+  flowEl.innerHTML = `
+    <h3>Подтверждение удаления аккумулятора #${escapeHtml(batteryId)}</h3>
+    <p>${escapeHtml(dispositionText)}</p>
+    ${flow.electrodeDisposition === 'scrapped' && flow.scrappedReason
+      ? `<p>Причина списания: ${escapeHtml(flow.scrappedReason)}</p>`
+      : ''
+    }
+    <p>Будут удалены только данные, принадлежащие записи аккумулятора:</p>
+    ${renderBatteryDeleteDependencyList(
+      getBatteryDeleteOwnedData(flow.check),
+      'Дополнительных записей аккумулятора не найдено.'
+    )}
+    <p class="record-delete-warning">Это действие нельзя отменить.</p>
+    <label>
+      Для удаления введите <strong>${escapeHtml(phrase)}</strong>
+      <input type="text" id="battery_delete_confirmation" autocomplete="off">
+    </label>
+    <div class="form-actions">
+      <button type="button" class="button-danger" data-battery-delete-action="confirm">Удалить аккумулятор</button>
+      ${electrodes.length > 0
+        ? '<button type="button" data-battery-delete-action="back">Назад</button>'
+        : ''
+      }
+      <button type="button" data-battery-delete-action="cancel">Отмена</button>
+    </div>
+  `;
+}
+
+function renderBatteryDeleteFlow() {
+  const flowEl = getBatteryDeleteFlowElement();
+
+  if (!flowEl) return;
+
+  const flow = state.ui.deleteFlow || getDefaultBatteryDeleteFlowState();
+  const isVisible = Boolean(
+    state.ui.isFormOpen &&
+    state.selection.currentBatteryId &&
+    flow.step !== 'idle'
+  );
+
+  flowEl.hidden = !isVisible;
+
+  if (!isVisible) {
+    flowEl.innerHTML = '';
+    return;
+  }
+
+  if (flow.step === 'blocked') {
+    renderBatteryDeleteBlocked(flowEl, flow.check);
+  } else if (flow.step === 'choose-electrodes') {
+    renderBatteryDeleteDispositionStep(flowEl, flow);
+  } else if (flow.step === 'confirm') {
+    renderBatteryDeleteSummaryStep(flowEl, flow);
+  }
+
+  attachBatteryDeleteFlowEvents(flowEl);
+}
+
+function attachBatteryDeleteFlowEvents(flowEl) {
+  flowEl.querySelectorAll('input[name="battery_delete_electrode_disposition"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const scrappedReason = document.getElementById('battery_delete_scrapped_reason')?.value || '';
+      setBatteryDeleteFlow({
+        electrodeDisposition: input.value,
+        scrappedReason
+      });
+    });
+  });
+
+  flowEl.querySelectorAll('[data-battery-delete-action]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const action = button.dataset.batteryDeleteAction;
+
+      if (action === 'cancel') {
+        resetBatteryDeleteFlow({ render: true });
+        return;
+      }
+
+      if (action === 'summary') {
+        const disposition = flowEl.querySelector('input[name="battery_delete_electrode_disposition"]:checked')?.value || 'available';
+        const scrappedReason = document.getElementById('battery_delete_scrapped_reason')?.value || '';
+        setBatteryDeleteFlow({
+          step: 'confirm',
+          electrodeDisposition: disposition,
+          scrappedReason
+        });
+        return;
+      }
+
+      if (action === 'back') {
+        setBatteryDeleteFlow({ step: 'choose-electrodes' });
+        return;
+      }
+
+      if (action === 'confirm') {
+        await submitBatteryGuidedDelete();
+      }
+    });
+  });
+}
+
+async function submitBatteryGuidedDelete() {
+  const batteryId = state.selection.currentBatteryId;
+  const flow = state.ui.deleteFlow || getDefaultBatteryDeleteFlowState();
+
+  if (!batteryId) return;
+
+  const body = {
+    confirmation: document.getElementById('battery_delete_confirmation')?.value || ''
+  };
+
+  if (getBatteryDeleteLinkedElectrodes(flow.check).length > 0) {
+    body.electrode_disposition = flow.electrodeDisposition || 'available';
+
+    if (body.electrode_disposition === 'scrapped') {
+      body.scrapped_reason = flow.scrappedReason || '';
+    }
+  }
+
+  const result = await withBatteryInlineSaveStatus('deleteBatteryBtn', async () => {
+    const res = await fetch(`/api/batteries/${batteryId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      await throwBatteryResponseError(res, 'Ошибка удаления аккумулятора');
+    }
+
+    return res.json();
+  }, 'Ошибка удаления аккумулятора');
+
+  if (!result) return;
+
+  resetBatteryDeleteFlow();
+  resetBatteryPageState();
+  await loadBatteries();
+  showBatteryPageStatus(`Аккумулятор #${batteryId} удалён.`);
 }
 
 
@@ -3238,23 +3621,69 @@ function renderElectrochemSavedFiles(entries) {
 
   entries.forEach((entry, index) => {
     const row = document.createElement('div');
-    const link = document.createElement('a');
-    const note = document.createElement('span');
-    
-    link.href = entry.file_link;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.textContent = entry.file_name || entry.file_link;
-    
-    note.textContent = entry.electrochem_notes
-      ? ` | ${entry.electrochem_notes}`
-      : '';
-    
+    const deleteBtn = document.createElement('button');
+
     row.append(`${index + 1}. `);
-    row.appendChild(link);
-    row.appendChild(note);
+
+    if (entry.file_link) {
+      const link = document.createElement('a');
+
+      link.href = entry.file_link;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = entry.file_name || entry.file_link;
+      row.appendChild(link);
+
+      if (entry.electrochem_notes) {
+        row.append(` | ${entry.electrochem_notes}`);
+      }
+    } else {
+      row.append(entry.electrochem_notes || 'Заметка без файла');
+    }
+
+    deleteBtn.type = 'button';
+    deleteBtn.textContent = '🗑';
+    deleteBtn.title = 'Удалить файл';
+    deleteBtn.style.marginLeft = '0.5rem';
+    deleteBtn.onclick = async () => {
+      const fileName = entry.file_name || entry.electrochem_notes || `Файл ${index + 1}`;
+
+      if (!confirm(`Удалить файл "${fileName}"?`)) return;
+
+      try {
+        await deleteBatteryElectrochem(entry.battery_electrochem_id);
+        setElectrochemState({
+          ...state.electrochem,
+          savedEntries: state.electrochem.savedEntries.filter(
+            (file) => file.battery_electrochem_id !== entry.battery_electrochem_id
+          )
+        });
+        renderElectrochemSavedFiles(state.electrochem.savedEntries);
+        markSectionsSaved(['battery_electrochem']);
+        renderBatteryPage();
+        showBatteryInlineStatus('battery_electrochem_files_save_btn', 'Файл удалён');
+      } catch (err) {
+        console.error(err);
+        showBatteryInlineStatus(
+          'battery_electrochem_files_save_btn',
+          err.message || 'Ошибка удаления файла электрохимических испытаний',
+          true
+        );
+      }
+    };
+
+    row.appendChild(deleteBtn);
     target.appendChild(row);
   });
+}
+
+function updateBatteryElectrochemFilesButtonVisibility() {
+  const filesInput = document.getElementById('electrochem_files');
+  const saveFilesBtn = document.getElementById('battery_electrochem_files_save_btn');
+
+  if (!saveFilesBtn) return;
+
+  saveFilesBtn.hidden = !filesInput?.files || filesInput.files.length === 0;
 }
 
 function fileToBase64(file) {
@@ -3276,6 +3705,86 @@ function fileToBase64(file) {
   });
 }
 
+async function deleteBatteryElectrochem(electrochemId) {
+  const res = await fetch(`/api/batteries/battery_electrochem/${electrochemId}`, {
+    method: 'DELETE'
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка удаления файла электрохимических испытаний');
+  }
+}
+
+async function buildBatteryElectrochemEntries(selectedFiles, notes) {
+  return Promise.all(selectedFiles.map(async (file) => ({
+    file_name: file.name,
+    file_content_base64: await fileToBase64(file),
+    electrochem_notes: notes || null
+  })));
+}
+
+async function postBatteryElectrochem(entries, notes) {
+  const res = await fetch('/api/batteries/battery_electrochem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      battery_id: state.selection.currentBatteryId,
+      entries,
+      electrochem_notes: notes || null
+    })
+  });
+
+  if (!res.ok) {
+    await throwBatteryResponseError(res, 'Ошибка сохранения электрохимических испытаний');
+  }
+
+  return res.json();
+}
+
+function finishBatteryElectrochemSave(saved) {
+  setElectrochemState({
+    notes: null,
+    files: null,
+    savedEntries: Array.isArray(saved) ? saved : []
+  });
+  renderElectrochemForm();
+  markSectionsSaved(['battery_electrochem']);
+  renderBatteryPage();
+}
+
+async function saveBatteryElectrochemFiles() {
+  const statusTargetId = 'battery_electrochem_files_save_btn';
+
+  return withBatteryInlineSaveStatus(statusTargetId, async () => {
+    if (!state.selection.currentBatteryId) {
+      showBatteryInlineStatus(statusTargetId, 'Сначала создайте элемент.', true);
+      return;
+    }
+
+    const filesInput = document.getElementById('electrochem_files');
+    syncElectrochemStateFromDom();
+
+    const selectedFiles = Array.from(filesInput.files || []);
+    const notes = typeof state.electrochem.notes === 'string'
+      ? state.electrochem.notes.trim()
+      : '';
+
+    if (selectedFiles.length === 0) {
+      showBatteryInlineStatus(statusTargetId, 'Выберите файлы.', true);
+      return;
+    }
+
+    const saved = await postBatteryElectrochem(
+      await buildBatteryElectrochemEntries(selectedFiles, notes),
+      notes
+    );
+
+    finishBatteryElectrochemSave(saved);
+    showBatteryInlineStatus(statusTargetId, 'Файлы сохранены.');
+  }, 'Ошибка сохранения файлов электрохимических испытаний');
+}
+
 async function saveBatteryElectrochem() {
   const statusTargetId = 'battery_electrochem_save_btn';
 
@@ -3290,45 +3799,21 @@ async function saveBatteryElectrochem() {
     syncElectrochemStateFromDom();
 
     const selectedFiles = Array.from(filesInput.files || []);
-    
-    if (selectedFiles.length === 0) {
-      showBatteryInlineStatus(statusTargetId, 'Выберите хотя бы один файл испытаний.', true);
+    const notes = typeof state.electrochem.notes === 'string'
+      ? state.electrochem.notes.trim()
+      : '';
+
+    if (selectedFiles.length === 0 && !notes) {
+      showBatteryInlineStatus(statusTargetId, 'Добавьте заметку или файл испытаний.', true);
       return;
     }
 
-    const entries = await Promise.all(selectedFiles.map(async (file) => ({
-      file_name: file.name,
-      file_content_base64: await fileToBase64(file),
-      electrochem_notes: state.electrochem.notes || null
-    })));
+    const saved = await postBatteryElectrochem(
+      await buildBatteryElectrochemEntries(selectedFiles, notes),
+      notes
+    );
 
-    const payload = {
-      entries
-    };
-
-    const res = await fetch('/api/batteries/battery_electrochem', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        battery_id: state.selection.currentBatteryId,
-        ...payload
-      })
-    });
-
-    if (!res.ok) {
-      await throwBatteryResponseError(res, 'Ошибка сохранения электрохимических испытаний');
-    }
-
-    const saved = await res.json();
-
-    setElectrochemState({
-      notes: null,
-      files: null,
-      savedEntries: Array.isArray(saved) ? saved : []
-    });
-    renderElectrochemForm();
-    markSectionsSaved(['battery_electrochem']);
-    renderBatteryPage();
+    finishBatteryElectrochemSave(saved);
     showBatteryInlineStatus(statusTargetId, 'Результаты электрохимических испытаний сохранены.');
   } catch (err) {
     console.error(err);
@@ -3687,6 +4172,7 @@ function resetBatteryPageStateForRestore() {
   clearBatteryRestoreFieldsets();
   resetBatterySectionState();
   resetElectrodeSelection();
+  resetBatteryDeleteFlow();
 }
 
 function applyBatteryMetaToState(data) {
@@ -4920,6 +5406,7 @@ function resetBatteryPageState({ openForm = false } = {}) {
   setBatteryFormOpen(openForm);
   setLoadedAssemblyComplete(false);
   setBatteryCreateButtonMode('create');
+  resetBatteryDeleteFlow();
   resetBatterySectionState();
   state.snapshots.savedSectionStates = {};
   clearBatteryInlineStatuses();
@@ -4945,45 +5432,6 @@ async function handleExitBatteryPage() {
   await loadBatteries();
 }
 
-async function handleDisassembleBatteryClick() {
-  const batteryId = state.selection.currentBatteryId;
-
-  if (!batteryId) return;
-
-  if (hasUnsavedBatteryChanges()) {
-    const proceed = confirm('Есть несохранённые изменения. Разобрать аккумулятор без сохранения?');
-    if (!proceed) return;
-  }
-
-  const confirmed = confirm(
-    `Разобрать аккумулятор #${batteryId}?\n\n` +
-    'Электроды будут возвращены в партию как списанные. Запись аккумулятора останется в базе.'
-  );
-
-  if (!confirmed) return;
-
-  const result = await withBatteryInlineSaveStatus('disassembleBatteryBtn', async () => {
-    const res = await fetch(`/api/batteries/${batteryId}/disassemble`, {
-      method: 'POST'
-    });
-
-    if (!res.ok) {
-      await throwBatteryResponseError(res, 'Ошибка разборки аккумулятора');
-    }
-
-    return res.json();
-  }, 'Ошибка разборки аккумулятора');
-
-  if (!result) return;
-
-  await loadBatteries();
-  await loadBatteryAssembly(batteryId);
-  showBatteryInlineStatus(
-    'disassembleBatteryBtn',
-    `Аккумулятор разобран. Списано электродов: ${result.scrapped_electrode_ids?.length || 0}.`
-  );
-}
-
 async function handleDeleteBatteryClick() {
   const batteryId = state.selection.currentBatteryId;
 
@@ -4994,10 +5442,12 @@ async function handleDeleteBatteryClick() {
     if (!proceed) return;
   }
 
+  resetBatteryDeleteFlow();
+
   const checkRes = await fetch(`/api/batteries/${batteryId}/delete-check`);
   const check = await checkRes.json().catch(() => ({}));
 
-  if (!checkRes.ok || !check.can_delete) {
+  if (!checkRes.ok) {
     showBatteryInlineStatus(
       'deleteBatteryBtn',
       formatBatterySaveError(check, 'Аккумулятор пока не готов к удалению'),
@@ -5007,31 +5457,20 @@ async function handleDeleteBatteryClick() {
     return;
   }
 
-  const phrase = `DELETE BATTERY ${batteryId}`;
-  const typed = prompt(`Для удаления записи аккумулятора введите: ${phrase}`);
-
-  if (typed !== phrase) {
-    showBatteryInlineStatus('deleteBatteryBtn', 'Удаление отменено.', true, { clearAfterMs: 4000 });
+  if (!check.can_delete || getBatteryDeleteHardBlockers(check).length > 0) {
+    setBatteryDeleteFlow({
+      step: 'blocked',
+      check
+    });
     return;
   }
 
-  const result = await withBatteryInlineSaveStatus('deleteBatteryBtn', async () => {
-    const res = await fetch(`/api/batteries/${batteryId}`, {
-      method: 'DELETE'
-    });
-
-    if (!res.ok) {
-      await throwBatteryResponseError(res, 'Ошибка удаления аккумулятора');
-    }
-
-    return res.json();
-  }, 'Ошибка удаления аккумулятора');
-
-  if (!result) return;
-
-  resetBatteryPageState();
-  await loadBatteries();
-  showBatteryPageStatus(`Аккумулятор #${batteryId} удалён.`);
+  setBatteryDeleteFlow({
+    step: getBatteryDeleteLinkedElectrodes(check).length > 0 ? 'choose-electrodes' : 'confirm',
+    check,
+    electrodeDisposition: 'available',
+    scrappedReason: ''
+  });
 }
 
 function handleAddBatteryClick() {
@@ -5393,17 +5832,24 @@ exitBatteriesBtn.addEventListener('click', async () => {
   await handleExitBatteryPage();
 });
 
-const disassembleBatteryBtn = document.getElementById('disassembleBatteryBtn');
-
-disassembleBatteryBtn.addEventListener('click', async () => {
-  await handleDisassembleBatteryClick();
-});
-
 const deleteBatteryBtn = document.getElementById('deleteBatteryBtn');
 
 deleteBatteryBtn.addEventListener('click', async () => {
   await handleDeleteBatteryClick();
 });
+
+const batteryElectrochemFilesInput = document.getElementById('electrochem_files');
+const batteryElectrochemFilesSaveBtn = document.getElementById('battery_electrochem_files_save_btn');
+
+if (batteryElectrochemFilesInput) {
+  batteryElectrochemFilesInput.addEventListener('change', updateBatteryElectrochemFilesButtonVisibility);
+}
+
+if (batteryElectrochemFilesSaveBtn) {
+  batteryElectrochemFilesSaveBtn.addEventListener('click', async () => {
+    await saveBatteryElectrochemFiles();
+  });
+}
 
 const addBatteryBtn = document.getElementById('addBatteryBtn');
 

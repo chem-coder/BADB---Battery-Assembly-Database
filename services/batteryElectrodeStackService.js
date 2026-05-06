@@ -142,6 +142,31 @@ async function assertBatteryStackIsValid(queryable, batteryId, stack) {
   await assertStackElectrodesMatchSources(queryable, context, stack);
 }
 
+function orderStackRowsForInsert(stack) {
+  const byPositionThenInput = (a, b) => {
+    const positionA = Number(a.row.position_index);
+    const positionB = Number(b.row.position_index);
+
+    if (Number.isFinite(positionA) && Number.isFinite(positionB) && positionA !== positionB) {
+      return positionA - positionB;
+    }
+
+    return a.index - b.index;
+  };
+  const rows = stack.map((row, index) => ({ row, index }));
+  const anodes = rows.filter((item) => item.row.role === 'anode').sort(byPositionThenInput);
+  const cathodes = rows.filter((item) => item.row.role === 'cathode').sort(byPositionThenInput);
+  const ordered = [];
+  const maxLength = Math.max(anodes.length, cathodes.length);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    if (anodes[index]) ordered.push(anodes[index].row);
+    if (cathodes[index]) ordered.push(cathodes[index].row);
+  }
+
+  return ordered;
+}
+
 async function saveBatteryElectrodeStack(pool, batteryId, stack) {
   const nextElectrodeIds = stack
     .map((row) => Number(row.electrode_id))
@@ -171,7 +196,7 @@ async function saveBatteryElectrodeStack(pool, batteryId, stack) {
       [batteryId]
     );
 
-    for (const row of stack) {
+    for (const row of orderStackRowsForInsert(stack)) {
       await client.query(
         `
         INSERT INTO battery_electrodes (

@@ -145,6 +145,7 @@
           <button type="button" id="deleteBatteryBtn" class="button-danger" hidden>Удалить запись</button>
         </div>
       </div>
+      <div id="battery_delete_flow" class="record-delete-flow" hidden></div>
       
       <form name="battery_assembly_log_form" autocomplete="on" hidden>
 
@@ -787,14 +788,22 @@
             </p>
 
             <label for="electrochem_files">
-              Файлы испытаний
+              Загрузить файлы
             </label>
             <input
               id="electrochem_files"
               name="electrochem_files"
               type="file"
               multiple
-            ><br>
+            >
+            <button
+              type="button"
+              id="battery_electrochem_files_save_btn"
+              class="btn_secondary"
+              hidden
+            >
+              Сохранить файлы
+            </button><br>
 
             <p id="electrochem_files_saved" class="tiny_note"></p>
 
@@ -825,7 +834,7 @@
     </div>
     
     <script src="/js/auth.js"></script>
-    <script src="/js/3-batteries.js?v=battery-sticky-header-20260505a"></script>
+    <script src="/js/3-batteries.js?v=battery-electrochem-files-save-20260506a"></script>
     
   </body>
 </html>

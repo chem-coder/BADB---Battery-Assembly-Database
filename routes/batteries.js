@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const { auth, requireRole } = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 const {
   sendDependencyConflict,
   sendForeignKeyConflict
@@ -202,7 +202,7 @@ router.post('/:id/disassemble', auth, async (req, res) => {
   }
 });
 
-router.get('/:id/delete-check', auth, requireRole('admin', 'lead'), async (req, res) => {
+router.get('/:id/delete-check', auth, async (req, res) => {
   const batteryId = Number(req.params.id);
 
   if (!Number.isInteger(batteryId)) {
@@ -220,7 +220,7 @@ router.get('/:id/delete-check', auth, requireRole('admin', 'lead'), async (req, 
   }
 });
 
-router.delete('/:id', auth, requireRole('admin', 'lead'), async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   const batteryId = Number(req.params.id);
 
   if (!Number.isInteger(batteryId)) {
@@ -228,7 +228,7 @@ router.delete('/:id', auth, requireRole('admin', 'lead'), async (req, res) => {
   }
 
   try {
-    res.json(await deleteBatteryRecord(pool, batteryId, req.user.userId));
+    res.json(await deleteBatteryRecord(pool, batteryId, req.user.userId, req.body || {}));
   } catch (err) {
     if (err.statusCode === 409 && err.dependencies) {
       return sendDependencyConflict(res, err.message, err.dependencies);
@@ -777,7 +777,8 @@ router.post('/battery_electrochem', auth, async (req, res) => {
 
   const {
     battery_id,
-    entries
+    entries,
+    electrochem_notes
   } = req.body;
 
   const batteryId = Number(battery_id);
@@ -786,12 +787,20 @@ router.post('/battery_electrochem', auth, async (req, res) => {
     return res.status(400).json({ error: 'Некорректный battery_id' });
   }
 
-  if (!Array.isArray(entries) || entries.length === 0) {
-    return res.status(400).json({ error: 'Не переданы файлы электрохимических испытаний' });
+  const normalizedEntries = Array.isArray(entries) ? entries : [];
+  const hasNotes = typeof electrochem_notes === 'string' && electrochem_notes.trim();
+
+  if (normalizedEntries.length === 0 && !hasNotes) {
+    return res.status(400).json({ error: 'Добавьте заметку или файл испытаний' });
   }
 
   try {
-    res.status(200).json(await saveBatteryElectrochem(pool, batteryId, entries));
+    res.status(200).json(await saveBatteryElectrochem(
+      pool,
+      batteryId,
+      normalizedEntries,
+      electrochem_notes
+    ));
 
   } catch (err) {
 

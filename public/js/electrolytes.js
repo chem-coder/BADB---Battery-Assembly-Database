@@ -4,27 +4,111 @@ const form = document.forms['electrolyte-form'];
 const title = form.querySelector('h2');
 const saveBtn = document.getElementById('saveBtn');
 const clearBtn = document.getElementById('clearBtn');
+const deleteElectrolyteBtn = document.getElementById('deleteElectrolyteBtn');
 const saveFilesBtn = document.getElementById('saveFilesBtn');
 const createdBySelect = document.getElementById('electrolyte-created-by');
 const typeSelect = document.getElementById('electrolyte_type');
 const filesInput = document.getElementById('electrolyte-files-input');
 const savedFilesBox = document.getElementById('electrolyte-files-saved');
+const stickyHeader = document.getElementById('electrolyte_sticky_header');
+const stickyTitle = document.getElementById('electrolyte_sticky_title');
+const stickyMeta = document.getElementById('electrolyte_sticky_meta');
+const stickyDirty = document.getElementById('electrolyte-global-dirty');
+const stickyStatus = document.getElementById('electrolyte-sticky-status');
+const filesStatus = document.getElementById('electrolyte-files-status');
 
 const electrolytesList = document.getElementById('electrolytesList');
 
 let mode = null; // 'create' | 'edit'
 let currentId = null;
+let currentElectrolyte = null;
 let savedElectrolyteFiles = [];
 let initialFormState = null;
+
+const ELECTROLYTE_TYPE_LABELS = {
+  liquid: 'жидкий',
+  solid: 'твёрдый',
+  gel: 'гелевый'
+};
+
+const ELECTROLYTE_STATUS_LABELS = {
+  active: 'активный',
+  inactive: 'не используется',
+  archived: 'архив'
+};
 
 function showForm() {
   form.hidden = false;
   addInput.disabled = true;
+  renderElectrolyteStickyHeader();
 }
 
 function hideForm() {
   form.hidden = true;
   addInput.disabled = false;
+  renderElectrolyteStickyHeader();
+}
+
+function formatDate(value) {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleDateString();
+}
+
+function getElectrolyteDisplayName() {
+  return (title.textContent || nameInput.value || '').trim() || 'без названия';
+}
+
+function getElectrolyteStickyTitle() {
+  const name = getElectrolyteDisplayName();
+
+  if (mode === 'edit' && currentId) {
+    return `Электролит #${currentId} | ${name}`;
+  }
+
+  return `Новый электролит | ${name}`;
+}
+
+function getElectrolyteMetaText() {
+  if (!mode) return '—';
+
+  const type = ELECTROLYTE_TYPE_LABELS[form.elements['electrolyte_type'].value] || '';
+  const status = ELECTROLYTE_STATUS_LABELS[form.elements['status'].value] || '';
+  const createdBy = currentElectrolyte?.created_by_name || '';
+  const createdAt = formatDate(currentElectrolyte?.created_at);
+
+  return [
+    type && `тип: ${type}`,
+    status && `статус: ${status}`,
+    createdBy && `создал: ${createdBy}`,
+    createdAt && `создан: ${createdAt}`
+  ].filter(Boolean).join(' — ') || 'новая запись';
+}
+
+function renderElectrolyteStickyHeader() {
+  window.BADB_UI?.setStickyHeader({
+    header: stickyHeader,
+    titleEl: stickyTitle,
+    metaEl: stickyMeta,
+    dirtyEl: stickyDirty,
+    title: getElectrolyteStickyTitle(),
+    meta: getElectrolyteMetaText(),
+    isDirty: hasUnsavedChanges(),
+    hidden: !mode
+  });
+
+  if (saveBtn) {
+    saveBtn.textContent = mode === 'create'
+      ? 'Сохранить электролит'
+      : 'Сохранить изменения';
+  }
+
+  if (deleteElectrolyteBtn) {
+    deleteElectrolyteBtn.hidden = mode !== 'edit' || !currentId;
+  }
 }
 
 function captureFormState() {
@@ -46,6 +130,7 @@ function captureFormState() {
 
 function markFormPristine() {
   initialFormState = captureFormState();
+  renderElectrolyteStickyHeader();
 }
 
 function hasUnsavedChanges() {
@@ -56,10 +141,12 @@ function hasUnsavedChanges() {
 function clearSavedElectrolyteFiles() {
   savedElectrolyteFiles = [];
   renderSavedElectrolyteFiles(savedElectrolyteFiles);
+  renderElectrolyteStickyHeader();
 }
 
 function updateSaveFilesButtonVisibility() {
   saveFilesBtn.hidden = !filesInput.files || filesInput.files.length === 0;
+  renderElectrolyteStickyHeader();
 }
 
 function resetForm() {
@@ -67,10 +154,12 @@ function resetForm() {
   title.textContent = '';
   mode = null;
   currentId = null;
+  currentElectrolyte = null;
   initialFormState = null;
   filesInput.value = '';
   clearSavedElectrolyteFiles();
   updateSaveFilesButtonVisibility();
+  clearRecordStatuses();
   hideForm();
 }
 
@@ -128,9 +217,9 @@ function renderSavedElectrolyteFiles(entries) {
         );
         renderSavedElectrolyteFiles(savedElectrolyteFiles);
         markFormPristine();
-        showStatus('Файл удалён');
+        showFileStatus('Файл удалён');
       } catch (err) {
-        showStatus(err.message, true);
+        showFileStatus(err.message, true, { clearAfterMs: 9000 });
       }
     };
 
@@ -139,6 +228,11 @@ function renderSavedElectrolyteFiles(entries) {
     row.appendChild(deleteBtn);
     savedFilesBox.appendChild(row);
   });
+}
+
+function clearRecordStatuses() {
+  showHeaderStatus('', false, { clearAfterMs: 0 });
+  showFileStatus('', false, { clearAfterMs: 0 });
 }
 
 function fileToBase64(file) {
@@ -232,6 +326,50 @@ async function deleteElectrolyteFile(fileId) {
   }
 }
 
+async function fetchElectrolyteDeleteCheck(id) {
+  const res = await fetch(`/api/electrolytes/${id}/delete-check`);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка проверки удаления электролита');
+  }
+
+  return res.json();
+}
+
+async function deleteElectrolyte(id) {
+  const res = await fetch(`/api/electrolytes/${id}`, {
+    method: 'DELETE'
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка удаления');
+  }
+}
+
+function formatDependencyRecords(dependencies) {
+  return dependencies
+    .flatMap((dependency) => dependency.records || [])
+    .slice(0, 4)
+    .map((record) => {
+      if (record.name) return `#${record.id}: ${record.name}`;
+      if (record.id) return `#${record.id}`;
+      return '';
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+function formatDeleteBlockedMessage(check) {
+  const base = check.message || 'Нельзя удалить электролит: есть связанные записи.';
+  const records = formatDependencyRecords(check.dependencies || []);
+
+  return records
+    ? `${base} Сначала уберите связи: ${records}.`
+    : base;
+}
+
 function renderElectrolytes(electrolytes) {
   electrolytesList.innerHTML = '';
 
@@ -239,94 +377,41 @@ function renderElectrolytes(electrolytes) {
     const li = document.createElement('li');
     li.className = 'user-row';
 
-    const info = document.createElement('div');
-    info.className = 'user-info';
+    const titleLine = document.createElement('div');
+    titleLine.className = 'record-list-title';
+    titleLine.textContent = el.name;
 
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = el.name;
+    const metaLine = document.createElement('div');
+    metaLine.className = 'record-list-meta';
+    metaLine.textContent = [
+      ELECTROLYTE_TYPE_LABELS[el.electrolyte_type] || el.electrolyte_type || '',
+      ELECTROLYTE_STATUS_LABELS[el.status] || el.status || '',
+      formatDate(el.created_at),
+      el.created_by_name || ''
+    ].filter(Boolean).join(' — ');
 
-    const statusSpan = document.createElement('span');
-    statusSpan.className = 'status';
-    statusSpan.textContent =
-      el.status === 'active' ? 'активный' :
-      el.status === 'inactive' ? 'не используется' :
-      'архив';
-
-    const authorSpan = document.createElement('span');
-    authorSpan.textContent = el.created_by_name;
-
-    const dateSpan = document.createElement('span');
-    dateSpan.textContent = new Date(el.created_at).toLocaleDateString();
-
-    info.appendChild(nameSpan);
-    info.appendChild(statusSpan);
-    info.appendChild(authorSpan);
-    info.appendChild(dateSpan);
+    const info = window.BADB_UI.createRecordOpenButton({
+      className: 'user-info',
+      ariaLabel: `Открыть электролит ${el.name}`,
+      children: [titleLine, metaLine],
+      onClick: async () => {
+        await openElectrolyteRecord(el);
+      }
+    });
 
     const actions = document.createElement('div');
     actions.className = 'actions';
 
-    const editBtn = document.createElement('button');
-    editBtn.textContent = '✏️';
-    editBtn.title = 'Редактировать';
-    editBtn.onclick = async () => {
-      mode = 'edit';
-      currentId = el.electrolyte_id;
-
-      showForm();
-
-      title.textContent = el.name;
-      nameInput.value = el.name;
-      populateElectrolyteForm(el);
-
-      if (el.created_by) {
-        createdBySelect.value = el.created_by;
+    const duplicateBtn = window.BADB_UI.createIconButton({
+      icon: '📑',
+      title: 'Дублировать электролит',
+      ariaLabel: `Дублировать электролит ${el.name}`,
+      onClick: () => {
+        duplicateElectrolyte(el);
       }
+    });
 
-      filesInput.value = '';
-      clearSavedElectrolyteFiles();
-
-      try {
-        savedElectrolyteFiles = await fetchElectrolyteFiles(el.electrolyte_id);
-        renderSavedElectrolyteFiles(savedElectrolyteFiles);
-        markFormPristine();
-      } catch (err) {
-        showStatus(err.message, true);
-      }
-    };
-
-    const duplicateBtn = document.createElement('button');
-    duplicateBtn.textContent = '📄';
-    duplicateBtn.title = 'Дублировать';
-    duplicateBtn.onclick = () => {
-      duplicateElectrolyte(el);
-    };
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = '🗑️';
-    deleteBtn.title = 'Удалить';
-    deleteBtn.onclick = async () => {
-      if (!confirm(`Удалить электролит "${el.name}"?`)) return;
-
-      try {
-        const res = await fetch(`/api/electrolytes/${el.electrolyte_id}`, {
-          method: 'DELETE'
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || 'Ошибка удаления');
-        }
-
-        loadElectrolytes();
-      } catch (err) {
-        showStatus(err.message, true);
-      }
-    };
-
-    actions.appendChild(editBtn);
     actions.appendChild(duplicateBtn);
-    actions.appendChild(deleteBtn);
 
     li.appendChild(info);
     li.appendChild(actions);
@@ -335,25 +420,72 @@ function renderElectrolytes(electrolytes) {
   });
 }
 
+function confirmDiscardUnsavedChanges() {
+  if (!hasUnsavedChanges()) return true;
+  return confirm('Выйти без сохранения изменений?');
+}
+
+async function openElectrolyteRecord(el) {
+  if (!confirmDiscardUnsavedChanges()) return;
+
+  clearRecordStatuses();
+  mode = 'edit';
+  currentId = el.electrolyte_id;
+  currentElectrolyte = el;
+
+  title.textContent = el.name;
+  title.hidden = false;
+  nameInput.hidden = true;
+  nameInput.value = el.name;
+  populateElectrolyteForm(el);
+
+  if (el.created_by) {
+    createdBySelect.value = el.created_by;
+  }
+
+  filesInput.value = '';
+  savedElectrolyteFiles = [];
+  renderSavedElectrolyteFiles(savedElectrolyteFiles);
+  updateSaveFilesButtonVisibility();
+  showForm();
+
+  try {
+    savedElectrolyteFiles = await fetchElectrolyteFiles(el.electrolyte_id);
+    renderSavedElectrolyteFiles(savedElectrolyteFiles);
+  } catch (err) {
+    showStatus(err.message, true, { clearAfterMs: 9000 });
+  } finally {
+    markFormPristine();
+    window.BADB_UI?.scrollToElement(stickyHeader || form);
+  }
+}
+
 function duplicateElectrolyte(el) {
+  if (!confirmDiscardUnsavedChanges()) return;
+
+  clearRecordStatuses();
   mode = 'create';
   currentId = null;
-
-  showForm();
+  currentElectrolyte = null;
 
   const copyName = `${el.name} (копия)`;
   title.textContent = copyName;
+  title.hidden = false;
+  nameInput.hidden = true;
   nameInput.value = copyName;
 
   populateElectrolyteForm(el);
   createdBySelect.value = '';
   filesInput.value = '';
   clearSavedElectrolyteFiles();
+  updateSaveFilesButtonVisibility();
+  showForm();
   markFormPristine();
+  window.BADB_UI?.scrollToElement(stickyHeader || form);
 }
 
-async function saveElectrolyteRecord() {
-  if (!validateRequiredFields()) return null;
+async function saveElectrolyteRecord(options = {}) {
+  if (!validateRequiredFields(options.statusTarget || 'header')) return null;
 
   const data = formDataToObject(form);
   delete data.created_by;
@@ -368,6 +500,14 @@ async function saveElectrolyteRecord() {
     mode = 'edit';
   } else if (initialMode === 'edit') {
     savedElectrolyte = await updateElectrolyte(currentId, data);
+  }
+
+  if (savedElectrolyte) {
+    currentElectrolyte = {
+      ...(currentElectrolyte || {}),
+      ...savedElectrolyte,
+      name: data.name
+    };
   }
 
   return {
@@ -398,15 +538,80 @@ async function uploadSelectedFiles() {
   return selectedFiles;
 }
 
+async function deleteCurrentElectrolyte() {
+  if (!currentId) {
+    showStatus('Сначала откройте электролит', true, { clearAfterMs: 5000 });
+    return;
+  }
+
+  try {
+    const check = await fetchElectrolyteDeleteCheck(currentId);
+
+    if (!check.can_delete) {
+      showStatus(formatDeleteBlockedMessage(check), true, { clearAfterMs: 15000 });
+      return;
+    }
+
+    if (hasUnsavedChanges() && !confirm('Есть несохранённые изменения. Удалить электролит без сохранения?')) {
+      return;
+    }
+
+    const phrase = `DELETE ELECTROLYTE ${currentId}`;
+    const confirmation = prompt(
+      `Удаление электролита #${currentId} необратимо.\nВведите ${phrase}, чтобы подтвердить.`
+    );
+
+    if (confirmation !== phrase) {
+      showStatus('Удаление отменено.', true, { clearAfterMs: 4000 });
+      return;
+    }
+
+    await deleteElectrolyte(currentId);
+    resetForm();
+    await loadElectrolytes();
+    showStatus('Электролит удалён', false, { clearAfterMs: 5000 });
+  } catch (err) {
+    showStatus(err.message, true, { clearAfterMs: 12000 });
+  }
+}
+
 const statusBox = document.querySelector('.status-feedback');
 
-function showStatus(msg, isError = false) {
-  statusBox.textContent = msg;
-  statusBox.style.color = isError ? '#b00020' : 'darkcyan';
+function showPageStatus(msg, isError = false, options = {}) {
+  window.BADB_UI?.showStatus(statusBox, msg, {
+    isError,
+    clearAfterMs: options.clearAfterMs ?? (isError ? 9000 : 4500)
+  });
+}
 
-  setTimeout(() => {
-    statusBox.textContent = '';
-  }, 1000);
+function showHeaderStatus(msg, isError = false, options = {}) {
+  window.BADB_UI?.showStatus(stickyStatus, msg, {
+    isError,
+    clearAfterMs: options.clearAfterMs ?? (isError ? 12000 : 4500)
+  });
+}
+
+function showFileStatus(msg, isError = false, options = {}) {
+  window.BADB_UI?.showStatus(filesStatus, msg, {
+    isError,
+    clearAfterMs: options.clearAfterMs ?? (isError ? 9000 : 4500)
+  });
+}
+
+function showStatus(msg, isError = false, options = {}) {
+  const target = options.target || (mode ? 'header' : 'page');
+
+  if (target === 'files') {
+    showFileStatus(msg, isError, options);
+    return;
+  }
+
+  if (target === 'header') {
+    showHeaderStatus(msg, isError, options);
+    return;
+  }
+
+  showPageStatus(msg, isError, options);
 }
 
 async function loadUsers() {
@@ -439,11 +644,15 @@ addInput.addEventListener('keydown', (e) => {
   const name = addInput.value.trim();
   if (!name) return;
 
+  clearRecordStatuses();
   mode = 'create';
   currentId = null;
+  currentElectrolyte = null;
 
   nameInput.value = name;
   title.textContent = name;
+  title.hidden = false;
+  nameInput.hidden = true;
 
   showForm();
 
@@ -451,9 +660,10 @@ addInput.addEventListener('keydown', (e) => {
   clearSavedElectrolyteFiles();
   updateSaveFilesButtonVisibility();
   markFormPristine();
+  window.BADB_UI?.scrollToElement(stickyHeader || form);
 });
 
-function validateRequiredFields() {
+function validateRequiredFields(statusTarget = 'header') {
   const missing = [];
 
   typeSelect.classList.remove('required-missing');
@@ -464,7 +674,7 @@ function validateRequiredFields() {
   }
 
   if (missing.length) {
-    showStatus(`Заполните обязательные поля: ${missing.join(', ')}`, true);
+    showStatus(`Заполните обязательные поля: ${missing.join(', ')}`, true, { target: statusTarget });
     return false;
   }
 
@@ -479,6 +689,8 @@ saveBtn.addEventListener('click', async () => {
     if (!result) return;
 
     const selectedFiles = await uploadSelectedFiles();
+    markFormPristine();
+    await loadElectrolytes();
 
     if (result.initialMode === 'create') {
       showStatus(
@@ -493,9 +705,6 @@ saveBtn.addEventListener('click', async () => {
           : 'Изменения сохранены'
       );
     }
-
-    resetForm();
-    loadElectrolytes();
   } catch (err) {
     showStatus(err.message, true);
   }
@@ -506,19 +715,20 @@ saveFilesBtn.addEventListener('click', async () => {
 
   try {
     if (mode === 'create') {
-      const result = await saveElectrolyteRecord();
+      const result = await saveElectrolyteRecord({ statusTarget: 'files' });
       if (!result) return;
-      loadElectrolytes();
+      await loadElectrolytes();
     }
 
     const selectedFiles = await uploadSelectedFiles();
 
     if (selectedFiles.length === 0) return;
 
-    showStatus('Файлы сохранены');
-    loadElectrolytes();
+    markFormPristine();
+    showStatus('Файлы сохранены', false, { target: 'files' });
+    await loadElectrolytes();
   } catch (err) {
-    showStatus(err.message, true);
+    showStatus(err.message, true, { target: 'files' });
   }
 });
 
@@ -533,7 +743,14 @@ clearBtn.addEventListener('click', () => {
   }
 });
 
+if (deleteElectrolyteBtn) {
+  deleteElectrolyteBtn.addEventListener('click', deleteCurrentElectrolyte);
+}
+
 filesInput.addEventListener('change', updateSaveFilesButtonVisibility);
+
+form.addEventListener('input', renderElectrolyteStickyHeader);
+form.addEventListener('change', renderElectrolyteStickyHeader);
 
 title.addEventListener('click', () => {
   nameInput.hidden = false;
@@ -555,6 +772,7 @@ nameInput.addEventListener('blur', () => {
   title.textContent = val;
   title.hidden = false;
   nameInput.hidden = true;
+  renderElectrolyteStickyHeader();
 });
 
 async function loadElectrolytes() {

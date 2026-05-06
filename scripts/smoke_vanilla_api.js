@@ -27,7 +27,8 @@ const DEFAULT_LOGIN = 'dkmaraulayte';
 const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd028_tape_projects_many_to_many.sql'),
   path.join(ROOT, 'migrations', 'd029_electrode_cut_batch_projects_many_to_many.sql'),
-  path.join(ROOT, 'migrations', 'd030_battery_projects_many_to_many.sql')
+  path.join(ROOT, 'migrations', 'd030_battery_projects_many_to_many.sql'),
+  path.join(ROOT, 'migrations', 'd031_harden_battery_stack_validate_trigger.sql')
 ];
 
 function parseArgs(argv) {
@@ -128,6 +129,22 @@ function run(command, args, { env, quiet = false } = {}) {
 
   if (!quiet && result.stdout) process.stdout.write(result.stdout);
   return result.stdout || '';
+}
+
+function runSmokeSql(context, sql) {
+  if (!context?.psql || !context?.db) {
+    throw new Error('Smoke SQL context is not available');
+  }
+
+  return run(context.psql, [
+    '-d',
+    context.db,
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-At',
+    '-c',
+    sql
+  ], { quiet: true }).trim();
 }
 
 async function getFreePort() {
@@ -440,7 +457,7 @@ async function runGetSmoke(client) {
   return seed;
 }
 
-async function runWriteSmoke(client, seed) {
+async function runWriteSmoke(client, seed, context) {
   const suffix = Date.now();
   const fileBase64 = Buffer.from('BADB smoke file').toString('base64');
   const made = {};
@@ -936,7 +953,9 @@ async function runWriteSmoke(client, seed) {
       anode_cut_batch_id: null,
       anode_source_notes: null
     });
-    await client.request('DELETE', `/api/batteries/${identityBattery.battery_id}`);
+    await client.request('DELETE', `/api/batteries/${identityBattery.battery_id}`, {
+      confirmation: `DELETE BATTERY ${identityBattery.battery_id}`
+    });
     if (made.projectId) {
       await client.post('/api/batteries', {
         project_id: made.projectId,
@@ -1021,6 +1040,43 @@ async function runWriteSmoke(client, seed) {
     });
     client.assertEqual(cylConfig.cyl_size_code, '21700', 'cylindrical config update persists size code');
 
+    for (const [batteryId, label] of [
+      [made.pouchBatteryId, 'pouch'],
+      [made.cylBatteryId, 'cylindrical']
+    ]) {
+      await client.post('/api/batteries/battery_electrode_sources', {
+        battery_id: batteryId,
+        cathode_tape_id: made.tapeId,
+        cathode_cut_batch_id: made.cutBatchId,
+        anode_tape_id: made.tapeId,
+        anode_cut_batch_id: made.cutBatchId
+      });
+      await client.put(`/api/batteries/battery_electrodes/${batteryId}`, [
+        {
+          electrode_id: made.electrodeId,
+          role: 'cathode',
+          position_index: 1
+        },
+        {
+          electrode_id: made.anodeElectrodeId,
+          role: 'anode',
+          position_index: 2
+        }
+      ]);
+      const savedCathodeFirstStack = await client.get(`/api/batteries/battery_electrodes/${batteryId}`);
+      client.assertEqual(savedCathodeFirstStack[0]?.role, 'cathode', `${label} stack preserves original cathode position`);
+      client.assertEqual(savedCathodeFirstStack[1]?.role, 'anode', `${label} stack preserves original anode position`);
+      await client.put(`/api/batteries/battery_electrodes/${batteryId}`, []);
+      await client.patch(`/api/batteries/battery_electrode_sources/${batteryId}`, {
+        cathode_tape_id: null,
+        cathode_cut_batch_id: null,
+        cathode_source_notes: null,
+        anode_tape_id: null,
+        anode_cut_batch_id: null,
+        anode_source_notes: null
+      });
+    }
+
     const lifecycleBattery = await client.post('/api/batteries', {
       project_id: projectId,
       project_ids: [projectId],
@@ -1052,29 +1108,149 @@ async function runWriteSmoke(client, seed) {
         position_index: 2
       }
     ]);
-    const blockedBatteryDeleteCheck = await client.get(`/api/batteries/${lifecycleBattery.battery_id}/delete-check`);
-    client.assertEqual(blockedBatteryDeleteCheck.can_delete, false, 'battery delete preflight blocks active stack');
-    await client.expectDependencyConflict('DELETE', `/api/batteries/${lifecycleBattery.battery_id}`);
-    const disassembled = await client.post(`/api/batteries/${lifecycleBattery.battery_id}/disassemble`);
-    client.assertEqual(disassembled.status, 'disassembled', 'battery disassembly sets status');
-    client.assertEqual(
-      disassembled.scrapped_electrode_ids.map(Number).includes(Number(made.lifecycleElectrodeId)),
-      true,
-      'battery disassembly returns cathode electrode id'
-    );
-    const lifecycleElectrode = (await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/electrodes`))
-      .find((electrode) => Number(electrode.electrode_id) === Number(made.lifecycleElectrodeId));
-    client.assertEqual(lifecycleElectrode?.status_code, 3, 'disassembled battery scraps returned electrode');
-    client.assertEqual(lifecycleElectrode?.used_in_battery_id, null, 'disassembled battery clears electrode battery link');
-    await client.put(`/api/electrodes/${made.lifecycleElectrodeId}/status`, {
-      status_code: 1,
-      used_in_battery_id: null,
-      scrapped_reason: null
+    const blockedLifecycleBattery = await client.post('/api/batteries', {
+      project_id: projectId,
+      project_ids: [projectId],
+      form_factor: 'coin',
+      battery_notes: `Codex Smoke Battery ${suffix} Cycling Blocker`
     });
-    const restoredLifecycleElectrode = (await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/electrodes`))
+    runSmokeSql(
+      context,
+      `INSERT INTO cycling_sessions (battery_id, equipment_type, file_name, status, uploaded_by, notes) ` +
+      `VALUES (${Number(blockedLifecycleBattery.battery_id)}, 'generic', 'battery-delete-blocker-${suffix}.txt', 'ready', ${Number(userId)}, 'smoke hard blocker')`
+    );
+    const blockedBatteryDeleteCheck = await client.get(`/api/batteries/${blockedLifecycleBattery.battery_id}/delete-check`);
+    client.assertEqual(blockedBatteryDeleteCheck.can_delete, false, 'battery delete preflight blocks cycling data');
+    client.assertEqual(
+      blockedBatteryDeleteCheck.hard_blockers?.some((dependency) => dependency.key === 'cycling_sessions'),
+      true,
+      'battery delete preflight reports cycling hard blocker before confirmation'
+    );
+    await client.expectDependencyConflict('DELETE', `/api/batteries/${blockedLifecycleBattery.battery_id}`, {
+      confirmation: `DELETE BATTERY ${blockedLifecycleBattery.battery_id}`
+    });
+    runSmokeSql(context, `DELETE FROM cycling_sessions WHERE battery_id = ${Number(blockedLifecycleBattery.battery_id)}`);
+    await client.request('DELETE', `/api/batteries/${blockedLifecycleBattery.battery_id}`, {
+      confirmation: `DELETE BATTERY ${blockedLifecycleBattery.battery_id}`
+    });
+
+    const clearBatteryDeleteCheck = await client.get(`/api/batteries/${lifecycleBattery.battery_id}/delete-check`);
+    client.assertEqual(clearBatteryDeleteCheck.can_delete, true, 'battery delete preflight allows guided electrode disposition');
+    client.assertEqual(
+      clearBatteryDeleteCheck.linked_electrodes?.length >= 2,
+      true,
+      'battery delete preflight returns linked electrodes'
+    );
+    client.assertEqual(
+      clearBatteryDeleteCheck.confirmable_owned_data?.some((dependency) => dependency.key === 'battery_electrodes'),
+      true,
+      'battery delete preflight returns confirmable owned data'
+    );
+    await client.request('DELETE', `/api/batteries/${lifecycleBattery.battery_id}`, {
+      confirmation: 'DELETE BATTERY wrong',
+      electrode_disposition: 'available'
+    }, [400]);
+    await client.post('/api/batteries/battery_qc', {
+      battery_id: lifecycleBattery.battery_id,
+      ocv_v: 3.1,
+      esr_mohm: 22,
+      qc_notes: 'smoke owned QC cleanup'
+    });
+    const lifecycleElectrochemRows = await client.post('/api/batteries/battery_electrochem', {
+      battery_id: lifecycleBattery.battery_id,
+      entries: [{
+        file_name: `lifecycle-electrochem-${suffix}.txt`,
+        file_content_base64: fileBase64,
+        electrochem_notes: 'smoke owned electrochem cleanup'
+      }]
+    });
+    const lifecycleElectrochemFile = lifecycleElectrochemRows.find((row) => row.file_name === `lifecycle-electrochem-${suffix}.txt`);
+    client.assertEqual(Boolean(lifecycleElectrochemFile?.file_link), true, 'lifecycle electrochem cleanup fixture has an upload file');
+    const ownedDataBatteryDeleteCheck = await client.get(`/api/batteries/${lifecycleBattery.battery_id}/delete-check`);
+    client.assertEqual(ownedDataBatteryDeleteCheck.can_delete, true, 'battery delete preflight allows battery-owned QC/electrochem cleanup');
+    await client.request('DELETE', `/api/batteries/${lifecycleBattery.battery_id}`, {
+      confirmation: `DELETE BATTERY ${lifecycleBattery.battery_id}`,
+      electrode_disposition: 'available'
+    });
+    const lifecycleElectrochemPath = lifecycleElectrochemFile?.file_link
+      ? path.join(ROOT, String(lifecycleElectrochemFile.file_link).replace(/^\/+/, ''))
+      : null;
+    client.assertEqual(
+      lifecycleElectrochemPath ? fs.existsSync(lifecycleElectrochemPath) : false,
+      false,
+      'battery delete removes owned electrochem upload file'
+    );
+    const availableLifecycleElectrodes = await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/electrodes`);
+    const availableLifecycleCathode = availableLifecycleElectrodes
       .find((electrode) => Number(electrode.electrode_id) === Number(made.lifecycleElectrodeId));
-    client.assertEqual(restoredLifecycleElectrode?.status_code, 1, 'scrapped electrode can be restored when safe');
-    await client.request('DELETE', `/api/batteries/${lifecycleBattery.battery_id}`);
+    client.assertEqual(availableLifecycleCathode?.status_code, 1, 'battery delete can return linked electrode as available');
+    client.assertEqual(availableLifecycleCathode?.used_in_battery_id, null, 'battery delete clears electrode battery link');
+    const availableAuditDetails = runSmokeSql(
+      context,
+      `SELECT details::text FROM activity_log WHERE action = 'delete' AND entity = 'battery' AND entity_id = ${Number(lifecycleBattery.battery_id)} ORDER BY id DESC LIMIT 1`
+    );
+    const parsedAvailableAudit = availableAuditDetails ? JSON.parse(availableAuditDetails) : null;
+    client.assertEqual(Boolean(parsedAvailableAudit), true, 'battery delete writes activity audit event');
+    client.assertEqual(parsedAvailableAudit?.electrode_disposition, 'available', 'battery delete audit records available disposition');
+    client.assertEqual(
+      runSmokeSql(context, `SELECT count(*) FROM battery_qc WHERE battery_id = ${Number(lifecycleBattery.battery_id)}`),
+      '0',
+      'battery delete removes owned QC rows'
+    );
+    client.assertEqual(
+      runSmokeSql(context, `SELECT count(*) FROM projects WHERE project_id = ${Number(projectId)}`),
+      '1',
+      'battery delete does not delete upstream project'
+    );
+
+    const scrappedLifecycleBattery = await client.post('/api/batteries', {
+      project_id: projectId,
+      project_ids: [projectId],
+      form_factor: 'coin',
+      battery_notes: `Codex Smoke Battery ${suffix} Scrapped Disposition`
+    });
+    await client.post('/api/batteries/battery_coin_config', {
+      battery_id: scrappedLifecycleBattery.battery_id,
+      coin_cell_mode: 'full_cell',
+      coin_size_code: '2032',
+      coin_layout: 'SE'
+    });
+    await client.post('/api/batteries/battery_electrode_sources', {
+      battery_id: scrappedLifecycleBattery.battery_id,
+      cathode_tape_id: made.tapeId,
+      cathode_cut_batch_id: made.cutBatchId,
+      anode_tape_id: made.tapeId,
+      anode_cut_batch_id: made.cutBatchId
+    });
+    await client.put(`/api/batteries/battery_electrodes/${scrappedLifecycleBattery.battery_id}`, [
+      {
+        electrode_id: made.lifecycleElectrodeId,
+        role: 'cathode',
+        position_index: 1
+      },
+      {
+        electrode_id: made.lifecycleAnodeElectrodeId,
+        role: 'anode',
+        position_index: 2
+      }
+    ]);
+    const scrappedReason = `smoke returned from battery ${scrappedLifecycleBattery.battery_id}`;
+    await client.request('DELETE', `/api/batteries/${scrappedLifecycleBattery.battery_id}`, {
+      confirmation: `DELETE BATTERY ${scrappedLifecycleBattery.battery_id}`,
+      electrode_disposition: 'scrapped',
+      scrapped_reason: scrappedReason
+    });
+    const scrappedLifecycleElectrodes = await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/electrodes`);
+    const scrappedLifecycleCathode = scrappedLifecycleElectrodes
+      .find((electrode) => Number(electrode.electrode_id) === Number(made.lifecycleElectrodeId));
+    client.assertEqual(scrappedLifecycleCathode?.status_code, 3, 'battery delete can return linked electrode as scrapped');
+    client.assertEqual(scrappedLifecycleCathode?.scrapped_reason, scrappedReason, 'battery delete records scrapped electrode reason');
+    const scrappedAuditDetails = runSmokeSql(
+      context,
+      `SELECT details::text FROM activity_log WHERE action = 'delete' AND entity = 'battery' AND entity_id = ${Number(scrappedLifecycleBattery.battery_id)} ORDER BY id DESC LIMIT 1`
+    );
+    const parsedScrappedAudit = scrappedAuditDetails ? JSON.parse(scrappedAuditDetails) : null;
+    client.assertEqual(parsedScrappedAudit?.electrode_disposition, 'scrapped', 'battery delete audit records scrapped disposition');
 
     await client.post('/api/batteries/battery_sep_config', {
       battery_id: made.batteryId,
@@ -1092,12 +1268,16 @@ async function runWriteSmoke(client, seed) {
       electrolyte_notes: 'smoke electrolyte dependency check',
       electrolyte_total_ul: 50
     });
+    const blockedElectrolyteDeleteCheck = await client.get(`/api/electrolytes/${made.electrolyteId}/delete-check`);
+    client.assertEqual(blockedElectrolyteDeleteCheck.can_delete, false, 'electrolyte delete preflight blocks battery use');
     await client.expectDependencyConflict('DELETE', `/api/electrolytes/${made.electrolyteId}`);
     await client.patch(`/api/batteries/battery_electrolyte/${made.batteryId}`, {
       electrolyte_id: existingElectrolyteId,
       electrolyte_notes: 'smoke electrolyte dependency reset',
       electrolyte_total_ul: null
     });
+    const clearElectrolyteDeleteCheck = await client.get(`/api/electrolytes/${made.electrolyteId}/delete-check`);
+    client.assertEqual(clearElectrolyteDeleteCheck.can_delete, true, 'electrolyte delete preflight clears after battery reset');
     await client.post('/api/batteries/battery_qc', {
       battery_id: made.batteryId,
       ocv_v: 3.7,
@@ -1118,8 +1298,26 @@ async function runWriteSmoke(client, seed) {
         electrochem_notes: 'smoke electrochem'
       }]
     });
-    made.electrochemFileLinks = electrochemRows.map((row) => row.file_link).filter(Boolean);
     client.assertEqual(electrochemRows.length, 1, 'battery electrochem upload returns one row');
+    const electrochemNoteRows = await client.post('/api/batteries/battery_electrochem', {
+      battery_id: made.batteryId,
+      entries: [],
+      electrochem_notes: 'smoke electrochem note without file'
+    });
+    made.electrochemFileLinks = electrochemNoteRows.map((row) => row.file_link).filter(Boolean);
+    client.assertEqual(
+      electrochemNoteRows.some((row) => !row.file_link && row.electrochem_notes === 'smoke electrochem note without file'),
+      true,
+      'battery electrochem notes can be saved without a file upload'
+    );
+    const uploadedElectrochemFile = electrochemRows.find((row) => row.file_link);
+    await client.request('DELETE', `/api/batteries/battery_electrochem/${uploadedElectrochemFile.battery_electrochem_id}`);
+    const electrochemAfterDelete = await client.get(`/api/batteries/battery_electrochem/${made.batteryId}`);
+    client.assertEqual(
+      electrochemAfterDelete.some((row) => Number(row.battery_electrochem_id) === Number(uploadedElectrochemFile.battery_electrochem_id)),
+      false,
+      'battery electrochem file rows can be deleted'
+    );
     await client.post('/api/batteries/battery_electrode_sources', {
       battery_id: made.batteryId,
       cathode_tape_id: made.tapeId,
@@ -1349,7 +1547,7 @@ async function main() {
 
     if (!opts.getOnly) {
       log('Running write-path smoke tests');
-      await runWriteSmoke(client, seed);
+      await runWriteSmoke(client, seed, { db: opts.db, psql: tools.psql });
       deleteSmokeBatteries(opts, tools);
       assertNoLeftovers(opts, tools);
       client.assertNoFailures('write smoke');

@@ -23,10 +23,37 @@ async function fetchBatteryElectrochem(pool, batteryId) {
   return result.rows.length === 0 ? null : result.rows;
 }
 
-async function saveBatteryElectrochem(pool, batteryId, entries) {
+async function saveBatteryElectrochem(pool, batteryId, entries = [], notes = null) {
+  const cleanNotes = typeof notes === 'string' && notes.trim()
+    ? notes.trim()
+    : null;
+  const normalizedEntries = Array.isArray(entries) ? entries : [];
+
+  if (normalizedEntries.length === 0 && cleanNotes) {
+    await pool.query(
+      `
+      INSERT INTO battery_electrochem (
+        battery_id,
+        file_name,
+        file_link,
+        electrochem_notes
+      )
+      VALUES ($1,$2,$3,$4)
+      `,
+      [
+        batteryId,
+        null,
+        null,
+        cleanNotes
+      ]
+    );
+
+    return (await fetchBatteryElectrochem(pool, batteryId)) || [];
+  }
+
   await fs.mkdir(ELECTROCHEM_UPLOAD_DIR, { recursive: true });
 
-  for (const entry of entries) {
+  for (const entry of normalizedEntries) {
     const originalName = entry.file_name || 'electrochem_file';
     const safeName = String(originalName).replace(/[^a-zA-Z0-9._-]/g, '_');
     const storedName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safeName}`;
@@ -54,7 +81,7 @@ async function saveBatteryElectrochem(pool, batteryId, entries) {
         batteryId,
         originalName,
         relativePath,
-        entry.electrochem_notes || null
+        entry.electrochem_notes || cleanNotes
       ]
     );
   }
@@ -71,6 +98,38 @@ async function saveBatteryElectrochem(pool, batteryId, entries) {
 // path-traversal concern beyond the file_link we stored ourselves.
 //
 // Throws a 404-shaped error if no row matched.
+async function deleteBatteryElectrochemFileLink(link) {
+  if (typeof link !== 'string' || !link.startsWith('/uploads/electrochem/')) {
+    return;
+  }
+
+  const fileName = link.replace(/^\/uploads\/electrochem\//, '');
+  const absolutePath = path.join(ELECTROCHEM_UPLOAD_DIR, fileName);
+
+  // Defense-in-depth path traversal check: if file_link in the DB was
+  // tampered (e.g. "/uploads/electrochem/../../etc/passwd"), path.join
+  // would normalize the .. and escape ELECTROCHEM_UPLOAD_DIR. Reject
+  // any resolved path that doesn't stay inside the expected directory.
+  // Practical attack requires direct DB compromise — the API path
+  // (saveBatteryElectrochem) sanitizes filenames via regex — but a small
+  // guard here costs nothing and stops a class of mistake outright.
+  const expectedRoot = path.resolve(ELECTROCHEM_UPLOAD_DIR);
+  const resolvedPath = path.resolve(absolutePath);
+
+  if (resolvedPath === expectedRoot || resolvedPath.startsWith(expectedRoot + path.sep)) {
+    await fs.unlink(resolvedPath).catch(() => {
+      // File already gone or permission — not fatal, DB row is the source of truth.
+    });
+  }
+  // else: refuse to unlink — file_link escaped the upload dir.
+}
+
+async function deleteBatteryElectrochemFileLinks(links) {
+  const uniqueLinks = [...new Set((Array.isArray(links) ? links : []).filter(Boolean))];
+
+  await Promise.all(uniqueLinks.map(deleteBatteryElectrochemFileLink));
+}
+
 async function deleteBatteryElectrochem(pool, electrochemId) {
   const result = await pool.query(
     `
@@ -87,33 +146,14 @@ async function deleteBatteryElectrochem(pool, electrochemId) {
     throw err;
   }
 
-  const link = result.rows[0].file_link;
-  if (typeof link === 'string' && link.startsWith('/uploads/electrochem/')) {
-    const fileName = link.replace(/^\/uploads\/electrochem\//, '');
-    const absolutePath = path.join(ELECTROCHEM_UPLOAD_DIR, fileName);
-
-    // Defense-in-depth path traversal check: if file_link in the DB was
-    // tampered (e.g. "/uploads/electrochem/../../etc/passwd"), path.join
-    // would normalize the .. and escape ELECTROCHEM_UPLOAD_DIR. Reject
-    // any resolved path that doesn't stay inside the expected directory.
-    // Practical attack requires direct DB compromise — the API path
-    // (saveBatteryElectrochem) sanitizes filenames via regex — but a 4-line
-    // guard here costs nothing and stops a class of mistake outright.
-    const expectedRoot = path.resolve(ELECTROCHEM_UPLOAD_DIR);
-    const resolvedPath = path.resolve(absolutePath);
-    if (resolvedPath === expectedRoot || resolvedPath.startsWith(expectedRoot + path.sep)) {
-      await fs.unlink(resolvedPath).catch(() => {
-        // File already gone or permission — not fatal, DB row is the source of truth.
-      });
-    }
-    // else: refuse to unlink — file_link escaped the upload dir.
-  }
+  await deleteBatteryElectrochemFileLink(result.rows[0].file_link);
 
   return { deleted: true, battery_electrochem_id: electrochemId };
 }
 
 module.exports = {
   deleteBatteryElectrochem,
+  deleteBatteryElectrochemFileLinks,
   fetchBatteryElectrochem,
   saveBatteryElectrochem
 };

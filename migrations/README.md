@@ -86,9 +86,16 @@ Full timeline is in the git log. High-level:
   `cycling_cycle_summary` for publication-grade plots (Dima, April 2026).
 - `020_cycling_active_mass` — adds `active_mass_mg` to
   `cycling_sessions` for mAh/g specific-capacity plots (Dima, April 2026).
-- `d013` … `d023` — Dalia's parallel stream: `updated_at` triggers,
-  form-factor cascades, tape workflow refinements, dry-box tracking
-  (March–April 2026).
+- `d013` … `d031` — Dalia's parallel stream: `updated_at` triggers,
+  form-factor cascades, tape workflow refinements, dry-box tracking,
+  coating sidedness, material source/property attachments, many-to-many
+  project links, and battery stack trigger hardening (March-May 2026).
+- `d031_harden_battery_stack_validate_trigger` — current local
+  `badb_app_v1` has this applied. It updates
+  `validate_battery_stack()` so pouch/cylindrical stacks allow equal
+  cathode/anode counts or one extra anode, but not one extra cathode.
+  The vanilla smoke harness also applies `d031` automatically to its
+  throwaway database because the restored dump predates that migration.
 
 ## When you open a PR
 

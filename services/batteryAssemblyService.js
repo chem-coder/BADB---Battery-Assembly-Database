@@ -54,7 +54,7 @@ async function ensureBatteryAssembledStatus(queryable, batteryId) {
     SET status = 'assembled'
     FROM readiness r
     WHERE b.battery_id = $1
-      AND b.status IS NULL
+      AND (b.status IS NULL OR b.status = 'disassembled')
       AND r.has_config
       AND r.has_sources
       AND r.has_electrodes
