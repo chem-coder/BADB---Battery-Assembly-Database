@@ -28,6 +28,9 @@ Archived notes and generated materials are historical context only.
 - Vanilla smoke harness now applies `d031` after restoring the old dump.
 - Battery/electrode/materials/capacity/runbook docs were compressed into the canonical docs system.
 - Formal `Документация ЕСПД/` mirror was updated from the canonical docs.
+- Electrolytes reference page polish: row-open workflow, sticky record header,
+  typed delete confirmation, dependency preflight, file section status,
+  stricter type/status validation, and unsaved-change guards.
 
 ## Last Verified Checkpoint
 
@@ -39,6 +42,15 @@ Verified on 2026-05-06:
 - `npm run contract:vanilla` passed.
 - `npm run smoke:vanilla` passed: 224 checks, 0 failures.
 - Canonical/formal docs link check passed.
+
+Electrolytes documentation update verified on 2026-05-06:
+
+- `node --check routes/electrolytes.js` passed.
+- `node --check public/js/electrolytes.js` passed.
+- `node --check public/js/badb-ui.js` passed.
+- `npm run contract:vanilla` passed.
+- `npm run smoke:vanilla` passed: 224 checks, 0 failures.
+- Current/formal docs link check passed.
 
 ## Must Verify Before Pilot
 
@@ -56,7 +68,14 @@ Verified on 2026-05-06:
   - cylindrical;
   - cathode-first valid payload for pouch/cyl.
 - Existing battery print report opens and loads data with an authenticated session.
-- Electrolytes page is checked after the current branch work is finished.
+- Electrolytes page is manually checked on the pilot target browser:
+  - create;
+  - edit name by title click;
+  - duplicate;
+  - upload/download/delete file;
+  - blocked delete when used by a battery;
+  - successful delete when unused;
+  - unsaved-change guard on exit/logout/browser close.
 
 ## Do Not Start Before Pilot Unless Blocking
 

@@ -31,6 +31,7 @@ Status: current
 - [Cycling](current/cycling.md)
 - [Dashboard](current/dashboard.md)
 - [Electrodes](current/electrodes.md)
+- [Electrolytes](current/electrolytes.md)
 - [Materials](current/materials.md)
 - [Project Links](current/project_links.md)
 - [Release Readiness](current/release_readiness.md)

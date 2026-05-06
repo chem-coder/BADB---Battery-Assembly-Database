@@ -6,7 +6,7 @@ Status: future idea
 Verified against code: light check 2026-05-06
 Source paths: `docs/archive/superseded/2026-05-06-future-backlog/BADB_VANILLA_REFERENCE_PAGE_UPGRADE_PLAN.md`, `public/js/badb-ui.js`, `public/reference/electrolytes.html`, `public/js/electrolytes.js`, `public/workflow/1-tapes.html`, `public/workflow/2-electrodes.html`, `public/workflow/3-batteries.html`
 
-This is a future rollout plan for making remaining vanilla reference pages feel closer to the current Tapes, Electrode Batches, Batteries, and in-progress Electrolytes interaction pattern.
+This is a future rollout plan for making remaining vanilla reference pages feel closer to the current Tapes, Electrode Batches, Batteries, and Electrolytes interaction pattern.
 
 Materials are out of scope for this rollout. The current Materials tree/composition workflow is good enough for the current release direction and should not be redesigned casually.
 
@@ -21,8 +21,9 @@ Current workflow pages already provide the design reference:
 Light code check on 2026-05-06 also found:
 
 - `public/js/badb-ui.js` exists as a shared vanilla UI helper;
-- Electrolytes already uses a sticky record header and helper-backed scroll/status behavior;
+- Electrolytes uses a sticky record header and helper-backed scroll/status behavior;
 - Electrolytes delete confirmation uses `DELETE ELECTROLYTE <id>`;
+- Electrolytes guards unsaved edits during exit, logout, record switching, and browser unload;
 - Electrolytes print report was not found in the current file search.
 
 Treat this doc as future guidance for the remaining rollout, not as proof that every item below is implemented.
@@ -71,12 +72,12 @@ If helper code needs many page-specific exceptions, keep that behavior local.
 
 Finish pages in small passes:
 
-1. Electrolytes remaining work, especially print report if useful.
-2. Separators row-open, sticky header, inside-form delete, and print report.
-3. Recipes row-open, sticky header, inside-form delete, and print report.
-4. Projects row-open and inside-form delete; decide whether a project print report is valuable.
-5. Users row-open and inside-form delete; avoid a heavy sticky header unless it clearly helps.
-6. Departments row-open and delete only if the dependency rules are clear.
+1. Separators row-open, sticky header, inside-form delete, and print report.
+2. Recipes row-open, sticky header, inside-form delete, and print report.
+3. Projects row-open and inside-form delete; decide whether a project print report is valuable.
+4. Users row-open and inside-form delete; avoid a heavy sticky header unless it clearly helps.
+5. Departments row-open and delete only if the dependency rules are clear.
+6. Optional Electrolytes print report, only if it becomes useful for pilot workflows.
 
 Good pairings:
 

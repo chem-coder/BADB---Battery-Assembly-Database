@@ -14,6 +14,7 @@ This folder is for concise descriptions of how the system works now. Claims here
 - [Cycling](cycling.md)
 - [Dashboard](dashboard.md)
 - [Electrodes](electrodes.md)
+- [Electrolytes](electrolytes.md)
 - [Materials](materials.md)
 - [Project Links](project_links.md)
 - [Release Readiness](release_readiness.md)
