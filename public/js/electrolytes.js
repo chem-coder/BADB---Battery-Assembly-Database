@@ -37,6 +37,19 @@ const ELECTROLYTE_STATUS_LABELS = {
   archived: 'архив'
 };
 
+function getElectrolyteNameValue() {
+  const source = nameInput.hidden ? title.textContent : nameInput.value;
+  return (source || '').trim();
+}
+
+function setElectrolyteName(name) {
+  const value = (name || '').trim();
+  title.textContent = value;
+  nameInput.value = value;
+  title.hidden = false;
+  nameInput.hidden = true;
+}
+
 function showForm() {
   form.hidden = false;
   addInput.disabled = true;
@@ -59,7 +72,7 @@ function formatDate(value) {
 }
 
 function getElectrolyteDisplayName() {
-  return (title.textContent || nameInput.value || '').trim() || 'без названия';
+  return getElectrolyteNameValue() || 'без названия';
 }
 
 function getElectrolyteStickyTitle() {
@@ -151,7 +164,7 @@ function updateSaveFilesButtonVisibility() {
 
 function resetForm() {
   form.reset();
-  title.textContent = '';
+  setElectrolyteName('');
   mode = null;
   currentId = null;
   currentElectrolyte = null;
@@ -256,7 +269,14 @@ function fileToBase64(file) {
 
 async function fetchElectrolytes() {
   const res = await fetch('/api/electrolytes');
-  return res.json();
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка загрузки списка электролитов');
+  }
+
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
 }
 
 async function createElectrolyte(data) {
@@ -433,10 +453,7 @@ async function openElectrolyteRecord(el) {
   currentId = el.electrolyte_id;
   currentElectrolyte = el;
 
-  title.textContent = el.name;
-  title.hidden = false;
-  nameInput.hidden = true;
-  nameInput.value = el.name;
+  setElectrolyteName(el.name);
   populateElectrolyteForm(el);
 
   if (el.created_by) {
@@ -467,12 +484,10 @@ function duplicateElectrolyte(el) {
   mode = 'create';
   currentId = null;
   currentElectrolyte = null;
+  initialFormState = null;
 
   const copyName = `${el.name} (копия)`;
-  title.textContent = copyName;
-  title.hidden = false;
-  nameInput.hidden = true;
-  nameInput.value = copyName;
+  setElectrolyteName(copyName);
 
   populateElectrolyteForm(el);
   createdBySelect.value = '';
@@ -480,7 +495,6 @@ function duplicateElectrolyte(el) {
   clearSavedElectrolyteFiles();
   updateSaveFilesButtonVisibility();
   showForm();
-  markFormPristine();
   window.BADB_UI?.scrollToElement(stickyHeader || form);
 }
 
@@ -489,7 +503,8 @@ async function saveElectrolyteRecord(options = {}) {
 
   const data = formDataToObject(form);
   delete data.created_by;
-  data.name = title.textContent;
+  data.name = getElectrolyteNameValue();
+  setElectrolyteName(data.name);
 
   const initialMode = mode;
   let savedElectrolyte = null;
@@ -615,21 +630,30 @@ function showStatus(msg, isError = false, options = {}) {
 }
 
 async function loadUsers() {
-  const res = await fetch('/api/users');
-  const users = await res.json();
+  try {
+    const res = await fetch('/api/users');
 
-  createdBySelect.replaceChildren(new Option(
-    window.BADB_AUTH?.getAuditUserPlaceholder?.() || '— автоматически —',
-    ''
-  ));
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Ошибка загрузки пользователей');
+    }
 
-  users
-    .forEach(u => {
+    const users = await res.json();
+
+    createdBySelect.replaceChildren(new Option(
+      window.BADB_AUTH?.getAuditUserPlaceholder?.() || '— автоматически —',
+      ''
+    ));
+
+    users.forEach(u => {
       const opt = document.createElement('option');
       opt.value = u.user_id;
       opt.textContent = u.name;
       createdBySelect.appendChild(opt);
     });
+  } catch (err) {
+    showPageStatus(err.message, true, { clearAfterMs: 9000 });
+  }
 }
 
 createdBySelect.addEventListener('focus', loadUsers);
@@ -648,25 +672,29 @@ addInput.addEventListener('keydown', (e) => {
   mode = 'create';
   currentId = null;
   currentElectrolyte = null;
+  initialFormState = null;
 
-  nameInput.value = name;
-  title.textContent = name;
-  title.hidden = false;
-  nameInput.hidden = true;
+  setElectrolyteName(name);
 
   showForm();
 
   addInput.value = '';
   clearSavedElectrolyteFiles();
   updateSaveFilesButtonVisibility();
-  markFormPristine();
   window.BADB_UI?.scrollToElement(stickyHeader || form);
 });
 
 function validateRequiredFields(statusTarget = 'header') {
   const missing = [];
+  const name = getElectrolyteNameValue();
 
+  nameInput.classList.remove('required-missing');
   typeSelect.classList.remove('required-missing');
+
+  if (!name) {
+    missing.push('Название');
+    nameInput.classList.add('required-missing');
+  }
 
   if (!typeSelect.value) {
     missing.push('Тип электролита');
@@ -674,6 +702,11 @@ function validateRequiredFields(statusTarget = 'header') {
   }
 
   if (missing.length) {
+    if (!name) {
+      nameInput.hidden = false;
+      title.hidden = true;
+      nameInput.focus();
+    }
     showStatus(`Заполните обязательные поля: ${missing.join(', ')}`, true, { target: statusTarget });
     return false;
   }
@@ -753,9 +786,11 @@ form.addEventListener('input', renderElectrolyteStickyHeader);
 form.addEventListener('change', renderElectrolyteStickyHeader);
 
 title.addEventListener('click', () => {
+  nameInput.value = getElectrolyteNameValue();
   nameInput.hidden = false;
   title.hidden = true;
   nameInput.focus();
+  nameInput.select();
 });
 
 nameInput.addEventListener('keydown', (e) => {
@@ -767,11 +802,7 @@ nameInput.addEventListener('keydown', (e) => {
 
 nameInput.addEventListener('blur', () => {
   const val = nameInput.value.trim();
-  if (!val) return;
-
-  title.textContent = val;
-  title.hidden = false;
-  nameInput.hidden = true;
+  setElectrolyteName(val || title.textContent);
   renderElectrolyteStickyHeader();
 });
 
@@ -783,8 +814,24 @@ async function loadElectrolytes() {
     renderElectrolytes(data);
   } catch (err) {
     console.error(err);
+    showPageStatus(err.message || 'Ошибка загрузки списка электролитов', true, { clearAfterMs: 9000 });
   }
 }
+
+const electrolyteLogoutGuard = {
+  hasUnsavedChanges,
+  discardUnsavedChanges: resetForm,
+  message: 'Есть несохранённые изменения электролита. Выйти без сохранения?'
+};
+
+window.BADB_PAGE_LOGOUT_GUARD = electrolyteLogoutGuard;
+window.BADB_AUTH?.registerLogoutGuard?.(electrolyteLogoutGuard);
+
+window.addEventListener('beforeunload', (event) => {
+  if (!hasUnsavedChanges()) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 
 hideForm();
 loadUsers();

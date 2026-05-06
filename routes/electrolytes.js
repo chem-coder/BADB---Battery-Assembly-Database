@@ -16,6 +16,9 @@ router.get('/test', async (req, res) => {
 
 // ---------- ELECTROLYTES ----------
 
+const ALLOWED_ELECTROLYTE_TYPES = ['liquid', 'solid', 'gel'];
+const ALLOWED_ELECTROLYTE_STATUSES = ['active', 'inactive', 'archived'];
+
 async function collectElectrolyteDeleteDependencies(db, electrolyteId) {
   return collectDependencyConflicts(db, [
     {
@@ -78,8 +81,11 @@ router.post('/', auth, async (req, res) => {
     return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
   }
 
-  const allowedStatus = ['active','inactive','archived'];
-  if (!allowedStatus.includes(status)) {
+  if (!ALLOWED_ELECTROLYTE_TYPES.includes(electrolyte_type)) {
+    return res.status(400).json({ error: 'Некорректный тип электролита' });
+  }
+
+  if (!ALLOWED_ELECTROLYTE_STATUSES.includes(status)) {
     return res.status(400).json({ error: 'Некорректный статус электролита' });
   }
 
@@ -347,6 +353,18 @@ router.put('/:id', auth, async (req, res) => {
     notes,
     status
   } = req.body;
+
+  if (!name || !electrolyte_type) {
+    return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
+  }
+
+  if (!ALLOWED_ELECTROLYTE_TYPES.includes(electrolyte_type)) {
+    return res.status(400).json({ error: 'Некорректный тип электролита' });
+  }
+
+  if (status != null && !ALLOWED_ELECTROLYTE_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Некорректный статус электролита' });
+  }
 
   try {
     const current = await pool.query(
