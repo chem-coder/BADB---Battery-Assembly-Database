@@ -80,6 +80,25 @@ Future print reports should follow the same technical print-sheet spirit:
 
 Print-page styling does not need to match the interactive form styling exactly. Print pages are their own technical output format.
 
+## Planned Report Backlog
+
+Record reports to add in upcoming bounded passes:
+
+- Electrolytes;
+- Separators;
+- Projects;
+- Users.
+
+List reports to add in upcoming bounded passes:
+
+- Departments list;
+- reusable list-view print pattern for pages where printing the current list is
+  useful.
+
+Recipes may also need a report because recipes are scientific work products, but
+that should be handled as its own scoped decision with the recipe-line editor in
+view.
+
 ## Numeric And Table Guidance
 
 For numeric data:
