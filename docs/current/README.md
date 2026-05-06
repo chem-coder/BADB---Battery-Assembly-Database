@@ -16,5 +16,6 @@ This folder is for concise descriptions of how the system works now. Claims here
 - [Electrodes](electrodes.md)
 - [Materials](materials.md)
 - [Project Links](project_links.md)
+- [Release Readiness](release_readiness.md)
 - [Repo Map](repo_map.md)
 - [Traceability](traceability.md)

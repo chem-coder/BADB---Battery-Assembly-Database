@@ -33,6 +33,7 @@ Status: current
 - [Electrodes](current/electrodes.md)
 - [Materials](current/materials.md)
 - [Project Links](current/project_links.md)
+- [Release Readiness](current/release_readiness.md)
 - [Repo Map](current/repo_map.md)
 - [Traceability](current/traceability.md)
 
