@@ -1,9 +1,9 @@
 # Electrodes
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-07
 Status: current
-Verified against code: 2026-05-06
+Verified against code: 2026-05-07
 
 Source paths:
 
@@ -42,6 +42,29 @@ Current sidedness behavior:
 
 - coin-compatible cut batches must be one-sided;
 - pouch and cylindrical compatible cut batches may be one-sided or two-sided.
+
+## Vanilla Electrode Batches Page
+
+The top controls on the vanilla Electrode Batches page are real list filters
+for the main all-batches list:
+
+- text search;
+- project;
+- source tape;
+- electrode type (`cathode` / `anode`);
+- coating sidedness from the source tape;
+- target form factor (`coin`, `pouch`, `cylindrical`).
+
+With no filters selected, the page shows all electrode cut batches. Selecting a
+tape filters the main list to that tape's batches and reveals the add-batch
+button for creating a new electrode batch from the selected tape.
+
+When a batch form is open, the filter panel and main list are hidden. Exiting
+the form restores the previous filter context.
+
+The old separate "batches for selected tape" display is not used as a second
+visible list. When a tape is selected, the main filtered list is the selected
+tape's batch list.
 
 ## Individual Electrodes
 

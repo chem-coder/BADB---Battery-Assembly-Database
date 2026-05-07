@@ -257,10 +257,37 @@ body[data-page="electrodes"] .electrode-filter-field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 10rem;
+}
+
+body[data-page="electrodes"] .electrode-filter-search {
+  flex: 1 1 18rem;
+  min-width: min(18rem, 100%);
+}
+
+body[data-page="electrodes"] .electrode-tape-filter {
+  flex: 1 1 28rem;
+  max-width: 42rem;
 }
 
 body[data-page="electrodes"] .electrode-project-filter select {
   min-width: min(24rem, 100%);
+}
+
+body[data-page="electrodes"] .electrode-filter-row input,
+body[data-page="electrodes"] .electrode-filter-row select {
+  width: 100%;
+}
+
+body[data-page="electrodes"] .electrode-filter-hint,
+body[data-page="electrodes"] .electrode-filter-summary {
+  margin-right: 0;
+  color: #667085;
+  font-size: 0.86rem;
+}
+
+body[data-page="electrodes"] .electrode-filter-summary {
+  align-self: center;
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-row {

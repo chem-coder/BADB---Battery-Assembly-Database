@@ -92,31 +92,70 @@
       
       <!-- tape selection block -->
       <fieldset id="choose-tape">
-        <legend>Параметры партии <span id="dirty-electrode-filters" class="dirty_marker">Не сохранено</span></legend>
-        <div class="electrode-filter-row">
+        <legend>Фильтры партий электродов</legend>
+        <div class="electrode-filter-row electrode-filter-row-top">
+          <div class="electrode-filter-field electrode-project-filter">
+            <label for="electrodes-project_id">Проект</label>
+            <div>
+              <select id="electrodes-project_id">
+                <option value="">Все проекты</option>
+              </select>
+            </div>
+          </div>
+
           <div class="electrode-filter-field">
-            <label for="electrode-role">Фильтр по типу электрода</label>
-            <select id="electrode-role" required>
-              <option value="">— выбрать —</option>
+            <label for="electrode-role">Тип</label>
+            <select id="electrode-role">
+              <option value="">Все типы</option>
               <option value="cathode">Катоды</option>
               <option value="anode">Аноды</option>
             </select>
           </div>
-          
-          <div class="electrode-filter-field electrode-project-filter">
-            <label for="electrodes-project_id">Фильтр по проекту ленты</label>
-            <div>
-              <select id="electrodes-project_id" required>
-                <option value="">— выбрать проект —</option>
-              </select>
-            </div>
+
+          <div class="electrode-filter-field">
+            <label for="electrode-batch-filter-sidedness">Сторонность</label>
+            <select id="electrode-batch-filter-sidedness">
+              <option value="">Любая</option>
+              <option value="one_sided">1-сторонние</option>
+              <option value="two_sided">2-сторонние</option>
+            </select>
           </div>
         </div>
-        
-        <label for="electrodes-tape_id">Лента: </label>
-        <select id="electrodes-tape_id" data-source="tapes" required>
-          <option value="">— выбрать ленту —</option>
-        </select><br>
+
+        <div class="electrode-filter-row electrode-filter-row-tape">
+          <div class="electrode-filter-field electrode-tape-filter">
+            <label for="electrodes-tape_id">Лента</label>
+            <select id="electrodes-tape_id" data-source="tapes">
+              <option value="">Все ленты</option>
+            </select>
+            <span class="electrode-filter-hint">Чтобы создать новую партию электродов, выберите ленту.</span>
+          </div>
+        </div>
+
+        <div class="electrode-filter-row electrode-filter-row-bottom">
+          <label class="electrode-filter-field electrode-filter-search" for="electrode-batch-filter-text">
+            <span>Поиск</span>
+            <input
+              id="electrode-batch-filter-text"
+              type="search"
+              placeholder="ID партии, лента, проект, заметки..."
+              autocomplete="off"
+            >
+          </label>
+
+          <div class="electrode-filter-field">
+            <label for="electrode-batch-filter-form-factor">Форм-фактор</label>
+            <select id="electrode-batch-filter-form-factor">
+              <option value="">Любой</option>
+              <option value="coin">Монеточный</option>
+              <option value="pouch">Пакетный</option>
+              <option value="cylindrical">Цилиндрический</option>
+            </select>
+          </div>
+
+          <button id="clearElectrodeBatchFiltersBtn" type="button">Сбросить</button>
+          <span id="electrode-batch-filter-summary" class="electrode-filter-summary" aria-live="polite"></span>
+        </div>
       </fieldset>
 
       <div id="electrode_sticky_header" class="record-sticky-header" hidden>
@@ -382,13 +421,11 @@
       
       <div id="cut-batches-section">
         <button type="button" id="add-cut-batch-btn" hidden>+ Добавить новую партию</button>
-        <h3>Вырезанные партии электродов</h3>
-        <div id="no-batches-msg">
+        <h3 id="batch-title" hidden></h3>
+        <div id="no-batches-msg" hidden>
           Пока нет вырезанных партий электродов
         </div>
-        
-        <h3 id="batch-title"></h3>
-        <ul id="current-cut-batches-list" class="users-list"></ul>
+        <ul id="current-cut-batches-list" class="users-list" hidden></ul>
       </div>
 
     </form>
@@ -401,7 +438,7 @@
 
     <script src="/js/auth.js"></script>
     <script src="/js/badb-ui.js?v=badb-ui-20260507a"></script>
-    <script src="/js/2-electrodes.js?v=electrode-sticky-header-20260505a"></script>
+    <script src="/js/2-electrodes.js?v=electrode-list-filters-20260507a"></script>
 
   </body>
 

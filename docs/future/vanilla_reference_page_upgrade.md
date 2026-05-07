@@ -30,6 +30,9 @@ Light code checks through 2026-05-07 also found:
   workflow/status label, project, tape type, and coating sidedness;
 - Batteries has compact page-local list filters for text, derived status, and
   form factor;
+- Electrode Batches has page-local list filters for text, project, tape, type,
+  source-tape sidedness, and target form factor; tape selection reveals the
+  add-batch action instead of creating a duplicate selected-tape list;
 - Electrolytes uses a sticky record header and helper-backed scroll/status behavior;
 - Electrolytes has page-local client-side list filters for text, status, and type;
 - Electrolytes delete confirmation uses `DELETE ELECTROLYTE <id>`;
