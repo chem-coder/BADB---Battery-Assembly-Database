@@ -15,6 +15,13 @@ const tapeStickyMeta = document.getElementById('tape_sticky_meta');
 const tapeGlobalDirty = document.getElementById('tape-global-dirty');
 const recipeMaterialsSaveBtn = document.getElementById('0-recipe-materials-save-btn');
 const tapesList = document.getElementById('tapesList');
+const tapeListFilterTextInput = document.getElementById('tape-list-filter-text');
+const tapeListFilterStatusSelect = document.getElementById('tape-list-filter-status');
+const tapeListFilterProjectSelect = document.getElementById('tape-list-filter-project');
+const tapeListFilterRoleSelect = document.getElementById('tape-list-filter-role');
+const tapeListFilterSidednessSelect = document.getElementById('tape-list-filter-sidedness');
+const clearTapeListFiltersBtn = document.getElementById('clearTapeListFiltersBtn');
+const tapeListFilterSummary = document.getElementById('tape-list-filter-summary');
 
 const createdBySelect = document.getElementById('tape-created-by');
 const dryingOperatorSelect = document.getElementById('0-drying_am-operator');
@@ -654,6 +661,7 @@ function setReferenceUsers(users) {
 
 function setReferenceProjects(projects) {
   state.reference.projects = Array.isArray(projects) ? projects : [];
+  renderTapeProjectFilterOptions();
 }
 
 function setReferenceCurrentRecipes(recipes) {
@@ -2758,14 +2766,279 @@ function recalculatePlannedMasses() {
   setDerivedCalculationState({ expandedCalculation: expandedData });
 }
 
-function renderTapesList() {
-  tapesList.innerHTML = '';
+const TAPE_LIST_STATUS_ORDER = [
+  'recipe_materials',
+  'drying_am',
+  'weighing',
+  'mixing',
+  'coating',
+  'drying_tape',
+  'calendering',
+  'drying_pressed_tape',
+  'finished'
+];
 
-  if (!Array.isArray(state.tapes.items) || state.tapes.items.length === 0) {
-    const li = document.createElement('li');
-    li.className = 'user-row';
-    li.textContent = 'Ленты не найдены';
-    tapesList.appendChild(li);
+function normalizeTapeListFilterText(value) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('ru-RU')
+    .replace(/ё/g, 'е');
+}
+
+function getTapeListFilterState() {
+  return {
+    text: normalizeTapeListFilterText(tapeListFilterTextInput?.value),
+    status: tapeListFilterStatusSelect?.value || '',
+    projectId: tapeListFilterProjectSelect?.disabled
+      ? ''
+      : tapeListFilterProjectSelect?.value || '',
+    role: tapeListFilterRoleSelect?.value || '',
+    sidedness: tapeListFilterSidednessSelect?.value || ''
+  };
+}
+
+function hasActiveTapeListFilters(filters = getTapeListFilterState()) {
+  return Boolean(
+    filters.text ||
+    filters.status ||
+    filters.projectId ||
+    filters.role ||
+    filters.sidedness
+  );
+}
+
+function getTapeCoatingSidednessLabel(sidedness) {
+  if (sidedness === 'one_sided') return '1-сторонняя';
+  if (sidedness === 'two_sided') return '2-сторонняя';
+  return sidedness || '';
+}
+
+function getTapeListRoleFilterValue(tape) {
+  return String(tape?.role || tape?.tape_type || '').trim();
+}
+
+function getTapeListSidednessFilterValue(tape) {
+  return String(tape?.coating_sidedness || '').trim();
+}
+
+function getTapeListStatusLabel(tape) {
+  return tape?.workflow_status_label || 'Выбор экземпляров';
+}
+
+function getTapeListStatusFilterValue(tape) {
+  const code = String(tape?.workflow_status_code || '').trim();
+  if (code) return code;
+
+  const label = normalizeTapeListFilterText(getTapeListStatusLabel(tape));
+  return label ? `label:${label}` : 'recipe_materials';
+}
+
+function getTapeListStatusSortRank(value) {
+  const rank = TAPE_LIST_STATUS_ORDER.indexOf(value);
+  return rank === -1 ? TAPE_LIST_STATUS_ORDER.length : rank;
+}
+
+function renderTapeStatusFilterOptions(tapes) {
+  if (!tapeListFilterStatusSelect) return;
+
+  const selectedValue = tapeListFilterStatusSelect.value;
+  const statusesByValue = new Map();
+
+  tapes.forEach((tape) => {
+    const value = getTapeListStatusFilterValue(tape);
+    if (!statusesByValue.has(value)) {
+      statusesByValue.set(value, getTapeListStatusLabel(tape));
+    }
+  });
+
+  const options = Array.from(statusesByValue.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) =>
+      getTapeListStatusSortRank(a.value) - getTapeListStatusSortRank(b.value) ||
+      a.label.localeCompare(b.label, 'ru')
+    );
+
+  tapeListFilterStatusSelect.innerHTML = '';
+
+  const allOption = document.createElement('option');
+  allOption.value = '';
+  allOption.textContent = 'Все статусы';
+  tapeListFilterStatusSelect.appendChild(allOption);
+
+  options.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.value;
+    option.textContent = item.label;
+    tapeListFilterStatusSelect.appendChild(option);
+  });
+
+  tapeListFilterStatusSelect.value = statusesByValue.has(selectedValue)
+    ? selectedValue
+    : '';
+}
+
+function getProjectNameById(projectId) {
+  const project = state.reference.projects.find((item) =>
+    String(item.project_id) === String(projectId)
+  );
+  return project?.name || '';
+}
+
+function renderTapeProjectFilterOptions() {
+  if (!tapeListFilterProjectSelect) return;
+
+  const selectedValue = tapeListFilterProjectSelect.value;
+  const projects = Array.isArray(state.reference.projects)
+    ? state.reference.projects
+    : [];
+  const seenProjectIds = new Set();
+
+  tapeListFilterProjectSelect.innerHTML = '';
+
+  const allOption = document.createElement('option');
+  allOption.value = '';
+  allOption.textContent = 'Все проекты';
+  tapeListFilterProjectSelect.appendChild(allOption);
+
+  projects.forEach((project) => {
+    const projectId = String(project.project_id || '');
+    if (!projectId || seenProjectIds.has(projectId)) return;
+
+    const option = document.createElement('option');
+    option.value = projectId;
+    option.textContent = project.name || `Проект #${projectId}`;
+    tapeListFilterProjectSelect.appendChild(option);
+    seenProjectIds.add(projectId);
+  });
+
+  tapeListFilterProjectSelect.disabled = seenProjectIds.size === 0;
+  tapeListFilterProjectSelect.value = seenProjectIds.has(selectedValue)
+    ? selectedValue
+    : '';
+}
+
+function getTapeProjectSearchLabels(tape) {
+  const labels = [
+    tape?.project_names,
+    tape?.project_name
+  ];
+
+  getTapeProjectIds(tape).forEach((projectId) => {
+    labels.push(projectId);
+    labels.push(getProjectNameById(projectId));
+  });
+
+  return labels.filter(Boolean);
+}
+
+function getTapeVisibleListLabel(tape) {
+  const coatingSidednessLabel = getTapeCoatingSidednessLabel(tape?.coating_sidedness);
+  const baseLabel = `#${tape?.tape_id} | ${tape?.name || '— без названия —'}`;
+  return coatingSidednessLabel
+    ? `${baseLabel} — ${coatingSidednessLabel}`
+    : baseLabel;
+}
+
+function getTapeListSearchText(tape) {
+  const coatingSidednessLabel = getTapeCoatingSidednessLabel(tape?.coating_sidedness);
+
+  return normalizeTapeListFilterText([
+    tape?.tape_id,
+    tape?.tape_id ? `#${tape.tape_id}` : '',
+    getTapeVisibleListLabel(tape),
+    tape?.name,
+    tape?.notes,
+    tape?.comments,
+    tape?.method_comments,
+    tape?.recipe_name,
+    tape?.recipe_label,
+    tape?.tape_recipe_id,
+    tape?.material_name,
+    tape?.material_names,
+    tape?.active_material_name,
+    tape?.active_materials,
+    tape?.recipe_materials,
+    coatingSidednessLabel,
+    tape?.coating_label,
+    tape?.coating_name,
+    tape?.coating_method_label,
+    tape?.coating_method_name,
+    getTapeListStatusLabel(tape),
+    tape?.created_by_name,
+    tape?.created_by,
+    ...getTapeProjectSearchLabels(tape)
+  ].filter(Boolean).join(' '));
+}
+
+function matchesTapeListFilters(tape, filters = getTapeListFilterState()) {
+  if (filters.status && getTapeListStatusFilterValue(tape) !== filters.status) {
+    return false;
+  }
+
+  if (filters.projectId && !getTapeProjectIds(tape).includes(filters.projectId)) {
+    return false;
+  }
+
+  if (filters.role && getTapeListRoleFilterValue(tape) !== filters.role) {
+    return false;
+  }
+
+  if (filters.sidedness && getTapeListSidednessFilterValue(tape) !== filters.sidedness) {
+    return false;
+  }
+
+  if (filters.text && !getTapeListSearchText(tape).includes(filters.text)) {
+    return false;
+  }
+
+  return true;
+}
+
+function updateTapeListFilterSummary(filteredCount, totalCount) {
+  const hasFilters = hasActiveTapeListFilters();
+
+  if (clearTapeListFiltersBtn) {
+    clearTapeListFiltersBtn.disabled = !hasFilters;
+  }
+
+  if (!tapeListFilterSummary) return;
+
+  if (totalCount === 0) {
+    tapeListFilterSummary.textContent = 'Нет лент';
+    return;
+  }
+
+  tapeListFilterSummary.textContent = hasFilters
+    ? `Показано ${filteredCount} из ${totalCount}`
+    : `Всего ${totalCount}`;
+}
+
+function renderTapeEmptyListRow(totalCount, hasFilters) {
+  const li = document.createElement('li');
+  li.className = 'user-row tape-empty-row';
+  li.textContent = totalCount === 0
+    ? 'Ленты пока не добавлены.'
+    : hasFilters
+      ? 'Ленты по выбранным фильтрам не найдены.'
+      : 'Ленты не найдены.';
+  tapesList.appendChild(li);
+}
+
+function renderTapesList() {
+  const tapes = Array.isArray(state.tapes.items) ? state.tapes.items : [];
+
+  renderTapeStatusFilterOptions(tapes);
+  renderTapeProjectFilterOptions();
+
+  const filters = getTapeListFilterState();
+  const hasFilters = hasActiveTapeListFilters(filters);
+  const filteredTapes = tapes.filter((tape) => matchesTapeListFilters(tape, filters));
+
+  tapesList.innerHTML = '';
+  updateTapeListFilterSummary(filteredTapes.length, tapes.length);
+
+  if (filteredTapes.length === 0) {
+    renderTapeEmptyListRow(tapes.length, hasFilters);
     return;
   }
 
@@ -2776,7 +3049,7 @@ function renderTapesList() {
     window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
   }
   
-  state.tapes.items.forEach(t => {
+  filteredTapes.forEach(t => {
     const li = document.createElement('li');
     li.className = 'user-row';
     
@@ -2786,12 +3059,7 @@ function renderTapesList() {
     info.title = 'Открыть ленту';
     info.setAttribute('aria-label', `Открыть ленту #${t.tape_id}`);
 
-    const coatingSidednessLabel =
-      t.coating_sidedness === 'one_sided'
-        ? '1-сторонняя'
-        : t.coating_sidedness === 'two_sided'
-          ? '2-сторонняя'
-          : '';
+    const coatingSidednessLabel = getTapeCoatingSidednessLabel(t.coating_sidedness);
     
     const nameSpan = document.createElement('strong');
     nameSpan.textContent = coatingSidednessLabel
@@ -2800,7 +3068,7 @@ function renderTapesList() {
 
     const statusSpan = document.createElement('small');
     statusSpan.style.color = '#666';
-    statusSpan.textContent = ` — Статус: ${t.workflow_status_label || 'Выбор экземпляров'}`;
+    statusSpan.textContent = ` — Статус: ${getTapeListStatusLabel(t)}`;
     
     const dateSpan = document.createElement('small');
     const displayDate = t.updated_at || t.created_at;
@@ -4037,6 +4305,38 @@ clearBtn.addEventListener('click', async () => {
   
   resetForm();
 });
+
+if (tapeListFilterTextInput) {
+  tapeListFilterTextInput.addEventListener('input', renderTapesList);
+}
+
+if (tapeListFilterStatusSelect) {
+  tapeListFilterStatusSelect.addEventListener('change', renderTapesList);
+}
+
+if (tapeListFilterProjectSelect) {
+  tapeListFilterProjectSelect.addEventListener('change', renderTapesList);
+}
+
+if (tapeListFilterRoleSelect) {
+  tapeListFilterRoleSelect.addEventListener('change', renderTapesList);
+}
+
+if (tapeListFilterSidednessSelect) {
+  tapeListFilterSidednessSelect.addEventListener('change', renderTapesList);
+}
+
+if (clearTapeListFiltersBtn) {
+  clearTapeListFiltersBtn.addEventListener('click', () => {
+    if (tapeListFilterTextInput) tapeListFilterTextInput.value = '';
+    if (tapeListFilterStatusSelect) tapeListFilterStatusSelect.value = '';
+    if (tapeListFilterProjectSelect) tapeListFilterProjectSelect.value = '';
+    if (tapeListFilterRoleSelect) tapeListFilterRoleSelect.value = '';
+    if (tapeListFilterSidednessSelect) tapeListFilterSidednessSelect.value = '';
+    renderTapesList();
+    tapeListFilterTextInput?.focus();
+  });
+}
 
 deleteTapeBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('deleteTapeBtn', async () => {
   const tapeId = state.selection.currentTapeId;

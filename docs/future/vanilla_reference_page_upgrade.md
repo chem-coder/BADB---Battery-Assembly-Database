@@ -23,9 +23,11 @@ Current workflow pages already provide the design reference:
 - Electrode Batches;
 - Batteries.
 
-Light code check on 2026-05-06 also found:
+Light code checks through 2026-05-07 also found:
 
 - `public/js/badb-ui.js` exists as a shared vanilla UI helper;
+- Tapes has compact page-local list filters for text, current visible
+  workflow/status label, project, tape type, and coating sidedness;
 - Batteries has compact page-local list filters for text, derived status, and
   form factor;
 - Electrolytes uses a sticky record header and helper-backed scroll/status behavior;

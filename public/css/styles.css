@@ -571,6 +571,42 @@ body[data-page="BAL"] .battery-filter-summary {
   align-self: center;
 }
 
+body[data-page="tapes"] .tape-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.85rem;
+  align-items: end;
+  margin: 0.35rem 0 0.8rem;
+}
+
+body[data-page="tapes"] .tape-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 10rem;
+}
+
+body[data-page="tapes"] .tape-filter-field:first-child {
+  flex: 1 1 18rem;
+  min-width: min(18rem, 100%);
+}
+
+body[data-page="tapes"] .tape-filter-field span,
+body[data-page="tapes"] .tape-filter-summary {
+  margin-right: 0;
+  color: #667085;
+  font-size: 0.86rem;
+}
+
+body[data-page="tapes"] .tape-filter-row input,
+body[data-page="tapes"] .tape-filter-row select {
+  width: 100%;
+}
+
+body[data-page="tapes"] .tape-filter-summary {
+  align-self: center;
+}
+
 body[data-page="tapes"] #printBtn,
 body[data-page="tapes"] #clearBtn,
 body[data-page="electrodes"] #printElectrodeBatchBtn,
