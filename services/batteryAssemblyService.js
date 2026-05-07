@@ -4,70 +4,150 @@ const {
 } = require('./batteryCapacityService');
 const { attachBatteryProjects } = require('./batteryProjectService');
 
-async function ensureBatteryAssembledStatus(queryable, batteryId) {
-  await queryable.query(
+function normalizeAssemblyCompleteness(row) {
+  if (!row) return null;
+
+  const completeness = {
+    battery_id: row.battery_id,
+    status: row.status || null,
+    has_config: Boolean(row.has_config),
+    has_sources: Boolean(row.has_sources),
+    has_electrodes: Boolean(row.has_electrodes),
+    has_separator: Boolean(row.has_separator),
+    has_electrolyte: Boolean(row.has_electrolyte)
+  };
+
+  completeness.is_complete = Boolean(
+    completeness.has_config &&
+    completeness.has_sources &&
+    completeness.has_electrodes &&
+    completeness.has_separator &&
+    completeness.has_electrolyte
+  );
+
+  return completeness;
+}
+
+async function getBatteryAssemblyCompleteness(queryable, batteryId) {
+  const result = await queryable.query(
     `
-    WITH readiness AS (
+    WITH battery_context AS (
       SELECT
-        (
-          EXISTS (
-            SELECT 1
-            FROM batteries b
-            JOIN battery_coin_config c ON c.battery_id = b.battery_id
-            WHERE b.battery_id = $1
-              AND b.form_factor = 'coin'
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM batteries b
-            JOIN battery_pouch_config p ON p.battery_id = b.battery_id
-            WHERE b.battery_id = $1
-              AND b.form_factor = 'pouch'
-              AND p.pouch_case_size_code IS NOT NULL
-              AND (
-                p.pouch_case_size_code <> 'other'
-                OR NULLIF(BTRIM(p.pouch_case_size_other), '') IS NOT NULL
-              )
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM batteries b
-            JOIN battery_cyl_config cy ON cy.battery_id = b.battery_id
-            WHERE b.battery_id = $1
-              AND b.form_factor = 'cylindrical'
-          )
-        ) AS has_config,
-        EXISTS (
-          SELECT 1 FROM battery_electrode_sources es WHERE es.battery_id = $1
-        ) AS has_sources,
-        EXISTS (
-          SELECT 1 FROM battery_electrodes el WHERE el.battery_id = $1
-        ) AS has_electrodes,
-        EXISTS (
-          SELECT 1 FROM battery_sep_config s WHERE s.battery_id = $1
-        ) AS has_separator,
-        EXISTS (
-          SELECT 1 FROM battery_electrolyte e WHERE e.battery_id = $1
-        ) AS has_electrolyte
+        b.battery_id,
+        b.form_factor,
+        b.status,
+        cc.coin_cell_mode,
+        cc.half_cell_type,
+        cc.coin_size_code,
+        pc.pouch_case_size_code,
+        pc.pouch_case_size_other,
+        cy.cyl_size_code
+      FROM batteries b
+      LEFT JOIN battery_coin_config cc
+        ON cc.battery_id = b.battery_id
+      LEFT JOIN battery_pouch_config pc
+        ON pc.battery_id = b.battery_id
+      LEFT JOIN battery_cyl_config cy
+        ON cy.battery_id = b.battery_id
+      WHERE b.battery_id = $1
+    ),
+    source_counts AS (
+      SELECT
+        COUNT(*) FILTER (
+          WHERE role = 'cathode'
+            AND tape_id IS NOT NULL
+            AND cut_batch_id IS NOT NULL
+        ) AS cathode_sources,
+        COUNT(*) FILTER (
+          WHERE role = 'anode'
+            AND tape_id IS NOT NULL
+            AND cut_batch_id IS NOT NULL
+        ) AS anode_sources
+      FROM battery_electrode_sources
+      WHERE battery_id = $1
+    ),
+    electrode_counts AS (
+      SELECT
+        COUNT(*) FILTER (WHERE role = 'cathode') AS cathodes,
+        COUNT(*) FILTER (WHERE role = 'anode') AS anodes
+      FROM battery_electrodes
+      WHERE battery_id = $1
     )
-    UPDATE batteries b
-    SET status = 'assembled'
-    FROM readiness r
-    WHERE b.battery_id = $1
-      AND (b.status IS NULL OR b.status = 'disassembled')
-      AND r.has_config
-      AND r.has_sources
-      AND r.has_electrodes
-      AND r.has_separator
-      AND r.has_electrolyte
+    SELECT
+      bc.battery_id,
+      bc.status,
+      CASE
+        WHEN bc.form_factor = 'coin' THEN
+          bc.coin_cell_mode IS NOT NULL
+          AND bc.coin_size_code IS NOT NULL
+          AND (
+            bc.coin_cell_mode <> 'half_cell'
+            OR bc.half_cell_type IS NOT NULL
+          )
+        WHEN bc.form_factor = 'pouch' THEN
+          bc.pouch_case_size_code IS NOT NULL
+          AND (
+            bc.pouch_case_size_code <> 'other'
+            OR NULLIF(BTRIM(bc.pouch_case_size_other), '') IS NOT NULL
+          )
+        WHEN bc.form_factor = 'cylindrical' THEN
+          bc.cyl_size_code IS NOT NULL
+        ELSE false
+      END AS has_config,
+      CASE
+        WHEN bc.form_factor = 'coin'
+          AND bc.coin_cell_mode = 'half_cell'
+          AND bc.half_cell_type = 'cathode_vs_li'
+          THEN sc.cathode_sources > 0 AND sc.anode_sources = 0
+        WHEN bc.form_factor = 'coin'
+          AND bc.coin_cell_mode = 'half_cell'
+          AND bc.half_cell_type = 'anode_vs_li'
+          THEN sc.anode_sources > 0 AND sc.cathode_sources = 0
+        WHEN bc.form_factor IN ('coin', 'pouch', 'cylindrical')
+          THEN sc.cathode_sources > 0 AND sc.anode_sources > 0
+        ELSE false
+      END AS has_sources,
+      CASE
+        WHEN bc.form_factor = 'coin'
+          AND bc.coin_cell_mode = 'half_cell'
+          AND bc.half_cell_type = 'cathode_vs_li'
+          THEN ec.cathodes = 1 AND ec.anodes = 0
+        WHEN bc.form_factor = 'coin'
+          AND bc.coin_cell_mode = 'half_cell'
+          AND bc.half_cell_type = 'anode_vs_li'
+          THEN ec.anodes = 1 AND ec.cathodes = 0
+        WHEN bc.form_factor = 'coin'
+          THEN ec.cathodes = 1 AND ec.anodes = 1
+        WHEN bc.form_factor IN ('pouch', 'cylindrical')
+          THEN ec.cathodes >= 1
+            AND ec.anodes >= 1
+            AND (ec.anodes = ec.cathodes OR ec.anodes = ec.cathodes + 1)
+        ELSE false
+      END AS has_electrodes,
+      EXISTS (
+        SELECT 1
+        FROM battery_sep_config s
+        WHERE s.battery_id = $1
+          AND s.separator_id IS NOT NULL
+      ) AS has_separator,
+      EXISTS (
+        SELECT 1
+        FROM battery_electrolyte e
+        WHERE e.battery_id = $1
+          AND e.electrolyte_id IS NOT NULL
+          AND e.electrolyte_total_ul IS NOT NULL
+      ) AS has_electrolyte
+    FROM battery_context bc
+    CROSS JOIN source_counts sc
+    CROSS JOIN electrode_counts ec
     `,
     [batteryId]
   );
+
+  return normalizeAssemblyCompleteness(result.rows[0]);
 }
 
 async function fetchBatteryAssembly(queryable, batteryId) {
-  await ensureBatteryAssembledStatus(queryable, batteryId);
-
   const result = await queryable.query(
     `
     SELECT jsonb_build_object(
@@ -181,8 +261,6 @@ async function fetchBatteryAssembly(queryable, batteryId) {
 }
 
 async function fetchBatteryReport(queryable, batteryId) {
-  await ensureBatteryAssembledStatus(queryable, batteryId);
-
   const result = await queryable.query(
     `
     SELECT jsonb_build_object(
@@ -399,5 +477,6 @@ async function fetchBatteryReport(queryable, batteryId) {
 
 module.exports = {
   fetchBatteryAssembly,
-  fetchBatteryReport
+  fetchBatteryReport,
+  getBatteryAssemblyCompleteness
 };

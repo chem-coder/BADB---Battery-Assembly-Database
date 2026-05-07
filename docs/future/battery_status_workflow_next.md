@@ -2,8 +2,8 @@
 
 Created: 2026-05-07
 Edited: 2026-05-07
-Status: future decision
-Verified against code: not implemented; decision recorded 2026-05-07
+Status: partially implemented
+Verified against code: status workflow implemented 2026-05-07; remaining future work listed below
 
 Source paths to inspect before implementation:
 
@@ -15,8 +15,10 @@ Source paths to inspect before implementation:
 - `docs/current/batteries.md`
 - `docs/rules/battery_lifecycle_rules.md`
 
-This document records the desired battery status behavior. It is not release
-evidence until the code is updated and checked.
+This document records the battery status decision and remaining follow-up work.
+The core status workflow below was implemented on 2026-05-07; rework/reopen
+actions, list filters, and any explicit old-data cleanup pass remain future
+work.
 
 ## Target Status Model
 
@@ -89,6 +91,8 @@ Possible action labels:
 The exact UI label can be decided during implementation. The important rule is
 that reopening/rework should be explicit and auditable.
 
+Status as of 2026-05-07: not implemented in this cleanup pass.
+
 ## List Filters
 
 The Batteries page needs top-of-list filters so users can find records without
@@ -102,6 +106,14 @@ Minimum useful filters:
 - text search by battery id/notes/material labels where practical.
 
 Status filtering should include the derived `Открыт` state.
+
+Status as of 2026-05-07: not implemented in this cleanup pass.
+
+## Old Data Cleanup
+
+Ordinary read/report endpoints no longer rewrite status. If old complete records
+still have blank/`NULL` or `disassembled` status, handle them later with an
+explicit migration, maintenance command, or deliberate cleanup pass.
 
 ## Implementation Guardrails
 

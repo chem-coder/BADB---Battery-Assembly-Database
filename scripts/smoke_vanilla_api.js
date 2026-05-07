@@ -973,21 +973,21 @@ async function runWriteSmoke(client, seed, context) {
       project_id: projectId,
       form_factor: 'coin',
       created_by: forgedUserId,
-      status: 'assembled',
       battery_notes: `Codex Smoke Battery ${suffix} Updated`
     });
     client.assertEqual(patchedBattery.created_by, userId, 'battery update preserves server-owned created_by');
     await client.patch(`/api/batteries/${made.batteryId}`, {
+      status: 'assembled'
+    }, [400]);
+    await client.patch(`/api/batteries/${made.batteryId}`, {
       project_id: made.projectId,
       form_factor: 'coin',
-      status: 'assembled',
       battery_notes: `Codex Smoke Battery ${suffix} Updated`
     });
     await client.expectDependencyConflict('DELETE', `/api/projects/${made.projectId}`);
     await client.patch(`/api/batteries/${made.batteryId}`, {
       project_id: projectId,
       form_factor: 'coin',
-      status: 'assembled',
       battery_notes: `Codex Smoke Battery ${suffix} Updated`
     });
     await client.post('/api/batteries/battery_coin_config', {
@@ -1364,6 +1364,38 @@ async function runWriteSmoke(client, seed, context) {
     ];
     await client.put(`/api/batteries/battery_electrodes/${made.batteryId}`, batteryStackPayload);
     await client.put(`/api/batteries/battery_electrodes/${made.batteryId}`, batteryStackPayload);
+    await client.patch(`/api/batteries/battery_sep_config/${made.batteryId}`, {
+      separator_id: made.separatorId,
+      separator_notes: 'smoke complete separator'
+    });
+    await client.patch(`/api/batteries/battery_electrolyte/${made.batteryId}`, {
+      electrolyte_id: made.electrolyteId,
+      electrolyte_notes: 'smoke complete electrolyte',
+      electrolyte_total_ul: 50
+    });
+    const assembledStatusBattery = await client.patch(`/api/batteries/${made.batteryId}`, {
+      status: 'assembled'
+    });
+    client.assertEqual(assembledStatusBattery.status, 'assembled', 'battery status can become assembled after required records exist');
+    const testingStatusBattery = await client.patch(`/api/batteries/${made.batteryId}`, {
+      status: 'testing'
+    });
+    client.assertEqual(testingStatusBattery.status, 'testing', 'battery status can move to testing after assembly completion');
+    await client.patch(`/api/batteries/${made.batteryId}`, {
+      status: ''
+    }, [400]);
+    await client.patch(`/api/batteries/${made.batteryId}`, {
+      status: 'disassembled'
+    }, [400]);
+    await client.patch(`/api/batteries/battery_sep_config/${made.batteryId}`, {
+      separator_id: null,
+      separator_notes: null
+    });
+    await client.patch(`/api/batteries/battery_electrolyte/${made.batteryId}`, {
+      electrolyte_id: existingElectrolyteId,
+      electrolyte_notes: 'smoke electrolyte dependency reset',
+      electrolyte_total_ul: null
+    });
     await client.expectDependencyConflict('DELETE', `/api/electrodes/${made.electrodeId}`);
     await client.put(`/api/batteries/battery_electrodes/${made.batteryId}`, []);
     const releasedElectrode = (await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/electrodes`))

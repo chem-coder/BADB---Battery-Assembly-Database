@@ -317,6 +317,23 @@ const BATTERY_PHASE_TWO_SECTIONS = new Set([
   'battery_electrochem'
 ]);
 
+const BATTERY_OPEN_STATUS_LABEL = 'Открыт';
+
+const BATTERY_SELECTABLE_STATUS_OPTIONS = [
+  { value: 'assembled', label: 'Собран' },
+  { value: 'testing', label: 'На тестировании' },
+  { value: 'completed', label: 'Завершён' },
+  { value: 'failed', label: 'Брак' }
+];
+
+const BATTERY_STATUS_LABELS = BATTERY_SELECTABLE_STATUS_OPTIONS.reduce((acc, option) => {
+  acc[option.value] = option.label;
+  return acc;
+}, {
+  '': BATTERY_OPEN_STATUS_LABEL,
+  disassembled: BATTERY_OPEN_STATUS_LABEL
+});
+
 function getDefaultBatterySectionLifecycleState() {
   return BATTERY_SECTION_KEYS.reduce((acc, sectionKey) => {
     acc[sectionKey] = {
@@ -1450,6 +1467,21 @@ function isCommentField(el) {
   );
 }
 
+function hasBatteryAssemblySourceRole(data, role) {
+  return (Array.isArray(data?.electrode_sources) ? data.electrode_sources : [])
+    .some(source =>
+      source.role === role &&
+      hasMeaningfulValue(source.tape_id) &&
+      hasMeaningfulValue(source.cut_batch_id)
+    );
+}
+
+function getBatteryAssemblyElectrodeRoleCount(data, role) {
+  return (Array.isArray(data?.electrodes) ? data.electrodes : [])
+    .filter(electrode => electrode.role === role)
+    .length;
+}
+
 function isBatteryAssemblyComplete(data) {
   const formFactor = data?.battery?.form_factor || null;
   const pouchConfig = data?.pouch_config || null;
@@ -1461,19 +1493,52 @@ function isBatteryAssemblyComplete(data) {
     );
 
   const hasConfig =
-    formFactor === 'coin' ? Boolean(data.coin_config)
-    : formFactor === 'pouch' ? hasPouchConfig
-    : formFactor === 'cylindrical' ? Boolean(data.cyl_config)
-    : Boolean(data.coin_config || data.pouch_config || data.cyl_config);
+    formFactor === 'coin'
+      ? Boolean(
+        data.coin_config?.coin_cell_mode &&
+        data.coin_config?.coin_size_code &&
+        (
+          data.coin_config.coin_cell_mode !== 'half_cell' ||
+          data.coin_config.half_cell_type
+        )
+      )
+    : formFactor === 'pouch'
+      ? hasPouchConfig
+    : formFactor === 'cylindrical'
+      ? Boolean(data.cyl_config?.cyl_size_code)
+    : false;
 
+  const cathodeSources = hasBatteryAssemblySourceRole(data, 'cathode');
+  const anodeSources = hasBatteryAssemblySourceRole(data, 'anode');
+  const coinMode = data?.coin_config?.coin_cell_mode || null;
+  const halfCellType = data?.coin_config?.half_cell_type || null;
   const hasSources =
-  Array.isArray(data.electrode_sources) && data.electrode_sources.length > 0;
+    formFactor === 'coin' && coinMode === 'half_cell' && halfCellType === 'cathode_vs_li'
+      ? cathodeSources && !anodeSources
+    : formFactor === 'coin' && coinMode === 'half_cell' && halfCellType === 'anode_vs_li'
+      ? anodeSources && !cathodeSources
+    : ['coin', 'pouch', 'cylindrical'].includes(formFactor)
+      ? cathodeSources && anodeSources
+    : false;
 
+  const cathodes = getBatteryAssemblyElectrodeRoleCount(data, 'cathode');
+  const anodes = getBatteryAssemblyElectrodeRoleCount(data, 'anode');
   const hasElectrodes =
-  Array.isArray(data.electrodes) && data.electrodes.length > 0;
+    formFactor === 'coin' && coinMode === 'half_cell' && halfCellType === 'cathode_vs_li'
+      ? cathodes === 1 && anodes === 0
+    : formFactor === 'coin' && coinMode === 'half_cell' && halfCellType === 'anode_vs_li'
+      ? anodes === 1 && cathodes === 0
+    : formFactor === 'coin'
+      ? cathodes === 1 && anodes === 1
+    : formFactor === 'pouch' || formFactor === 'cylindrical'
+      ? cathodes >= 1 && anodes >= 1 && (anodes === cathodes || anodes === cathodes + 1)
+    : false;
 
-  const hasAssembly =
-  Boolean(data.separator) && Boolean(data.electrolyte);
+  const hasAssembly = Boolean(
+    data.separator?.separator_id &&
+    data.electrolyte?.electrolyte_id &&
+    hasMeaningfulValue(data.electrolyte?.electrolyte_total_ul)
+  );
 
   return hasConfig && hasSources && hasElectrodes && hasAssembly;
 }
@@ -1763,17 +1828,39 @@ function getBatteryProjectLabel() {
   );
 }
 
-function getBatteryStatusLabel(status) {
-  const statusLabels = {
-    '': 'В сборке',
-    assembled: 'Собран',
-    testing: 'На тестировании',
-    completed: 'Завершён',
-    failed: 'Брак',
-    disassembled: 'Разобран'
-  };
+function normalizeBatteryStatusForDisplay(status) {
+  return status === 'disassembled'
+    ? ''
+    : status || '';
+}
 
-  return statusLabels[status || ''] || status || '';
+function getBatteryStatusLabel(status) {
+  const normalizedStatus = normalizeBatteryStatusForDisplay(status);
+
+  return BATTERY_STATUS_LABELS[normalizedStatus] || normalizedStatus || BATTERY_OPEN_STATUS_LABEL;
+}
+
+function renderBatteryStatusOptions(select, { includeOpen = false } = {}) {
+  const options = [];
+
+  if (includeOpen) {
+    options.push({ value: '', label: BATTERY_OPEN_STATUS_LABEL });
+  }
+
+  options.push(...BATTERY_SELECTABLE_STATUS_OPTIONS);
+
+  select.replaceChildren(
+    ...options.map((option) => new Option(option.label, option.value))
+  );
+}
+
+function getBatteryStatusControlValue(status) {
+  const normalizedStatus = normalizeBatteryStatusForDisplay(status);
+  const isSelectable = BATTERY_SELECTABLE_STATUS_OPTIONS.some(
+    option => option.value === normalizedStatus
+  );
+
+  return isSelectable ? normalizedStatus : 'assembled';
 }
 
 function renderBatteryStickyHeader() {
@@ -1934,13 +2021,15 @@ function renderBatteryStatusControl() {
   if (!select) return;
 
   if (!state.selection.currentBatteryId || !state.stack.loadedAssemblyComplete) {
+    renderBatteryStatusOptions(select, { includeOpen: true });
     select.disabled = true;
     select.value = '';
     return;
   }
 
+  renderBatteryStatusOptions(select);
   select.disabled = false;
-  select.value = state.selection.currentBattery?.status || '';
+  select.value = getBatteryStatusControlValue(state.selection.currentBattery?.status);
 }
 
 function renderMetaForm() {
@@ -3434,6 +3523,7 @@ async function saveElectrodeStack() {
   
   markSectionsSaved(['battery_stack']);
   await refreshBatteryStatusState();
+  await autoSaveAssembledStatusTransition();
   renderBatteryPage();
   
   showBatteryInlineStatus(statusTargetId, 'Стек электродов сохранён.');
@@ -4397,15 +4487,6 @@ function renderBatteriesList() {
   
   list.innerHTML = '';
 
-  const statusLabels = {
-    '': 'В Сборке',
-    assembled: 'Собран',
-    testing: 'На Тестировании',
-    completed: 'Завершён',
-    failed: 'Брак',
-    disassembled: 'Разобран'
-  };
-
   function formatCoinSize(code) {
     return code ? String(code) : '';
   }
@@ -4489,7 +4570,7 @@ function renderBatteriesList() {
     const li = document.createElement('li');
     li.className = 'user-row';
 
-    const status = statusLabels[b.status || ''] || (b.status || 'В сборке');
+    const status = getBatteryStatusLabel(b.status);
     const updatedDate = formatListDate(b.updated_at, b.created_at);
     const sizeInfo =
       b.form_factor === 'coin'
@@ -5637,6 +5718,9 @@ async function updateBatteryFromHeaderPayload(headerPayload) {
 
   applySavedBatteryHeaderState(updatedBattery, headerPayload, 'edit');
   await refreshBatteryHeaderDependencies();
+  await refreshBatteryStatusState();
+  await autoSaveAssembledStatusTransition();
+  renderBatteryPage();
 }
 
 async function handleBatteryCreateOrUpdate() {

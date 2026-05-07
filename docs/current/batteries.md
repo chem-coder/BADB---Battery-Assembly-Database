@@ -72,6 +72,34 @@ The workflow is intentionally built from the battery row outward:
 Lower sections should not pretend to be independent records without a valid
 `battery_id`.
 
+## Status Workflow
+
+Battery status uses the existing `batteries.status` column:
+
+- blank/`NULL` is displayed as `Открыт`;
+- legacy `disassembled` values are also displayed as `Открыт`;
+- `assembled` is displayed as `Собран`;
+- `testing` is displayed as `На тестировании`;
+- `completed` is displayed as `Завершён`;
+- `failed` is displayed as `Брак`.
+
+`Открыт` is a system-derived incomplete/editable state. It is not a selectable
+dropdown outcome. Before required assembly records are complete, the status
+control displays `Открыт` and stays disabled.
+
+Required assembly records for the `Собран` transition are:
+
+- valid form-factor config;
+- required electrode source roles;
+- valid saved electrode stack;
+- separator config with a separator;
+- electrolyte config with electrolyte and total volume.
+
+When the required records become complete through the Batteries page save flow,
+the page explicitly saves `assembled`. Ordinary read/report endpoints do not
+promote status on fetch. After assembly is complete, the status dropdown allows
+only `Собран`, `На тестировании`, `Завершён`, and `Брак`.
+
 ## Electrode Sources And Stack
 
 Source selection happens before stack selection. The saved source cut batches
@@ -121,10 +149,13 @@ The backend still has a disassembly route/service for compatibility and future
 product work. The visible vanilla delete workflow is not a real disassembly
 record. Use guided physical delete only for mistaken database records.
 
-A battery in `disassembled` status is not terminal. When disassembly leaves no
-rows in `battery_electrodes`, the vanilla Batteries page must allow a new stack
-to be selected and saved through `PUT /api/batteries/battery_electrodes/:id` so
-assembly can continue from that battery record.
+The old persistent `disassembled` value is legacy compatibility data, not a
+normal current status choice. New disassembly behavior removes owned assembly
+rows and leaves the battery displayed as `Открыт`. If a legacy `disassembled`
+battery has no rows in `battery_electrodes`, the vanilla Batteries page must
+allow a new stack to be selected and saved through
+`PUT /api/batteries/battery_electrodes/:id` so assembly can continue from that
+battery record.
 
 ## d031 Stack Trigger
 

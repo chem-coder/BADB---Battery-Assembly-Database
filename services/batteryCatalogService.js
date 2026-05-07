@@ -17,6 +17,16 @@ const {
   validateBatteryProjectIdsForSources,
   validateProjectIds
 } = require('./batteryProjectService');
+const {
+  getBatteryAssemblyCompleteness
+} = require('./batteryAssemblyService');
+
+const USER_SELECTABLE_BATTERY_STATUSES = new Set([
+  'assembled',
+  'testing',
+  'completed',
+  'failed'
+]);
 
 function statusError(message, statusCode) {
   const err = new Error(message);
@@ -397,38 +407,26 @@ async function getBattery(pool, batteryId) {
   return battery;
 }
 
-async function assertAssembledStatusAllowed(pool, batteryId, status) {
-  if (status !== 'assembled') return;
+async function assertBatteryStatusUpdateAllowed(pool, batteryId, status) {
+  if (status === undefined) return;
 
-  const check = await pool.query(`
-    SELECT
-      COUNT(*) FILTER (WHERE role = 'anode') AS anodes,
-      COUNT(*) FILTER (WHERE role = 'cathode') AS cathodes
-    FROM battery_electrodes
-    WHERE battery_id = $1
-  `, [batteryId]);
-
-  const { anodes, cathodes } = check.rows[0];
-
-  const modeRes = await pool.query(`
-    SELECT coin_cell_mode
-    FROM battery_coin_config
-    WHERE battery_id = $1
-  `, [batteryId]);
-
-  const mode = modeRes.rows[0]?.coin_cell_mode;
-
-  if (mode === 'full_cell' && (anodes !== 1 || cathodes !== 1)) {
-    throw statusError('Full cell must have exactly 1 anode and 1 cathode', 400);
+  if (!USER_SELECTABLE_BATTERY_STATUSES.has(status)) {
+    throw statusError('Статус "Открыт" задаётся системой и не выбирается вручную', 400);
   }
 
-  if (mode === 'half_cell' && (anodes + cathodes) !== 1) {
-    throw statusError('Half cell must have exactly 1 electrode', 400);
+  const completeness = await getBatteryAssemblyCompleteness(pool, batteryId);
+
+  if (!completeness) {
+    throw statusError('Батарея не найдена', 404);
+  }
+
+  if (!completeness.is_complete) {
+    throw statusError('Статус можно менять только после завершения обязательных записей сборки', 400);
   }
 }
 
 async function updateBattery(pool, batteryId, payload, userId) {
-  await assertAssembledStatusAllowed(pool, batteryId, payload.status);
+  await assertBatteryStatusUpdateAllowed(pool, batteryId, payload.status);
 
   const currentContext = await fetchCurrentIdentityContext(pool, batteryId);
   const current = currentContext.battery;

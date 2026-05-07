@@ -27,6 +27,34 @@ battery-owned child rows after preflight and typed confirmation. It must not
 delete upstream lab records such as projects, tapes, electrode cut batches,
 electrodes, separators, electrolytes, recipes, materials, or users.
 
+## Status
+
+`Открыт` is a derived incomplete/editable state represented by blank/`NULL`
+`batteries.status`. It must not be offered as a user-selectable status value.
+Legacy `disassembled` values must be displayed as `Открыт` for compatibility,
+but new workflow code must not preserve `disassembled` as a normal long-term
+current status.
+
+Ordinary read/report endpoints must not mutate battery status. Status promotion
+to `assembled` is allowed only in an explicit save/status workflow after the
+required assembly records are complete:
+
+- form-factor config;
+- required electrode source roles;
+- valid saved electrode stack;
+- separator config with a separator;
+- electrolyte config with electrolyte and total volume.
+
+After assembly completion, user-selectable statuses are limited to:
+
+- `assembled`
+- `testing`
+- `completed`
+- `failed`
+
+The API must reject user attempts to set `Открыт`/blank, `disassembled`, unknown
+statuses, or any selectable status before assembly completion.
+
 ## Access
 
 Guided battery delete is intentionally available to any authenticated user.
@@ -155,6 +183,8 @@ real lab disassembly workflow.
 
 Do not use physical delete to record a real battery outcome.
 
-A `disassembled` battery may be reassembled on the same battery record. If it
-has no saved `battery_electrodes` rows, the stack section must stay editable and
-must allow saving a new stack through the normal stack endpoint.
+Disassembly should remove owned assembly rows and leave the current displayed
+state as derived `Открыт`. A legacy `disassembled` battery may be reassembled on
+the same battery record. If it has no saved `battery_electrodes` rows, the stack
+section must stay editable and must allow saving a new stack through the normal
+stack endpoint.

@@ -413,7 +413,7 @@ async function disassembleBattery(pool, batteryId, userId) {
       `
       UPDATE batteries
       SET
-        status = 'disassembled',
+        status = NULL,
         updated_by = $1,
         updated_at = now()
       WHERE battery_id = $2
@@ -428,7 +428,7 @@ async function disassembleBattery(pool, batteryId, userId) {
       'battery_id',
       batteryId,
       current,
-      { status: 'disassembled' },
+      { status: null },
       userId,
       ['status'],
       false
@@ -439,7 +439,7 @@ async function disassembleBattery(pool, batteryId, userId) {
     return {
       success: true,
       battery_id: batteryId,
-      status: 'disassembled',
+      status: null,
       scrapped_electrode_ids: electrodeIds,
       scrapped_reason: scrappedReason,
       deleted_counts: deletedCounts
