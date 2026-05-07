@@ -68,18 +68,19 @@ Battery assembly log structure and external reference-source ideas live in `docs
 Battery status/dropdown cleanup and top-of-list filters live in
 `docs/future/battery_status_workflow_next.md`.
 
-## Electrolytes Reference Filters
+## Reference Page Filters
 
-The Electrolytes reference page is current for row-open editing, list-level
-duplicate, sticky opened-record actions, delete placement, unsaved-change
-guards, and the record print report.
+The Electrolytes reference page is current for row-open editing, page-local
+text/status/type filters, list-level duplicate, sticky opened-record actions,
+delete placement, unsaved-change guards, and the record print report.
 
 Future decision:
 
-- add top-of-list filters only if electrolyte list growth makes scanning slow;
-- likely filters are type, status, free-text search across name, solvent, salts,
-  concentration, additives, and notes, plus creator/date metadata if useful;
-- keep filters page-local first; no electrolyte schema change is implied.
+- add top-of-list filters to other reference pages only when list growth makes
+  scanning slow;
+- keep filters page-local first;
+- do not introduce schema changes or a shared cross-page filter framework unless
+  a later bounded pass proves the need.
 
 UI consistency and reference-page rollout ideas live in:
 

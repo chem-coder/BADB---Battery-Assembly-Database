@@ -100,7 +100,10 @@ Current behavior:
 
 - entering a name in the top add field opens a new electrolyte record;
 - list row summary opens an existing electrolyte record;
-- list filters are intentionally not part of the current page;
+- list filters apply client-side to the loaded list by text, status, and
+  electrolyte type;
+- filter reset clears all list filters without changing the opened record;
+- empty filtered results show a compact empty state;
 - duplicate remains a list-level action;
 - print is available from each saved list row and from the opened record header;
 - an opened record has a sticky header with compact metadata, save, exit,
@@ -131,11 +134,6 @@ Report contents:
 The print page has no main app chrome and exposes a `window.print()` action.
 
 ## Current Boundaries
-
-List filters are future work only. If the list grows enough to need them, a
-later scoped pass can add page-local filters such as type, status, text search
-across name/composition fields, and optional created/updated metadata filters.
-This does not imply electrolyte schema work.
 
 Do not expand the electrolyte schema or add electrochemical formulation logic
 unless it is explicitly required for pilot release or a later feature pass.

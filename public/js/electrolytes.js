@@ -17,6 +17,11 @@ const stickyMeta = document.getElementById('electrolyte_sticky_meta');
 const stickyDirty = document.getElementById('electrolyte-global-dirty');
 const stickyStatus = document.getElementById('electrolyte-sticky-status');
 const filesStatus = document.getElementById('electrolyte-files-status');
+const filterTextInput = document.getElementById('electrolyte-filter-text');
+const filterStatusSelect = document.getElementById('electrolyte-filter-status');
+const filterTypeSelect = document.getElementById('electrolyte-filter-type');
+const clearFiltersBtn = document.getElementById('clearElectrolyteFiltersBtn');
+const filterSummary = document.getElementById('electrolyte-filter-summary');
 
 const electrolytesList = document.getElementById('electrolytesList');
 
@@ -25,6 +30,7 @@ let currentId = null;
 let currentElectrolyte = null;
 let savedElectrolyteFiles = [];
 let initialFormState = null;
+let allElectrolytes = [];
 
 const ELECTROLYTE_TYPE_LABELS = {
   liquid: 'жидкий',
@@ -70,6 +76,67 @@ function formatDate(value) {
   if (Number.isNaN(date.getTime())) return '';
 
   return date.toLocaleDateString();
+}
+
+function normalizeFilterText(value) {
+  return String(value || '').trim().toLocaleLowerCase('ru-RU');
+}
+
+function getElectrolyteFilterState() {
+  return {
+    text: normalizeFilterText(filterTextInput?.value),
+    status: filterStatusSelect?.value || '',
+    type: filterTypeSelect?.value || ''
+  };
+}
+
+function hasActiveElectrolyteFilters(filters = getElectrolyteFilterState()) {
+  return Boolean(filters.text || filters.status || filters.type);
+}
+
+function getElectrolyteSearchText(el) {
+  return normalizeFilterText([
+    el.name,
+    el.solvent_system,
+    el.salts,
+    el.concentration,
+    el.additives,
+    el.notes,
+    el.created_by_name
+  ].filter(Boolean).join(' '));
+}
+
+function matchesElectrolyteFilters(el, filters = getElectrolyteFilterState()) {
+  if (filters.status && el.status !== filters.status) return false;
+  if (filters.type && el.electrolyte_type !== filters.type) return false;
+  if (filters.text && !getElectrolyteSearchText(el).includes(filters.text)) return false;
+
+  return true;
+}
+
+function getFilteredElectrolytes() {
+  const filters = getElectrolyteFilterState();
+  return allElectrolytes.filter((el) => matchesElectrolyteFilters(el, filters));
+}
+
+function updateElectrolyteFilterSummary(filteredCount, totalCount) {
+  const filters = getElectrolyteFilterState();
+  const hasFilters = hasActiveElectrolyteFilters(filters);
+
+  if (clearFiltersBtn) {
+    clearFiltersBtn.disabled = !hasFilters;
+  }
+
+  if (!filterSummary) return;
+
+  if (totalCount === 0) {
+    filterSummary.textContent = 'Нет электролитов';
+    return;
+  }
+
+  filterSummary.textContent = hasFilters
+    ? `Показано ${filteredCount} из ${totalCount}`
+    : `Всего: ${totalCount}`;
 }
 
 function getElectrolyteDisplayName() {
@@ -412,8 +479,23 @@ function openElectrolytePrintReport(id) {
   window.location.href = url;
 }
 
-function renderElectrolytes(electrolytes) {
+function renderElectrolytes(electrolytes, options = {}) {
+  const totalCount = options.totalCount ?? electrolytes.length;
+  const hasFilters = Boolean(options.hasFilters);
+
   electrolytesList.innerHTML = '';
+
+  if (electrolytes.length === 0) {
+    const emptyRow = document.createElement('li');
+    emptyRow.className = 'user-row electrolyte-empty-row';
+    emptyRow.textContent = totalCount === 0
+      ? 'Электролиты пока не добавлены.'
+      : hasFilters
+        ? 'Нет электролитов по выбранным фильтрам.'
+        : 'Электролиты не найдены.';
+    electrolytesList.appendChild(emptyRow);
+    return;
+  }
 
   electrolytes.forEach(el => {
     const li = document.createElement('li');
@@ -470,6 +552,17 @@ function renderElectrolytes(electrolytes) {
 
     electrolytesList.appendChild(li);
   });
+}
+
+function renderFilteredElectrolytes() {
+  const filters = getElectrolyteFilterState();
+  const filtered = getFilteredElectrolytes();
+
+  renderElectrolytes(filtered, {
+    totalCount: allElectrolytes.length,
+    hasFilters: hasActiveElectrolyteFilters(filters)
+  });
+  updateElectrolyteFilterSummary(filtered.length, allElectrolytes.length);
 }
 
 function confirmDiscardUnsavedChanges() {
@@ -849,11 +942,34 @@ async function loadElectrolytes() {
 
   try {
     const data = await fetchElectrolytes();
-    renderElectrolytes(data);
+    allElectrolytes = data;
+    renderFilteredElectrolytes();
   } catch (err) {
     console.error(err);
     showPageStatus(err.message || 'Ошибка загрузки списка электролитов', true, { clearAfterMs: 9000 });
   }
+}
+
+if (filterTextInput) {
+  filterTextInput.addEventListener('input', renderFilteredElectrolytes);
+}
+
+if (filterStatusSelect) {
+  filterStatusSelect.addEventListener('change', renderFilteredElectrolytes);
+}
+
+if (filterTypeSelect) {
+  filterTypeSelect.addEventListener('change', renderFilteredElectrolytes);
+}
+
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', () => {
+    if (filterTextInput) filterTextInput.value = '';
+    if (filterStatusSelect) filterStatusSelect.value = '';
+    if (filterTypeSelect) filterTypeSelect.value = '';
+    renderFilteredElectrolytes();
+    filterTextInput?.focus();
+  });
 }
 
 const electrolyteLogoutGuard = {

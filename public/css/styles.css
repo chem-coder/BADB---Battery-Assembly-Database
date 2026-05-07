@@ -263,6 +263,42 @@ body[data-page="electrodes"] .electrode-project-filter select {
   min-width: min(24rem, 100%);
 }
 
+body[data-page="electrolytes"] .electrolyte-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.85rem;
+  align-items: end;
+  margin: 0.35rem 0 0.8rem;
+}
+
+body[data-page="electrolytes"] .electrolyte-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 10rem;
+}
+
+body[data-page="electrolytes"] .electrolyte-filter-field:first-child {
+  flex: 1 1 18rem;
+  min-width: min(18rem, 100%);
+}
+
+body[data-page="electrolytes"] .electrolyte-filter-field span,
+body[data-page="electrolytes"] .electrolyte-filter-summary {
+  margin-right: 0;
+  color: #667085;
+  font-size: 0.86rem;
+}
+
+body[data-page="electrolytes"] .electrolyte-filter-row input,
+body[data-page="electrolytes"] .electrolyte-filter-row select {
+  width: 100%;
+}
+
+body[data-page="electrolytes"] .electrolyte-filter-summary {
+  align-self: center;
+}
+
 body[data-page="electrodes"] .electrode-section > fieldset {
   margin-top: 0.55rem;
 }
@@ -538,6 +574,13 @@ body[data-page="BAL"] #batteriesList {
   align-items: center;
   justify-content: space-between;
   padding: 0.4rem 0;
+}
+
+body[data-page="electrolytes"] .electrolyte-empty-row {
+  justify-content: flex-start;
+  color: #667085;
+  font-size: 0.95rem;
+  padding: 0.6rem 0.35rem;
 }
 
 .user-info {

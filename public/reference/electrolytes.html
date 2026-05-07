@@ -146,10 +146,46 @@
 
     </form>
     <div class="status-feedback" aria-live="polite"></div>
+
+    <div id="electrolyte_filters" class="electrolyte-filter-row" aria-label="Фильтры списка электролитов">
+      <label class="electrolyte-filter-field" for="electrolyte-filter-text">
+        <span>Поиск</span>
+        <input
+          id="electrolyte-filter-text"
+          type="search"
+          placeholder="Название, соли, растворители..."
+          autocomplete="off"
+        />
+      </label>
+
+      <label class="electrolyte-filter-field" for="electrolyte-filter-status">
+        <span>Статус</span>
+        <select id="electrolyte-filter-status">
+          <option value="">Все статусы</option>
+          <option value="active">активный</option>
+          <option value="inactive">не используется</option>
+          <option value="archived">архив</option>
+        </select>
+      </label>
+
+      <label class="electrolyte-filter-field" for="electrolyte-filter-type">
+        <span>Тип</span>
+        <select id="electrolyte-filter-type">
+          <option value="">Все типы</option>
+          <option value="liquid">жидкий</option>
+          <option value="solid">твёрдый</option>
+          <option value="gel">гелевый</option>
+        </select>
+      </label>
+
+      <button id="clearElectrolyteFiltersBtn" type="button">Сбросить</button>
+      <span id="electrolyte-filter-summary" class="electrolyte-filter-summary" aria-live="polite"></span>
+    </div>
+
     <ul id="electrolytesList" class="users-list"></ul>
 
     <script src="/js/auth.js"></script>
     <script src="/js/badb-ui.js?v=badb-ui-20260505a"></script>
-    <script src="/js/electrolytes.js?v=electrolyte-feedback-20260505a"></script>
+    <script src="/js/electrolytes.js?v=electrolyte-filters-20260507a"></script>
   </body>
 </html>

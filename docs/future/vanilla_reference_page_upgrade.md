@@ -27,6 +27,7 @@ Light code check on 2026-05-06 also found:
 
 - `public/js/badb-ui.js` exists as a shared vanilla UI helper;
 - Electrolytes uses a sticky record header and helper-backed scroll/status behavior;
+- Electrolytes has page-local client-side list filters for text, status, and type;
 - Electrolytes delete confirmation uses `DELETE ELECTROLYTE <id>`;
 - Electrolytes guards unsaved edits during exit, logout, record switching, and browser unload;
 - Electrolytes has a record print report at `/workflow/electrolyte-print.html`;
@@ -96,14 +97,13 @@ Avoid one huge implementation pass across all reference pages.
 
 ## Electrolytes Follow-Up
 
-Electrolytes is current for this pass: row-open behavior, list-level duplicate,
-opened-record sticky header, inside-header delete, unsaved-change guards, and
-the record print report are implemented.
+Electrolytes is current for this pass: row-open behavior, page-local list
+filters, list-level duplicate, opened-record sticky header, inside-header
+delete, unsaved-change guards, and the record print report are implemented.
 
-Filters are future work only. A later scoped pass may add page-local filters
-such as type, status, text search across name/composition fields, and optional
-created/updated metadata filters. Do not add filter schema or list-view printing
-as part of the completed electrolyte print-report work.
+Other reference pages may add their own page-local filters later when list size
+or workflow needs justify it. Do not introduce a shared cross-page filter
+framework until at least a few pages prove the same pattern.
 
 ## Print Report Candidates
 
