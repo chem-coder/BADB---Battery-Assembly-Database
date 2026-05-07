@@ -1,9 +1,9 @@
 # Batteries
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-07
 Status: current
-Verified against code: 2026-05-06
+Verified against code: 2026-05-07
 
 Source paths:
 
@@ -86,6 +86,8 @@ Current high-level behavior:
   sidedness rules;
 - saved stack electrodes are marked used by the backend;
 - saved stacks are read by `position_index`;
+- a `disassembled` battery with no rows in `battery_electrodes` may be
+  reassembled directly by selecting and saving a new stack;
 - pouch/cylindrical stacks may have equal cathode/anode counts or one extra
   anode.
 
@@ -118,6 +120,11 @@ Detailed lifecycle rules are in `docs/rules/battery_lifecycle_rules.md`.
 The backend still has a disassembly route/service for compatibility and future
 product work. The visible vanilla delete workflow is not a real disassembly
 record. Use guided physical delete only for mistaken database records.
+
+A battery in `disassembled` status is not terminal. When disassembly leaves no
+rows in `battery_electrodes`, the vanilla Batteries page must allow a new stack
+to be selected and saved through `PUT /api/batteries/battery_electrodes/:id` so
+assembly can continue from that battery record.
 
 ## d031 Stack Trigger
 

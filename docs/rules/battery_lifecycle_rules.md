@@ -1,9 +1,9 @@
 # Battery Lifecycle Rules
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-07
 Status: rule
-Verified against code: 2026-05-06
+Verified against code: 2026-05-07
 
 Source paths:
 
@@ -154,3 +154,7 @@ future product work. The vanilla guided delete flow is not the same thing as a
 real lab disassembly workflow.
 
 Do not use physical delete to record a real battery outcome.
+
+A `disassembled` battery may be reassembled on the same battery record. If it
+has no saved `battery_electrodes` rows, the stack section must stay editable and
+must allow saving a new stack through the normal stack endpoint.

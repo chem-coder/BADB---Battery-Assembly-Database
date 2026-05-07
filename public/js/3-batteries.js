@@ -641,7 +641,9 @@ function deriveBatterySectionLifecycleState() {
   return BATTERY_SECTION_KEYS.reduce((acc, sectionKey) => {
     const previousSectionKey = BATTERY_SECTION_UNLOCK_RULES[sectionKey];
     const savedSnapshot = state.snapshots.savedSectionStates[sectionKey] ?? null;
-    const isSaved = savedSnapshot !== null;
+    const isSaved = sectionKey === 'battery_stack'
+      ? hasBatteryStackLinksInSnapshot(savedSnapshot)
+      : savedSnapshot !== null;
     const isComplete = isSaved && isBatterySectionComplete(sectionKey);
     const isDirty = isSaved
       ? getCurrentBatterySectionSnapshot(sectionKey) !== savedSnapshot
@@ -1541,8 +1543,8 @@ function hasSavedNamedFieldValue(sectionKey, fieldNames) {
   );
 }
 
-function hasSavedBatteryStackLinks() {
-  const stack = parseBatterySnapshot(state.snapshots.savedSectionStates.battery_stack);
+function hasBatteryStackLinksInSnapshot(snapshot) {
+  const stack = parseBatterySnapshot(snapshot);
 
   if (!stack) return false;
 
@@ -1550,6 +1552,10 @@ function hasSavedBatteryStackLinks() {
     (Array.isArray(stack.selectedCathodes) && stack.selectedCathodes.length > 0) ||
     (Array.isArray(stack.selectedAnodes) && stack.selectedAnodes.length > 0)
   );
+}
+
+function hasSavedBatteryStackLinks() {
+  return hasBatteryStackLinksInSnapshot(state.snapshots.savedSectionStates.battery_stack);
 }
 
 function hasSavedBatteryLifecycleLinks() {
@@ -1698,8 +1704,14 @@ function renderBatteryFinalizedUiCleanup(identityLocked) {
   const stackTargetIntro = document.getElementById('battery_stack_target_intro');
   const stackTargetHint = document.getElementById('battery_stack_target_hint');
   const stackSaveButton = document.getElementById('battery_stack_save_btn');
+  const stackSectionState = state.ui.sectionState?.battery_stack || {};
+  const stackSavedAndClean = Boolean(
+    stackSectionState.isSaved &&
+    !stackSectionState.isDirty &&
+    hasSavedBatteryStackLinks()
+  );
   const stackSaved = Boolean(
-    state.ui.sectionState?.battery_stack?.isSaved ||
+    stackSavedAndClean ||
     state.stack.readOnly ||
     state.stack.hideSelectionBlocks
   );

@@ -66,6 +66,7 @@ Electrolytes documentation update verified on 2026-05-06:
   - coin full-cell;
   - pouch;
   - cylindrical;
+  - disassembled battery with no saved stack rows;
   - cathode-first valid payload for pouch/cyl.
 - Existing battery print report opens and loads data with an authenticated session.
 - Electrolytes page is manually checked on the pilot target browser:
