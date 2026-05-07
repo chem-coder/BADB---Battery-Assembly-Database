@@ -29,6 +29,8 @@ Archived notes and generated materials are historical context only.
   so the guided delete panel is immediately visible; status dropdown visual
   emphasis and save/display behavior were corrected without changing the status
   model.
+- Batteries list filters: client-side text, derived status, and form-factor
+  filters with reset and empty-result messaging.
 - Battery stack DB trigger hardening in `d031_harden_battery_stack_validate_trigger.sql`.
 - Trigger-safe pouch/cyl stack insert order: `A1, C1, A2, C2`, preserving original `position_index`.
 - Vanilla smoke harness now applies `d031` after restoring the old dump.
@@ -72,6 +74,8 @@ Batteries UX/status follow-up verified on 2026-05-07:
 - `git diff --check` passed.
 - Browser check passed: from a mid-page scroll position, clicking
   `Удалить запись` moved the page to the top and showed the guided delete panel.
+- Browser check passed for Batteries list filters: text search, derived
+  `Открыт`, `pouch`, reset, and empty-result message.
 
 ## Must Verify Before Pilot
 

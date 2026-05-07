@@ -7,6 +7,11 @@ const batteryProjectMultiSelect = document.getElementById('battery-project-multi
 const batteryProjectMultiSelectTrigger = document.getElementById('battery-project-multiselect-trigger');
 const batteryProjectMultiSelectOptions = document.getElementById('battery-project-multiselect-options');
 const createdBySelect = document.getElementById('battery_created_by');
+const batteryListFilterTextInput = document.getElementById('battery-list-filter-text');
+const batteryListFilterStatusSelect = document.getElementById('battery-list-filter-status');
+const batteryListFilterFormFactorSelect = document.getElementById('battery-list-filter-form-factor');
+const batteryListFilterSummary = document.getElementById('battery-list-filter-summary');
+const clearBatteryListFiltersBtn = document.getElementById('clearBatteryListFiltersBtn');
 
 // -------- State --------
 
@@ -4485,106 +4490,226 @@ async function loadBatteryAssembly(batteryId) {
 
 // -------- Render: Lists / Stack --------
 
+function normalizeBatteryListFilterText(value) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('ru-RU')
+    .replace(/ё/g, 'е');
+}
+
+function getBatteryListFilterState() {
+  return {
+    text: normalizeBatteryListFilterText(batteryListFilterTextInput?.value),
+    status: batteryListFilterStatusSelect?.value || '',
+    formFactor: batteryListFilterFormFactorSelect?.value || ''
+  };
+}
+
+function hasActiveBatteryListFilters(filters = getBatteryListFilterState()) {
+  return Boolean(filters.text || filters.status || filters.formFactor);
+}
+
+function formatBatteryCoinSize(code) {
+  return code ? String(code) : '';
+}
+
+function formatBatteryBatchGeometry(shape, diameterMm, lengthMm, widthMm) {
+  if (shape === 'circle' && diameterMm != null) {
+    return `${diameterMm} mm`;
+  }
+
+  if (lengthMm != null && widthMm != null) {
+    return `${lengthMm}×${widthMm} mm`;
+  }
+
+  if (lengthMm != null) return `${lengthMm} mm`;
+  if (widthMm != null) return `${widthMm} mm`;
+
+  return '';
+}
+
+function formatBatteryPouchSize(battery) {
+  const cathodeSize = formatBatteryBatchGeometry(
+    battery.cathode_batch_shape,
+    battery.cathode_batch_diameter_mm,
+    battery.cathode_batch_length_mm,
+    battery.cathode_batch_width_mm
+  );
+
+  const anodeSize = formatBatteryBatchGeometry(
+    battery.anode_batch_shape,
+    battery.anode_batch_diameter_mm,
+    battery.anode_batch_length_mm,
+    battery.anode_batch_width_mm
+  );
+
+  if (cathodeSize && anodeSize && cathodeSize === anodeSize) {
+    return cathodeSize;
+  }
+
+  if (cathodeSize && anodeSize) {
+    return `C ${cathodeSize} / A ${anodeSize}`;
+  }
+
+  return cathodeSize || anodeSize || '';
+}
+
+function formatBatteryVisibleSizeInfo(battery) {
+  if (battery.form_factor === 'coin') {
+    const electrodeSize = formatBatteryPouchSize(battery);
+    return [
+      formatBatteryCoinSize(battery.coin_size_code),
+      electrodeSize ? `электроды ${electrodeSize}` : ''
+    ].filter(Boolean).join(' / ');
+  }
+
+  if (battery.form_factor === 'pouch') {
+    return formatBatteryPouchSize(battery);
+  }
+
+  return '';
+}
+
+function formatBatteryActiveMaterials(battery) {
+  const cathodeMaterials = battery.cathode_active_materials || '';
+  const anodeMaterials = battery.anode_active_materials || '';
+
+  if (cathodeMaterials && anodeMaterials) {
+    return `C ${cathodeMaterials} / A ${anodeMaterials}`;
+  }
+
+  if (cathodeMaterials) {
+    return `C ${cathodeMaterials}`;
+  }
+
+  if (anodeMaterials) {
+    return `A ${anodeMaterials}`;
+  }
+
+  return '';
+}
+
+function formatBatteryListDate(value, fallbackValue = null) {
+  const source = value || fallbackValue;
+
+  if (!source) return '';
+
+  const date = new Date(source);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return date.toLocaleDateString();
+}
+
+function getBatteryListProjectLabel(battery) {
+  return battery.project_names || battery.project_name || '—';
+}
+
+function getBatteryListStatusFilterValue(status) {
+  return normalizeBatteryStatusForDisplay(status) || 'open';
+}
+
+function getBatteryListSearchText(battery) {
+  const status = getBatteryStatusLabel(battery.status);
+  const updatedDate = formatBatteryListDate(battery.updated_at, battery.created_at);
+  const sizeInfo = formatBatteryVisibleSizeInfo(battery);
+  const materialsInfo = formatBatteryActiveMaterials(battery);
+  const title = `#${battery.battery_id} | ${getBatteryListProjectLabel(battery)}`;
+
+  return normalizeBatteryListFilterText([
+    battery.battery_id,
+    `#${battery.battery_id}`,
+    title,
+    battery.project_names,
+    battery.project_name,
+    battery.project_id,
+    battery.form_factor,
+    status,
+    updatedDate,
+    materialsInfo,
+    sizeInfo,
+    battery.notes,
+    battery.battery_notes,
+    battery.created_by_name,
+    battery.created_by
+  ].filter(Boolean).join(' '));
+}
+
+function matchesBatteryListFilters(battery, filters = getBatteryListFilterState()) {
+  if (filters.status && getBatteryListStatusFilterValue(battery.status) !== filters.status) {
+    return false;
+  }
+
+  if (filters.formFactor && battery.form_factor !== filters.formFactor) {
+    return false;
+  }
+
+  if (filters.text && !getBatteryListSearchText(battery).includes(filters.text)) {
+    return false;
+  }
+
+  return true;
+}
+
+function updateBatteryListFilterSummary(filteredCount, totalCount) {
+  if (!batteryListFilterSummary) return;
+
+  const hasFilters = hasActiveBatteryListFilters();
+
+  if (totalCount === 0) {
+    batteryListFilterSummary.textContent = 'Нет аккумуляторов';
+    return;
+  }
+
+  batteryListFilterSummary.textContent = hasFilters
+    ? `Показано ${filteredCount} из ${totalCount}`
+    : `Всего ${totalCount}`;
+}
+
+function renderBatteryEmptyListRow(list, totalCount, hasFilters) {
+  const emptyRow = document.createElement('li');
+  emptyRow.className = 'user-row battery-empty-row';
+  emptyRow.textContent = totalCount === 0
+    ? 'Аккумуляторы пока не добавлены.'
+    : hasFilters
+      ? 'Аккумуляторы по выбранным фильтрам не найдены.'
+      : 'Аккумуляторы не найдены.';
+  list.appendChild(emptyRow);
+}
+
 function renderBatteriesList() {
-  
   const list = document.getElementById('batteriesList');
-  
+
+  if (!list) return;
+
+  const batteries = Array.isArray(state.selection.batteries)
+    ? state.selection.batteries
+    : [];
+  const filters = getBatteryListFilterState();
+  const hasFilters = hasActiveBatteryListFilters(filters);
+  const filteredBatteries = batteries.filter(battery =>
+    matchesBatteryListFilters(battery, filters)
+  );
+
   list.innerHTML = '';
+  updateBatteryListFilterSummary(filteredBatteries.length, batteries.length);
 
-  function formatCoinSize(code) {
-    return code ? String(code) : '';
+  if (filteredBatteries.length === 0) {
+    renderBatteryEmptyListRow(list, batteries.length, hasFilters);
+    return;
   }
 
-  function formatBatchGeometry(shape, diameterMm, lengthMm, widthMm) {
-    if (shape === 'circle' && diameterMm != null) {
-      return `${diameterMm} mm`;
-    }
-
-    if (lengthMm != null && widthMm != null) {
-      return `${lengthMm}×${widthMm} mm`;
-    }
-
-    if (lengthMm != null) return `${lengthMm} mm`;
-    if (widthMm != null) return `${widthMm} mm`;
-
-    return '';
-  }
-
-  function formatPouchSize(battery) {
-    const cathodeSize = formatBatchGeometry(
-      battery.cathode_batch_shape,
-      battery.cathode_batch_diameter_mm,
-      battery.cathode_batch_length_mm,
-      battery.cathode_batch_width_mm
-    );
-
-    const anodeSize = formatBatchGeometry(
-      battery.anode_batch_shape,
-      battery.anode_batch_diameter_mm,
-      battery.anode_batch_length_mm,
-      battery.anode_batch_width_mm
-    );
-
-    if (cathodeSize && anodeSize && cathodeSize === anodeSize) {
-      return cathodeSize;
-    }
-
-    if (cathodeSize && anodeSize) {
-      return `C ${cathodeSize} / A ${anodeSize}`;
-    }
-
-    return cathodeSize || anodeSize || '';
-  }
-
-  function formatActiveMaterials(battery) {
-    const cathodeMaterials = battery.cathode_active_materials || '';
-    const anodeMaterials = battery.anode_active_materials || '';
-
-    if (cathodeMaterials && anodeMaterials) {
-      return `C ${cathodeMaterials} / A ${anodeMaterials}`;
-    }
-
-    if (cathodeMaterials) {
-      return `C ${cathodeMaterials}`;
-    }
-
-    if (anodeMaterials) {
-      return `A ${anodeMaterials}`;
-    }
-
-    return '';
-  }
-
-  function formatListDate(value, fallbackValue = null) {
-    const source = value || fallbackValue;
-
-    if (!source) return '';
-
-    const date = new Date(source);
-
-    if (Number.isNaN(date.getTime())) {
-      return '';
-    }
-
-    return date.toLocaleDateString();
-  }
-  
-  state.selection.batteries.forEach(b => {
+  filteredBatteries.forEach(b => {
     
     const li = document.createElement('li');
     li.className = 'user-row';
 
     const status = getBatteryStatusLabel(b.status);
-    const updatedDate = formatListDate(b.updated_at, b.created_at);
-    const sizeInfo =
-      b.form_factor === 'coin'
-        ? [formatCoinSize(b.coin_size_code), formatPouchSize(b) ? `электроды ${formatPouchSize(b)}` : '']
-          .filter(Boolean)
-          .join(' / ')
-        : b.form_factor === 'pouch'
-          ? formatPouchSize(b)
-          : '';
-    const materialsInfo = formatActiveMaterials(b);
+    const updatedDate = formatBatteryListDate(b.updated_at, b.created_at);
+    const sizeInfo = formatBatteryVisibleSizeInfo(b);
+    const materialsInfo = formatBatteryActiveMaterials(b);
 
     const info = document.createElement('button');
     info.type = 'button';
@@ -4594,7 +4719,7 @@ function renderBatteriesList() {
 
     const title = document.createElement('strong');
     title.textContent =
-      `#${b.battery_id} | ${b.project_names || b.project_name || '—'}`;
+      `#${b.battery_id} | ${getBatteryListProjectLabel(b)}`;
 
     const statusSpan = document.createElement('small');
     statusSpan.style.color = '#666';
@@ -5952,6 +6077,28 @@ const deleteBatteryBtn = document.getElementById('deleteBatteryBtn');
 deleteBatteryBtn.addEventListener('click', async () => {
   await handleDeleteBatteryClick();
 });
+
+if (batteryListFilterTextInput) {
+  batteryListFilterTextInput.addEventListener('input', renderBatteriesList);
+}
+
+if (batteryListFilterStatusSelect) {
+  batteryListFilterStatusSelect.addEventListener('change', renderBatteriesList);
+}
+
+if (batteryListFilterFormFactorSelect) {
+  batteryListFilterFormFactorSelect.addEventListener('change', renderBatteriesList);
+}
+
+if (clearBatteryListFiltersBtn) {
+  clearBatteryListFiltersBtn.addEventListener('click', () => {
+    if (batteryListFilterTextInput) batteryListFilterTextInput.value = '';
+    if (batteryListFilterStatusSelect) batteryListFilterStatusSelect.value = '';
+    if (batteryListFilterFormFactorSelect) batteryListFilterFormFactorSelect.value = '';
+    renderBatteriesList();
+    batteryListFilterTextInput?.focus();
+  });
+}
 
 const batteryElectrochemFilesInput = document.getElementById('electrochem_files');
 const batteryElectrochemFilesSaveBtn = document.getElementById('battery_electrochem_files_save_btn');

@@ -14,6 +14,7 @@ This folder is for recurring workflows: tests, migrations, release checks, docum
 - [Backup And Restore](backup_restore.md)
 - [DB And Schema Verification](db_schema_verification.md)
 - [Documentation Systematization HOW_TO](HOW_TO_SYSTEMATIZE_DOCS.md)
+- [Frontend Parity Handoff](frontend_parity_handoff.md)
 - [Git Workflow](git_workflow.md)
 - [Run BADB Locally](run_local.md)
 - [Testing And Release Checks](testing_release.md)

@@ -535,6 +535,42 @@ body[data-page="BAL"] .battery-status-control select {
   font-weight: 600;
 }
 
+body[data-page="BAL"] .battery-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.85rem;
+  align-items: end;
+  margin: 0.35rem 0 0.8rem;
+}
+
+body[data-page="BAL"] .battery-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 10rem;
+}
+
+body[data-page="BAL"] .battery-filter-field:first-child {
+  flex: 1 1 18rem;
+  min-width: min(18rem, 100%);
+}
+
+body[data-page="BAL"] .battery-filter-field span,
+body[data-page="BAL"] .battery-filter-summary {
+  margin-right: 0;
+  color: #667085;
+  font-size: 0.86rem;
+}
+
+body[data-page="BAL"] .battery-filter-row input,
+body[data-page="BAL"] .battery-filter-row select {
+  width: 100%;
+}
+
+body[data-page="BAL"] .battery-filter-summary {
+  align-self: center;
+}
+
 body[data-page="tapes"] #printBtn,
 body[data-page="tapes"] #clearBtn,
 body[data-page="electrodes"] #printElectrodeBatchBtn,
@@ -600,6 +636,13 @@ body[data-page="BAL"] #batteriesList {
 }
 
 body[data-page="electrolytes"] .electrolyte-empty-row {
+  justify-content: flex-start;
+  color: #667085;
+  font-size: 0.95rem;
+  padding: 0.6rem 0.35rem;
+}
+
+body[data-page="BAL"] .battery-empty-row {
   justify-content: flex-start;
   color: #667085;
   font-size: 0.95rem;

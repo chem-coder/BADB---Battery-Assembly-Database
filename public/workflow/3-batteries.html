@@ -831,12 +831,49 @@
 
       <div class="save_message" aria-live="polite"></div>
 
+      <div id="battery_list_filters" class="battery-filter-row" aria-label="Фильтры списка аккумуляторов">
+        <label class="battery-filter-field" for="battery-list-filter-text">
+          <span>Поиск</span>
+          <input
+            id="battery-list-filter-text"
+            type="search"
+            placeholder="ID, проект, заметки, размер..."
+            autocomplete="off"
+          >
+        </label>
+
+        <label class="battery-filter-field" for="battery-list-filter-status">
+          <span>Статус</span>
+          <select id="battery-list-filter-status">
+            <option value="">Все статусы</option>
+            <option value="open">Открыт</option>
+            <option value="assembled">Собран</option>
+            <option value="testing">На тестировании</option>
+            <option value="completed">Завершён</option>
+            <option value="failed">Брак</option>
+          </select>
+        </label>
+
+        <label class="battery-filter-field" for="battery-list-filter-form-factor">
+          <span>Форм-фактор</span>
+          <select id="battery-list-filter-form-factor">
+            <option value="">Все форм-факторы</option>
+            <option value="coin">coin</option>
+            <option value="pouch">pouch</option>
+            <option value="cylindrical">cylindrical</option>
+          </select>
+        </label>
+
+        <button id="clearBatteryListFiltersBtn" type="button">Сбросить</button>
+        <span id="battery-list-filter-summary" class="battery-filter-summary" aria-live="polite"></span>
+      </div>
+
       <ul id="batteriesList" class="users-list"></ul>
     </div>
     
     <script src="/js/auth.js"></script>
     <script src="/js/badb-ui.js?v=badb-ui-20260507a"></script>
-    <script src="/js/3-batteries.js?v=battery-electrochem-files-save-20260506a"></script>
+    <script src="/js/3-batteries.js?v=battery-list-filters-20260507a"></script>
     
   </body>
 </html>

@@ -8,6 +8,7 @@ Status: current
 
 - [AI Rules From Dalia](rules/ai_rules_from_dalia.md)
 - [Documentation Systematization HOW_TO](instructions/HOW_TO_SYSTEMATIZE_DOCS.md)
+- [Frontend Parity Handoff](instructions/frontend_parity_handoff.md)
 - [Docs Triage Audit 2026-05-06](archive/docs_triage_audit_2026-05-06.md)
 
 ## Instruction Docs
@@ -17,6 +18,7 @@ Status: current
 - [Battery Page Pre-Merge Checklist](instructions/battery_premerge_checklist.md)
 - [Backup And Restore](instructions/backup_restore.md)
 - [DB And Schema Verification](instructions/db_schema_verification.md)
+- [Frontend Parity Handoff](instructions/frontend_parity_handoff.md)
 - [Run BADB Locally](instructions/run_local.md)
 - [Testing And Release Checks](instructions/testing_release.md)
 - [Git Workflow](instructions/git_workflow.md)

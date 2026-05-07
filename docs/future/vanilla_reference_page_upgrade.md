@@ -26,6 +26,8 @@ Current workflow pages already provide the design reference:
 Light code check on 2026-05-06 also found:
 
 - `public/js/badb-ui.js` exists as a shared vanilla UI helper;
+- Batteries has compact page-local list filters for text, derived status, and
+  form factor;
 - Electrolytes uses a sticky record header and helper-backed scroll/status behavior;
 - Electrolytes has page-local client-side list filters for text, status, and type;
 - Electrolytes delete confirmation uses `DELETE ELECTROLYTE <id>`;

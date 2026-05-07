@@ -3,7 +3,7 @@
 Created: 2026-05-07
 Edited: 2026-05-07
 Status: partially implemented
-Verified against code: status workflow and status dropdown save/display behavior implemented 2026-05-07; remaining future work listed below
+Verified against code: status workflow, status dropdown save/display behavior, and simple list filters implemented 2026-05-07; remaining future work listed below
 
 Source paths to inspect before implementation:
 
@@ -17,8 +17,8 @@ Source paths to inspect before implementation:
 
 This document records the battery status decision and remaining follow-up work.
 The core status workflow below was implemented on 2026-05-07; rework/reopen
-actions, list filters, and any explicit old-data cleanup pass remain future
-work.
+actions and any explicit old-data cleanup pass remain future work. A small
+client-side list-filter pass is implemented and noted below.
 
 ## Target Status Model
 
@@ -110,19 +110,23 @@ Status as of 2026-05-07: not implemented in this cleanup pass.
 
 ## List Filters
 
-The Batteries page needs top-of-list filters so users can find records without
-misusing status values.
+The Batteries page has simple top-of-list filters so users can find records
+without misusing status values.
 
-Minimum useful filters:
+Implemented filters as of 2026-05-07:
 
 - status;
-- project;
 - form factor;
-- text search by battery id/notes/material labels where practical.
+- text search by battery id, visible list label, notes, project
+  labels/names, active material label, visible size/config label, creator, and
+  date text;
+- reset button.
 
 Status filtering should include the derived `Открыт` state.
 
-Status as of 2026-05-07: not implemented in this cleanup pass.
+Status as of 2026-05-07: the small client-side filter pass is implemented.
+Project multi-select, date range, operator filter, and backend/list-query
+filtering remain future work.
 
 ## Old Data Cleanup
 

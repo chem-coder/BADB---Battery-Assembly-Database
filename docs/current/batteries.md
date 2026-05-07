@@ -75,6 +75,26 @@ The workflow is intentionally built from the battery row outward:
 Lower sections should not pretend to be independent records without a valid
 `battery_id`.
 
+## List Filters
+
+The vanilla Batteries list has compact client-side filters above
+`batteriesList`. They filter only the currently loaded list response and do not
+write to the backend.
+
+Current filters:
+
+- text search across battery id, visible list label, notes, project
+  labels/names, active material label, visible size/config label, creator, and
+  date text;
+- status: all, `Открыт`, `Собран`, `На тестировании`, `Завершён`, `Брак`;
+- form factor: all, `coin`, `pouch`, `cylindrical`;
+- reset button.
+
+Status filtering uses the same display normalization as the list:
+blank/`NULL` and legacy `disassembled` are treated as derived `Открыт`.
+Filtering is page-local UI state. It must not mutate `batteries.status` or
+change allowed status transitions.
+
 ## Status Workflow
 
 Battery status uses the existing `batteries.status` column:
