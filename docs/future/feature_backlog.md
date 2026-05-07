@@ -1,9 +1,9 @@
 # Feature Backlog
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-07
 Status: future idea
-Verified against code: light check 2026-05-06
+Verified against code: light check 2026-05-07
 Source paths: `docs/archive/superseded/2026-05-06-future-backlog/BADB_Feature_Ideas.md`, `docs/archive/superseded/2026-05-06-future-backlog/IDEAS.md`, `public/workflow/1-tapes.html`, `public/js/1-tapes.js`, `docs/current/capacity_calculations.md`
 
 This file preserves small future ideas that do not yet deserve their own current-system document. It is not release evidence and is not a work order by itself.
@@ -24,7 +24,7 @@ These old ideas have already become current behavior:
 
 - Tapes page slurry solids summary. Current behavior is documented in `docs/current/capacity_calculations.md`.
 - Material specific capacity, electrode capacity summaries, and battery limiting-capacity summaries. Current behavior is documented in `docs/current/capacity_calculations.md`.
-- Battery, electrode batch, and tape print reports already exist.
+- Battery, electrode batch, tape, and electrolyte record print reports already exist.
 
 ## Tape Measurement Ideas
 
@@ -64,6 +64,22 @@ Important themes from the backlog:
 ## Assembly And Optimization Ideas
 
 Battery assembly log structure and external reference-source ideas live in `docs/future/battery_assembly_logs_next.md`.
+
+Battery status/dropdown cleanup and top-of-list filters live in
+`docs/future/battery_status_workflow_next.md`.
+
+## Electrolytes Reference Filters
+
+The Electrolytes reference page is current for row-open editing, list-level
+duplicate, sticky opened-record actions, delete placement, unsaved-change
+guards, and the record print report.
+
+Future decision:
+
+- add top-of-list filters only if electrolyte list growth makes scanning slow;
+- likely filters are type, status, free-text search across name, solvent, salts,
+  concentration, additives, and notes, plus creator/date metadata if useful;
+- keep filters page-local first; no electrolyte schema change is implied.
 
 UI consistency and reference-page rollout ideas live in:
 

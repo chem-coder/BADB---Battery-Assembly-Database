@@ -49,6 +49,7 @@ Status: current
 ## Future Docs
 
 - [Battery Assembly Logs Future Reference](future/battery_assembly_logs_next.md)
+- [Battery Status Workflow Next](future/battery_status_workflow_next.md)
 - [Cycling Future Work](future/cycling_next.md)
 - [Dashboard Future Work](future/dashboard_next.md)
 - [Feature Backlog](future/feature_backlog.md)

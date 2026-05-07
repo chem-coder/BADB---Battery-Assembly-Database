@@ -9,6 +9,7 @@ This folder is for ideas and proposals that are not implemented yet and are not 
 ## Future Docs
 
 - [Battery Assembly Logs Future Reference](battery_assembly_logs_next.md)
+- [Battery Status Workflow Next](battery_status_workflow_next.md)
 - [Cycling Future Work](cycling_next.md)
 - [Dashboard Future Work](dashboard_next.md)
 - [Feature Backlog](feature_backlog.md)

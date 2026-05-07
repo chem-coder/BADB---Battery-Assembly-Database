@@ -61,6 +61,64 @@ async function getElectrolyteDeleteCheck(db, electrolyteId) {
   };
 }
 
+async function getElectrolyteReport(db, electrolyteId) {
+  const electrolyteResult = await db.query(
+    `
+    SELECT
+      e.electrolyte_id,
+      e.name,
+      e.electrolyte_type,
+      e.solvent_system,
+      e.salts,
+      e.concentration,
+      e.additives,
+      e.notes,
+      e.status,
+      e.created_by,
+      e.created_at,
+      u_created.name AS created_by_name,
+      e.updated_by,
+      e.updated_at,
+      u_updated.name AS updated_by_name
+    FROM electrolytes e
+    LEFT JOIN users u_created ON u_created.user_id = e.created_by
+    LEFT JOIN users u_updated ON u_updated.user_id = e.updated_by
+    WHERE e.electrolyte_id = $1
+    `,
+    [electrolyteId]
+  );
+
+  if (electrolyteResult.rowCount === 0) {
+    const err = new Error('Электролит не найден');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const filesResult = await db.query(
+    `
+    SELECT
+      electrolyte_file_id,
+      electrolyte_id,
+      file_name,
+      mime_type,
+      octet_length(file_data) AS file_size_bytes,
+      uploaded_at
+    FROM electrolyte_files
+    WHERE electrolyte_id = $1
+    ORDER BY electrolyte_file_id
+    `,
+    [electrolyteId]
+  );
+
+  return {
+    electrolyte: electrolyteResult.rows[0],
+    files: filesResult.rows.map(row => ({
+      ...row,
+      download_url: `/api/electrolytes/files/${row.electrolyte_file_id}/download`
+    }))
+  };
+}
+
 // CREATE electrolyte
 // POST /api/electrolytes
 router.post('/', auth, async (req, res) => {
@@ -331,6 +389,24 @@ router.delete('/files/:fileId', auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка удаления файла электролита' });
+  }
+});
+
+router.get('/:id/report', auth, async (req, res) => {
+  const electrolyteId = Number(req.params.id);
+
+  if (!Number.isInteger(electrolyteId)) {
+    return res.status(400).json({ error: 'Некорректный electrolyte_id' });
+  }
+
+  try {
+    res.json(await getElectrolyteReport(pool, electrolyteId));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки печатного отчёта по электролиту' });
   }
 });
 

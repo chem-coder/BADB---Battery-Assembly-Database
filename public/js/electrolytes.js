@@ -2,6 +2,7 @@ const addInput = document.getElementById('electrolyte-name');
 const nameInput = document.getElementById('electrolyte-name-input');
 const form = document.forms['electrolyte-form'];
 const title = form.querySelector('h2');
+const printElectrolyteBtn = document.getElementById('printElectrolyteBtn');
 const saveBtn = document.getElementById('saveBtn');
 const clearBtn = document.getElementById('clearBtn');
 const deleteElectrolyteBtn = document.getElementById('deleteElectrolyteBtn');
@@ -121,6 +122,10 @@ function renderElectrolyteStickyHeader() {
 
   if (deleteElectrolyteBtn) {
     deleteElectrolyteBtn.hidden = mode !== 'edit' || !currentId;
+  }
+
+  if (printElectrolyteBtn) {
+    printElectrolyteBtn.hidden = mode !== 'edit' || !currentId;
   }
 }
 
@@ -390,6 +395,23 @@ function formatDeleteBlockedMessage(check) {
     : base;
 }
 
+function getElectrolytePrintReportUrl(id) {
+  return `/workflow/electrolyte-print.html?electrolyte_id=${encodeURIComponent(id)}`;
+}
+
+function openElectrolytePrintReport(id) {
+  if (!id) return;
+  const url = getElectrolytePrintReportUrl(id);
+  const reportWindow = window.open(url, '_blank');
+
+  if (reportWindow) {
+    reportWindow.opener = null;
+    return;
+  }
+
+  window.location.href = url;
+}
+
 function renderElectrolytes(electrolytes) {
   electrolytesList.innerHTML = '';
 
@@ -422,6 +444,15 @@ function renderElectrolytes(electrolytes) {
     const actions = document.createElement('div');
     actions.className = 'actions';
 
+    const printBtn = window.BADB_UI.createIconButton({
+      icon: '🖨️',
+      title: 'Печать отчёта',
+      ariaLabel: `Печать отчёта электролита ${el.name}`,
+      onClick: () => {
+        openElectrolytePrintReport(el.electrolyte_id);
+      }
+    });
+
     const duplicateBtn = window.BADB_UI.createIconButton({
       icon: '📑',
       title: 'Дублировать электролит',
@@ -431,6 +462,7 @@ function renderElectrolytes(electrolytes) {
       }
     });
 
+    actions.appendChild(printBtn);
     actions.appendChild(duplicateBtn);
 
     li.appendChild(info);
@@ -778,6 +810,12 @@ clearBtn.addEventListener('click', () => {
 
 if (deleteElectrolyteBtn) {
   deleteElectrolyteBtn.addEventListener('click', deleteCurrentElectrolyte);
+}
+
+if (printElectrolyteBtn) {
+  printElectrolyteBtn.addEventListener('click', () => {
+    openElectrolytePrintReport(currentId);
+  });
 }
 
 filesInput.addEventListener('change', updateSaveFilesButtonVisibility);

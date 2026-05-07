@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "public/js/**/*.js",
-  "updatedAt": "2026-05-06",
+  "updatedAt": "2026-05-07",
   "normalization": {
     "pathParams": ":param",
     "query": "?:query"
@@ -208,6 +208,14 @@
       "request": "none",
       "response": "delete eligibility and dependency blockers",
       "sources": ["public/js/electrolytes.js"]
+    },
+    {
+      "path": "/api/electrolytes/:param/report",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "electrolyte print/report payload with electrolyte fields and file metadata",
+      "sources": ["public/js/electrolyte-print.js"]
     },
     {
       "path": "/api/electrolytes/:param/files",

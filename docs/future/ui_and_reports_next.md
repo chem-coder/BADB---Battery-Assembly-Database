@@ -1,10 +1,10 @@
 # UI And Reports Future Work
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-07
 Status: future idea
-Verified against code: light check 2026-05-06
-Source paths: `docs/archive/superseded/2026-05-06-future-backlog/UI Styling Consistency Plan.md`, `docs/archive/superseded/2026-05-06-future-backlog/Printout Design.md`, `docs/archive/superseded/2026-05-06-root-doc-transition/DALIA_MIGRATION_GUIDE.md`, `public/css/styles.css`, `public/workflow/tape-print.html`, `public/workflow/electrode-batch-print.html`, `public/workflow/battery-print.html`, `client-web/src/pages/`
+Verified against code: light check 2026-05-07
+Source paths: `docs/archive/superseded/2026-05-06-future-backlog/UI Styling Consistency Plan.md`, `docs/archive/superseded/2026-05-06-future-backlog/Printout Design.md`, `docs/archive/superseded/2026-05-06-root-doc-transition/DALIA_MIGRATION_GUIDE.md`, `public/css/styles.css`, `public/workflow/tape-print.html`, `public/workflow/electrode-batch-print.html`, `public/workflow/battery-print.html`, `public/workflow/electrolyte-print.html`, `client-web/src/pages/`
 
 This file preserves future UI consistency and report-layout guidance. It is not a redesign request.
 
@@ -65,6 +65,7 @@ Current print report references:
 - `public/workflow/tape-print.html`
 - `public/workflow/electrode-batch-print.html`
 - `public/workflow/battery-print.html`
+- `public/workflow/electrolyte-print.html`
 
 Future print reports should follow the same technical print-sheet spirit:
 
@@ -82,9 +83,12 @@ Print-page styling does not need to match the interactive form styling exactly. 
 
 ## Planned Report Backlog
 
-Record reports to add in upcoming bounded passes:
+Completed record reports:
 
 - Electrolytes;
+
+Record reports to add in upcoming bounded passes:
+
 - Separators;
 - Projects;
 - Users.
