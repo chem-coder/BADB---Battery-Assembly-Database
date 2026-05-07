@@ -3,7 +3,7 @@
 Created: 2026-05-07
 Edited: 2026-05-07
 Status: partially implemented
-Verified against code: status workflow implemented 2026-05-07; remaining future work listed below
+Verified against code: status workflow and status dropdown save/display behavior implemented 2026-05-07; remaining future work listed below
 
 Source paths to inspect before implementation:
 
@@ -69,6 +69,21 @@ After assembly-complete:
 
 The user must not manually choose `Открыт` from the dropdown. `Открыт` is a
 system-derived editable/incomplete state, not a user-selected lifecycle outcome.
+
+Implemented frontend/backend details:
+
+- `battery_status` shows `Открыт` only as disabled derived display before
+  assembly completion;
+- after assembly completion, the enabled dropdown contains only `assembled`,
+  `testing`, `completed`, and `failed`;
+- `battery_status` is handled by a dedicated change handler, not generic dirty
+  form mutation handlers;
+- manual status PATCH responses must be used to refresh frontend battery/QC
+  state before re-rendering the dropdown;
+- `PATCH /api/batteries/:id` validates status against assembly completeness and
+  rejects blank/open, `disassembled`, unknown, or premature selectable statuses;
+- legacy `disassembled` is display-normalized as `Открыт` and remains
+  reassemblable through normal save flows.
 
 ## No Hidden Write On Read
 

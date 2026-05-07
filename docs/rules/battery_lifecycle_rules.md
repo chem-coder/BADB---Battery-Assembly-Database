@@ -10,6 +10,10 @@ Source paths:
 - `routes/batteries.js`
 - `services/batteryLifecycleService.js`
 - `services/batteryElectrochemService.js`
+- `services/batteryCatalogService.js`
+- `services/batteryAssemblyService.js`
+- `public/js/3-batteries.js`
+- `public/workflow/3-batteries.html`
 - `contracts/vanilla_api_endpoints.json`
 - `scripts/smoke_vanilla_api.js`
 
@@ -54,6 +58,19 @@ After assembly completion, user-selectable statuses are limited to:
 
 The API must reject user attempts to set `Открыт`/blank, `disassembled`, unknown
 statuses, or any selectable status before assembly completion.
+
+Frontend status controls must preserve the same contract:
+
+- before assembly completion, show disabled `Открыт`;
+- after assembly completion, enable only `assembled`, `testing`, `completed`,
+  and `failed`;
+- do not include `Открыт` or `disassembled` in the enabled dropdown;
+- do not let the status field participate in generic dirty-form mutation logic;
+- save status through a dedicated handler and update UI state from the backend
+  response before re-rendering.
+
+The list row label, sticky header label, report/status display, and dropdown
+must all normalize legacy `disassembled` as derived `Открыт`.
 
 ## Access
 

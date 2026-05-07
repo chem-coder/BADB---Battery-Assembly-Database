@@ -12,9 +12,12 @@ Source paths:
 - `services/batteryElectrodeSourceService.js`
 - `services/batteryElectrodeStackService.js`
 - `services/batteryCompatibleCutBatchService.js`
+- `public/workflow/3-batteries.html`
 - `public/js/3-batteries.js`
+- `public/css/styles.css`
 - `contracts/vanilla_api_endpoints.json`
 - `scripts/smoke_vanilla_api.js`
+- `docs/instructions/vanilla_ui_patterns.md`
 
 This document summarizes the current battery workflow. Hard lifecycle rules
 live in `docs/rules/battery_lifecycle_rules.md`. Electrode source and stack
@@ -100,6 +103,22 @@ the page explicitly saves `assembled`. Ordinary read/report endpoints do not
 promote status on fetch. After assembly is complete, the status dropdown allows
 only `Собран`, `На тестировании`, `Завершён`, and `Брак`.
 
+Status control implementation:
+
+- the `battery_status` select displays derived `Открыт` only while the record is
+  incomplete or has legacy `disassembled` status;
+- the enabled option list must contain only `assembled`, `testing`,
+  `completed`, and `failed`;
+- `battery_status` is excluded from generic form dirty handlers and uses its
+  own `change` handler;
+- manual status save sends the selected value to `PATCH /api/batteries/:id`;
+- after the PATCH succeeds, frontend battery/QC state must be updated from the
+  returned `status` before re-rendering the dropdown;
+- list labels and the sticky header use the normalized display value, so legacy
+  `disassembled` appears as `Открыт`.
+
+Do not reintroduce manual `Открыт` or selectable `disassembled`.
+
 ## Electrode Sources And Stack
 
 Source selection happens before stack selection. The saved source cut batches
@@ -140,6 +159,17 @@ Delete behavior:
 - linked electrodes must be returned as available or scrapped;
 - every successful delete writes an `activity_log` audit event;
 - upstream lab records are not deleted.
+
+Clicking `Удалить запись` must make the guided delete area visible immediately.
+The Batteries page renders `battery_delete_flow` directly under
+`battery_sticky_header`, then scrolls the document to the page top. The correct
+implementation is to set `document.scrollingElement`/`documentElement`/`body`
+scroll position to `0` and then call `window.scrollTo(0, 0)`. Do not use
+`battery_sticky_header.scrollIntoView()` for this behavior; the sticky header
+can already be visible without the document being at the top.
+
+Reusable vanilla UI guidance lives in
+`docs/instructions/vanilla_ui_patterns.md`.
 
 Detailed lifecycle rules are in `docs/rules/battery_lifecycle_rules.md`.
 

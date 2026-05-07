@@ -2773,7 +2773,7 @@ function renderTapesList() {
     const restoreData = await fetchTapeRestoreData(tape);
     normalizeTapeRestoreDataIntoState(restoreData);
     await renderTapeRestoreFromState(restoreData);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
   }
   
   state.tapes.items.forEach(t => {

@@ -3163,6 +3163,10 @@ function getBatteryDeleteFlowElement() {
   return document.getElementById('battery_delete_flow');
 }
 
+function scrollBatteryDeleteFlowIntoView() {
+  window.BADB_UI?.scrollToTop();
+}
+
 function getBatteryDeleteHardBlockers(check = state.ui.deleteFlow?.check) {
   return Array.isArray(check?.hard_blockers)
     ? check.hard_blockers
@@ -4451,7 +4455,7 @@ function openBatteryPrintReport(batteryId) {
 
 async function openBatteryRecord(battery) {
   await populateBatteryForm(battery);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
 }
 
 // Load a battery for editing
@@ -5478,7 +5482,11 @@ async function handleBatteryStatusChange() {
     setCurrentBattery({
       ...(state.selection.currentBattery || {}),
       ...(updatedBattery || {}),
-      status: state.qc.status || null
+      status: updatedBattery?.status || state.qc.status || null
+    });
+    setQcState({
+      ...state.qc,
+      status: updatedBattery?.status || state.qc.status || null
     });
     renderBatteryStatusControl();
     refreshDirtyState();
@@ -5547,6 +5555,7 @@ async function handleDeleteBatteryClick() {
       true,
       { clearAfterMs: 18000 }
     );
+    scrollBatteryDeleteFlowIntoView();
     return;
   }
 
@@ -5555,6 +5564,7 @@ async function handleDeleteBatteryClick() {
       step: 'blocked',
       check
     });
+    scrollBatteryDeleteFlowIntoView();
     return;
   }
 
@@ -5564,6 +5574,7 @@ async function handleDeleteBatteryClick() {
     electrodeDisposition: 'available',
     scrappedReason: ''
   });
+  scrollBatteryDeleteFlowIntoView();
 }
 
 function handleAddBatteryClick() {
@@ -5894,6 +5905,10 @@ document
     return;
   }
 
+  if (event.target?.id === 'battery_status') {
+    return;
+  }
+
   handleBatteryFormMutation();
 });
 
@@ -5901,6 +5916,10 @@ document
 .querySelector('form[name="battery_assembly_log_form"]')
 .addEventListener('change', (event) => {
   if (event.target?.closest?.('#battery_stack_builder')) {
+    return;
+  }
+
+  if (event.target?.id === 'battery_status') {
     return;
   }
 

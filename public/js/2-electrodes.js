@@ -985,7 +985,7 @@
       }
 
       await selectBatch(batch);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
     }
 
     function shouldShowElectrodeWorkflow() {

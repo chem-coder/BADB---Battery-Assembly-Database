@@ -1,7 +1,7 @@
 # Documentation Index
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-07
 Status: current
 
 ## Operating Rules
@@ -21,6 +21,7 @@ Status: current
 - [Testing And Release Checks](instructions/testing_release.md)
 - [Git Workflow](instructions/git_workflow.md)
 - [UI API DB Mapping](instructions/ui_api_db_mapping.md)
+- [Vanilla UI Patterns](instructions/vanilla_ui_patterns.md)
 - [Workflow State Refactor Pattern](instructions/workflow_state_refactor.md)
 
 ## Current Feature Docs

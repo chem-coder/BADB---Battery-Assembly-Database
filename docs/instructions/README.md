@@ -1,7 +1,7 @@
 # Instructions
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-07
 Status: instruction
 
 This folder is for recurring workflows: tests, migrations, release checks, documentation updates, and cleanup procedures.
@@ -18,4 +18,5 @@ This folder is for recurring workflows: tests, migrations, release checks, docum
 - [Run BADB Locally](run_local.md)
 - [Testing And Release Checks](testing_release.md)
 - [UI API DB Mapping](ui_api_db_mapping.md)
+- [Vanilla UI Patterns](vanilla_ui_patterns.md)
 - [Workflow State Refactor Pattern](workflow_state_refactor.md)

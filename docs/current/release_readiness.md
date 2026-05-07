@@ -1,7 +1,7 @@
 # BADB Release Readiness
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-07
 Status: current
 
 This file tracks only the current release-control state. Do not use it for future ideas, long worklogs, or archived rationale.
@@ -25,6 +25,10 @@ Archived notes and generated materials are historical context only.
 - Guided battery delete workflow with auth-only access, typed confirmation, hard blockers, electrode disposition, owned QC/electrochem cleanup, and `activity_log`.
 - Battery status workflow cleanup: derived `Открыт`, no status mutation on read,
   guarded post-assembly statuses, and legacy `disassembled` display compatibility.
+- Batteries page UX follow-up: `Удалить запись` scrolls the document to the top
+  so the guided delete panel is immediately visible; status dropdown visual
+  emphasis and save/display behavior were corrected without changing the status
+  model.
 - Battery stack DB trigger hardening in `d031_harden_battery_stack_validate_trigger.sql`.
 - Trigger-safe pouch/cyl stack insert order: `A1, C1, A2, C2`, preserving original `position_index`.
 - Vanilla smoke harness now applies `d031` after restoring the old dump.
@@ -61,6 +65,13 @@ Battery status workflow cleanup verified on 2026-05-07:
 - `npm run contract:vanilla` passed.
 - `npm run smoke:vanilla` passed: 233 checks, 0 failures.
 - Browser/manual status checks passed on a throwaway smoke database.
+
+Batteries UX/status follow-up verified on 2026-05-07:
+
+- `node --check public/js/3-batteries.js` passed.
+- `git diff --check` passed.
+- Browser check passed: from a mid-page scroll position, clicking
+  `Удалить запись` moved the page to the top and showed the guided delete panel.
 
 ## Must Verify Before Pilot
 

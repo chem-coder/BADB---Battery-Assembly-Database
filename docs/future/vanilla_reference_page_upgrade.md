@@ -4,7 +4,7 @@ Created: 2026-05-06
 Edited: 2026-05-07
 Status: future idea
 Verified against code: light check 2026-05-07
-Source paths: `docs/archive/superseded/2026-05-06-future-backlog/BADB_VANILLA_REFERENCE_PAGE_UPGRADE_PLAN.md`, `public/js/badb-ui.js`, `public/reference/electrolytes.html`, `public/js/electrolytes.js`, `public/workflow/1-tapes.html`, `public/workflow/2-electrodes.html`, `public/workflow/3-batteries.html`
+Source paths: `docs/archive/superseded/2026-05-06-future-backlog/BADB_VANILLA_REFERENCE_PAGE_UPGRADE_PLAN.md`, `docs/instructions/vanilla_ui_patterns.md`, `public/js/badb-ui.js`, `public/reference/electrolytes.html`, `public/js/electrolytes.js`, `public/workflow/1-tapes.html`, `public/workflow/2-electrodes.html`, `public/workflow/3-batteries.html`
 
 This is a future rollout plan for making remaining vanilla reference pages feel closer to the current Tapes, Electrode Batches, Batteries, and Electrolytes interaction pattern.
 
@@ -52,6 +52,11 @@ Use this interaction pattern where practical:
 - Save keeps the record open;
 - Exit returns to the list/default view;
 - opening a record scrolls to the top.
+
+For top-of-page scroll behavior, use the document-scroller pattern in
+`docs/instructions/vanilla_ui_patterns.md`. Do not target a sticky header with
+`scrollIntoView()` when the requirement is to return the page to the top. Sticky
+headers can already be visible while the document remains scrolled down.
 
 Use Russian labels throughout.
 
@@ -155,3 +160,7 @@ npm run contract:vanilla
 Run `npm run smoke:vanilla` after meaningful API, route, delete, dependency, or print-report changes.
 
 Visually check desktop and mobile width for sticky-header overlap, long Russian labels, and button wrapping.
+
+For row-open or delete-panel scroll work, also browser-test from a deliberately
+scrolled mid-page position and confirm that the page top or guided panel becomes
+visible after the real click.

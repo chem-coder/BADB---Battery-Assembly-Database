@@ -165,12 +165,48 @@
     });
   }
 
+  function scrollToTop(options = {}) {
+    const { behavior = 'auto' } = options;
+
+    requestAnimationFrame(() => {
+      const scrollingElement =
+        document.scrollingElement ||
+        document.documentElement ||
+        document.body;
+
+      if (behavior === 'smooth') {
+        try {
+          window.scrollTo({ top: 0, left: 0, behavior });
+        } catch {
+          if (scrollingElement) {
+            scrollingElement.scrollTop = 0;
+            scrollingElement.scrollLeft = 0;
+          }
+          window.scrollTo(0, 0);
+        }
+        return;
+      }
+
+      if (scrollingElement) {
+        scrollingElement.scrollTop = 0;
+        scrollingElement.scrollLeft = 0;
+      }
+
+      try {
+        window.scrollTo({ top: 0, left: 0, behavior });
+      } catch {
+        window.scrollTo(0, 0);
+      }
+    });
+  }
+
   window.BADB_UI = {
     createIconButton,
     createRecordOpenButton,
     setDirtyFlag,
     setStickyHeader,
     showStatus,
-    scrollToElement
+    scrollToElement,
+    scrollToTop
   };
 })();

@@ -371,7 +371,7 @@ async function disassembleBattery(pool, batteryId, userId) {
     }
 
     const electrodeIds = await fetchBatteryElectrodeIds(client, batteryId);
-    const scrappedReason = `вернут из аккумулятора #${batteryId} при разборке`;
+    const scrappedReason = `возвращен из аккумулятора #${batteryId} при разборке`;
     const deletedCounts = {};
 
     if (electrodeIds.length > 0) {

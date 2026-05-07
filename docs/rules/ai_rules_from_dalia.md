@@ -1,7 +1,7 @@
 # AI Rules From Dalia
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-07
 Status: rule
 
 These are standing rules for AI agents and collaborators working in `BADB_main`.
@@ -65,6 +65,23 @@ Use this order when sources disagree:
 5. Canonical docs in `BADB_main/docs/current`, `BADB_main/docs/rules`, and `BADB_main/docs/instructions`.
 6. `BADB_main/Документация ЕСПД` as a formal mirror.
 7. Inbox, generated, archived, or historical material only after verification.
+
+## Fix The Root Cause
+
+Do not solve recurring bugs by piling on page-specific exceptions, duplicate
+helpers, defensive branches, or explanatory documentation that only preserves
+the mess.
+
+When the same problem appears in more than one place:
+
+- find the shared mechanism or incorrect assumption;
+- fix that mechanism once;
+- remove or avoid duplicate one-off patches;
+- document the reusable rule briefly;
+- keep the solution smaller than the problem.
+
+More code and more context are not proof of safety. Prefer one clear primitive
+over many local workarounds.
 
 ## Migrations
 
