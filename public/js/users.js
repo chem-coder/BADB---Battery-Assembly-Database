@@ -4,8 +4,21 @@ const addUserFieldset = document.getElementById('addUserFieldset');
 const addUserForm = document.getElementById('addUserForm');
 const saveNewUserBtn = document.getElementById('saveNewUserBtn');
 const exitNewUserBtn = document.getElementById('exitNewUserBtn');
+const deleteUserBtn = document.getElementById('deleteUserBtn');
 const dirtyUserCreate = document.getElementById('dirty-user-create');
 const userFormLegend = document.getElementById('userFormLegend');
+const stickyHeader = document.getElementById('user_sticky_header');
+const stickyTitle = document.getElementById('user_sticky_title');
+const stickyMeta = document.getElementById('user_sticky_meta');
+const stickyDirty = document.getElementById('user-global-dirty');
+const stickyStatus = document.getElementById('user-sticky-status');
+const pageStatus = document.getElementById('users-page-status');
+const filterTextInput = document.getElementById('user-filter-text');
+const filterRoleSelect = document.getElementById('user-filter-role');
+const filterDepartmentSelect = document.getElementById('user-filter-department');
+const filterActiveSelect = document.getElementById('user-filter-active');
+const clearFiltersBtn = document.getElementById('clearUserFiltersBtn');
+const filterSummary = document.getElementById('user-filter-summary');
 
 const newUserName = document.getElementById('newUserName');
 const newUserLogin = document.getElementById('newUserLogin');
@@ -35,6 +48,7 @@ let currentUsers = [];
 let currentDepartments = [];
 let formMode = 'create';
 let currentEditUserId = null;
+let currentOpenedUser = null;
 let createFormDirty = false;
 let passwordResetVisible = false;
 let savedUserFormSnapshot = '';
@@ -105,17 +119,28 @@ async function deleteUser(id) {
 }
 
 function showStatus(msg, isError = false) {
-  const existing = document.querySelector('.inline-status');
-  if (existing) existing.remove();
+  const target = addUserFieldset.hidden ? pageStatus : stickyStatus;
 
-  const el = document.createElement('div');
-  el.className = 'inline-status';
-  el.textContent = msg;
-  el.style.margin = '0.75rem 0';
-  el.style.color = isError ? '#b00020' : '#2e7d32';
+  if (window.BADB_UI?.showStatus && target) {
+    window.BADB_UI.showStatus(target, msg, { isError });
+    return;
+  }
 
-  addUserFieldset.after(el);
-  setTimeout(() => el.remove(), 2500);
+  if (!target) return;
+
+  target.textContent = msg;
+  target.style.color = isError ? '#b00020' : '#2e7d32';
+  setTimeout(() => {
+    target.textContent = '';
+  }, 2500);
+}
+
+function clearUserStatuses() {
+  [stickyStatus, pageStatus].forEach((target) => {
+    if (!target) return;
+    target.textContent = '';
+    target.classList.remove('is-error', 'is-success', 'is-saved', 'is-saving');
+  });
 }
 
 function getCurrentAuthUser() {
@@ -135,8 +160,104 @@ function canManageUser(user) {
   return isCurrentUserAdmin() || isCurrentAuthUser(user);
 }
 
+function canDeleteUser(user) {
+  return Boolean(user?.user_id) && canManageUser(user);
+}
+
 function renderAddUserButtonAccess() {
   showAddUserFormBtn.hidden = !isCurrentUserAdmin();
+}
+
+function getSelectedOptionText(select) {
+  return select?.selectedOptions?.[0]?.textContent?.trim() || '';
+}
+
+function getUserDepartmentLabel(user) {
+  if (!user) return getSelectedOptionText(newUserDepartment) || UNDECIDED_LABEL;
+  return user.department_name || UNDECIDED_LABEL;
+}
+
+function getCurrentFormUserForPermissions() {
+  if (formMode !== 'edit') return null;
+  return currentOpenedUser || currentUsers.find(user => String(user.user_id) === String(currentEditUserId)) || null;
+}
+
+function canSaveCurrentUserForm() {
+  if (formMode === 'create') return isCurrentUserAdmin();
+  const user = getCurrentFormUserForPermissions();
+  return Boolean(user && canManageUser(user));
+}
+
+function setUserFormEditable(canEdit) {
+  [
+    newUserName,
+    newUserLogin,
+    newUserPassword,
+    confirmUserPassword,
+    newUserPosition,
+    newUserDepartment,
+    newUserActive
+  ].forEach((field) => {
+    field.disabled = !canEdit;
+  });
+
+  newUserRole.disabled = !canEdit || (formMode === 'edit' && !isCurrentUserAdmin());
+  showResetUserPasswordBtn.disabled = !canEdit;
+  cancelResetUserPasswordBtn.disabled = !canEdit;
+
+  if (!canEdit && formMode === 'edit') {
+    passwordResetVisible = false;
+    newUserPasswordField.hidden = true;
+    confirmUserPasswordField.hidden = true;
+    resetUserPasswordField.hidden = true;
+    cancelUserPasswordResetField.hidden = true;
+  }
+}
+
+function updateUserActionState() {
+  const canSave = canSaveCurrentUserForm();
+  const canDelete = formMode === 'edit' && canDeleteUser(getCurrentFormUserForPermissions());
+
+  saveNewUserBtn.disabled = !canSave;
+  saveNewUserBtn.title = canSave
+    ? 'Сохранить пользователя'
+    : 'Недостаточно прав для сохранения';
+
+  deleteUserBtn.hidden = !canDelete;
+  deleteUserBtn.disabled = !canDelete;
+}
+
+function renderUserStickyHeader() {
+  if (addUserFieldset.hidden) {
+    if (stickyHeader) stickyHeader.hidden = true;
+    return;
+  }
+
+  const name = newUserName.value.trim();
+  const login = newUserLogin.value.trim();
+  const title = formMode === 'create'
+    ? 'Новый пользователь'
+    : [name || UNDECIDED_LABEL, login ? `(${login})` : ''].filter(Boolean).join(' ');
+  const meta = [
+    login ? `логин: ${login}` : '',
+    `роль: ${formatRole(newUserRole.value)}`,
+    `отдел: ${getSelectedOptionText(newUserDepartment) || getUserDepartmentLabel(currentOpenedUser)}`,
+    `должность: ${newUserPosition.value || UNDECIDED_LABEL}`,
+    `статус: ${newUserActive.value === 'false' ? 'неактивен' : 'активен'}`
+  ].filter(Boolean).join(' — ');
+
+  window.BADB_UI?.setStickyHeader({
+    header: stickyHeader,
+    titleEl: stickyTitle,
+    metaEl: stickyMeta,
+    dirtyEl: stickyDirty,
+    title,
+    meta,
+    isDirty: createFormDirty,
+    hidden: false
+  });
+
+  updateUserActionState();
 }
 
 // -------- User form --------
@@ -144,6 +265,7 @@ function renderAddUserButtonAccess() {
 function setCreateFormDirty(isDirty) {
   createFormDirty = Boolean(isDirty);
   dirtyUserCreate.style.display = createFormDirty ? 'inline' : 'none';
+  window.BADB_UI?.setDirtyFlag(stickyDirty, createFormDirty);
 }
 
 function getUserFormSnapshot() {
@@ -169,6 +291,7 @@ function markUserFormClean() {
 
 function refreshUserFormDirty() {
   setCreateFormDirty(getUserFormSnapshot() !== savedUserFormSnapshot);
+  renderUserStickyHeader();
 }
 
 function hasUnsavedCreateUserChanges() {
@@ -185,35 +308,64 @@ function resetCreateUserForm() {
   newUserActive.value = 'true';
   passwordResetVisible = false;
   configurePasswordFields();
+  setUserFormEditable(true);
   markUserFormClean();
+  renderUserStickyHeader();
 }
 
 function hideCreateUserForm() {
   resetCreateUserForm();
   addUserFieldset.hidden = true;
+  if (stickyHeader) stickyHeader.hidden = true;
   showAddUserFormBtn.disabled = false;
   newUserRole.disabled = false;
   formMode = 'create';
   currentEditUserId = null;
+  currentOpenedUser = null;
+  clearUserStatuses();
 }
 
 function showCreateUserForm() {
+  if (!confirmDiscardCreateUserChanges()) return false;
+  clearUserStatuses();
   formMode = 'create';
   currentEditUserId = null;
+  currentOpenedUser = null;
   renderCreateUserSelects();
   userFormLegend.textContent = 'Новый пользователь';
   resetCreateUserForm();
   addUserFieldset.hidden = false;
   showAddUserFormBtn.disabled = true;
+  setUserFormEditable(true);
   markUserFormClean();
+  renderUserStickyHeader();
+  window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
   newUserName.focus();
+  return true;
 }
 
-function showEditUserForm(user) {
-  if (!confirmDiscardCreateUserChanges()) return;
+function showEditUserForm(user, options = {}) {
+  if (!user) return false;
+  const {
+    skipConfirm = false,
+    scroll = true,
+    focus = true,
+    force = false
+  } = options;
 
+  if (!force && !addUserFieldset.hidden && formMode === 'edit' && String(currentEditUserId) === String(user.user_id)) {
+    if (scroll) {
+      window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
+    }
+    return true;
+  }
+
+  if (!skipConfirm && !confirmDiscardCreateUserChanges()) return false;
+
+  clearUserStatuses();
   formMode = 'edit';
   currentEditUserId = user.user_id;
+  currentOpenedUser = user;
   renderCreateUserSelects();
   resetCreateUserForm();
 
@@ -228,12 +380,21 @@ function showEditUserForm(user) {
     ? UNDECIDED_DEPARTMENT_VALUE
     : String(user.department_id);
   newUserActive.value = String(Boolean(user.active));
-  newUserRole.disabled = !isCurrentUserAdmin();
+  setUserFormEditable(canManageUser(user));
 
   addUserFieldset.hidden = false;
   showAddUserFormBtn.disabled = true;
   markUserFormClean();
-  newUserName.focus();
+  renderUserStickyHeader();
+  if (scroll) {
+    window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
+  }
+
+  if (focus && !newUserName.disabled) {
+    newUserName.focus();
+  }
+
+  return true;
 }
 
 function configurePasswordFields() {
@@ -333,68 +494,148 @@ function formatRole(role) {
   return ROLE_LABELS[role] || role || UNDECIDED_LABEL;
 }
 
+function formatUserStatus(user) {
+  return user?.active ? 'активен' : 'неактивен';
+}
+
+function normalizeFilterText(value) {
+  return String(value || '').trim().toLocaleLowerCase('ru-RU');
+}
+
+function renderUserFilterOptions() {
+  if (!filterDepartmentSelect) return;
+
+  const currentValue = filterDepartmentSelect.value;
+  filterDepartmentSelect.replaceChildren(
+    new Option('Все отделы', ''),
+    new Option(UNDECIDED_LABEL, UNDECIDED_DEPARTMENT_VALUE),
+    ...currentDepartments.map(department => new Option(department.name, String(department.department_id)))
+  );
+
+  filterDepartmentSelect.value = [...filterDepartmentSelect.options].some(
+    option => option.value === currentValue
+  )
+    ? currentValue
+    : '';
+}
+
+function getUserFilterState() {
+  return {
+    text: normalizeFilterText(filterTextInput?.value),
+    role: filterRoleSelect?.value || '',
+    department: filterDepartmentSelect?.value || '',
+    active: filterActiveSelect?.value || ''
+  };
+}
+
+function hasActiveUserFilters(filters = getUserFilterState()) {
+  return Boolean(filters.text || filters.role || filters.department || filters.active);
+}
+
+function getUserDepartmentFilterValue(user) {
+  return user.department_id == null
+    ? UNDECIDED_DEPARTMENT_VALUE
+    : String(user.department_id);
+}
+
+function getUserSearchText(user) {
+  return normalizeFilterText([
+    user.name,
+    user.login,
+    user.department_name,
+    user.role,
+    formatRole(user.role),
+    user.position
+  ].filter(value => value !== null && value !== undefined && value !== '').join(' '));
+}
+
+function matchesUserFilters(user, filters = getUserFilterState()) {
+  if (filters.role && user.role !== filters.role) return false;
+  if (filters.department && getUserDepartmentFilterValue(user) !== filters.department) return false;
+  if (filters.active && String(Boolean(user.active)) !== filters.active) return false;
+  if (filters.text && !getUserSearchText(user).includes(filters.text)) return false;
+
+  return true;
+}
+
+function getFilteredUsers() {
+  const filters = getUserFilterState();
+  return currentUsers.filter(user => matchesUserFilters(user, filters));
+}
+
+function updateUserFilterSummary(filteredCount, totalCount) {
+  const filters = getUserFilterState();
+  const hasFilters = hasActiveUserFilters(filters);
+
+  if (clearFiltersBtn) {
+    clearFiltersBtn.disabled = !hasFilters;
+  }
+
+  if (!filterSummary) return;
+
+  if (totalCount === 0) {
+    filterSummary.textContent = 'Нет пользователей';
+    return;
+  }
+
+  filterSummary.textContent = hasFilters
+    ? `Показано ${filteredCount} из ${totalCount}`
+    : `Всего: ${totalCount}`;
+}
+
 function renderUsers(users) {
   usersList.innerHTML = '';
 
-  users
+  if (users.length === 0) {
+    const emptyRow = document.createElement('li');
+    emptyRow.className = 'user-row user-empty-row';
+    emptyRow.textContent = currentUsers.length === 0
+      ? 'Пользователи пока не добавлены.'
+      : hasActiveUserFilters()
+        ? 'Пользователи по выбранным фильтрам не найдены.'
+        : 'Пользователи не найдены.';
+    usersList.appendChild(emptyRow);
+    return;
+  }
+
+  [...users]
     .sort((a, b) => a.name.localeCompare(b.name))
     .forEach(user => {
       const li = document.createElement('li');
       li.className = 'user-row';
+      if (!addUserFieldset.hidden && String(currentEditUserId) === String(user.user_id)) {
+        li.classList.add('is-open');
+      }
 
-      const info = document.createElement('div');
-      info.className = 'user-info';
-
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = user.name;
+      const titleLine = document.createElement('div');
+      titleLine.className = 'record-list-title';
+      titleLine.textContent = `${user.name || UNDECIDED_LABEL} / ${user.login || UNDECIDED_LABEL}`;
 
       const statusSpan = document.createElement('span');
       statusSpan.className = 'status' + (user.active ? '' : ' inactive');
-      statusSpan.textContent = user.active ? 'активен' : 'неактивен';
+      statusSpan.textContent = formatUserStatus(user);
 
-      const meta = document.createElement('div');
-      meta.className = 'user-meta';
-      meta.textContent = [
-        `логин: ${user.login || UNDECIDED_LABEL}`,
+      titleLine.appendChild(statusSpan);
+
+      const metaLine = document.createElement('div');
+      metaLine.className = 'record-list-meta';
+      metaLine.textContent = [
         `роль: ${formatRole(user.role)}`,
         `должность: ${user.position || UNDECIDED_LABEL}`,
         `отдел: ${user.department_name || UNDECIDED_LABEL}`
-      ].join(' · ');
+      ].join(' — ');
 
-      info.appendChild(nameSpan);
-      info.appendChild(statusSpan);
-      info.appendChild(meta);
-
-      const actions = document.createElement('div');
-      actions.className = 'actions';
-
-      const editBtn = document.createElement('button');
-      editBtn.textContent = '✏️';
-      editBtn.title = 'Редактировать';
-      editBtn.onclick = () => enterEditMode(li, user);
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.textContent = '🗑';
-      deleteBtn.title = 'Удалить';
-      deleteBtn.onclick = async () => {
-        if (!confirm('Вы уверены?')) return;
-
-        try {
-          await deleteUser(user.user_id);
-          showStatus('Пользователь удалён');
-          await loadUsers();
-        } catch (err) {
-          showStatus(err.message, true);
+      const info = window.BADB_UI.createRecordOpenButton({
+        className: 'user-info',
+        ariaLabel: `Открыть пользователя ${user.name || user.login || user.user_id}`,
+        children: [titleLine, metaLine],
+        onClick: () => {
+          enterEditMode(li, user);
         }
-      };
-
-      if (canManageUser(user)) {
-        actions.appendChild(editBtn);
-        actions.appendChild(deleteBtn);
-      }
+      });
+      info.title = `Открыть пользователя ${user.name || user.login || user.user_id}`;
 
       li.appendChild(info);
-      li.appendChild(actions);
 
       usersList.appendChild(li);
     });
@@ -402,6 +643,62 @@ function renderUsers(users) {
 
 function enterEditMode(_li, user) {
   showEditUserForm(user);
+}
+
+function renderFilteredUsers() {
+  const filters = getUserFilterState();
+  const filtered = getFilteredUsers();
+
+  renderUsers(filtered);
+  updateUserFilterSummary(filtered.length, currentUsers.length);
+}
+
+function findCurrentUserRecord(id) {
+  return currentUsers.find(user => String(user.user_id) === String(id)) || null;
+}
+
+async function reloadUsersAndReopen(savedUser, message) {
+  const savedId = savedUser?.user_id || currentEditUserId;
+
+  await loadUsers();
+
+  const latestUser = findCurrentUserRecord(savedId);
+  if (!latestUser) {
+    hideCreateUserForm();
+    showStatus(message);
+    return;
+  }
+
+  showEditUserForm(latestUser, {
+    skipConfirm: true,
+    scroll: false,
+    focus: false,
+    force: true
+  });
+  renderFilteredUsers();
+  showStatus(message);
+}
+
+async function handleDeleteCurrentUser() {
+  const user = getCurrentFormUserForPermissions();
+
+  if (!canDeleteUser(user)) return;
+
+  const label = user.name || user.login || `#${user.user_id}`;
+  if (!confirm(`Удалить пользователя ${label}?`)) return;
+
+  deleteUserBtn.disabled = true;
+
+  try {
+    await deleteUser(user.user_id);
+    hideCreateUserForm();
+    await loadUsers();
+    showStatus('Пользователь удалён');
+  } catch (err) {
+    showStatus(err.message, true);
+  } finally {
+    renderUserStickyHeader();
+  }
 }
 
 // -------- Events --------
@@ -427,26 +724,33 @@ cancelResetUserPasswordBtn.addEventListener('click', () => {
 addUserForm.addEventListener('submit', async (e) => {
   e.preventDefault();
 
+  if (!canSaveCurrentUserForm()) {
+    showStatus('Недостаточно прав для сохранения', true);
+    return;
+  }
+
   if (!addUserForm.reportValidity()) return;
   if (!validatePasswordReset()) return;
 
   saveNewUserBtn.disabled = true;
 
   try {
+    let savedUser;
+    let message;
+
     if (formMode === 'create') {
-      await createUser(buildUserPayload());
-      showStatus('Пользователь создан');
+      savedUser = await createUser(buildUserPayload());
+      message = 'Пользователь создан';
     } else {
-      await updateUser(currentEditUserId, buildUserPayload());
-      showStatus('Изменения сохранены');
+      savedUser = await updateUser(currentEditUserId, buildUserPayload());
+      message = 'Изменения сохранены';
     }
 
-    hideCreateUserForm();
-    await loadUsers();
+    await reloadUsersAndReopen(savedUser, message);
   } catch (err) {
     showStatus(err.message, true);
   } finally {
-    saveNewUserBtn.disabled = false;
+    renderUserStickyHeader();
   }
 });
 
@@ -454,6 +758,35 @@ exitNewUserBtn.addEventListener('click', () => {
   if (!confirmDiscardCreateUserChanges()) return;
   hideCreateUserForm();
 });
+
+deleteUserBtn.addEventListener('click', handleDeleteCurrentUser);
+
+if (filterTextInput) {
+  filterTextInput.addEventListener('input', renderFilteredUsers);
+}
+
+if (filterRoleSelect) {
+  filterRoleSelect.addEventListener('change', renderFilteredUsers);
+}
+
+if (filterDepartmentSelect) {
+  filterDepartmentSelect.addEventListener('change', renderFilteredUsers);
+}
+
+if (filterActiveSelect) {
+  filterActiveSelect.addEventListener('change', renderFilteredUsers);
+}
+
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', () => {
+    if (filterTextInput) filterTextInput.value = '';
+    if (filterRoleSelect) filterRoleSelect.value = '';
+    if (filterDepartmentSelect) filterDepartmentSelect.value = '';
+    if (filterActiveSelect) filterActiveSelect.value = '';
+    renderFilteredUsers();
+    filterTextInput?.focus();
+  });
+}
 
 window.addEventListener('beforeunload', (e) => {
   if (!hasUnsavedCreateUserChanges()) return;
@@ -481,8 +814,13 @@ async function loadUsers() {
     currentUsers = Array.isArray(users) ? users : [];
     currentDepartments = Array.isArray(departments) ? departments : [];
     renderAddUserButtonAccess();
+    renderUserFilterOptions();
     renderCreateUserSelects();
-    renderUsers(currentUsers);
+    if (!addUserFieldset.hidden && formMode === 'edit') {
+      currentOpenedUser = findCurrentUserRecord(currentEditUserId) || currentOpenedUser;
+      renderUserStickyHeader();
+    }
+    renderFilteredUsers();
   } catch (err) {
     showStatus(err.message || 'Ошибка загрузки пользователей', true);
   }

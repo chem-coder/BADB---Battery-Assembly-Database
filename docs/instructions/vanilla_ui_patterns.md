@@ -1,7 +1,7 @@
 # Vanilla UI Patterns
 
 Created: 2026-05-07
-Edited: 2026-05-07
+Edited: 2026-05-08
 Status: instruction
 
 Use this when implementing recurring vanilla-page behavior in `public/`.
@@ -10,6 +10,7 @@ Source paths:
 
 - `public/js/3-batteries.js`
 - `public/workflow/3-batteries.html`
+- `public/reference/users.html`
 - `public/css/styles.css`
 - `docs/future/vanilla_reference_page_upgrade.md`
 
@@ -88,6 +89,25 @@ Required pattern:
 The Batteries page uses this pattern for `battery_status`: derived `Открыт` is
 shown while assembly is incomplete, but only `assembled`, `testing`,
 `completed`, and `failed` are selectable after assembly is complete.
+
+## Users Filter Layout
+
+The Users page has a fixed two-row filter layout, not a free-wrapping flex row.
+
+Required desktop layout:
+
+- top row: text search, then the role filter with any injected
+  `Текущий пользователь` button beside the role select;
+- second row: department filter, active/inactive status filter, and reset
+  button;
+- third row: the result count, for example `Всего: 37`, below all filter
+  controls.
+
+Do not let the role label/select rise above the search baseline, and do not let
+the `Текущий пользователь` button wrap under the role select on desktop. The
+global auth enhancer can insert that button directly after select elements, so
+Users page CSS must keep the role select and injected button on the same filter
+row.
 
 ## Verification
 

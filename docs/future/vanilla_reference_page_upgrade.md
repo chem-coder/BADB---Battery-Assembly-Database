@@ -4,7 +4,7 @@ Created: 2026-05-06
 Edited: 2026-05-08
 Status: future idea
 Verified against code: light check 2026-05-08
-Source paths: `docs/archive/superseded/2026-05-06-future-backlog/BADB_VANILLA_REFERENCE_PAGE_UPGRADE_PLAN.md`, `docs/instructions/vanilla_ui_patterns.md`, `public/js/badb-ui.js`, `public/reference/electrolytes.html`, `public/js/electrolytes.js`, `public/reference/separators.html`, `public/js/separators.js`, `public/workflow/1-tapes.html`, `public/workflow/2-electrodes.html`, `public/workflow/3-batteries.html`
+Source paths: `docs/archive/superseded/2026-05-06-future-backlog/BADB_VANILLA_REFERENCE_PAGE_UPGRADE_PLAN.md`, `docs/instructions/vanilla_ui_patterns.md`, `public/js/badb-ui.js`, `public/reference/electrolytes.html`, `public/js/electrolytes.js`, `public/reference/separators.html`, `public/js/separators.js`, `public/reference/users.html`, `public/js/users.js`, `public/workflow/1-tapes.html`, `public/workflow/2-electrodes.html`, `public/workflow/3-batteries.html`
 
 This is a future rollout plan for making remaining vanilla reference pages feel closer to the current Tapes, Electrode Batches, Batteries, and Electrolytes interaction pattern.
 
@@ -44,6 +44,9 @@ Light code checks through 2026-05-07 also found:
 - Separators uses the same row-open, sticky-header, inside-header delete, print
   report, and client-side filter pattern with fields that actually exist on
   separators: text, status, and structure.
+- Users uses row-open behavior, page-local filters for text, role, department,
+  and active status, an opened-record sticky header, inside-header save/exit,
+  and inside-header delete using the existing `/api/users/:id` security rules.
 
 Treat this doc as future guidance for the remaining rollout, not as proof that every item below is implemented.
 
@@ -98,9 +101,8 @@ Finish pages in small passes:
 
 1. Recipes row-open, sticky header, inside-form delete, and later print report.
 2. Projects row-open, inside-form delete, and later project report.
-3. Users row-open, inside-form delete, and later user report; avoid a heavy sticky header unless it clearly helps.
-4. Departments row-open and delete only if the dependency rules are clear; add printable departments list as a reporting pass.
-5. List-view printing pattern after at least one record report proves the report style.
+3. Departments row-open and delete only if the dependency rules are clear; add printable departments list as a reporting pass.
+4. List-view printing pattern after at least one record report proves the report style.
 
 Good pairings:
 
@@ -128,6 +130,24 @@ implemented.
 
 The separator filters intentionally do not include project filtering because
 separators do not currently have project links.
+
+## Users Follow-Up
+
+Users is current for this pass: row-open behavior, page-local filters, opened
+record sticky header, save/exit in the sticky header, delete only inside the
+opened record, and unsaved-change guards for exit, logout, record switching,
+and browser unload are implemented.
+
+The user filters intentionally use fields already returned by `/api/users`:
+name/login text, role, department, and active status. Delete visibility mirrors
+the current route policy: administrators can delete any user, and non-admin
+users can delete only themselves.
+
+The Users filter layout is intentionally fixed: search and the role/current-user
+control sit on the top row, department/status/reset sit on the second row, and
+the result count stays below all controls.
+
+A Users print report is still future work.
 
 ## Print Report Candidates
 
