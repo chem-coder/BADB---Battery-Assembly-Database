@@ -114,6 +114,8 @@ Batteries UX/status follow-up verified on 2026-05-07:
 - Large UI redesign.
 - New schema expansions.
 - New feature families.
+- Users print report and broad list-view printing; these are future ideas, not
+  current-version requirements.
 - Broad documentation cleanup beyond keeping current docs accurate.
 - Refactors that are not required for release safety.
 

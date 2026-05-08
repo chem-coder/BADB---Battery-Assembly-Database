@@ -91,11 +91,11 @@ Completed record reports:
 - Recipes;
 - Separators.
 
-Record reports to add in upcoming bounded passes:
+Future-only report ideas, not part of the current version:
 
 - Users.
 
-List reports to add in upcoming bounded passes:
+Future-only list report ideas, not part of the current version:
 
 - Departments list;
 - reusable list-view print pattern for pages where printing the current list is

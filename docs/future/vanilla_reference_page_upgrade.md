@@ -206,11 +206,11 @@ Completed record reports:
 - Recipes
 - Separators
 
-Planned record reports:
+Future-only record report ideas, not part of the current version:
 
 - Users
 
-Planned list reports:
+Future-only list report ideas, not part of the current version:
 
 - Departments list;
 - general list-view print pattern for reference/workflow tables where a compact
