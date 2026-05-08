@@ -2,9 +2,9 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta 
+    <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0" 
+      content="width=device-width, initial-scale=1.0"
     />
     <title>Пользователи</title>
     <link rel="stylesheet" type="text/css" href="/css/styles.css">
@@ -16,7 +16,23 @@
       <h1>Пользователи</h1>
     </header>
 
-    <button id="showAddUserFormBtn" type="button" class="add-user">+ Добавить</button>
+    <button id="showAddUserFormBtn" type="button" class="add-user" title="Добавить пользователя">+ Добавить</button>
+
+    <div id="user_sticky_header" class="record-sticky-header" hidden>
+      <div class="record-sticky-info">
+        <div class="record-sticky-title">
+          <span id="user_sticky_title">Новый пользователь</span>
+          <span id="user-global-dirty" class="badb-dirty-flag">Не сохранено</span>
+        </div>
+        <div id="user_sticky_meta" class="record-sticky-meta">—</div>
+      </div>
+      <div class="form-actions record-sticky-actions">
+        <button id="saveNewUserBtn" type="submit" form="addUserForm" title="Сохранить пользователя">Сохранить</button>
+        <button id="exitNewUserBtn" type="button" title="Выйти из записи пользователя">Выйти</button>
+        <button id="deleteUserBtn" type="button" class="button-danger" title="Удалить пользователя" hidden>Удалить</button>
+        <span id="user-sticky-status" class="inline_status" aria-live="polite"></span>
+      </div>
+    </div>
 
     <fieldset id="addUserFieldset" hidden>
       <legend><span id="userFormLegend">Новый пользователь</span> <span id="dirty-user-create" style="display:none; margin-left:8px;">● не сохранено</span></legend>
@@ -44,12 +60,12 @@
 
         <div id="resetUserPasswordField" class="form-field" hidden>
           <label>&nbsp;</label>
-          <button id="showResetUserPasswordBtn" type="button">Сбросить пароль</button>
+          <button id="showResetUserPasswordBtn" type="button" title="Показать поля сброса пароля">Сбросить пароль</button>
         </div>
 
         <div id="cancelUserPasswordResetField" class="form-field" hidden>
           <label>&nbsp;</label>
-          <button id="cancelResetUserPasswordBtn" type="button">Отмена сброса пароля</button>
+          <button id="cancelResetUserPasswordBtn" type="button" title="Отменить сброс пароля">Отмена сброса пароля</button>
         </div>
 
         <div class="form-field">
@@ -81,16 +97,56 @@
         </div>
       </form>
 
-      <div class="form-actions">
-        <button id="saveNewUserBtn" type="submit" form="addUserForm">Сохранить</button>
-        <button id="exitNewUserBtn" type="button">Выйти</button>
-      </div>
     </fieldset>
+
+    <div id="users-page-status" class="status-feedback" aria-live="polite"></div>
+
+    <div id="user_filters" class="user-filter-row" aria-label="Фильтры списка пользователей">
+      <label class="user-filter-field user-filter-field-search" for="user-filter-text">
+        <span>Поиск</span>
+        <input
+          id="user-filter-text"
+          type="search"
+          placeholder="Имя, логин, отдел, роль..."
+          autocomplete="off"
+        />
+      </label>
+
+      <label class="user-filter-field user-filter-field-role" for="user-filter-role">
+        <span>Роль</span>
+        <select id="user-filter-role">
+          <option value="">Все роли</option>
+          <option value="employee">Сотрудник</option>
+          <option value="lead">Руководитель</option>
+          <option value="admin">Администратор</option>
+        </select>
+      </label>
+
+      <label class="user-filter-field user-filter-field-department" for="user-filter-department">
+        <span>Отдел</span>
+        <select id="user-filter-department">
+          <option value="">Все отделы</option>
+        </select>
+      </label>
+
+      <label class="user-filter-field user-filter-field-active" for="user-filter-active">
+        <span>Статус</span>
+        <select id="user-filter-active">
+          <option value="">Все статусы</option>
+          <option value="true">активен</option>
+          <option value="false">неактивен</option>
+        </select>
+      </label>
+
+      <button id="clearUserFiltersBtn" class="user-filter-reset" type="button" title="Сбросить фильтры пользователей">Сбросить</button>
+      <span id="user-filter-summary" class="user-filter-summary" aria-live="polite"></span>
+    </div>
 
     <ul id="usersList" class="users-list"></ul>
 
     <script src="/js/auth.js"></script>
-    <script src="/js/users.js"></script>
+    <script src="/js/badb-ui.js?v=badb-ui-20260507a"></script>
+    <script src="/js/users.js?v=users-page-upgrade-20260508a"></script>
 
   </body>
 </html>
