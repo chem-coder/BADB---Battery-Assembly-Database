@@ -122,6 +122,18 @@ Backend/API dependency: `GET /api/separators/:id/report` and
 `GET /api/separators/:id/delete-check`.
 Notes: Current Vue scope should be checked before implementation.
 
+### Project Access Terminology
+
+Status: pending
+Priority: normal
+Source: `docs/instructions/vanilla_ui_patterns.md`
+Expected Vue behavior: project access/confidentiality labels should use
+`Доступ`, `Все уровни доступа`, `для всех`, `для отдела`, and
+`выборочный доступ`. Do not show `Видимость` or `публичный` for this UI.
+Backend/API dependency: internal values may remain `public`, `department`, and
+`confidential`.
+Notes: This is terminology parity, not a schema or permission change.
+
 ## Maintenance Rules
 
 - Keep this file short.

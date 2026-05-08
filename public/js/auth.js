@@ -84,7 +84,7 @@
     badge.setAttribute('aria-live', 'polite');
     badge.innerHTML = `
       <span id="badb-auth-user">Пользователь: —</span>
-      <button type="button" id="badb-auth-logout">Выход</button>
+      <button type="button" id="badb-auth-logout" title="Выйти из аккаунта">Выйти из аккаунта</button>
     `;
 
     const overlay = document.createElement('div');
@@ -101,7 +101,7 @@
           Пароль
           <input id="badb-auth-password" name="password" type="password" autocomplete="current-password" required>
         </label>
-        <button type="submit">Войти</button>
+        <button type="submit" title="Войти">Войти</button>
         <div id="badb-auth-error" role="alert"></div>
       </form>
     `;
@@ -348,6 +348,7 @@
       button.type = 'button';
       button.className = 'badb-current-user-button';
       button.textContent = 'Текущий пользователь';
+      button.title = 'Выбрать текущего пользователя';
       button.addEventListener('click', () => {
         if (!select.disabled) ensureCurrentUserOption(select);
       });

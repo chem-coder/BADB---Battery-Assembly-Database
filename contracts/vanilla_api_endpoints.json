@@ -362,6 +362,14 @@
       "sources": ["public/js/projects.js"]
     },
     {
+      "path": "/api/projects/:param/report",
+      "methods": ["GET"],
+      "auth": "auth plus project view policy",
+      "request": "none",
+      "response": "project print/report payload with project fields, access grants, effective users, downstream counts, and connected record lists",
+      "sources": ["public/js/project-print.js"]
+    },
+    {
       "path": "/api/projects/:param/access",
       "methods": ["GET", "POST"],
       "auth": "GET auth plus project view policy; POST auth plus project modify policy",

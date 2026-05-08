@@ -3,8 +3,9 @@ const nameInput = document.getElementById('project-name-input');
 const form = document.forms['project-form'];
 const title = form.querySelector('h2');
 const saveBtn = document.getElementById('saveBtn');
-const clearBtn = document.getElementById('clearBtn');
 const exitBtn = document.getElementById('exitBtn');
+const printProjectBtn = document.getElementById('printProjectBtn');
+const deleteProjectBtn = document.getElementById('deleteProjectBtn');
 const createdBySelect = document.getElementById('project-created-by');
 
 const projectsList = document.getElementById('projectsList');
@@ -22,9 +23,22 @@ const projectUserAccessBody = document.getElementById('projectUserAccessBody');
 const projectAccessUserSelect = document.getElementById('project-access-user-id');
 const projectUserAccessLevel = document.getElementById('project-user-access-level');
 const grantUserAccessBtn = document.getElementById('grantUserAccessBtn');
+const stickyHeader = document.getElementById('project_sticky_header');
+const stickyTitle = document.getElementById('project_sticky_title');
+const stickyMeta = document.getElementById('project_sticky_meta');
+const stickyDirty = document.getElementById('project-global-dirty');
+const stickyStatus = document.getElementById('project-sticky-status');
+const filterTextInput = document.getElementById('project-filter-text');
+const filterStatusSelect = document.getElementById('project-filter-status');
+const filterVisibilitySelect = document.getElementById('project-filter-visibility');
+const filterDepartmentSelect = document.getElementById('project-filter-department');
+const filterLeadSelect = document.getElementById('project-filter-lead');
+const clearFiltersBtn = document.getElementById('clearProjectFiltersBtn');
+const filterSummary = document.getElementById('project-filter-summary');
 
 let mode = null; // 'create' | 'edit'
 let currentId = null;
+let currentProject = null;
 let currentProjectLeadId = null;
 let initialFormState = null;
 let currentUsers = [];
@@ -32,15 +46,44 @@ let currentDepartments = [];
 let currentAccessGrants = [];
 let currentDepartmentAccess = [];
 let currentUserAccess = [];
+let allProjects = [];
+
+const PROJECT_STATUS_LABELS = {
+  active: 'активный',
+  paused: 'приостановлен',
+  completed: 'завершён',
+  archived: 'архивирован'
+};
+
+const PROJECT_VISIBILITY_LABELS = {
+  public: 'для всех',
+  department: 'для отдела',
+  confidential: 'выборочный доступ'
+};
+
+function getProjectNameValue() {
+  const source = nameInput.hidden ? title.textContent : nameInput.value;
+  return (source || '').trim();
+}
+
+function setProjectName(name) {
+  const value = (name || '').trim();
+  title.textContent = value;
+  nameInput.value = value;
+  title.hidden = false;
+  nameInput.hidden = true;
+}
 
 function showForm() {
   form.hidden = false;
   addInput.disabled = true;
+  renderProjectStickyHeader();
 }
 
 function hideForm() {
   form.hidden = true;
   addInput.disabled = false;
+  renderProjectStickyHeader();
 }
 
 function captureFormState() {
@@ -60,6 +103,7 @@ function captureFormState() {
 
 function markFormPristine() {
   initialFormState = captureFormState();
+  renderProjectStickyHeader();
 }
 
 function hasUnsavedChanges() {
@@ -71,11 +115,13 @@ function resetForm() {
   form.reset();
   updateDepartmentVisibility();
   resetProjectAccessSection();
-  title.textContent = '';
+  setProjectName('');
   mode = null;
   currentId = null;
+  currentProject = null;
   currentProjectLeadId = null;
   initialFormState = null;
+  clearRecordStatuses();
   hideForm();
 }
 
@@ -97,16 +143,11 @@ function normalizeProjectPayload(data) {
 }
 
 function statusLabel(status) {
-  return status === 'active' ? 'активный' :
-    status === 'paused' ? 'приостановлен' :
-    status === 'completed' ? 'завершён' :
-    'архивирован';
+  return PROJECT_STATUS_LABELS[status] || status || '—';
 }
 
 function confidentialityLabel(level) {
-  return level === 'department' ? 'отдел' :
-    level === 'confidential' ? 'выборочно' :
-    'все';
+  return PROJECT_VISIBILITY_LABELS[level] || level || '—';
 }
 
 function accessLevelLabel(level) {
@@ -126,11 +167,169 @@ function strongerAccessLevel(a, b) {
 }
 
 function formatDate(value) {
-  return value ? new Date(value).toLocaleDateString('ru-RU') : '';
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleDateString('ru-RU');
 }
 
 function formatDateTime(value) {
-  return value ? new Date(value).toLocaleDateString('ru-RU') : '—';
+  return value ? formatDate(value) || String(value) : '—';
+}
+
+function normalizeFilterText(value) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('ru-RU')
+    .replace(/ё/g, 'е');
+}
+
+function getProjectFilterState() {
+  return {
+    text: normalizeFilterText(filterTextInput?.value),
+    status: filterStatusSelect?.value || '',
+    visibility: filterVisibilitySelect?.value || '',
+    department: filterDepartmentSelect?.value || '',
+    lead: filterLeadSelect?.value || ''
+  };
+}
+
+function hasActiveProjectFilters(filters = getProjectFilterState()) {
+  return Boolean(
+    filters.text ||
+    filters.status ||
+    filters.visibility ||
+    filters.department ||
+    filters.lead
+  );
+}
+
+function getProjectSearchText(project) {
+  return normalizeFilterText([
+    project.name,
+    project.description,
+    project.lead_name,
+    project.created_by_name,
+    project.department_name
+  ].filter(Boolean).join(' '));
+}
+
+function matchesProjectFilters(project, filters = getProjectFilterState()) {
+  if (filters.status && project.status !== filters.status) return false;
+  if (filters.visibility && project.confidentiality_level !== filters.visibility) return false;
+  if (filters.department && String(project.department_id || '') !== filters.department) return false;
+  if (filters.lead && String(project.lead_id || '') !== filters.lead) return false;
+  if (filters.text && !getProjectSearchText(project).includes(filters.text)) return false;
+
+  return true;
+}
+
+function getFilteredProjects() {
+  const filters = getProjectFilterState();
+  return allProjects.filter(project => matchesProjectFilters(project, filters));
+}
+
+function updateProjectFilterSummary(filteredCount, totalCount) {
+  const filters = getProjectFilterState();
+  const hasFilters = hasActiveProjectFilters(filters);
+
+  if (clearFiltersBtn) {
+    clearFiltersBtn.disabled = !hasFilters;
+  }
+
+  if (!filterSummary) return;
+
+  if (totalCount === 0) {
+    filterSummary.textContent = 'Нет проектов';
+    return;
+  }
+
+  filterSummary.textContent = hasFilters
+    ? `Показано ${filteredCount} из ${totalCount}`
+    : `Всего: ${totalCount}`;
+}
+
+function getSelectedOptionText(select) {
+  if (!select || !select.value) return '';
+  const option = select.options[select.selectedIndex];
+  return option?.textContent?.trim() || '';
+}
+
+function getProjectStickyTitle() {
+  const name = getProjectNameValue() || 'без названия';
+
+  if (mode === 'edit' && currentId) {
+    return `Проект #${currentId} | ${name}`;
+  }
+
+  return `Новый проект | ${name}`;
+}
+
+function getProjectMetaText() {
+  if (!mode) return '—';
+
+  const status = statusLabel(form.elements['status'].value);
+  const visibility = confidentialityLabel(form.elements['confidentiality_level'].value);
+  const department = getSelectedOptionText(departmentSelect) || currentProject?.department_name || '';
+  const lead = getSelectedOptionText(leadSelect) || currentProject?.lead_name || '';
+  const createdBy = currentProject?.created_by_name || '';
+  const startDate = formatDate(form.elements['start_date'].value || currentProject?.start_date);
+  const dueDate = formatDate(form.elements['due_date'].value || currentProject?.due_date);
+
+  return [
+    status && `статус: ${status}`,
+    visibility && `доступ: ${visibility}`,
+    department && `отдел: ${department}`,
+    lead && `руководитель: ${lead}`,
+    startDate && `начало: ${startDate}`,
+    dueDate && `план: ${dueDate}`,
+    createdBy && `создал: ${createdBy}`
+  ].filter(Boolean).join(' — ') || 'новая запись';
+}
+
+function renderProjectStickyHeader() {
+  window.BADB_UI?.setStickyHeader({
+    header: stickyHeader,
+    titleEl: stickyTitle,
+    metaEl: stickyMeta,
+    dirtyEl: stickyDirty,
+    title: getProjectStickyTitle(),
+    meta: getProjectMetaText(),
+    isDirty: hasUnsavedChanges(),
+    hidden: !mode
+  });
+
+  if (saveBtn) {
+    saveBtn.textContent = 'Сохранить';
+    saveBtn.title = 'Сохранить изменения';
+  }
+
+  if (printProjectBtn) {
+    printProjectBtn.hidden = mode !== 'edit' || !currentId;
+    printProjectBtn.title = 'Печать отчёта';
+  }
+
+  if (exitBtn) {
+    exitBtn.textContent = 'Выйти';
+    exitBtn.title = 'Вернуться к списку, не выходя из аккаунта';
+  }
+
+  if (deleteProjectBtn) {
+    deleteProjectBtn.hidden = mode !== 'edit' || !currentId;
+    deleteProjectBtn.textContent = 'Удалить';
+    deleteProjectBtn.title = 'Удалить запись';
+  }
+}
+
+function clearRecordStatuses() {
+  showStatus('', false, { target: 'header', clearAfterMs: 0 });
+}
+
+function confirmDiscardUnsavedChanges() {
+  if (!hasUnsavedChanges()) return true;
+  return confirm('Выйти без сохранения изменений?');
 }
 
 function updateDepartmentVisibility() {
@@ -149,7 +348,14 @@ function updateDepartmentVisibility() {
 
 async function fetchProjects() {
   const res = await fetch('/api/projects');
-  return res.json();
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка загрузки списка проектов');
+  }
+
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
 }
 
 async function createProject(data) {
@@ -188,9 +394,42 @@ async function deleteProject(id) {
   });
   
   if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Ошибка удаления');
+    const err = await res.json().catch(() => ({}));
+    throw new Error(formatProjectDeleteError(err));
   }
+}
+
+function formatDependencySummary(dependencies) {
+  if (!Array.isArray(dependencies) || dependencies.length === 0) return '';
+
+  return dependencies
+    .map((dependency) => {
+      const label = dependency.label || dependency.key || 'связанные записи';
+      const count = dependency.count ?? dependency.records?.length ?? 0;
+      const records = (dependency.records || [])
+        .slice(0, 3)
+        .map(record => {
+          if (record.name) return `#${record.id}: ${record.name}`;
+          if (record.id) return `#${record.id}`;
+          return '';
+        })
+        .filter(Boolean)
+        .join(', ');
+
+      return records
+        ? `${label}: ${count} (${records})`
+        : `${label}: ${count}`;
+    })
+    .join('; ');
+}
+
+function formatProjectDeleteError(payload = {}) {
+  const message = payload.error || 'Ошибка удаления проекта';
+  const dependencySummary = formatDependencySummary(payload.dependencies);
+
+  return dependencySummary
+    ? `${message}. Блокирующие записи: ${dependencySummary}`
+    : message;
 }
 
 async function fetchProjectAccess(projectId) {
@@ -582,26 +821,79 @@ async function loadProjectAccess() {
 
 // -------- Rendering --------
 
-function renderProjects(projects) {
+function populateProjectForm(proj) {
+  setProjectName(proj.name || '');
+
+  form.elements['lead_id'].value = proj.lead_id || '';
+  form.elements['start_date'].value = proj.start_date ? proj.start_date.slice(0, 10) : '';
+  form.elements['due_date'].value = proj.due_date ? proj.due_date.slice(0, 10) : '';
+  form.elements['description'].value = proj.description || '';
+  form.elements['status'].value = proj.status || 'active';
+  form.elements['confidentiality_level'].value = proj.confidentiality_level || 'public';
+  form.elements['department_id'].value = proj.department_id || '';
+  updateDepartmentVisibility();
+
+  if (proj.created_by) {
+    createdBySelect.value = proj.created_by;
+  } else {
+    createdBySelect.value = '';
+  }
+}
+
+function getProjectSnapshotFromForm() {
+  return {
+    project_id: currentId,
+    name: getProjectNameValue(),
+    lead_id: form.elements['lead_id'].value || null,
+    start_date: form.elements['start_date'].value || null,
+    due_date: form.elements['due_date'].value || null,
+    description: form.elements['description'].value || '',
+    status: form.elements['status'].value || 'active',
+    confidentiality_level: form.elements['confidentiality_level'].value || 'public',
+    department_id: form.elements['department_id'].value || null,
+    department_name: getSelectedOptionText(departmentSelect),
+    lead_name: getSelectedOptionText(leadSelect),
+    created_by: createdBySelect.value || null,
+    created_by_name: currentProject?.created_by_name || ''
+  };
+}
+
+function renderProjects(projects, options = {}) {
+  const totalCount = options.totalCount ?? projects.length;
+  const hasFilters = Boolean(options.hasFilters);
+
   projectsList.innerHTML = '';
-  
+
+  if (projects.length === 0) {
+    const emptyRow = document.createElement('li');
+    emptyRow.className = 'user-row project-empty-row';
+    emptyRow.textContent = totalCount === 0
+      ? 'Проекты пока не добавлены.'
+      : hasFilters
+        ? 'Нет проектов по выбранным фильтрам.'
+        : 'Проекты не найдены.';
+    projectsList.appendChild(emptyRow);
+    return;
+  }
+
   projects.forEach(proj => {
     const li = document.createElement('li');
     li.className = 'user-row';
-    
-    const info = document.createElement('div');
-    info.className = 'user-info';
-    
+
+    const titleLine = document.createElement('div');
+    titleLine.className = 'record-list-title';
+
     const nameSpan = document.createElement('span');
     nameSpan.className = 'project-list-title';
     nameSpan.textContent = proj.name;
-    
+
     const statusSpan = document.createElement('span');
     statusSpan.className = 'status';
     statusSpan.textContent = statusLabel(proj.status);
+    titleLine.append(nameSpan, statusSpan);
 
     const meta = document.createElement('div');
-    meta.className = 'project-list-meta';
+    meta.className = 'record-list-meta project-list-meta';
     const accessText = confidentialityLabel(proj.confidentiality_level);
     const departmentText = proj.confidentiality_level === 'department' && proj.department_name
       ? ` · ${proj.department_name}`
@@ -618,128 +910,186 @@ function renderProjects(projects) {
       dateParts,
       createdText
     ].filter(Boolean).join(' — ');
-    
-    info.appendChild(nameSpan);
-    info.appendChild(statusSpan);
-    info.appendChild(meta);
-    
+
+    const info = window.BADB_UI.createRecordOpenButton({
+      className: 'user-info',
+      ariaLabel: 'Открыть запись',
+      children: [titleLine, meta],
+      onClick: async () => {
+        await openProjectRecord(proj);
+      }
+    });
+    info.title = 'Открыть запись';
+
     const actions = document.createElement('div');
     actions.className = 'actions';
-    
-    const editBtn = document.createElement('button');
-    editBtn.textContent = '✏️';
-    editBtn.title = 'Редактировать';          
-    editBtn.onclick = () => {
-      mode = 'edit';
-      currentId = proj.project_id;
-      currentProjectLeadId = proj.lead_id || null;
-      
-      // show form
-      showForm();
-      
-      // title + name
-      title.textContent = proj.name;
-      nameInput.value = proj.name;
-      
-      // Populate form with DB values (apply defaults for NULLs)
-      form.elements['lead_id'].value = proj.lead_id || '';
-      form.elements['start_date'].value = proj.start_date ? proj.start_date.slice(0,10) : '';
-      form.elements['due_date'].value = proj.due_date ? proj.due_date.slice(0,10) : '';
-      form.elements['description'].value = proj.description || '';
-      form.elements['status'].value = proj.status || 'active';
-      form.elements['confidentiality_level'].value = proj.confidentiality_level || 'public';
-      form.elements['department_id'].value = proj.department_id || '';
-      updateDepartmentVisibility();
-      
-      // user (if present in list)
-      if (proj.created_by) {
-        createdBySelect.value = proj.created_by;
-      }
 
-      markFormPristine();
-      loadProjectAccess().catch(err => showStatus(err.message, true));
-    };
-    
-    const duplicateBtn = document.createElement('button');
-    duplicateBtn.textContent = '📄';
-    duplicateBtn.title = 'Дублировать';
-    
-    duplicateBtn.onclick = () => {
-      duplicateProject(proj);
-    };
-    
-    const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = '🗑';
-    deleteBtn.title = 'Удалить';
-    deleteBtn.onclick = async () => {
-      if (!confirm(`Удалить проект "${proj.name}"?`)) return;
-      
-      try {
-        await deleteProject(proj.project_id);
-        showStatus('Проект удалён');
-        loadProjects();
-      } catch (err) {
-        showStatus(err.message, true);
+    const printBtn = window.BADB_UI.createIconButton({
+      icon: '🖨️',
+      title: 'Печать отчёта',
+      ariaLabel: 'Печать отчёта',
+      onClick: () => {
+        openProjectPrintReport(proj.project_id);
       }
-    };
-    
-    actions.appendChild(editBtn);
+    });
+
+    const duplicateBtn = window.BADB_UI.createIconButton({
+      icon: '📄',
+      title: 'Дублировать запись',
+      ariaLabel: 'Дублировать запись',
+      onClick: () => {
+        duplicateProject(proj);
+      }
+    });
+
+    actions.appendChild(printBtn);
     actions.appendChild(duplicateBtn);
-    actions.appendChild(deleteBtn);
-    
+
     li.appendChild(info);
     li.appendChild(actions);
-    
+
     projectsList.appendChild(li);
   });
 }
 
+function renderFilteredProjects() {
+  const filters = getProjectFilterState();
+  const filtered = getFilteredProjects();
+
+  renderProjects(filtered, {
+    totalCount: allProjects.length,
+    hasFilters: hasActiveProjectFilters(filters)
+  });
+  updateProjectFilterSummary(filtered.length, allProjects.length);
+}
+
+async function openProjectRecord(proj) {
+  if (!confirmDiscardUnsavedChanges()) return false;
+
+  clearRecordStatuses();
+  mode = 'edit';
+  currentId = proj.project_id;
+  currentProject = proj;
+  currentProjectLeadId = proj.lead_id || null;
+
+  populateProjectForm(proj);
+  showForm();
+
+  try {
+    await loadProjectAccess();
+  } catch (err) {
+    showStatus(err.message, true, { clearAfterMs: 9000 });
+  } finally {
+    markFormPristine();
+    window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
+  }
+
+  return true;
+}
+
 function duplicateProject(proj) {
+  if (!proj || !confirmDiscardUnsavedChanges()) return false;
+
+  clearRecordStatuses();
   mode = 'create';
   currentId = null;
+  currentProject = null;
   currentProjectLeadId = null;
-  
-  showForm();
-  
-  // title + name
-  const copyName = proj.name + ' (копия)';
-  title.textContent = copyName;
-  nameInput.value = copyName;
-  
-  // Populate form with DB values (apply defaults for NULLs)
-  form.elements['lead_id'].value = proj.lead_id || '';
-  form.elements['start_date'].value = proj.start_date ? proj.start_date.slice(0,10) : '';
-  form.elements['due_date'].value = proj.due_date ? proj.due_date.slice(0,10) : '';
-  form.elements['description'].value = proj.description || '';  
-  form.elements['status'].value = proj.status || 'active';
-  form.elements['confidentiality_level'].value = proj.confidentiality_level || 'public';
-  form.elements['department_id'].value = proj.department_id || '';
-  updateDepartmentVisibility();
+  initialFormState = null;
+
+  populateProjectForm({
+    ...proj,
+    name: `${proj.name || 'Проект'} (копия)`,
+    created_by: null
+  });
   resetProjectAccessSection();
-  
-  // IMPORTANT: reset things that must be new
+
   createdBySelect.value = '';
   leadSelect.value = '';
+  currentProjectLeadId = null;
 
-  markFormPristine();
-}      
+  showForm();
+  renderProjectStickyHeader();
+  window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
+  return true;
+}
+
+function getProjectPrintReportUrl(id) {
+  return `/workflow/project-print.html?project_id=${encodeURIComponent(id)}`;
+}
+
+function openProjectPrintReport(id) {
+  if (!id) return;
+
+  const url = getProjectPrintReportUrl(id);
+  const reportWindow = window.open(url, '_blank');
+
+  if (reportWindow) {
+    reportWindow.opener = null;
+    return;
+  }
+
+  window.location.href = url;
+}
 
 
 // -------- Status helper --------
 
 const statusBox = document.querySelector('.status-feedback');
 
-function showStatus(msg, isError = false) {
-  statusBox.textContent = msg;
-  statusBox.style.color = isError ? '#b00020' : 'darkcyan';
-  
-  setTimeout(() => {
-    statusBox.textContent = '';
-  }, 1000);
+function showPageStatus(msg, isError = false, options = {}) {
+  window.BADB_UI?.showStatus(statusBox, msg, {
+    isError,
+    clearAfterMs: options.clearAfterMs ?? (isError ? 9000 : 4500)
+  });
+}
+
+function showHeaderStatus(msg, isError = false, options = {}) {
+  window.BADB_UI?.showStatus(stickyStatus, msg, {
+    isError,
+    clearAfterMs: options.clearAfterMs ?? (isError ? 12000 : 4500)
+  });
+}
+
+function showStatus(msg, isError = false, options = {}) {
+  const target = options.target || (mode ? 'header' : 'page');
+
+  if (target === 'header') {
+    showHeaderStatus(msg, isError, options);
+    return;
+  }
+
+  showPageStatus(msg, isError, options);
 }
 
 
 // -------- Reference dropdowns --------
+
+function populateProjectLeadFilter() {
+  if (!filterLeadSelect) return;
+
+  const previous = filterLeadSelect.value;
+  filterLeadSelect.replaceChildren(new Option('Все руководители', ''));
+  currentUsers.forEach(user => {
+    filterLeadSelect.add(new Option(user.name, user.user_id));
+  });
+  filterLeadSelect.value = [...filterLeadSelect.options].some(option => option.value === previous)
+    ? previous
+    : '';
+}
+
+function populateProjectDepartmentFilter() {
+  if (!filterDepartmentSelect) return;
+
+  const previous = filterDepartmentSelect.value;
+  filterDepartmentSelect.replaceChildren(new Option('Все отделы', ''));
+  currentDepartments.forEach(department => {
+    filterDepartmentSelect.add(new Option(department.name, department.department_id));
+  });
+  filterDepartmentSelect.value = [...filterDepartmentSelect.options].some(option => option.value === previous)
+    ? previous
+    : '';
+}
 
 // Refresh user options without losing current selections
 async function loadUsers() {
@@ -747,6 +1097,12 @@ async function loadUsers() {
   const prevLead = leadSelect.value;
   
   const res = await fetch('/api/users');
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка загрузки пользователей');
+  }
+
   currentUsers = await res.json();
   
   createdBySelect.replaceChildren(new Option(
@@ -765,12 +1121,21 @@ async function loadUsers() {
   
   createdBySelect.value = prevCreated;
   leadSelect.value = prevLead;
+  populateProjectLeadFilter();
   populateAccessUserSelect();
+  if (allProjects.length) renderFilteredProjects();
+  renderProjectStickyHeader();
 }
 
 async function loadDepartments() {
   const prevDepartment = departmentSelect.value;
   const res = await fetch('/api/departments');
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка загрузки отделов');
+  }
+
   currentDepartments = await res.json();
 
   departmentSelect.replaceChildren(new Option('— выбрать отдел —', ''));
@@ -780,29 +1145,41 @@ async function loadDepartments() {
   });
 
   departmentSelect.value = prevDepartment;
+  populateProjectDepartmentFilter();
   populateAccessDepartmentSelect();
   updateDepartmentVisibility();
+  if (allProjects.length) renderFilteredProjects();
+  renderProjectStickyHeader();
 }
 
 // Refresh reference dropdowns on focus
-leadSelect.addEventListener('focus', loadUsers);
+leadSelect.addEventListener('focus', () => {
+  loadUsers().catch(err => showStatus(err.message, true, { target: 'page' }));
+});
 leadSelect.addEventListener('change', () => {
   if (!projectDepartmentAccessSection.hidden) {
     renderProjectUserAccess();
   }
+  renderProjectStickyHeader();
 });
-createdBySelect.addEventListener('focus', loadUsers);
-departmentSelect.addEventListener('focus', loadDepartments);
+createdBySelect.addEventListener('focus', () => {
+  loadUsers().catch(err => showStatus(err.message, true, { target: 'page' }));
+});
+departmentSelect.addEventListener('focus', () => {
+  loadDepartments().catch(err => showStatus(err.message, true, { target: 'page' }));
+});
 confidentialitySelect.addEventListener('change', () => {
   updateDepartmentVisibility();
   if (!projectDepartmentAccessSection.hidden) {
     renderProjectUserAccess();
   }
+  renderProjectStickyHeader();
 });
 departmentSelect.addEventListener('change', () => {
   if (!projectDepartmentAccessSection.hidden) {
     renderProjectUserAccess();
   }
+  renderProjectStickyHeader();
 });
 
 
@@ -817,13 +1194,15 @@ addInput.addEventListener('keydown', (e) => {
   
   const name = addInput.value.trim();
   if (!name) return;
-  
+
+  clearRecordStatuses();
   mode = 'create';
   currentId = null;
+  currentProject = null;
   currentProjectLeadId = null;
-  
-  title.textContent = name;
-  nameInput.value = name;
+  initialFormState = null;
+
+  setProjectName(name);
   form.elements['status'].value = 'active';
   form.elements['confidentiality_level'].value = 'public';
   updateDepartmentVisibility();
@@ -832,46 +1211,93 @@ addInput.addEventListener('keydown', (e) => {
   showForm();
   
   addInput.value = '';
-  markFormPristine();
+  renderProjectStickyHeader();
+  window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
 });
 
 function validateRequiredFields() {
+  const missing = [];
+  const name = getProjectNameValue();
+
+  nameInput.classList.remove('required-missing');
+  departmentSelect.classList.remove('required-missing');
+
+  if (!name) {
+    missing.push('Название');
+    nameInput.classList.add('required-missing');
+  }
+
   if (form.elements['confidentiality_level'].value === 'department' && !form.elements['department_id'].value) {
-    showStatus('Укажите отдел проекта', true);
+    missing.push('Отдел');
+    departmentSelect.classList.add('required-missing');
+  }
+
+  if (missing.length) {
+    if (!name) {
+      nameInput.hidden = false;
+      title.hidden = true;
+      nameInput.focus();
+    }
+
+    showStatus(`Заполните обязательные поля: ${missing.join(', ')}`, true);
     return false;
   }
 
   return true;
 }
 
-saveBtn.addEventListener('click', async () => {
-  if (!mode) return;
-  
-  if (!validateRequiredFields()) return;
-  
+async function saveProjectRecord() {
+  if (!validateRequiredFields()) return null;
+
   const data = normalizeProjectPayload(formDataToObject(form));
   delete data.created_by;
-  data.name = title.textContent;
-  
+  data.name = getProjectNameValue();
+  setProjectName(data.name);
+
+  const initialMode = mode;
+  let savedProjectId = currentId;
+
+  if (initialMode === 'create') {
+    const savedProject = await createProject(data);
+    savedProjectId = savedProject.project_id;
+    currentId = savedProjectId;
+    mode = 'edit';
+  } else if (initialMode === 'edit') {
+    await updateProject(currentId, data);
+  }
+
+  currentProjectLeadId = data.lead_id || null;
+
+  return {
+    initialMode,
+    savedProjectId
+  };
+}
+
+saveBtn.addEventListener('click', async () => {
+  if (!mode) return;
+
   try {
-    if (mode === 'create') {
-      await createProject(data);
-      showStatus('Проект сохранён');
-    }
-    
-    if (mode === 'edit') {
-      await updateProject(currentId, data);
-      showStatus('Изменения сохранены');
-    }
-    
-    resetForm();
-    loadProjects();   // refresh list
+    const result = await saveProjectRecord();
+    if (!result) return;
+
+    const projects = await loadProjects();
+    currentProject = projects.find(project => Number(project.project_id) === Number(currentId)) || {
+      ...getProjectSnapshotFromForm(),
+      project_id: currentId
+    };
+    populateProjectForm(currentProject);
+    await loadProjectAccess();
+    markFormPristine();
+
+    showStatus(result.initialMode === 'create'
+      ? 'Проект сохранён'
+      : 'Изменения сохранены');
   } catch (err) {
     showStatus(err.message, true);
   }
 });
 
-clearBtn.addEventListener('click', resetForm);
 exitBtn.addEventListener('click', () => {
   if (!hasUnsavedChanges()) {
     resetForm();
@@ -882,6 +1308,39 @@ exitBtn.addEventListener('click', () => {
     resetForm();
   }
 });
+
+if (printProjectBtn) {
+  printProjectBtn.addEventListener('click', () => {
+    openProjectPrintReport(currentId);
+  });
+}
+
+async function deleteCurrentProject() {
+  if (!currentId) {
+    showStatus('Сначала откройте проект', true);
+    return;
+  }
+
+  if (hasUnsavedChanges() && !confirm('Есть несохранённые изменения. Удалить проект без сохранения?')) {
+    return;
+  }
+
+  const name = getProjectNameValue() || `#${currentId}`;
+  if (!confirm(`Удалить проект "${name}"?`)) return;
+
+  try {
+    await deleteProject(currentId);
+    resetForm();
+    await loadProjects();
+    showStatus('Проект удалён', false, { target: 'page', clearAfterMs: 5000 });
+  } catch (err) {
+    showStatus(err.message, true, { clearAfterMs: 15000 });
+  }
+}
+
+if (deleteProjectBtn) {
+  deleteProjectBtn.addEventListener('click', deleteCurrentProject);
+}
 
 grantDepartmentAccessBtn.addEventListener('click', async () => {
   if (!currentId) return;
@@ -926,9 +1385,11 @@ grantUserAccessBtn.addEventListener('click', async () => {
 /* ------ name: editable ------ */
 
 title.addEventListener('click', () => {
+  nameInput.value = getProjectNameValue();
   nameInput.hidden = false;
   title.hidden = true;
   nameInput.focus();
+  nameInput.select();
 });
 
 nameInput.addEventListener('keydown', (e) => {
@@ -940,23 +1401,72 @@ nameInput.addEventListener('keydown', (e) => {
 
 nameInput.addEventListener('blur', () => {
   const val = nameInput.value.trim();
-  if (!val) return;
-  
-  title.textContent = val;
-  title.hidden = false;
-  nameInput.hidden = true;
+  setProjectName(val || title.textContent);
+  renderProjectStickyHeader();
 });
+
+form.addEventListener('input', renderProjectStickyHeader);
+form.addEventListener('change', renderProjectStickyHeader);
 
 
 // -------- Init --------
 
 async function loadProjects() {
   const projects = await fetchProjects();
-  renderProjects(projects);
+  allProjects = projects;
+  renderFilteredProjects();
+  return allProjects;
 }
+
+if (filterTextInput) {
+  filterTextInput.addEventListener('input', renderFilteredProjects);
+}
+
+if (filterStatusSelect) {
+  filterStatusSelect.addEventListener('change', renderFilteredProjects);
+}
+
+if (filterVisibilitySelect) {
+  filterVisibilitySelect.addEventListener('change', renderFilteredProjects);
+}
+
+if (filterDepartmentSelect) {
+  filterDepartmentSelect.addEventListener('change', renderFilteredProjects);
+}
+
+if (filterLeadSelect) {
+  filterLeadSelect.addEventListener('change', renderFilteredProjects);
+}
+
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', () => {
+    if (filterTextInput) filterTextInput.value = '';
+    if (filterStatusSelect) filterStatusSelect.value = '';
+    if (filterVisibilitySelect) filterVisibilitySelect.value = '';
+    if (filterDepartmentSelect) filterDepartmentSelect.value = '';
+    if (filterLeadSelect) filterLeadSelect.value = '';
+    renderFilteredProjects();
+    filterTextInput?.focus();
+  });
+}
+
+const projectLogoutGuard = {
+  hasUnsavedChanges,
+  discardUnsavedChanges: resetForm,
+  message: 'Есть несохранённые изменения проекта. Выйти без сохранения?'
+};
+
+window.BADB_PAGE_LOGOUT_GUARD = projectLogoutGuard;
+window.BADB_AUTH?.registerLogoutGuard?.(projectLogoutGuard);
+
+window.addEventListener('beforeunload', (event) => {
+  if (!hasUnsavedChanges()) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 
 hideForm();
 updateDepartmentVisibility();
-loadUsers();
-loadDepartments();
-loadProjects();
+loadUsers().catch(err => showPageStatus(err.message, true, { clearAfterMs: 9000 }));
+loadDepartments().catch(err => showPageStatus(err.message, true, { clearAfterMs: 9000 }));
+loadProjects().catch(err => showPageStatus(err.message, true, { clearAfterMs: 9000 }));

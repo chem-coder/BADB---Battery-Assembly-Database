@@ -1,7 +1,7 @@
 # Vanilla UI Patterns
 
 Created: 2026-05-07
-Edited: 2026-05-07
+Edited: 2026-05-08
 Status: instruction
 
 Use this when implementing recurring vanilla-page behavior in `public/`.
@@ -69,6 +69,82 @@ For pages with sticky opened-record headers:
 - keep inline action feedback next to the action button.
 
 The scroll target is the page top, not the button and not the sticky header.
+
+## Button Language And Tooltips
+
+The vanilla app UI is Russian. Do not introduce English visible labels such as
+`Save`, `Print`, `Exit`, `Log out`, or mixed/transliterated labels such as
+`Nazad`.
+
+Use exactly this visible vocabulary on opened-record pages:
+
+- `Сохранить` means save the opened record.
+- `Печать` means open the print report.
+- `Выйти` means close the opened record and return to the list view. It does
+  not mean account logout.
+- `Удалить` means delete the opened record.
+- `Выйти из аккаунта` means end the user session.
+
+Do not use `Назад` for closing an opened record on vanilla reference/workflow
+pages. Use `Выйти` with a tooltip instead.
+
+Every button must have a hover description via `title`. Icon-only buttons must
+also have `aria-label`. For list-level icon buttons, use the exact same phrase
+for `title` and `aria-label`.
+
+Required common tooltips:
+
+- `Сохранить`: `Сохранить изменения`
+- `Печать`: `Печать отчёта`
+- `Выйти`: `Вернуться к списку, не выходя из аккаунта`
+- `Удалить`: `Удалить запись`
+- `Выйти из аккаунта`: `Выйти из аккаунта`
+- list print icon: title + `aria-label` `Печать отчёта`
+- list duplicate icon: title + `aria-label` `Дублировать запись`
+- list open/edit icon, if present: title + `aria-label` `Открыть запись`
+- filter reset button: `Сбросить фильтры`
+
+Standard placement:
+
+- `Печать`: both list-level icon and opened-record sticky/header button when a
+  report exists.
+- `Дублировать`: list-level icon only unless Dalia explicitly approves another
+  placement.
+- `Удалить`: opened-record sticky/header button only.
+- `Выйти`: opened-record sticky/header button only.
+
+## Access Terminology
+
+For project access/confidentiality UI, do not use `Видимость` as the visible
+field/filter label and do not use `публичный` as the visible value.
+
+The database/API value names may remain `public`, `department`, and
+`confidential`. These are internal values, not Russian UI labels.
+
+Use this visible vocabulary:
+
+- field/filter label: `Доступ`
+- all-filter option: `Все уровни доступа`
+- `public`: `для всех`
+- `department`: `для отдела`
+- `confidential`: `выборочный доступ`
+
+For list metadata, prefer phrases such as `доступ: для всех`,
+`доступ: для отдела`, or `доступ: выборочный доступ`.
+
+## Filter Layout
+
+For vanilla list filters, keep the result count below the filter controls, not
+inside the same row as selects/buttons.
+
+Use this structure:
+
+1. filter controls;
+2. reset/clear button with the filter controls;
+3. count line below all filter controls, for example `Всего: 6`.
+
+Do not let count text compete with controls in a crowded row. On pages with
+multi-row filters, the count still belongs below the full filter block.
 
 ## Derived Status Controls
 

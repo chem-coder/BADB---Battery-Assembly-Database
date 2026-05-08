@@ -279,6 +279,10 @@ body[data-page="electrodes"] .electrode-filter-row select {
   width: 100%;
 }
 
+body[data-page="electrodes"] .electrode-filter-row-bottom {
+  margin-bottom: 0.25rem;
+}
+
 body[data-page="electrodes"] .electrode-filter-hint,
 body[data-page="electrodes"] .electrode-filter-summary {
   margin-right: 0;
@@ -287,11 +291,14 @@ body[data-page="electrodes"] .electrode-filter-summary {
 }
 
 body[data-page="electrodes"] .electrode-filter-summary {
-  align-self: center;
+  display: block;
+  align-self: start;
+  margin: 0.15rem 0 0.85rem;
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-row,
-body[data-page="separators"] .separator-filter-row {
+body[data-page="separators"] .separator-filter-row,
+body[data-page="projectsList"] .project-filter-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem 0.85rem;
@@ -300,7 +307,8 @@ body[data-page="separators"] .separator-filter-row {
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-field,
-body[data-page="separators"] .separator-filter-field {
+body[data-page="separators"] .separator-filter-field,
+body[data-page="projectsList"] .project-filter-field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -308,7 +316,8 @@ body[data-page="separators"] .separator-filter-field {
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-field:first-child,
-body[data-page="separators"] .separator-filter-field:first-child {
+body[data-page="separators"] .separator-filter-field:first-child,
+body[data-page="projectsList"] .project-filter-field:first-child {
   flex: 1 1 18rem;
   min-width: min(18rem, 100%);
 }
@@ -316,7 +325,9 @@ body[data-page="separators"] .separator-filter-field:first-child {
 body[data-page="electrolytes"] .electrolyte-filter-field span,
 body[data-page="electrolytes"] .electrolyte-filter-summary,
 body[data-page="separators"] .separator-filter-field span,
-body[data-page="separators"] .separator-filter-summary {
+body[data-page="separators"] .separator-filter-summary,
+body[data-page="projectsList"] .project-filter-field span,
+body[data-page="projectsList"] .project-filter-summary {
   margin-right: 0;
   color: #667085;
   font-size: 0.86rem;
@@ -325,13 +336,96 @@ body[data-page="separators"] .separator-filter-summary {
 body[data-page="electrolytes"] .electrolyte-filter-row input,
 body[data-page="electrolytes"] .electrolyte-filter-row select,
 body[data-page="separators"] .separator-filter-row input,
-body[data-page="separators"] .separator-filter-row select {
+body[data-page="separators"] .separator-filter-row select,
+body[data-page="projectsList"] .project-filter-row input,
+body[data-page="projectsList"] .project-filter-row select {
   width: 100%;
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-summary,
-body[data-page="separators"] .separator-filter-summary {
+body[data-page="separators"] .separator-filter-summary,
+body[data-page="projectsList"] .project-filter-summary {
   align-self: center;
+}
+
+body[data-page="electrolytes"] .electrolyte-filter-row,
+body[data-page="separators"] .separator-filter-row {
+  margin-bottom: 0.25rem;
+}
+
+body[data-page="electrolytes"] .electrolyte-filter-summary,
+body[data-page="separators"] .separator-filter-summary {
+  display: block;
+  align-self: start;
+  margin: 0.15rem 0 0.85rem;
+}
+
+body[data-page="projectsList"] .project-filter-row {
+  display: grid;
+  gap: 0.65rem;
+}
+
+body[data-page="projectsList"] .project-filter-line {
+  display: grid;
+  gap: 0.65rem 0.85rem;
+  align-items: end;
+}
+
+body[data-page="projectsList"] .project-filter-line-top {
+  grid-template-columns: minmax(18rem, 1fr) minmax(20rem, 0.9fr);
+}
+
+body[data-page="projectsList"] .project-filter-line-bottom {
+  grid-template-columns: minmax(10rem, 13rem) minmax(12rem, 16rem) minmax(12rem, 18rem) auto;
+}
+
+body[data-page="projectsList"] .project-filter-line .project-filter-field:first-child {
+  min-width: 0;
+}
+
+body[data-page="projectsList"] .project-filter-search {
+  min-width: 0;
+}
+
+body[data-page="projectsList"] .project-filter-control-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+body[data-page="projectsList"] .project-filter-control-line select {
+  min-width: 0;
+}
+
+body[data-page="projectsList"] .project-filter-control-line .badb-current-user-button {
+  flex: 0 0 auto;
+  margin-left: 0;
+  white-space: nowrap;
+}
+
+body[data-page="projectsList"] #clearProjectFiltersBtn {
+  align-self: end;
+  white-space: nowrap;
+}
+
+body[data-page="projectsList"] .project-filter-row > .project-filter-summary {
+  align-self: start;
+  justify-self: start;
+}
+
+@media (max-width: 960px) {
+  body[data-page="projectsList"] .project-filter-line-bottom {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  body[data-page="projectsList"] #clearProjectFiltersBtn {
+    justify-self: start;
+  }
+
+  body[data-page="projectsList"] .project-filter-summary {
+    align-self: start;
+  }
 }
 
 body[data-page="electrodes"] .electrode-section > fieldset {
@@ -575,7 +669,7 @@ body[data-page="BAL"] .battery-filter-row {
   flex-wrap: wrap;
   gap: 0.65rem 0.85rem;
   align-items: end;
-  margin: 0.35rem 0 0.8rem;
+  margin: 0.35rem 0 0.25rem;
 }
 
 body[data-page="BAL"] .battery-filter-field {
@@ -603,7 +697,9 @@ body[data-page="BAL"] .battery-filter-row select {
 }
 
 body[data-page="BAL"] .battery-filter-summary {
-  align-self: center;
+  display: block;
+  align-self: start;
+  margin: 0.15rem 0 0.85rem;
 }
 
 body[data-page="tapes"] .tape-filter-row {
@@ -611,7 +707,7 @@ body[data-page="tapes"] .tape-filter-row {
   flex-wrap: wrap;
   gap: 0.65rem 0.85rem;
   align-items: end;
-  margin: 0.35rem 0 0.8rem;
+  margin: 0.35rem 0 0.25rem;
 }
 
 body[data-page="tapes"] .tape-filter-field {
@@ -639,7 +735,9 @@ body[data-page="tapes"] .tape-filter-row select {
 }
 
 body[data-page="tapes"] .tape-filter-summary {
-  align-self: center;
+  display: block;
+  align-self: start;
+  margin: 0.15rem 0 0.85rem;
 }
 
 body[data-page="tapes"] #printBtn,
@@ -677,6 +775,15 @@ body[data-page="BAL"] #batteriesList {
 }
 
 @media (max-width: 720px) {
+  body[data-page="projectsList"] .project-filter-line-top,
+  body[data-page="projectsList"] .project-filter-line-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-page="projectsList"] .project-filter-summary {
+    align-self: start;
+  }
+
   body[data-page] .record-sticky-header {
     align-items: flex-start;
   }
@@ -708,7 +815,8 @@ body[data-page="BAL"] #batteriesList {
 }
 
 body[data-page="electrolytes"] .electrolyte-empty-row,
-body[data-page="separators"] .separator-empty-row {
+body[data-page="separators"] .separator-empty-row,
+body[data-page="projectsList"] .project-empty-row {
   justify-content: flex-start;
   color: #667085;
   font-size: 0.95rem;

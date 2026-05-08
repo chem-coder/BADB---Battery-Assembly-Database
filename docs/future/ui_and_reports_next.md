@@ -86,11 +86,11 @@ Print-page styling does not need to match the interactive form styling exactly. 
 Completed record reports:
 
 - Electrolytes;
+- Projects;
+- Separators.
 
 Record reports to add in upcoming bounded passes:
 
-- Separators;
-- Projects;
 - Users.
 
 List reports to add in upcoming bounded passes:

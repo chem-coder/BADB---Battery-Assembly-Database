@@ -194,6 +194,270 @@ function requireView(req, res, next) {
     });
 }
 
+async function getProjectReport(db, projectId) {
+  const [
+    projectResult,
+    departmentAccessResult,
+    userAccessResult,
+    effectiveUsersResult,
+    tapeResult,
+    electrodeBatchResult,
+    batteryResult
+  ] = await Promise.all([
+    db.query(`
+      SELECT p.project_id, p.name, p.created_by, p.lead_id,
+             lead.name AS lead_name,
+             p.start_date, p.due_date, p.status, p.description,
+             p.confidentiality_level, p.department_id,
+             d.name AS department_name,
+             p.created_at, p.updated_at, p.updated_by,
+             creator.name AS created_by_name,
+             updater.name AS updated_by_name
+      FROM projects p
+      LEFT JOIN users lead ON lead.user_id = p.lead_id
+      LEFT JOIN departments d ON d.department_id = p.department_id
+      LEFT JOIN users creator ON creator.user_id = p.created_by
+      LEFT JOIN users updater ON updater.user_id = p.updated_by
+      WHERE p.project_id = $1
+    `, [projectId]),
+    db.query(`
+      SELECT pda.department_id, d.name AS department_name,
+             pda.access_level, pda.granted_at, pda.expires_at,
+             (pda.expires_at IS NOT NULL AND pda.expires_at <= now()) AS is_expired,
+             g.name AS granted_by_name
+      FROM project_department_access pda
+      JOIN departments d ON d.department_id = pda.department_id
+      LEFT JOIN users g ON g.user_id = pda.granted_by
+      WHERE pda.project_id = $1
+      ORDER BY d.name
+    `, [projectId]),
+    db.query(`
+      SELECT upa.user_id, u.name AS user_name,
+             u.department_id, d.name AS department_name,
+             upa.access_level, upa.granted_at, upa.expires_at,
+             (upa.expires_at IS NOT NULL AND upa.expires_at <= now()) AS is_expired,
+             g.name AS granted_by_name
+      FROM user_project_access upa
+      JOIN users u ON u.user_id = upa.user_id
+      LEFT JOIN departments d ON d.department_id = u.department_id
+      LEFT JOIN users g ON g.user_id = upa.granted_by
+      WHERE upa.project_id = $1
+      ORDER BY u.name
+    `, [projectId]),
+    db.query(`
+      WITH project_row AS (
+        SELECT project_id, lead_id, confidentiality_level, department_id
+        FROM projects
+        WHERE project_id = $1
+      ),
+      access_sources AS (
+        SELECT u.user_id,
+               u.name AS user_name,
+               u.position,
+               u.department_id,
+               d.name AS department_name,
+               3 AS level_rank,
+               'руководитель проекта' AS source_label
+        FROM project_row p
+        JOIN users u
+          ON u.user_id = p.lead_id
+        LEFT JOIN departments d
+          ON d.department_id = u.department_id
+
+        UNION ALL
+
+        SELECT u.user_id,
+               u.name AS user_name,
+               u.position,
+               u.department_id,
+               d.name AS department_name,
+               1 AS level_rank,
+               'отдел проекта' AS source_label
+        FROM project_row p
+        JOIN users u
+          ON u.department_id = p.department_id
+        LEFT JOIN departments d
+          ON d.department_id = u.department_id
+        WHERE p.confidentiality_level = 'department'
+          AND p.department_id IS NOT NULL
+          AND COALESCE(u.active, true) = true
+
+        UNION ALL
+
+        SELECT u.user_id,
+               u.name AS user_name,
+               u.position,
+               u.department_id,
+               user_department.name AS department_name,
+               CASE pda.access_level
+                 WHEN 'admin' THEN 3
+                 WHEN 'edit' THEN 2
+                 ELSE 1
+               END AS level_rank,
+               'отдел: ' || grant_department.name AS source_label
+        FROM project_department_access pda
+        JOIN departments grant_department
+          ON grant_department.department_id = pda.department_id
+        JOIN users u
+          ON u.department_id = pda.department_id
+        LEFT JOIN departments user_department
+          ON user_department.department_id = u.department_id
+        WHERE pda.project_id = $1
+          AND (pda.expires_at IS NULL OR pda.expires_at > now())
+          AND COALESCE(u.active, true) = true
+
+        UNION ALL
+
+        SELECT u.user_id,
+               u.name AS user_name,
+               u.position,
+               u.department_id,
+               d.name AS department_name,
+               CASE upa.access_level
+                 WHEN 'admin' THEN 3
+                 WHEN 'edit' THEN 2
+                 ELSE 1
+               END AS level_rank,
+               'личный доступ' AS source_label
+        FROM user_project_access upa
+        JOIN users u
+          ON u.user_id = upa.user_id
+        LEFT JOIN departments d
+          ON d.department_id = u.department_id
+        WHERE upa.project_id = $1
+          AND (upa.expires_at IS NULL OR upa.expires_at > now())
+          AND COALESCE(u.active, true) = true
+      )
+      SELECT user_id,
+             user_name,
+             position,
+             department_id,
+             department_name,
+             CASE MAX(level_rank)
+               WHEN 3 THEN 'admin'
+               WHEN 2 THEN 'edit'
+               ELSE 'view'
+             END AS access_level,
+             string_agg(DISTINCT source_label, ', ' ORDER BY source_label) AS access_sources
+      FROM access_sources
+      GROUP BY user_id, user_name, position, department_id, department_name
+      ORDER BY department_name NULLS LAST, user_name
+    `, [projectId]),
+    db.query(`
+      SELECT DISTINCT
+             t.tape_id,
+             t.name,
+             t.status,
+             t.availability_status,
+             t.created_at,
+             t.updated_at,
+             r.role AS tape_role,
+             r.name AS recipe_name,
+             u_created.name AS created_by_name
+      FROM tapes t
+      LEFT JOIN tape_projects tp
+        ON tp.tape_id = t.tape_id
+      LEFT JOIN tape_recipes r
+        ON r.tape_recipe_id = t.tape_recipe_id
+      LEFT JOIN users u_created
+        ON u_created.user_id = t.created_by
+      WHERE t.project_id = $1
+         OR tp.project_id = $1
+      ORDER BY t.tape_id
+    `, [projectId]),
+    db.query(`
+      SELECT DISTINCT
+             ecb.cut_batch_id,
+             ecb.tape_id,
+             t.name AS tape_name,
+             r.role AS tape_role,
+             ecb.target_form_factor,
+             ecb.target_config_code,
+             ecb.shape,
+             ecb.diameter_mm,
+             ecb.length_mm,
+             ecb.width_mm,
+             ecb.comments,
+             ecb.created_at,
+             u_created.name AS created_by_name,
+             COALESCE(ec.electrode_count, 0)::int AS electrode_count,
+             (
+               SELECT c.coating_sidedness
+               FROM tape_process_steps ts_coating
+               JOIN operation_types ot_coating
+                 ON ot_coating.operation_type_id = ts_coating.operation_type_id
+               JOIN tape_step_coating c
+                 ON c.step_id = ts_coating.step_id
+               WHERE ts_coating.tape_id = ecb.tape_id
+                 AND ot_coating.code = 'coating'
+               LIMIT 1
+             ) AS tape_coating_sidedness
+      FROM electrode_cut_batches ecb
+      JOIN tapes t
+        ON t.tape_id = ecb.tape_id
+      LEFT JOIN electrode_cut_batch_projects ecbp
+        ON ecbp.cut_batch_id = ecb.cut_batch_id
+      LEFT JOIN tape_recipes r
+        ON r.tape_recipe_id = t.tape_recipe_id
+      LEFT JOIN users u_created
+        ON u_created.user_id = ecb.created_by
+      LEFT JOIN (
+        SELECT cut_batch_id, COUNT(*) AS electrode_count
+        FROM electrodes
+        GROUP BY cut_batch_id
+      ) ec
+        ON ec.cut_batch_id = ecb.cut_batch_id
+      WHERE ecbp.project_id = $1
+         OR t.project_id = $1
+      ORDER BY ecb.cut_batch_id
+    `, [projectId]),
+    db.query(`
+      SELECT DISTINCT
+             b.battery_id,
+             b.project_id,
+             b.form_factor,
+             b.status,
+             b.battery_notes AS notes,
+             b.created_at,
+             b.updated_at,
+             u_created.name AS created_by_name
+      FROM batteries b
+      LEFT JOIN battery_projects bp
+        ON bp.battery_id = b.battery_id
+      LEFT JOIN users u_created
+        ON u_created.user_id = b.created_by
+      WHERE b.project_id = $1
+         OR bp.project_id = $1
+      ORDER BY b.battery_id
+    `, [projectId])
+  ]);
+
+  if (projectResult.rowCount === 0) {
+    const err = new Error('Проект не найден');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  return {
+    project: projectResult.rows[0],
+    access: {
+      departments: departmentAccessResult.rows,
+      users: userAccessResult.rows,
+      effective_users: effectiveUsersResult.rows
+    },
+    downstream: {
+      tapes: tapeResult.rows,
+      electrode_batches: electrodeBatchResult.rows,
+      batteries: batteryResult.rows
+    },
+    downstream_counts: {
+      tapes: tapeResult.rows.length,
+      electrode_batches: electrodeBatchResult.rows.length,
+      batteries: batteryResult.rows.length
+    }
+  };
+}
+
 // CREATE
 router.post('/', auth, async (req, res) => {
   const {
@@ -384,6 +648,25 @@ router.get('/', auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+router.get('/:id/report', auth, requireView, async (req, res) => {
+  const projectId = Number(req.params.id);
+
+  if (!Number.isInteger(projectId)) {
+    return res.status(400).json({ error: 'Некорректный ID проекта' });
+  }
+
+  try {
+    res.json(await getProjectReport(pool, projectId));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки печатного отчёта по проекту' });
   }
 });
 

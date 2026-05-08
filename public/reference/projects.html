@@ -18,13 +18,30 @@
     <!-- Enter opens the form and copies the name into it -->
     <input
       id="project-name"
-      type="text" 
+      type="text"
       name="name"
       class="add-user"
       placeholder="+ Добавить проект"
       autocomplete="off"
       required
     />
+
+    <div id="project_sticky_header" class="record-sticky-header" hidden>
+      <div class="record-sticky-info">
+        <div class="record-sticky-title">
+          <span id="project_sticky_title">Новый проект</span>
+          <span id="project-global-dirty" class="badb-dirty-flag">Не сохранено</span>
+        </div>
+        <div id="project_sticky_meta" class="record-sticky-meta">—</div>
+      </div>
+      <div class="form-actions record-sticky-actions">
+        <button id="saveBtn" type="button" title="Сохранить изменения">Сохранить</button>
+        <button id="printProjectBtn" type="button" title="Печать отчёта" hidden>Печать</button>
+        <button id="exitBtn" type="button" title="Вернуться к списку, не выходя из аккаунта">Выйти</button>
+        <button id="deleteProjectBtn" type="button" class="button-danger" title="Удалить запись" hidden>Удалить</button>
+        <span id="project-sticky-status" class="inline_status" aria-live="polite"></span>
+      </div>
+    </div>
     
     <!-- Form hidden by default; shown on create/edit -->
     <form name="project-form" autocomplete="off" hidden>
@@ -88,11 +105,11 @@
       <fieldset id="project-access">
         <legend>Доступ</legend>
 
-        <label for="project-confidentiality-level">Видимость</label>
+        <label for="project-confidentiality-level">Доступ</label>
         <select id="project-confidentiality-level" name="confidentiality_level">
-          <option value="public">Все</option>
-          <option value="department">Отдел</option>
-          <option value="confidential">Выборочно</option>
+          <option value="public">для всех</option>
+          <option value="department">для отдела</option>
+          <option value="confidential">выборочный доступ</option>
         </select><br>
 
         <div id="project-department-block" hidden>
@@ -121,7 +138,7 @@
 
           <div class="form-field">
             <label>&nbsp;</label>
-            <button id="grantDepartmentAccessBtn" type="button">Добавить отдел</button>
+            <button id="grantDepartmentAccessBtn" type="button" title="Добавить доступ отдела">Добавить отдел</button>
           </div>
         </div>
 
@@ -171,22 +188,76 @@
 
           <div class="form-field">
             <label>&nbsp;</label>
-            <button id="grantUserAccessBtn" type="button">Добавить пользователя</button>
+            <button id="grantUserAccessBtn" type="button" title="Добавить пользователя">Добавить пользователя</button>
           </div>
         </div>
       </fieldset>
 
-      <button id="saveBtn" type="button">Сохранить запись</button>
-      <button id="clearBtn" type="button">Очистить форму</button>
-      <button id="exitBtn" type="button">Выход</button><br>
-
     </form>
 
     <div class="status-feedback" aria-live="polite"></div>
+
+    <div id="project_filters" class="project-filter-row" aria-label="Фильтры списка проектов">
+      <div class="project-filter-line project-filter-line-top">
+        <label class="project-filter-field project-filter-search" for="project-filter-text">
+          <span>Поиск</span>
+          <input
+            id="project-filter-text"
+            type="search"
+            placeholder="Название, описание, руководитель..."
+            autocomplete="off"
+          />
+        </label>
+
+        <label class="project-filter-field project-filter-lead" for="project-filter-lead">
+          <span>Руководитель</span>
+          <span class="project-filter-control-line">
+            <select id="project-filter-lead">
+              <option value="">Все руководители</option>
+            </select>
+          </span>
+        </label>
+      </div>
+
+      <div class="project-filter-line project-filter-line-bottom">
+        <label class="project-filter-field" for="project-filter-status">
+          <span>Статус</span>
+          <select id="project-filter-status">
+            <option value="">Все статусы</option>
+            <option value="active">активный</option>
+            <option value="paused">приостановлен</option>
+            <option value="completed">завершён</option>
+            <option value="archived">архивирован</option>
+          </select>
+        </label>
+
+        <label class="project-filter-field" for="project-filter-visibility">
+          <span>Доступ</span>
+          <select id="project-filter-visibility">
+            <option value="">Все уровни доступа</option>
+            <option value="public">для всех</option>
+            <option value="department">для отдела</option>
+            <option value="confidential">выборочный доступ</option>
+          </select>
+        </label>
+
+        <label class="project-filter-field" for="project-filter-department">
+          <span>Отдел</span>
+          <select id="project-filter-department">
+            <option value="">Все отделы</option>
+          </select>
+        </label>
+
+        <button id="clearProjectFiltersBtn" type="button" title="Сбросить фильтры">Сбросить</button>
+      </div>
+      <span id="project-filter-summary" class="project-filter-summary" aria-live="polite"></span>
+    </div>
+
     <ul id="projectsList" class="users-list"></ul>
 
     <script src="/js/auth.js"></script>
-    <script src="/js/projects.js"></script>
+    <script src="/js/badb-ui.js?v=badb-ui-20260507a"></script>
+    <script src="/js/projects.js?v=project-page-upgrade-20260508a"></script>
     
   </body>
 </html>
