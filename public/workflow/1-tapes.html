@@ -111,9 +111,9 @@
         <div id="tape_sticky_meta" class="record-sticky-meta">—</div>
       </div>
       <div class="form-actions record-sticky-actions tape-form-actions">
-        <button type="button" id="printBtn">Печать</button>
-        <button type="button" id="clearBtn">Выход</button>
-        <button type="button" id="deleteTapeBtn" class="button-danger" hidden>Удалить ленту</button>
+        <button type="button" id="printBtn" title="Печать отчёта">Печать</button>
+        <button type="button" id="clearBtn" title="Вернуться к списку, не выходя из аккаунта">Выйти</button>
+        <button type="button" id="deleteTapeBtn" class="button-danger" title="Удалить ленту" hidden>Удалить ленту</button>
         <span class="inline-save-status" aria-live="polite"></span>
       </div>
     </div>
@@ -146,6 +146,7 @@
               type="button"
               id="project-multiselect-trigger"
               class="multi-select-trigger"
+              title="Выбрать проекты"
               aria-expanded="false"
               aria-controls="project-multiselect-options"
             >— выбрать проекты —</button>
@@ -185,7 +186,7 @@
           min="0"
           placeholder="например 10.0000"><br>
           
-          <button type="button" id="saveBtn">Создать ленту</button>
+          <button type="button" id="saveBtn" title="Создать ленту">Создать ленту</button>
           <span class="inline-save-status" aria-live="polite"></span>
         </fieldset>
       </details>
@@ -195,7 +196,7 @@
           <span id="dirty-recipe-materials" class="dirty_marker">Не сохранено</span>
         </summary>
         <div id="recipe-lines-container"></div>
-        <button type="button" id="0-recipe-materials-save-btn">Сохранить выбор экземпляров</button>
+        <button type="button" id="0-recipe-materials-save-btn" title="Сохранить выбор экземпляров">Сохранить выбор экземпляров</button>
         <span class="inline-save-status" aria-live="polite"></span>
         
         <hr class="section-divider">
@@ -225,7 +226,7 @@
           <input id="0-drying_am-date" type="date" name="0-drying_am-date" placeholder="Дата начала сушки">
           <input id="0-drying_am-time" type="time" name="0-drying_am-time" placeholder="Время начала сушки">
           
-          <button type="button" class="date-time-now-button" id="0-drying_am-now-button">Сейчас</button><br>
+          <button type="button" class="date-time-now-button" id="0-drying_am-now-button" title="Установить текущее время">Сейчас</button><br>
           
           <label for="0-drying_am-notes">Примечания: </label>
           <textarea id="0-drying_am-notes" name="0-drying_am-notes" placeholder="Примечания к этапу сушки активного материала"></textarea><br>
@@ -247,12 +248,12 @@
           <input id="0-drying_am-end-date" type="date" name="0-drying_am-end-date" placeholder="Дата окончания сушки">
           <input id="0-drying_am-end-time" type="time" name="0-drying_am-end-time" placeholder="Время окончания сушки">
 
-          <button type="button" class="date-time-now-button" id="0-drying_am-end-now-button" data-date-target="0-drying_am-end-date" data-time-target="0-drying_am-end-time">Сейчас</button><br>
+          <button type="button" class="date-time-now-button" id="0-drying_am-end-now-button" data-date-target="0-drying_am-end-date" data-time-target="0-drying_am-end-time" title="Установить текущее время">Сейчас</button><br>
           
           <label for="0-drying_am-other_param">Дополнительные технические параметры (если применимо): </label>
           <textarea id="0-drying_am-other_param" name="0-drying_am-other_param" placeholder="Примечания к этапу сушки активного материала"></textarea><br>
           
-          <button type="button" id="0-drying_am-save-btn">Сохранить сушку</button>
+          <button type="button" id="0-drying_am-save-btn" title="Сохранить сушку">Сохранить сушку</button>
           <span class="inline-save-status" aria-live="polite"></span>
         </fieldset>
       </details>
@@ -279,7 +280,7 @@
           <input id="1-weighing-date" type="date" name="1-weighing-date" placeholder="Дата начала сушки">
           <input id="1-weighing-time" type="time" name="1-weighing-time" placeholder="Время начала сушки">
           
-          <button type="button" class="date-time-now-button" id="1-weighing-now-button">Сейчас</button><br>
+          <button type="button" class="date-time-now-button" id="1-weighing-now-button" title="Установить текущее время">Сейчас</button><br>
           
           <label for="1-weighing-notes">Примечания: </label>
           <textarea id="1-weighing-notes" name="1-weighing-notes" placeholder="Примечания к этапу подготовки пасты"></textarea><br>
@@ -302,7 +303,7 @@
 
           <div id="slurry-solids-summary" class="slurry-solids-summary" aria-live="polite" hidden></div>
           
-          <button type="button" id="1-weighing-save-btn">Сохранить этап замеса</button>
+          <button type="button" id="1-weighing-save-btn" title="Сохранить этап замеса">Сохранить этап замеса</button>
           <span class="inline-save-status" aria-live="polite"></span>
           
         </fieldset>
@@ -324,7 +325,7 @@
           <input id="1-mixing-started_at-date" type="date" name="started_at_date" placeholder="Дата начала перемешивания">
           <input id="1-mixing-started_at-time" type="time" name="started_at_time" placeholder="Время начала перемешивания">
           
-          <button type="button" class="date-time-now-button" id="1-mixing-now-button">Сейчас</button><br>
+          <button type="button" class="date-time-now-button" id="1-mixing-now-button" title="Установить текущее время">Сейчас</button><br>
           
           <label for="1-mixing-comments">Примечания: </label>
           <textarea id="1-mixing-comments" name="comments" placeholder="Примечания к этапу перемешивания"></textarea><br>
@@ -390,7 +391,7 @@
           step="0.1"
           placeholder="Например: 1200"><br>
           
-          <button type="button" id="1-mixing-save-btn">Сохранить этап перемешивания</button>
+          <button type="button" id="1-mixing-save-btn" title="Сохранить этап перемешивания">Сохранить этап перемешивания</button>
           <span class="inline-save-status" aria-live="polite"></span>
           
         </fieldset>
@@ -421,7 +422,7 @@
             <input id="2-coating-date" type="date" name="2-coating-date" placeholder="Дата начала сушки">
             <input id="2-coating-time" type="time" name="2-coating-time" placeholder="Время начала сушки">
             
-            <button type="button" class="date-time-now-button" id="2-coating-now-button">Сейчас</button><br>
+            <button type="button" class="date-time-now-button" id="2-coating-now-button" title="Установить текущее время">Сейчас</button><br>
             
             <label for="2-cathode-tape-notes">Примечания: </label>
             <textarea id="2-cathode-tape-notes" name="2-cathode-tape-notes" placeholder="Комментарии к подготовке ленты"></textarea>
@@ -477,7 +478,7 @@
             <label for="2-coating-dry-duration">Длительность, мин:</label>
             <input id="2-coating-dry-duration" type="number" step="1" min="0"><br>
             
-            <button type="button" id="2-coating-save-btn">Сохранить этап нанесения</button>
+            <button type="button" id="2-coating-save-btn" title="Сохранить этап нанесения">Сохранить этап нанесения</button>
             <span class="inline-save-status" aria-live="polite"></span>
           </fieldset>
           
@@ -498,7 +499,7 @@
             <input id="2-calendering-date" type="date" name="2-calendering-date" placeholder="Дата начала сушки">
             <input id="2-calendering-time" type="time" name="2-calendering-time" placeholder="Время начала сушки">
             
-            <button type="button" class="date-time-now-button" id="2-calendering-now-button">Сейчас</button><br>
+            <button type="button" class="date-time-now-button" id="2-calendering-now-button" title="Установить текущее время">Сейчас</button><br>
             
             <label for="2-calendering-notes">Примечания: </label>
             <textarea id="2-calendering-notes" name="2-calendering-notes" placeholder="Примечания к этапу каландрирования"></textarea><br>
@@ -560,7 +561,7 @@
             placeholder="Указать другое"
             disabled><br>
             
-            <button type="button" id="2-calendering-save-btn">Сохранить этап каландрирования</button>
+            <button type="button" id="2-calendering-save-btn" title="Сохранить этап каландрирования">Сохранить этап каландрирования</button>
             <span class="inline-save-status" aria-live="polite"></span>
           </fieldset>
           
@@ -581,7 +582,7 @@
             <input id="2b-drying_pressed_tape-date" type="date" name="2b-drying_pressed_tape-date" placeholder="Дата начала сушки">
             <input id="2b-drying_pressed_tape-time" type="time" name="2b-drying_pressed_tape-time" placeholder="Время начала сушки">
             
-            <button type="button" class="date-time-now-button" id="2b-drying_pressed_tape-now-button">Сейчас</button><br>
+            <button type="button" class="date-time-now-button" id="2b-drying_pressed_tape-now-button" title="Установить текущее время">Сейчас</button><br>
             
             <label for="2b-drying_pressed_tape-notes">Примечания: </label>
             <textarea id="2b-drying_pressed_tape-notes" name="2b-drying_pressed_tape-notes" placeholder="Примечания к этапу сушки"></textarea>
@@ -603,12 +604,12 @@
             <input id="2b-drying_pressed_tape-end-date" type="date" name="2b-drying_pressed_tape-end-date" placeholder="Дата окончания сушки">
             <input id="2b-drying_pressed_tape-end-time" type="time" name="2b-drying_pressed_tape-end-time" placeholder="Время окончания сушки">
 
-            <button type="button" class="date-time-now-button" id="2b-drying_pressed_tape-end-now-button" data-date-target="2b-drying_pressed_tape-end-date" data-time-target="2b-drying_pressed_tape-end-time">Сейчас</button><br>
+            <button type="button" class="date-time-now-button" id="2b-drying_pressed_tape-end-now-button" data-date-target="2b-drying_pressed_tape-end-date" data-time-target="2b-drying_pressed_tape-end-time" title="Установить текущее время">Сейчас</button><br>
             
             <label for="2b-drying_pressed_tape-other_param">Дополнительные технические параметры (если применимо): </label>
             <textarea id="2b-drying_pressed_tape-other_param" name="2b-drying_pressed_tape-other_param" placeholder="Примечания к этапу сушки активного материала"></textarea><br>
             
-            <button type="button" id="2b-drying_pressed_tape-save-btn">Сохранить этап сушки</button>
+            <button type="button" id="2b-drying_pressed_tape-save-btn" title="Сохранить этап сушки">Сохранить этап сушки</button>
             <span class="inline-save-status" aria-live="polite"></span>
             
           </fieldset>
@@ -635,6 +636,7 @@
             id="2c-dry-box-start-now-button"
             data-date-target="2c-dry-box-start-date"
             data-time-target="2c-dry-box-start-time"
+            title="Установить текущее время"
           >Сейчас</button><br>
 
           <label for="2c-dry-box-temperature">Температура, °C: </label>
@@ -651,16 +653,16 @@
           <label for="2c-dry-box-comments">Примечания: </label>
           <textarea id="2c-dry-box-comments" placeholder="Комментарии по последней сушке в шкафу"></textarea><br>
 
-          <button type="button" id="2c-dry-box-save-btn">Сохранить параметры сушки</button>
+          <button type="button" id="2c-dry-box-save-btn" title="Сохранить параметры сушки">Сохранить параметры сушки</button>
           <span class="inline-save-status" aria-live="polite"></span><br>
 
-          <button type="button" id="2c-dry-box-remove-btn">Вынуть из шкафа сейчас</button>
+          <button type="button" id="2c-dry-box-remove-btn" title="Вынуть из шкафа сейчас">Вынуть из шкафа сейчас</button>
           <span class="inline-save-status" aria-live="polite"></span><br>
 
-          <button type="button" id="2c-dry-box-return-btn">Вернуть в шкаф сейчас</button>
+          <button type="button" id="2c-dry-box-return-btn" title="Вернуть в шкаф сейчас">Вернуть в шкаф сейчас</button>
           <span class="inline-save-status" aria-live="polite"></span><br>
 
-          <button type="button" id="2c-dry-box-deplete-btn">Лента израсходована</button>
+          <button type="button" id="2c-dry-box-deplete-btn" title="Отметить ленту израсходованной">Лента израсходована</button>
           <span class="inline-save-status" aria-live="polite"></span>
         </fieldset>
       </details>
@@ -708,7 +710,7 @@
         </select>
       </label>
 
-      <button id="clearTapeListFiltersBtn" type="button">Сбросить</button>
+      <button id="clearTapeListFiltersBtn" type="button" title="Сбросить фильтры">Сбросить</button>
     </div>
     <span id="tape-list-filter-summary" class="tape-filter-summary" aria-live="polite"></span>
 

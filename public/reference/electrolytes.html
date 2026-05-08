@@ -35,10 +35,10 @@
         <div id="electrolyte_sticky_meta" class="record-sticky-meta">—</div>
       </div>
       <div class="form-actions record-sticky-actions">
-        <button id="printElectrolyteBtn" type="button" hidden>Печать</button>
-        <button id="saveBtn" type="button">Сохранить запись</button>
-        <button id="clearBtn" type="button">Выход</button>
-        <button id="deleteElectrolyteBtn" type="button" class="button-danger" hidden>Удалить электролит</button>
+        <button id="printElectrolyteBtn" type="button" title="Печать отчёта" hidden>Печать</button>
+        <button id="saveBtn" type="button" title="Сохранить изменения">Сохранить запись</button>
+        <button id="clearBtn" type="button" title="Вернуться к списку, не выходя из аккаунта">Выйти</button>
+        <button id="deleteElectrolyteBtn" type="button" class="button-danger" title="Удалить электролит" hidden>Удалить электролит</button>
         <span id="electrolyte-sticky-status" class="inline_status" aria-live="polite"></span>
       </div>
     </div>
@@ -139,7 +139,7 @@
           type="file"
           multiple
         />
-        <button id="saveFilesBtn" type="button" hidden>Сохранить файлы</button>
+        <button id="saveFilesBtn" type="button" title="Сохранить файлы" hidden>Сохранить файлы</button>
         <span id="electrolyte-files-status" class="inline_status" aria-live="polite"></span>
         <div id="electrolyte-files-saved"></div>
       </fieldset>
@@ -178,7 +178,7 @@
         </select>
       </label>
 
-      <button id="clearElectrolyteFiltersBtn" type="button">Сбросить</button>
+      <button id="clearElectrolyteFiltersBtn" type="button" title="Сбросить фильтры">Сбросить</button>
     </div>
     <span id="electrolyte-filter-summary" class="electrolyte-filter-summary" aria-live="polite"></span>
 

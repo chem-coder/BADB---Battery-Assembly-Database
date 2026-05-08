@@ -3010,7 +3010,7 @@ function updateTapeListFilterSummary(filteredCount, totalCount) {
 
   tapeListFilterSummary.textContent = hasFilters
     ? `Показано ${filteredCount} из ${totalCount}`
-    : `Всего ${totalCount}`;
+    : `Всего: ${totalCount}`;
 }
 
 function renderTapeEmptyListRow(totalCount, hasFilters) {

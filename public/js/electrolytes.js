@@ -289,6 +289,7 @@ function renderSavedElectrolyteFiles(entries) {
     deleteBtn.type = 'button';
     deleteBtn.textContent = '🗑';
     deleteBtn.title = 'Удалить файл';
+    deleteBtn.setAttribute('aria-label', `Удалить файл ${entry.file_name || index + 1}`);
     deleteBtn.style.marginLeft = '0.5rem';
     deleteBtn.onclick = async () => {
       const fileName = entry.file_name || `Файл ${index + 1}`;
@@ -598,7 +599,7 @@ async function openElectrolyteRecord(el) {
     showStatus(err.message, true, { clearAfterMs: 9000 });
   } finally {
     markFormPristine();
-    window.BADB_UI?.scrollToElement(stickyHeader || form);
+    window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
   }
 }
 
@@ -620,7 +621,7 @@ function duplicateElectrolyte(el) {
   clearSavedElectrolyteFiles();
   updateSaveFilesButtonVisibility();
   showForm();
-  window.BADB_UI?.scrollToElement(stickyHeader || form);
+  window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
 }
 
 async function saveElectrolyteRecord(options = {}) {
@@ -806,7 +807,7 @@ addInput.addEventListener('keydown', (e) => {
   addInput.value = '';
   clearSavedElectrolyteFiles();
   updateSaveFilesButtonVisibility();
-  window.BADB_UI?.scrollToElement(stickyHeader || form);
+  window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
 });
 
 function validateRequiredFields(statusTarget = 'header') {

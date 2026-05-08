@@ -275,6 +275,7 @@ function renderSavedSeparatorFiles(entries) {
     deleteBtn.type = 'button';
     deleteBtn.textContent = '🗑';
     deleteBtn.title = 'Удалить файл';
+    deleteBtn.setAttribute('aria-label', `Удалить файл ${entry.file_name || index + 1}`);
     deleteBtn.style.marginLeft = '0.5rem';
     deleteBtn.onclick = async () => {
       const fileName = entry.file_name || `Файл ${index + 1}`;
@@ -646,7 +647,7 @@ async function openSeparatorRecord(sep) {
     showStatus(err.message, true, { clearAfterMs: 9000 });
   } finally {
     markFormPristine();
-    window.BADB_UI?.scrollToElement(stickyHeader || form);
+    window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
   }
 }
 
@@ -673,7 +674,7 @@ function duplicateSeparator(sep) {
   clearSavedSeparatorFiles();
   updateSaveFilesButtonVisibility();
   showForm();
-  window.BADB_UI?.scrollToElement(stickyHeader || form);
+  window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
 }
 
 function getSeparatorPrintReportUrl(id) {
@@ -950,7 +951,7 @@ addInput.addEventListener('keydown', (e) => {
   addInput.value = '';
   clearSavedSeparatorFiles();
   updateSaveFilesButtonVisibility();
-  window.BADB_UI?.scrollToElement(stickyHeader || form);
+  window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
 });
 
 saveBtn.addEventListener('click', async () => {

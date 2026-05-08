@@ -446,14 +446,7 @@ function hasStartedBatterySection(sectionKey) {
   }
 
   if (sectionKey === 'battery_assembly') {
-    const formFactor = state.meta.form_factor;
-    const activeAssembly =
-      formFactor === 'coin' ? state.assembly.coin
-      : formFactor === 'pouch' ? state.assembly.pouch
-      : formFactor === 'cylindrical' ? state.assembly.cylindrical
-      : null;
-
-    return hasMeaningfulObjectValue(activeAssembly);
+    return hasStartedBatteryAssemblySection();
   }
 
   if (sectionKey === 'battery_qc') {
@@ -469,6 +462,43 @@ function hasStartedBatterySection(sectionKey) {
       notes: state.electrochem.notes,
       files: state.electrochem.files
     }) || (Array.isArray(state.electrochem.savedEntries) && state.electrochem.savedEntries.length > 0);
+  }
+
+  return false;
+}
+
+function isDefaultCoinAssemblyFieldValue(fieldName, value) {
+  if (fieldName === 'spacer_thickness_mm') {
+    return toFiniteBatteryNumber(value) === 0.5;
+  }
+
+  if (fieldName === 'spacer_count') {
+    return toFiniteBatteryNumber(value) === 2;
+  }
+
+  return false;
+}
+
+function hasStartedCoinAssemblySection(assembly) {
+  return Object.entries(assembly || {}).some(([fieldName, value]) => (
+    hasMeaningfulValue(value) &&
+    !isDefaultCoinAssemblyFieldValue(fieldName, value)
+  ));
+}
+
+function hasStartedBatteryAssemblySection() {
+  const formFactor = state.meta.form_factor;
+
+  if (formFactor === 'coin') {
+    return hasStartedCoinAssemblySection(state.assembly.coin);
+  }
+
+  if (formFactor === 'pouch') {
+    return hasMeaningfulObjectValue(state.assembly.pouch);
+  }
+
+  if (formFactor === 'cylindrical') {
+    return hasMeaningfulObjectValue(state.assembly.cylindrical);
   }
 
   return false;
@@ -3755,6 +3785,7 @@ function renderElectrochemSavedFiles(entries) {
     deleteBtn.type = 'button';
     deleteBtn.textContent = '🗑';
     deleteBtn.title = 'Удалить файл';
+    deleteBtn.setAttribute('aria-label', `Удалить файл ${entry.file_name || entry.electrochem_notes || index + 1}`);
     deleteBtn.style.marginLeft = '0.5rem';
     deleteBtn.onclick = async () => {
       const fileName = entry.file_name || entry.electrochem_notes || `Файл ${index + 1}`;
@@ -4665,7 +4696,7 @@ function updateBatteryListFilterSummary(filteredCount, totalCount) {
 
   batteryListFilterSummary.textContent = hasFilters
     ? `Показано ${filteredCount} из ${totalCount}`
-    : `Всего ${totalCount}`;
+    : `Всего: ${totalCount}`;
 }
 
 function renderBatteryEmptyListRow(list, totalCount, hasFilters) {

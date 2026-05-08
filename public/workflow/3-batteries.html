@@ -128,7 +128,7 @@
         <h1>Протокол сборки аккумуляторa</h1>
       </header>
 
-      <button type="button" id="addBatteryBtn">+ Добавить аккумулятор</button>
+      <button type="button" id="addBatteryBtn" title="Добавить аккумулятор">+ Добавить аккумулятор</button>
 
       <div id="battery_sticky_header" class="record-sticky-header" hidden>
         <div class="record-sticky-info">
@@ -139,10 +139,10 @@
           <div id="battery_sticky_meta" class="record-sticky-meta">—</div>
         </div>
         <div class="form-actions record-sticky-actions battery-form-actions">
-          <button type="button" id="printBatteryBtn" hidden>Печать</button>
-          <button type="button" id="exitBatteriesBtn" hidden>Выйти</button>
-          <button type="button" id="disassembleBatteryBtn" hidden>Разобрать аккумулятор</button>
-          <button type="button" id="deleteBatteryBtn" class="button-danger" hidden>Удалить запись</button>
+          <button type="button" id="printBatteryBtn" title="Печать отчёта" hidden>Печать</button>
+          <button type="button" id="exitBatteriesBtn" title="Вернуться к списку, не выходя из аккаунта" hidden>Выйти</button>
+          <button type="button" id="disassembleBatteryBtn" title="Разобрать аккумулятор" hidden>Разобрать аккумулятор</button>
+          <button type="button" id="deleteBatteryBtn" class="button-danger" title="Удалить запись" hidden>Удалить запись</button>
         </div>
       </div>
       <div id="battery_delete_flow" class="record-delete-flow" hidden></div>
@@ -352,6 +352,7 @@
                     type="button"
                     id="battery-project-multiselect-trigger"
                     class="multi-select-trigger"
+                    title="Выбрать проекты"
                     aria-expanded="false"
                     aria-controls="battery-project-multiselect-options"
                   >— выбрать проекты —</button>
@@ -361,7 +362,7 @@
                 <input type="hidden" id="battery_project_ids" name="project_ids">
                 <div id="battery_project_hint" class="field-hint"></div>
 
-                <button type="button" id="battery_create_btn">Создать аккумулятор</button>
+                <button type="button" id="battery_create_btn" title="Создать аккумулятор">Создать аккумулятор</button>
 
               </fieldset>
 
@@ -451,6 +452,7 @@
                   type="button"
                   id="battery_stack_save_btn"
                   class="btn_secondary"
+                  title="Сохранить стек электродов"
                   onclick="saveElectrodeStack()"
                 >
                   Сохранить стек электродов
@@ -580,6 +582,7 @@
                 type="button"
                 id="coin_assembly_save_btn"
                 class="btn_secondary"
+                title="Сохранить параметры сборки"
                 onclick="saveAssemblyParams()"
               >
                 Сохранить параметры сборки
@@ -652,6 +655,7 @@
                 type="button"
                 id="pouch_assembly_save_btn"
                 class="btn_secondary"
+                title="Сохранить параметры сборки"
                 onclick="saveAssemblyParams()"
               >
                 Сохранить параметры сборки
@@ -724,6 +728,7 @@
                 type="button"
                 id="cyl_assembly_save_btn"
                 class="btn_secondary"
+                title="Сохранить параметры сборки"
                 onclick="saveAssemblyParams()"
               >
                 Сохранить параметры сборки
@@ -774,9 +779,10 @@
               type="button"
               id="battery_qc_save_btn"
               class="btn_secondary"
+              title="Сохранить результаты контроля качества"
               onclick="saveBatteryQc()"
             >
-              Сохранить результаты qc
+              Сохранить результаты контроля качества
             </button>
 
           </fieldset>
@@ -801,6 +807,7 @@
               type="button"
               id="battery_electrochem_files_save_btn"
               class="btn_secondary"
+              title="Сохранить файлы"
               hidden
             >
               Сохранить файлы
@@ -819,6 +826,7 @@
               type="button"
               id="battery_electrochem_save_btn"
               class="btn_secondary"
+              title="Сохранить результаты электрохимических испытаний"
               onclick="saveBatteryElectrochem()"
             >
               Сохранить результаты электрохимических испытаний
@@ -864,7 +872,7 @@
           </select>
         </label>
 
-        <button id="clearBatteryListFiltersBtn" type="button">Сбросить</button>
+        <button id="clearBatteryListFiltersBtn" type="button" title="Сбросить фильтры">Сбросить</button>
       </div>
       <span id="battery-list-filter-summary" class="battery-filter-summary" aria-live="polite"></span>
 

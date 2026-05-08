@@ -1789,7 +1789,7 @@
 
       batchFilterSummary.textContent = hasFilters
         ? `Показано ${filteredCount} из ${totalCount}`
-        : `Всего ${totalCount}`;
+        : `Всего: ${totalCount}`;
     }
 
     function renderCutBatchListInto(list) {
@@ -2091,6 +2091,7 @@
           scrapBtn.type = 'button';
           scrapBtn.textContent = '❌';
           scrapBtn.title = 'Списать';
+          scrapBtn.setAttribute('aria-label', `Списать электрод ${e.electrode_id}`);
           
           scrapBtn.onclick = async () => {
             await scrapElectrode(e);
@@ -2104,6 +2105,7 @@
           restoreBtn.type = 'button';
           restoreBtn.textContent = '↩';
           restoreBtn.title = 'Вернуть в доступные';
+          restoreBtn.setAttribute('aria-label', `Вернуть электрод ${e.electrode_id} в доступные`);
 
           restoreBtn.onclick = async () => {
             await restoreScrappedElectrode(e);
@@ -2118,6 +2120,7 @@
         deleteBtn.type = 'button';
         deleteBtn.textContent = '🗑️';
         deleteBtn.title = 'Удалить';
+        deleteBtn.setAttribute('aria-label', `Удалить электрод ${e.electrode_id}`);
         
         deleteBtn.onclick = async () => {
           const ok = confirm(`Удалить электрод ${e.electrode_id}?`);
@@ -2587,6 +2590,8 @@
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.textContent = '🗑️';
+      removeBtn.title = 'Удалить строку массы фольги';
+      removeBtn.setAttribute('aria-label', 'Удалить строку массы фольги');
       
       actionTd.appendChild(removeBtn);
       
@@ -2779,6 +2784,8 @@
       const removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.textContent = '🗑️';
+      removeBtn.title = 'Удалить строку электрода';
+      removeBtn.setAttribute('aria-label', 'Удалить строку электрода');
       actionTd.appendChild(removeBtn);
       
       tr.appendChild(numTd);

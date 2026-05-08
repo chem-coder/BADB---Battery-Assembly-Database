@@ -87,6 +87,7 @@
 
   function createRecordOpenButton({
     ariaLabel,
+    title,
     className = '',
     children = [],
     text,
@@ -99,6 +100,8 @@
     if (ariaLabel) {
       button.setAttribute('aria-label', ariaLabel);
     }
+
+    button.title = title || ariaLabel || 'Открыть запись';
 
     if (text !== undefined) {
       button.textContent = text;

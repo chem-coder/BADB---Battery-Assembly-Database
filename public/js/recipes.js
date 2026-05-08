@@ -544,7 +544,7 @@ function createRecipeLineRow(index) {
     </td>
 
     <td>
-      <button type="button" class="delete-line" title="Удалить компонент">🗑</button>
+      <button type="button" class="delete-line" title="Удалить компонент" aria-label="Удалить компонент">🗑</button>
     </td>
   `;
 

@@ -153,7 +153,7 @@
             </select>
           </div>
 
-          <button id="clearElectrodeBatchFiltersBtn" type="button">Сбросить</button>
+          <button id="clearElectrodeBatchFiltersBtn" type="button" title="Сбросить фильтры">Сбросить</button>
         </div>
         <span id="electrode-batch-filter-summary" class="electrode-filter-summary" aria-live="polite"></span>
       </fieldset>
@@ -167,10 +167,10 @@
           <div id="electrode_sticky_meta" class="record-sticky-meta">—</div>
         </div>
         <div class="form-actions record-sticky-actions electrode-batch-actions">
-          <button type="button" id="saveBtn">Сохранить партию</button>
-          <button type="button" id="printElectrodeBatchBtn" hidden>Печать</button>
-          <button type="button" id="exitBatchBtn">Выйти</button>
-          <button type="button" id="deleteElectrodeBatchBtn" class="button-danger" hidden>Удалить партию</button>
+          <button type="button" id="saveBtn" title="Сохранить изменения">Сохранить партию</button>
+          <button type="button" id="printElectrodeBatchBtn" title="Печать отчёта" hidden>Печать</button>
+          <button type="button" id="exitBatchBtn" title="Вернуться к списку, не выходя из аккаунта">Выйти</button>
+          <button type="button" id="deleteElectrodeBatchBtn" class="button-danger" title="Удалить партию" hidden>Удалить партию</button>
         </div>
       </div>
       
@@ -194,6 +194,7 @@
                     type="button"
                     id="electrode-batch-project-multiselect-trigger"
                     class="multi-select-trigger"
+                    title="Выбрать проекты"
                     aria-expanded="false"
                     aria-controls="electrode-batch-project-multiselect-options"
                   >— выбрать проекты —</button>
@@ -286,7 +287,7 @@
                   <tbody id="foil-mass-body"></tbody>
                 </table>
                 
-                <button type="button" id="add-foil-mass-row-btn">+</button>
+                <button type="button" id="add-foil-mass-row-btn" title="Добавить строку массы фольги">+</button>
               </fieldset>
             </details>
             
@@ -326,7 +327,7 @@
                   </table>
                 </div>
                 
-                <button type="button" id="add-electrode-row-btn">+</button>
+                <button type="button" id="add-electrode-row-btn" title="Добавить строку электрода">+</button>
                 
               </fieldset>
             </details>
@@ -353,6 +354,7 @@
                 type="button"
                 class="date-time-now-button"
                 id="electrodes-drying-start-now-button"
+                title="Установить текущее время"
                 >
                 Сейчас
               </button>
@@ -376,6 +378,7 @@
               type="button"
               class="date-time-now-button"
               id="electrodes-drying-end-now-button"
+              title="Установить текущее время"
               >
               Сейчас
             </button>
@@ -413,14 +416,14 @@
           <legend>Что дальше с лентой?</legend>
           <div id="electrodes-tape-dry-box-status" aria-live="polite"></div>
           <div id="electrodes-tape-dry-box-detail" style="margin:6px 0 10px; color:#666;"></div>
-          <button type="button" id="electrodes-return-tape-btn">Поместить в сушильный шкаф</button>
-          <button type="button" id="electrodes-deplete-tape-btn">Списать ленту</button>
+          <button type="button" id="electrodes-return-tape-btn" title="Поместить ленту в сушильный шкаф">Поместить в сушильный шкаф</button>
+          <button type="button" id="electrodes-deplete-tape-btn" title="Списать ленту">Списать ленту</button>
         </fieldset>
         
       </div>
       
       <div id="cut-batches-section">
-        <button type="button" id="add-cut-batch-btn" hidden>+ Добавить новую партию</button>
+        <button type="button" id="add-cut-batch-btn" title="Добавить новую партию" hidden>+ Добавить новую партию</button>
         <h3 id="batch-title" hidden></h3>
         <div id="no-batches-msg" hidden>
           Пока нет вырезанных партий электродов
