@@ -1,7 +1,7 @@
 # Documentation Index
 
 Created: 2026-05-06
-Edited: 2026-05-07
+Edited: 2026-05-08
 Status: current
 
 ## Operating Rules
@@ -39,6 +39,7 @@ Status: current
 - [Project Links](current/project_links.md)
 - [Release Readiness](current/release_readiness.md)
 - [Repo Map](current/repo_map.md)
+- [Separators](current/separators.md)
 - [Traceability](current/traceability.md)
 
 ## Rule Docs

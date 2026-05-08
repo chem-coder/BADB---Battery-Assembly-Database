@@ -290,7 +290,8 @@ body[data-page="electrodes"] .electrode-filter-summary {
   align-self: center;
 }
 
-body[data-page="electrolytes"] .electrolyte-filter-row {
+body[data-page="electrolytes"] .electrolyte-filter-row,
+body[data-page="separators"] .separator-filter-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem 0.85rem;
@@ -298,31 +299,38 @@ body[data-page="electrolytes"] .electrolyte-filter-row {
   margin: 0.35rem 0 0.8rem;
 }
 
-body[data-page="electrolytes"] .electrolyte-filter-field {
+body[data-page="electrolytes"] .electrolyte-filter-field,
+body[data-page="separators"] .separator-filter-field {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   min-width: 10rem;
 }
 
-body[data-page="electrolytes"] .electrolyte-filter-field:first-child {
+body[data-page="electrolytes"] .electrolyte-filter-field:first-child,
+body[data-page="separators"] .separator-filter-field:first-child {
   flex: 1 1 18rem;
   min-width: min(18rem, 100%);
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-field span,
-body[data-page="electrolytes"] .electrolyte-filter-summary {
+body[data-page="electrolytes"] .electrolyte-filter-summary,
+body[data-page="separators"] .separator-filter-field span,
+body[data-page="separators"] .separator-filter-summary {
   margin-right: 0;
   color: #667085;
   font-size: 0.86rem;
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-row input,
-body[data-page="electrolytes"] .electrolyte-filter-row select {
+body[data-page="electrolytes"] .electrolyte-filter-row select,
+body[data-page="separators"] .separator-filter-row input,
+body[data-page="separators"] .separator-filter-row select {
   width: 100%;
 }
 
-body[data-page="electrolytes"] .electrolyte-filter-summary {
+body[data-page="electrolytes"] .electrolyte-filter-summary,
+body[data-page="separators"] .separator-filter-summary {
   align-self: center;
 }
 
@@ -660,6 +668,7 @@ body[data-page="BAL"] #exitBatteriesBtn {
 body[data-page="tapes"] #tapesList,
 body[data-page="electrodes"] #all-cut-batches-list,
 body[data-page="electrolytes"] #electrolytesList,
+body[data-page="separators"] #separatorsList,
 body[data-page="projectsList"] #projectsList,
 body[data-page="BAL"] #batteriesList {
   border-top: 1px solid #d8dee6;
@@ -698,7 +707,8 @@ body[data-page="BAL"] #batteriesList {
   padding: 0.4rem 0;
 }
 
-body[data-page="electrolytes"] .electrolyte-empty-row {
+body[data-page="electrolytes"] .electrolyte-empty-row,
+body[data-page="separators"] .separator-empty-row {
   justify-content: flex-start;
   color: #667085;
   font-size: 0.95rem;

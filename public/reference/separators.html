@@ -26,6 +26,23 @@
       required
     />
     
+    <div id="separator_sticky_header" class="record-sticky-header" hidden>
+      <div class="record-sticky-info">
+        <div class="record-sticky-title">
+          <span id="separator_sticky_title">Новый сепаратор</span>
+          <span id="separator-global-dirty" class="badb-dirty-flag">Не сохранено</span>
+        </div>
+        <div id="separator_sticky_meta" class="record-sticky-meta">—</div>
+      </div>
+      <div class="form-actions record-sticky-actions">
+        <button id="printSeparatorBtn" type="button" hidden>Печать</button>
+        <button id="saveBtn" type="button">Сохранить запись</button>
+        <button id="clearBtn" type="button">Выход</button>
+        <button id="deleteSeparatorBtn" type="button" class="button-danger" hidden>Удалить сепаратор</button>
+        <span id="separator-sticky-status" class="inline_status" aria-live="polite"></span>
+      </div>
+    </div>
+
     <!-- Form hidden by default; shown on create/edit -->
     <form name="separator-form" autocomplete="on" hidden>
 
@@ -110,6 +127,7 @@
         <label>Файл паспорта</label>
         <input id="separator-files" type="file" name="separator_files" multiple>
         <button id="saveFilesBtn" type="button" hidden>Сохранить файлы</button>
+        <span id="separator-files-status" class="inline_status" aria-live="polite"></span>
         <p id="separator-files-saved" class="tiny_note"></p>
         <input type="hidden" name="file_path"><br>
 
@@ -140,15 +158,45 @@
 
       </fieldset>
 
-      <button id="saveBtn" type="button">Сохранить запись</button>
-      <button id="clearBtn" type="button">Очистить форму</button>
-      <button id="exitBtn" type="button">Выход</button><br>
-
     </form>
     <div class="status-feedback" aria-live="polite"></div>
+
+    <div id="separator_filters" class="separator-filter-row" aria-label="Фильтры списка сепараторов">
+      <label class="separator-filter-field" for="separator-filter-text">
+        <span>Поиск</span>
+        <input
+          id="separator-filter-text"
+          type="search"
+          placeholder="Название, поставщик, марка, партия..."
+          autocomplete="off"
+        />
+      </label>
+
+      <label class="separator-filter-field" for="separator-filter-status">
+        <span>Статус</span>
+        <select id="separator-filter-status">
+          <option value="">Все статусы</option>
+          <option value="available">в наличии</option>
+          <option value="used">израсходован</option>
+          <option value="scrap">списан</option>
+        </select>
+      </label>
+
+      <label class="separator-filter-field" for="separator-filter-structure">
+        <span>Структура</span>
+        <select id="separator-filter-structure">
+          <option value="">Все структуры</option>
+        </select>
+      </label>
+
+      <button id="clearSeparatorFiltersBtn" type="button">Сбросить</button>
+      <span id="separator-filter-summary" class="separator-filter-summary" aria-live="polite"></span>
+    </div>
+
     <ul id="separatorsList" class="users-list"></ul>
 
     <script src="/js/auth.js"></script>
-    <script src="/js/separators.js"></script>
+    <script src="/js/badb-ui.js?v=badb-ui-20260507a"></script>
+    <script src="/js/separators.js?v=separator-page-upgrade-20260508a"></script>
   </body>
 </html>

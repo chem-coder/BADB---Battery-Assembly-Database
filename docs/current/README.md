@@ -1,7 +1,7 @@
 # Current System Docs
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-08
 Status: current
 
 This folder is for concise descriptions of how the system works now. Claims here must be verified against code, migrations, and tests.
@@ -19,4 +19,5 @@ This folder is for concise descriptions of how the system works now. Claims here
 - [Project Links](project_links.md)
 - [Release Readiness](release_readiness.md)
 - [Repo Map](repo_map.md)
+- [Separators](separators.md)
 - [Traceability](traceability.md)

@@ -2,13 +2,25 @@ const addInput = document.getElementById('separator-name');
 const nameInput = document.getElementById('separator-name-input');
 const form = document.forms['separator-form'];
 const title = form.querySelector('h2');
+const printSeparatorBtn = document.getElementById('printSeparatorBtn');
 const saveBtn = document.getElementById('saveBtn');
 const clearBtn = document.getElementById('clearBtn');
-const exitBtn = document.getElementById('exitBtn');
+const deleteSeparatorBtn = document.getElementById('deleteSeparatorBtn');
 const saveFilesBtn = document.getElementById('saveFilesBtn');
 const createdBySelect = document.getElementById('separator-created-by');
 const filesInput = document.getElementById('separator-files');
 const savedFilesBox = document.getElementById('separator-files-saved');
+const stickyHeader = document.getElementById('separator_sticky_header');
+const stickyTitle = document.getElementById('separator_sticky_title');
+const stickyMeta = document.getElementById('separator_sticky_meta');
+const stickyDirty = document.getElementById('separator-global-dirty');
+const stickyStatus = document.getElementById('separator-sticky-status');
+const filesStatus = document.getElementById('separator-files-status');
+const filterTextInput = document.getElementById('separator-filter-text');
+const filterStatusSelect = document.getElementById('separator-filter-status');
+const filterStructureSelect = document.getElementById('separator-filter-structure');
+const clearFiltersBtn = document.getElementById('clearSeparatorFiltersBtn');
+const filterSummary = document.getElementById('separator-filter-summary');
 
 const separatorsList = document.getElementById('separatorsList');
 const statusSelect = form.querySelector('select[name="status"]');
@@ -18,17 +30,82 @@ const structureSelect = document.getElementById('separator-structure-id');
 
 let mode = null; // 'create' | 'edit'
 let currentId = null;
+let currentSeparator = null;
 let savedSeparatorFiles = [];
 let initialFormState = null;
+let allSeparators = [];
+let allStructures = [];
+
+const SEPARATOR_STATUS_LABELS = {
+  available: 'в наличии',
+  used: 'израсходован',
+  scrap: 'списан'
+};
+
+function formatDate(value) {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleDateString('ru-RU');
+}
+
+function formatDateTime(value) {
+  if (!value) return '—';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return date.toLocaleString('ru-RU');
+}
+
+function normalizeFilterText(value) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('ru-RU')
+    .replace(/ё/g, 'е');
+}
+
+function getSeparatorNameValue() {
+  const source = nameInput.hidden ? title.textContent : nameInput.value;
+  return (source || '').trim();
+}
+
+function setSeparatorName(name) {
+  const value = (name || '').trim();
+  title.textContent = value;
+  nameInput.value = value;
+  title.hidden = false;
+  nameInput.hidden = true;
+}
+
+function getStructureName(structureId, fallback = '') {
+  const structure = allStructures.find(
+    item => String(item.sep_str_id) === String(structureId)
+  );
+
+  return structure?.name || fallback || '';
+}
+
+function getSeparatorStructureName(sep) {
+  return sep?.structure_name || getStructureName(sep?.structure_id) || '';
+}
+
+function getSeparatorStatusLabel(status) {
+  return SEPARATOR_STATUS_LABELS[status] || status || '—';
+}
 
 function showForm() {
   form.hidden = false;
   addInput.disabled = true;
+  renderSeparatorStickyHeader();
 }
 
 function hideForm() {
   form.hidden = true;
   addInput.disabled = false;
+  renderSeparatorStickyHeader();
 }
 
 function captureFormState() {
@@ -53,13 +130,113 @@ function captureFormState() {
   });
 }
 
-function markFormPristine() {
-  initialFormState = captureFormState();
-}
-
 function hasUnsavedChanges() {
   if (!mode) return false;
   return captureFormState() !== initialFormState;
+}
+
+function getSeparatorStickyTitle() {
+  const name = getSeparatorNameValue() || 'без названия';
+
+  if (mode === 'edit' && currentId) {
+    return `Сепаратор #${currentId} | ${name}`;
+  }
+
+  return `Новый сепаратор | ${name}`;
+}
+
+function getSeparatorMetaText() {
+  if (!mode) return '—';
+
+  const structureName = getStructureName(structureSelect.value);
+  const status = getSeparatorStatusLabel(form.elements['status'].value);
+  const thickness = form.elements['thickness_um'].value;
+  const porosity = form.elements['porosity'].value;
+  const createdBy = currentSeparator?.created_by_name || '';
+  const createdAt = formatDate(currentSeparator?.created_at);
+
+  return [
+    structureName && `структура: ${structureName}`,
+    status && `статус: ${status}`,
+    thickness && `толщина: ${thickness} мкм`,
+    porosity && `пористость: ${porosity}%`,
+    createdBy && `создал: ${createdBy}`,
+    createdAt && `создан: ${createdAt}`
+  ].filter(Boolean).join(' — ') || 'новая запись';
+}
+
+function renderSeparatorStickyHeader() {
+  window.BADB_UI?.setStickyHeader({
+    header: stickyHeader,
+    titleEl: stickyTitle,
+    metaEl: stickyMeta,
+    dirtyEl: stickyDirty,
+    title: getSeparatorStickyTitle(),
+    meta: getSeparatorMetaText(),
+    isDirty: hasUnsavedChanges(),
+    hidden: !mode
+  });
+
+  if (saveBtn) {
+    saveBtn.textContent = mode === 'create'
+      ? 'Сохранить сепаратор'
+      : 'Сохранить изменения';
+  }
+
+  if (deleteSeparatorBtn) {
+    deleteSeparatorBtn.hidden = mode !== 'edit' || !currentId;
+  }
+
+  if (printSeparatorBtn) {
+    printSeparatorBtn.hidden = mode !== 'edit' || !currentId;
+  }
+}
+
+function markFormPristine() {
+  initialFormState = captureFormState();
+  renderSeparatorStickyHeader();
+}
+
+function clearRecordStatuses() {
+  showHeaderStatus('', false, { clearAfterMs: 0 });
+  showFileStatus('', false, { clearAfterMs: 0 });
+}
+
+function clearSavedSeparatorFiles() {
+  savedSeparatorFiles = [];
+  renderSavedSeparatorFiles(savedSeparatorFiles);
+  renderSeparatorStickyHeader();
+}
+
+function updateSaveFilesButtonVisibility() {
+  saveFilesBtn.hidden = !filesInput.files || filesInput.files.length === 0;
+  renderSeparatorStickyHeader();
+}
+
+function resetForm() {
+  form.reset();
+  setSeparatorName('');
+  mode = null;
+  currentId = null;
+  currentSeparator = null;
+  initialFormState = null;
+  filesInput.value = '';
+  clearSavedSeparatorFiles();
+  updateSaveFilesButtonVisibility();
+  clearRecordStatuses();
+  hideForm();
+  updateDepletedState();
+}
+
+function formDataToObject(formEl) {
+  const data = {};
+
+  Array.from(new FormData(formEl).entries()).forEach(([key, value]) => {
+    if (value instanceof File) return;
+    data[key] = value;
+  });
+
+  return data;
 }
 
 function populateSeparatorForm(sep) {
@@ -72,10 +249,10 @@ function populateSeparatorForm(sep) {
   form.elements['porosity'].value = sep.porosity ?? '';
   form.elements['comments'].value = sep.comments || '';
   form.elements['status'].value = sep.status || 'available';
-  form.elements['depleted_at'].value = sep.depleted_at || '';
+  form.elements['depleted_at'].value = sep.depleted_at ? String(sep.depleted_at).slice(0, 10) : '';
   form.elements['file_path'].value = sep.file_path || '';
-
-  document.getElementById('separator-structure-id').value = sep.structure_id || '';
+  structureSelect.value = sep.structure_id || '';
+  updateDepletedState();
 }
 
 function renderSavedSeparatorFiles(entries) {
@@ -111,9 +288,9 @@ function renderSavedSeparatorFiles(entries) {
         );
         renderSavedSeparatorFiles(savedSeparatorFiles);
         markFormPristine();
-        showStatus('Файл удалён');
+        showFileStatus('Файл удалён');
       } catch (err) {
-        showStatus(err.message, true);
+        showFileStatus(err.message, true, { clearAfterMs: 9000 });
       }
     };
 
@@ -124,43 +301,16 @@ function renderSavedSeparatorFiles(entries) {
   });
 }
 
-function updateSaveFilesButtonVisibility() {
-  saveFilesBtn.hidden = !filesInput.files || filesInput.files.length === 0;
-}
-
-function clearSavedSeparatorFiles() {
-  savedSeparatorFiles = [];
-  renderSavedSeparatorFiles(savedSeparatorFiles);
-}
-
-function resetForm() {
-  form.reset();
-  title.textContent = '';
-  mode = null;
-  currentId = null;
-  initialFormState = null;
-  clearSavedSeparatorFiles();
-  updateSaveFilesButtonVisibility();
-  hideForm();
-}
-
-function formDataToObject(form) {
-  const data = {};
-
-  Array.from(new FormData(form).entries()).forEach(([key, value]) => {
-    if (value instanceof File) return;
-    data[key] = value;
-  });
-
-  return data;
-}
-
-
-// -------- API helpers --------
-
 async function fetchSeparators() {
   const res = await fetch('/api/separators');
-  return res.json();
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка загрузки списка сепараторов');
+  }
+
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
 }
 
 async function createSeparator(data) {
@@ -169,30 +319,13 @@ async function createSeparator(data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
-  
+
   if (!res.ok) {
-    const err = await res.json();
+    const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Ошибка сохранения');
   }
-  
-  return res.json();
-}
 
-async function loadStructures() {
-  const res = await fetch('/api/structures');
-  const structures = await res.json();
-  
-  const select = document.getElementById('separator-structure-id');
-  
-  // CLEAR existing options first
-  select.innerHTML = '<option value="">— выбрать —</option>';
-  
-  structures.forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s.sep_str_id;
-    opt.textContent = s.name;
-    select.appendChild(opt);
-  });
+  return res.json();
 }
 
 async function updateSeparator(id, data) {
@@ -201,13 +334,51 @@ async function updateSeparator(id, data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
-  
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Ошибка обновления');
   }
-  
+
   return res.json();
+}
+
+async function loadStructures() {
+  try {
+    const res = await fetch('/api/structures');
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Ошибка загрузки структур сепараторов');
+    }
+
+    allStructures = await res.json();
+    renderStructureOptions();
+    renderFilteredSeparators();
+  } catch (err) {
+    showPageStatus(err.message, true, { clearAfterMs: 9000 });
+  }
+}
+
+function renderStructureOptions() {
+  structureSelect.replaceChildren(new Option('— выбрать —', ''));
+
+  allStructures.forEach(s => {
+    structureSelect.appendChild(new Option(s.name, s.sep_str_id));
+  });
+
+  if (filterStructureSelect) {
+    const currentValue = filterStructureSelect.value;
+    filterStructureSelect.replaceChildren(new Option('Все структуры', ''));
+
+    allStructures.forEach(s => {
+      filterStructureSelect.appendChild(new Option(s.name, String(s.sep_str_id)));
+    });
+
+    filterStructureSelect.value = [...filterStructureSelect.options].some(
+      option => option.value === currentValue
+    ) ? currentValue : '';
+  }
 }
 
 async function fetchSeparatorFiles(id) {
@@ -247,135 +418,26 @@ async function deleteSeparatorFile(fileId) {
   }
 }
 
+async function fetchSeparatorDeleteCheck(id) {
+  const res = await fetch(`/api/separators/${id}/delete-check`);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка проверки удаления сепаратора');
+  }
+
+  return res.json();
+}
+
 async function deleteSeparator(id) {
   const res = await fetch(`/api/separators/${id}`, {
     method: 'DELETE'
   });
-  
+
   if (!res.ok) {
-    const err = await res.json();
+    const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Ошибка удаления');
   }
-}
-
-
-// -------- Rendering --------
-function renderSeparators(separators) {
-  separatorsList.innerHTML = '';
-  
-  separators.forEach(sep => {
-    const li = document.createElement('li');
-    li.className = 'user-row';
-    
-    const info = document.createElement('div');
-    info.className = 'user-info';
-    
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = sep.name;
-    
-    const statusSpan = document.createElement('span');
-    statusSpan.className = 'status';
-    statusSpan.textContent =
-    sep.status === 'available' ? 'в наличии' :
-    sep.status === 'used' ? 'израсходован' :
-    'списан';
-    
-    info.appendChild(nameSpan);
-    info.appendChild(statusSpan);
-    
-    const actions = document.createElement('div');
-    actions.className = 'actions';
-    
-    const editBtn = document.createElement('button');
-    editBtn.textContent = '✏️';
-    editBtn.title = 'Редактировать';          
-    editBtn.onclick = async () => {
-      mode = 'edit';
-      currentId = sep.sep_id;
-      
-      // show form
-      showForm();
-      
-      // title + name
-      title.textContent = sep.name;
-      nameInput.value = sep.name;
-
-      populateSeparatorForm(sep);
-      
-      if (sep.created_by) {
-        createdBySelect.value = sep.created_by;
-      }
-
-      filesInput.value = '';
-      clearSavedSeparatorFiles();
-
-      try {
-        savedSeparatorFiles = await fetchSeparatorFiles(sep.sep_id);
-        renderSavedSeparatorFiles(savedSeparatorFiles);
-        markFormPristine();
-      } catch (err) {
-        showStatus(err.message, true);
-      }
-      
-      updateDepletedState();
-    };
-    
-    const duplicateBtn = document.createElement('button');
-    duplicateBtn.textContent = '📄';
-    duplicateBtn.title = 'Дублировать';
-    
-    duplicateBtn.onclick = () => {
-      duplicateSeparator(sep);
-    };
-    
-    const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = '🗑';
-    deleteBtn.title = 'Удалить';
-    deleteBtn.onclick = async () => {
-      if (!confirm(`Удалить сепаратор "${sep.name}"?`)) return;
-      
-      try {
-        await deleteSeparator(sep.sep_id);
-        showStatus('Сепаратор удалён');
-        loadSeparators();
-      } catch (err) {
-        showStatus(err.message, true);
-      }
-    };
-    
-    actions.appendChild(editBtn);
-    actions.appendChild(duplicateBtn);
-    actions.appendChild(deleteBtn);
-    
-    li.appendChild(info);
-    li.appendChild(actions);
-    
-    separatorsList.appendChild(li);
-  });
-}
-
-function duplicateSeparator(sep) {
-  mode = 'create';
-  currentId = null;
-  
-  showForm();
-  
-  // title + name
-  const copyName = sep.name + ' (копия)';
-  title.textContent = copyName;
-  nameInput.value = copyName;
-
-  populateSeparatorForm(sep);
-  
-  // IMPORTANT: reset things that must be new
-  createdBySelect.value = '';
-  form.elements['file_path'].value = '';
-  depletedInput.value = '';
-  filesInput.value = '';
-  clearSavedSeparatorFiles();
-  markFormPristine();
-  
-  updateDepletedState();
 }
 
 function fileToBase64(file) {
@@ -397,12 +459,246 @@ function fileToBase64(file) {
   });
 }
 
-async function saveSeparatorRecord() {
-  if (!validateRequiredFields()) return null;
+function getSeparatorFilterState() {
+  return {
+    text: normalizeFilterText(filterTextInput?.value),
+    status: filterStatusSelect?.value || '',
+    structure: filterStructureSelect?.value || ''
+  };
+}
+
+function hasActiveSeparatorFilters(filters = getSeparatorFilterState()) {
+  return Boolean(filters.text || filters.status || filters.structure);
+}
+
+function getSeparatorSearchText(sep) {
+  return normalizeFilterText([
+    sep.sep_id,
+    sep.name,
+    sep.supplier,
+    sep.brand,
+    sep.batch,
+    getSeparatorStructureName(sep),
+    sep.air_perm,
+    sep.air_perm_units,
+    sep.thickness_um,
+    sep.porosity,
+    sep.comments,
+    getSeparatorStatusLabel(sep.status),
+    sep.created_by_name,
+    sep.updated_by_name
+  ].filter(value => value !== null && value !== undefined && value !== '').join(' '));
+}
+
+function matchesSeparatorFilters(sep, filters = getSeparatorFilterState()) {
+  if (filters.status && sep.status !== filters.status) return false;
+  if (filters.structure && String(sep.structure_id || '') !== filters.structure) return false;
+  if (filters.text && !getSeparatorSearchText(sep).includes(filters.text)) return false;
+
+  return true;
+}
+
+function getFilteredSeparators() {
+  const filters = getSeparatorFilterState();
+  return allSeparators.filter((sep) => matchesSeparatorFilters(sep, filters));
+}
+
+function updateSeparatorFilterSummary(filteredCount, totalCount) {
+  const filters = getSeparatorFilterState();
+  const hasFilters = hasActiveSeparatorFilters(filters);
+
+  if (clearFiltersBtn) {
+    clearFiltersBtn.disabled = !hasFilters;
+  }
+
+  if (!filterSummary) return;
+
+  if (totalCount === 0) {
+    filterSummary.textContent = 'Нет сепараторов';
+    return;
+  }
+
+  filterSummary.textContent = hasFilters
+    ? `Показано ${filteredCount} из ${totalCount}`
+    : `Всего: ${totalCount}`;
+}
+
+function renderSeparators(separators, options = {}) {
+  const totalCount = options.totalCount ?? separators.length;
+  const hasFilters = Boolean(options.hasFilters);
+
+  separatorsList.innerHTML = '';
+
+  if (separators.length === 0) {
+    const emptyRow = document.createElement('li');
+    emptyRow.className = 'user-row separator-empty-row';
+    emptyRow.textContent = totalCount === 0
+      ? 'Сепараторы пока не добавлены.'
+      : hasFilters
+        ? 'Сепараторы по выбранным фильтрам не найдены.'
+        : 'Сепараторы не найдены.';
+    separatorsList.appendChild(emptyRow);
+    return;
+  }
+
+  separators.forEach(sep => {
+    const li = document.createElement('li');
+    li.className = 'user-row';
+
+    const titleLine = document.createElement('div');
+    titleLine.className = 'record-list-title';
+    titleLine.textContent = `#${sep.sep_id} | ${sep.name || '— без названия —'}`;
+
+    const metaLine = document.createElement('div');
+    metaLine.className = 'record-list-meta';
+    metaLine.textContent = [
+      getSeparatorStructureName(sep),
+      getSeparatorStatusLabel(sep.status),
+      sep.supplier || '',
+      sep.brand || '',
+      sep.batch ? `партия: ${sep.batch}` : '',
+      sep.thickness_um != null ? `${sep.thickness_um} мкм` : '',
+      sep.porosity != null ? `${sep.porosity}%` : '',
+      sep.created_by_name || ''
+    ].filter(Boolean).join(' — ');
+
+    const info = window.BADB_UI.createRecordOpenButton({
+      className: 'user-info',
+      ariaLabel: `Открыть сепаратор ${sep.name || sep.sep_id}`,
+      children: [titleLine, metaLine],
+      onClick: async () => {
+        await openSeparatorRecord(sep);
+      }
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const printBtn = window.BADB_UI.createIconButton({
+      icon: '🖨️',
+      title: 'Печать отчёта',
+      ariaLabel: `Печать отчёта сепаратора ${sep.name || sep.sep_id}`,
+      onClick: () => {
+        openSeparatorPrintReport(sep.sep_id);
+      }
+    });
+
+    const duplicateBtn = window.BADB_UI.createIconButton({
+      icon: '📑',
+      title: 'Дублировать сепаратор',
+      ariaLabel: `Дублировать сепаратор ${sep.name || sep.sep_id}`,
+      onClick: () => {
+        duplicateSeparator(sep);
+      }
+    });
+
+    actions.appendChild(printBtn);
+    actions.appendChild(duplicateBtn);
+
+    li.appendChild(info);
+    li.appendChild(actions);
+
+    separatorsList.appendChild(li);
+  });
+}
+
+function renderFilteredSeparators() {
+  const filters = getSeparatorFilterState();
+  const filtered = getFilteredSeparators();
+
+  renderSeparators(filtered, {
+    totalCount: allSeparators.length,
+    hasFilters: hasActiveSeparatorFilters(filters)
+  });
+  updateSeparatorFilterSummary(filtered.length, allSeparators.length);
+}
+
+function confirmDiscardUnsavedChanges() {
+  if (!hasUnsavedChanges()) return true;
+  return confirm('Выйти без сохранения изменений?');
+}
+
+async function openSeparatorRecord(sep) {
+  if (!confirmDiscardUnsavedChanges()) return;
+
+  clearRecordStatuses();
+  mode = 'edit';
+  currentId = sep.sep_id;
+  currentSeparator = sep;
+
+  setSeparatorName(sep.name);
+  populateSeparatorForm(sep);
+
+  if (sep.created_by) {
+    createdBySelect.value = sep.created_by;
+  }
+
+  filesInput.value = '';
+  savedSeparatorFiles = [];
+  renderSavedSeparatorFiles(savedSeparatorFiles);
+  updateSaveFilesButtonVisibility();
+  showForm();
+
+  try {
+    savedSeparatorFiles = await fetchSeparatorFiles(sep.sep_id);
+    renderSavedSeparatorFiles(savedSeparatorFiles);
+  } catch (err) {
+    showStatus(err.message, true, { clearAfterMs: 9000 });
+  } finally {
+    markFormPristine();
+    window.BADB_UI?.scrollToElement(stickyHeader || form);
+  }
+}
+
+function duplicateSeparator(sep) {
+  if (!confirmDiscardUnsavedChanges()) return;
+
+  clearRecordStatuses();
+  mode = 'create';
+  currentId = null;
+  currentSeparator = null;
+  initialFormState = null;
+
+  const copyName = `${sep.name} (копия)`;
+  setSeparatorName(copyName);
+  populateSeparatorForm({
+    ...sep,
+    status: 'available',
+    depleted_at: ''
+  });
+
+  createdBySelect.value = '';
+  form.elements['file_path'].value = '';
+  filesInput.value = '';
+  clearSavedSeparatorFiles();
+  updateSaveFilesButtonVisibility();
+  showForm();
+  window.BADB_UI?.scrollToElement(stickyHeader || form);
+}
+
+function getSeparatorPrintReportUrl(id) {
+  return `/workflow/separator-print.html?sep_id=${encodeURIComponent(id)}`;
+}
+
+function openSeparatorPrintReport(id) {
+  if (!id) return;
+  const reportWindow = window.open(getSeparatorPrintReportUrl(id), '_blank');
+
+  if (reportWindow) {
+    reportWindow.opener = null;
+    return;
+  }
+
+  window.location.href = getSeparatorPrintReportUrl(id);
+}
+
+async function saveSeparatorRecord(options = {}) {
+  if (!validateRequiredFields(options.statusTarget || 'header')) return null;
 
   const data = formDataToObject(form);
   delete data.created_by;
-  data.name = title.textContent;
+  data.name = getSeparatorNameValue();
+  setSeparatorName(data.name);
 
   const initialMode = mode;
   let savedSeparator = null;
@@ -413,6 +709,16 @@ async function saveSeparatorRecord() {
     mode = 'edit';
   } else if (initialMode === 'edit') {
     savedSeparator = await updateSeparator(currentId, data);
+  }
+
+  if (savedSeparator) {
+    currentSeparator = {
+      ...(currentSeparator || {}),
+      ...savedSeparator,
+      ...data,
+      sep_id: savedSeparator.sep_id || currentId,
+      structure_name: getStructureName(data.structure_id)
+    };
   }
 
   return {
@@ -443,7 +749,64 @@ async function uploadSelectedFiles() {
   return selectedFiles;
 }
 
-// ---------- Depleted Separator logic ----------
+function formatDependencyRecords(dependencies) {
+  return dependencies
+    .flatMap((dependency) => dependency.records || [])
+    .slice(0, 4)
+    .map((record) => {
+      if (record.name) return `#${record.id}: ${record.name}`;
+      if (record.id) return `#${record.id}`;
+      return '';
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+function formatDeleteBlockedMessage(check) {
+  const base = check.message || 'Нельзя удалить сепаратор: есть связанные записи.';
+  const records = formatDependencyRecords(check.dependencies || []);
+
+  return records
+    ? `${base} Сначала уберите связи: ${records}.`
+    : base;
+}
+
+async function deleteCurrentSeparator() {
+  if (!currentId) {
+    showStatus('Сначала откройте сепаратор', true, { clearAfterMs: 5000 });
+    return;
+  }
+
+  try {
+    const check = await fetchSeparatorDeleteCheck(currentId);
+
+    if (!check.can_delete) {
+      showStatus(formatDeleteBlockedMessage(check), true, { clearAfterMs: 15000 });
+      return;
+    }
+
+    if (hasUnsavedChanges() && !confirm('Есть несохранённые изменения. Удалить сепаратор без сохранения?')) {
+      return;
+    }
+
+    const phrase = `DELETE SEPARATOR ${currentId}`;
+    const confirmation = prompt(
+      `Удаление сепаратора #${currentId} необратимо.\nВведите ${phrase}, чтобы подтвердить.`
+    );
+
+    if (confirmation !== phrase) {
+      showStatus('Удаление отменено.', true, { clearAfterMs: 4000 });
+      return;
+    }
+
+    await deleteSeparator(currentId);
+    resetForm();
+    await loadSeparators();
+    showStatus('Сепаратор удалён', false, { clearAfterMs: 5000 });
+  } catch (err) {
+    showStatus(err.message, true, { clearAfterMs: 12000 });
+  }
+}
 
 function updateDepletedState() {
   if (statusSelect.value === 'available') {
@@ -452,150 +815,196 @@ function updateDepletedState() {
   } else {
     depletedWrapper.hidden = false;
   }
+
+  renderSeparatorStickyHeader();
 }
-
-statusSelect.addEventListener('change', updateDepletedState);
-
-
-
-// -------- Status helper --------
 
 const statusBox = document.querySelector('.status-feedback');
 
-function showStatus(msg, isError = false) {
-  statusBox.textContent = msg;
-  statusBox.style.color = isError ? '#b00020' : 'darkcyan';
-  
-  setTimeout(() => {
-    statusBox.textContent = '';
-  }, 1000);
-}
-
-
-// -------- Reference dropdowns --------
-
-async function loadUsers() {
-  const res = await fetch('/api/users');
-  const users = await res.json();
-  
-  // CLEAR existing options first
-  createdBySelect.replaceChildren(new Option(
-    window.BADB_AUTH?.getAuditUserPlaceholder?.() || '— автоматически —',
-    ''
-  ));
-  
-  users
-  .forEach(u => {
-    const opt = document.createElement('option');
-    opt.value = u.user_id;
-    opt.textContent = u.name;
-    createdBySelect.appendChild(opt);
+function showPageStatus(msg, isError = false, options = {}) {
+  window.BADB_UI?.showStatus(statusBox, msg, {
+    isError,
+    clearAfterMs: options.clearAfterMs ?? (isError ? 9000 : 4500)
   });
 }
 
-// Refresh reference dropdowns on focus
-structureSelect.addEventListener('focus', loadStructures);
-createdBySelect.addEventListener('focus', loadUsers);
+function showHeaderStatus(msg, isError = false, options = {}) {
+  window.BADB_UI?.showStatus(stickyStatus, msg, {
+    isError,
+    clearAfterMs: options.clearAfterMs ?? (isError ? 12000 : 4500)
+  });
+}
 
+function showFileStatus(msg, isError = false, options = {}) {
+  window.BADB_UI?.showStatus(filesStatus, msg, {
+    isError,
+    clearAfterMs: options.clearAfterMs ?? (isError ? 9000 : 4500)
+  });
+}
 
-// -------- Events --------
+function showStatus(msg, isError = false, options = {}) {
+  const target = options.target || (mode ? 'header' : 'page');
 
-addInput.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  
-  e.preventDefault();
-  
-  if (!form.hidden) return;   // prevent double-create
-  
-  const name = addInput.value.trim();
-  if (!name) return;
-  
-  mode = 'create';
-  currentId = null;
-  
-  nameInput.value = name;
-  title.textContent = name;
-  
-  showForm();
-  
-  addInput.value = '';
-  markFormPristine();
-});
+  if (target === 'files') {
+    showFileStatus(msg, isError, options);
+    return;
+  }
 
-function validateRequiredFields() {
-  let missing = [];
-  
-  // clear previous highlights
+  if (target === 'header') {
+    showHeaderStatus(msg, isError, options);
+    return;
+  }
+
+  showPageStatus(msg, isError, options);
+}
+
+async function loadUsers() {
+  try {
+    const res = await fetch('/api/users');
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Ошибка загрузки пользователей');
+    }
+
+    const users = await res.json();
+
+    createdBySelect.replaceChildren(new Option(
+      window.BADB_AUTH?.getAuditUserPlaceholder?.() || '— автоматически —',
+      ''
+    ));
+
+    users.forEach(u => {
+      createdBySelect.appendChild(new Option(u.name, u.user_id));
+    });
+  } catch (err) {
+    showPageStatus(err.message, true, { clearAfterMs: 9000 });
+  }
+}
+
+function validateRequiredFields(statusTarget = 'header') {
+  const missing = [];
+  const name = getSeparatorNameValue();
+
+  nameInput.classList.remove('required-missing');
   structureSelect.classList.remove('required-missing');
-  
+
+  if (!name) {
+    missing.push('Название');
+    nameInput.classList.add('required-missing');
+  }
+
   if (!structureSelect.value) {
     missing.push('Тип структуры');
     structureSelect.classList.add('required-missing');
   }
-  
+
   if (missing.length) {
-    showStatus(
-      'Заполните обязательные поля: ' + missing.join(', '),
-      true
-    );
+    if (!name) {
+      nameInput.hidden = false;
+      title.hidden = true;
+      nameInput.focus();
+    }
+
+    showStatus(`Заполните обязательные поля: ${missing.join(', ')}`, true, { target: statusTarget });
     return false;
   }
-  
+
   return true;
 }
+
+async function loadSeparators() {
+  if (!separatorsList) return;
+
+  try {
+    const data = await fetchSeparators();
+    allSeparators = data;
+    renderFilteredSeparators();
+  } catch (err) {
+    console.error(err);
+    showPageStatus(err.message || 'Ошибка загрузки списка сепараторов', true, { clearAfterMs: 9000 });
+  }
+}
+
+addInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+
+  e.preventDefault();
+
+  if (!form.hidden) return;
+
+  const name = addInput.value.trim();
+  if (!name) return;
+
+  clearRecordStatuses();
+  mode = 'create';
+  currentId = null;
+  currentSeparator = null;
+  initialFormState = null;
+
+  form.reset();
+  setSeparatorName(name);
+  updateDepletedState();
+  showForm();
+
+  addInput.value = '';
+  clearSavedSeparatorFiles();
+  updateSaveFilesButtonVisibility();
+  window.BADB_UI?.scrollToElement(stickyHeader || form);
+});
 
 saveBtn.addEventListener('click', async () => {
   if (!mode) return;
 
   try {
-    const { savedSeparator, initialMode } = await saveSeparatorRecord();
+    const result = await saveSeparatorRecord();
+    if (!result) return;
+
     const selectedFiles = await uploadSelectedFiles();
+    markFormPristine();
+    await loadSeparators();
 
-    if (savedSeparator) {
-      const successMessage =
-        initialMode === 'edit'
-          ? (selectedFiles.length > 0 ? 'Изменения и файлы сохранены' : 'Изменения сохранены')
-          : (selectedFiles.length > 0 ? 'Сепаратор и файлы сохранены' : 'Сепаратор сохранён');
-
-      showStatus(successMessage);
+    if (result.initialMode === 'create') {
+      showStatus(
+        selectedFiles.length > 0
+          ? 'Сепаратор и файлы сохранены'
+          : 'Сепаратор сохранён'
+      );
+    } else {
+      showStatus(
+        selectedFiles.length > 0
+          ? 'Изменения и файлы сохранены'
+          : 'Изменения сохранены'
+      );
     }
-    
-    resetForm();
-    loadSeparators();   // refresh list
   } catch (err) {
     showStatus(err.message, true);
   }
-  
 });
 
 saveFilesBtn.addEventListener('click', async () => {
-  if (!filesInput.files || filesInput.files.length === 0) return;
+  if (!mode) return;
 
   try {
-    let createdNewSeparator = false;
-
-    if (!currentId) {
-      const result = await saveSeparatorRecord();
-
-      if (!result?.savedSeparator) return;
-      createdNewSeparator = result.initialMode === 'create';
+    if (mode === 'create') {
+      const result = await saveSeparatorRecord({ statusTarget: 'files' });
+      if (!result) return;
+      await loadSeparators();
     }
 
-    await uploadSelectedFiles();
+    const selectedFiles = await uploadSelectedFiles();
 
-    if (createdNewSeparator) {
-      loadSeparators();
-      showStatus('Сепаратор и файлы сохранены');
-    } else {
-      showStatus('Файлы сохранены');
-    }
+    if (selectedFiles.length === 0) return;
+
+    markFormPristine();
+    showStatus('Файлы сохранены', false, { target: 'files' });
+    await loadSeparators();
   } catch (err) {
-    showStatus(err.message, true);
+    showStatus(err.message, true, { target: 'files' });
   }
 });
 
-clearBtn.addEventListener('click', resetForm);
-exitBtn.addEventListener('click', () => {
+clearBtn.addEventListener('click', () => {
   if (!hasUnsavedChanges()) {
     resetForm();
     return;
@@ -605,14 +1014,31 @@ exitBtn.addEventListener('click', () => {
     resetForm();
   }
 });
-filesInput.addEventListener('change', updateSaveFilesButtonVisibility);
 
-/* ------ name: editable ------ */
+if (deleteSeparatorBtn) {
+  deleteSeparatorBtn.addEventListener('click', deleteCurrentSeparator);
+}
+
+if (printSeparatorBtn) {
+  printSeparatorBtn.addEventListener('click', () => {
+    openSeparatorPrintReport(currentId);
+  });
+}
+
+filesInput.addEventListener('change', updateSaveFilesButtonVisibility);
+statusSelect.addEventListener('change', updateDepletedState);
+structureSelect.addEventListener('focus', loadStructures);
+createdBySelect.addEventListener('focus', loadUsers);
+
+form.addEventListener('input', renderSeparatorStickyHeader);
+form.addEventListener('change', renderSeparatorStickyHeader);
 
 title.addEventListener('click', () => {
+  nameInput.value = getSeparatorNameValue();
   nameInput.hidden = false;
   title.hidden = true;
   nameInput.focus();
+  nameInput.select();
 });
 
 nameInput.addEventListener('keydown', (e) => {
@@ -624,20 +1050,46 @@ nameInput.addEventListener('keydown', (e) => {
 
 nameInput.addEventListener('blur', () => {
   const val = nameInput.value.trim();
-  if (!val) return;
-  
-  title.textContent = val;
-  title.hidden = false;
-  nameInput.hidden = true;
+  setSeparatorName(val || title.textContent);
+  renderSeparatorStickyHeader();
 });
 
-
-// -------- Init --------
-
-async function loadSeparators() {
-  const separators = await fetchSeparators();
-  renderSeparators(separators);
+if (filterTextInput) {
+  filterTextInput.addEventListener('input', renderFilteredSeparators);
 }
+
+if (filterStatusSelect) {
+  filterStatusSelect.addEventListener('change', renderFilteredSeparators);
+}
+
+if (filterStructureSelect) {
+  filterStructureSelect.addEventListener('change', renderFilteredSeparators);
+}
+
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', () => {
+    if (filterTextInput) filterTextInput.value = '';
+    if (filterStatusSelect) filterStatusSelect.value = '';
+    if (filterStructureSelect) filterStructureSelect.value = '';
+    renderFilteredSeparators();
+    filterTextInput?.focus();
+  });
+}
+
+const separatorLogoutGuard = {
+  hasUnsavedChanges,
+  discardUnsavedChanges: resetForm,
+  message: 'Есть несохранённые изменения сепаратора. Выйти без сохранения?'
+};
+
+window.BADB_PAGE_LOGOUT_GUARD = separatorLogoutGuard;
+window.BADB_AUTH?.registerLogoutGuard?.(separatorLogoutGuard);
+
+window.addEventListener('beforeunload', (event) => {
+  if (!hasUnsavedChanges()) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
 
 hideForm();
 updateDepletedState();

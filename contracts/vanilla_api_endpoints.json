@@ -482,6 +482,22 @@
       "sources": ["public/js/separators.js"]
     },
     {
+      "path": "/api/separators/:param/delete-check",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "separator delete dependency check",
+      "sources": ["public/js/separators.js"]
+    },
+    {
+      "path": "/api/separators/:param/report",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "separator print/report payload with separator fields and file metadata",
+      "sources": ["public/js/separator-print.js"]
+    },
+    {
       "path": "/api/separators/:param/files",
       "methods": ["GET", "POST"],
       "auth": "auth",

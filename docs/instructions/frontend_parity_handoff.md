@@ -1,7 +1,7 @@
 # Frontend Parity Handoff
 
 Created: 2026-05-07
-Edited: 2026-05-07
+Edited: 2026-05-08
 Status: instruction
 
 Use this when vanilla/backend behavior changes and the Vue frontend maintained
@@ -108,6 +108,19 @@ Expected Vue behavior: if Vue owns an electrolytes page, mirror the current
 filter and print-report expectations where relevant.
 Backend/API dependency: electrolyte list/detail/report routes.
 Notes: Verify current Vue scope before implementing.
+
+### Separator Reference Page Reports And Filters
+
+Status: pending
+Priority: normal
+Source: `docs/current/separators.md`
+Expected Vue behavior: if Vue owns a separators page, mirror the current
+row-open, status/structure/text filters, inside-record delete, and print-report
+expectations where relevant. Do not add project filters unless separator project
+links are actually implemented.
+Backend/API dependency: `GET /api/separators/:id/report` and
+`GET /api/separators/:id/delete-check`.
+Notes: Current Vue scope should be checked before implementation.
 
 ## Maintenance Rules
 

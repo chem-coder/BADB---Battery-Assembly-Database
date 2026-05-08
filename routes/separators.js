@@ -17,6 +17,175 @@ router.get('/test', async (req, res) => {
 
 // -------- SEPARATORS --------
 
+const ALLOWED_SEPARATOR_STATUSES = ['available', 'used', 'scrap'];
+
+function statusError(message, statusCode) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
+function optionalText(value) {
+  if (value == null) return null;
+
+  const text = String(value).trim();
+  return text === '' ? null : text;
+}
+
+function optionalNumber(value, label) {
+  if (value == null || value === '') return null;
+
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    throw statusError(`${label} должно быть числом`, 400);
+  }
+
+  return number;
+}
+
+function optionalDate(value, label) {
+  if (value == null || value === '') return null;
+
+  const text = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    throw statusError(`${label}: укажите дату в формате ГГГГ-ММ-ДД`, 400);
+  }
+
+  return text;
+}
+
+function getSeparatorWriteError(err) {
+  if (err.statusCode) {
+    return { statusCode: err.statusCode, message: err.message };
+  }
+
+  if (err.code === '23505' && err.constraint === 'separators_name_batch_key') {
+    return {
+      statusCode: 409,
+      message: 'Сепаратор с таким названием и партией уже существует.'
+    };
+  }
+
+  if (err.code === '23503' && err.constraint === 'separators_structure_id_fkey') {
+    return {
+      statusCode: 400,
+      message: 'Выберите существующий тип структуры сепаратора.'
+    };
+  }
+
+  if (err.code === '22P02' || err.code === '22007' || err.code === '22008') {
+    return {
+      statusCode: 400,
+      message: 'Проверьте числовые поля и дату списания сепаратора.'
+    };
+  }
+
+  return null;
+}
+
+async function collectSeparatorDeleteDependencies(db, separatorId) {
+  return collectDependencyConflicts(db, [
+    {
+      key: 'battery_sep_config',
+      label: 'аккумуляторы с этим сепаратором',
+      query: `
+        SELECT b.battery_id AS id, b.battery_notes AS name
+        FROM battery_sep_config bsc
+        JOIN batteries b ON b.battery_id = bsc.battery_id
+        WHERE bsc.separator_id = $1
+        ORDER BY b.battery_id
+        LIMIT 25
+      `,
+      params: [separatorId]
+    }
+  ]);
+}
+
+async function getSeparatorDeleteCheck(db, separatorId) {
+  const exists = await db.query(
+    'SELECT sep_id FROM separators WHERE sep_id = $1',
+    [separatorId]
+  );
+
+  if (exists.rowCount === 0) {
+    throw statusError('Сепаратор не найден', 404);
+  }
+
+  const dependencies = await collectSeparatorDeleteDependencies(db, separatorId);
+
+  return {
+    sep_id: separatorId,
+    can_delete: dependencies.length === 0,
+    message: dependencies.length > 0
+      ? 'Нельзя удалить сепаратор: он используется в аккумуляторах.'
+      : '',
+    dependencies
+  };
+}
+
+async function getSeparatorReport(db, separatorId) {
+  const separatorResult = await db.query(
+    `
+    SELECT
+      s.sep_id,
+      s.name,
+      s.supplier,
+      s.brand,
+      s.batch,
+      s.structure_id,
+      ss.name AS structure_name,
+      s.air_perm,
+      s.air_perm_units,
+      s.thickness_um,
+      s.porosity,
+      s.comments,
+      s.status,
+      s.depleted_at,
+      s.file_path,
+      s.created_by,
+      s.created_at,
+      u_created.name AS created_by_name,
+      s.updated_by,
+      s.updated_at,
+      u_updated.name AS updated_by_name
+    FROM separators s
+    LEFT JOIN separator_structure ss ON ss.sep_str_id = s.structure_id
+    LEFT JOIN users u_created ON u_created.user_id = s.created_by
+    LEFT JOIN users u_updated ON u_updated.user_id = s.updated_by
+    WHERE s.sep_id = $1
+    `,
+    [separatorId]
+  );
+
+  if (separatorResult.rowCount === 0) {
+    throw statusError('Сепаратор не найден', 404);
+  }
+
+  const filesResult = await db.query(
+    `
+    SELECT
+      separator_file_id,
+      sep_id,
+      file_name,
+      mime_type,
+      octet_length(file_data) AS file_size_bytes,
+      uploaded_at
+    FROM separator_files
+    WHERE sep_id = $1
+    ORDER BY separator_file_id
+    `,
+    [separatorId]
+  );
+
+  return {
+    separator: separatorResult.rows[0],
+    files: filesResult.rows.map(row => ({
+      ...row,
+      download_url: `/api/separators/files/${row.separator_file_id}/download`
+    }))
+  };
+}
+
 // CREATE
 router.post('/', auth, async (req, res) => {
   const {
@@ -36,15 +205,44 @@ router.post('/', auth, async (req, res) => {
 
   const structure_id = Number(req.body.structure_id);
   const created_by = req.user.userId;
+  let cleanPayload;
 
   // 1. validate required strings
-  if (!name) {
-    return res.status(400).json({ error: 'Обязательные поля отсутствуют' });
+  if (typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'Название сепаратора обязательно' });
   }
 
   // 2. validate required foreign keys
-  if (!Number.isInteger(structure_id)) {
-    return res.status(400).json({ error: 'Некорректные идентификаторы' });
+  if (!Number.isInteger(structure_id) || structure_id <= 0) {
+    return res.status(400).json({ error: 'Выберите тип структуры сепаратора' });
+  }
+
+  if (!ALLOWED_SEPARATOR_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Некорректный статус сепаратора' });
+  }
+
+  try {
+    cleanPayload = {
+      name: name.trim(),
+      supplier: optionalText(supplier),
+      brand: optionalText(brand),
+      batch: optionalText(batch),
+      structure_id,
+      air_perm: optionalNumber(air_perm, 'Воздушная проницаемость'),
+      air_perm_units: optionalText(air_perm_units),
+      thickness_um: optionalNumber(thickness_um, 'Толщина'),
+      porosity: optionalNumber(porosity, 'Пористость'),
+      comments: optionalText(comments),
+      status,
+      depleted_at: status === 'available' ? null : optionalDate(depleted_at, 'Дата списания'),
+      created_by,
+      file_path: optionalText(file_path)
+    };
+  } catch (err) {
+    const writeError = getSeparatorWriteError(err);
+    return res.status(writeError?.statusCode || 400).json({
+      error: writeError?.message || 'Проверьте поля сепаратора'
+    });
   }
 
   try {
@@ -70,28 +268,33 @@ router.post('/', auth, async (req, res) => {
         $13,
         $14
       )
-      RETURNING sep_id
+      RETURNING *
       `,
       [
-        name.trim(),
-        supplier || null,
-        brand || null,
-        batch || null,
-        structure_id,
-        air_perm ?? null,
-        air_perm_units || null,
-        thickness_um ?? null,
-        porosity ?? null,
-        comments || null,
-        status,
-        depleted_at || null,
-        created_by,
-        file_path || null
+        cleanPayload.name,
+        cleanPayload.supplier,
+        cleanPayload.brand,
+        cleanPayload.batch,
+        cleanPayload.structure_id,
+        cleanPayload.air_perm,
+        cleanPayload.air_perm_units,
+        cleanPayload.thickness_um,
+        cleanPayload.porosity,
+        cleanPayload.comments,
+        cleanPayload.status,
+        cleanPayload.depleted_at,
+        cleanPayload.created_by,
+        cleanPayload.file_path
       ]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    const writeError = getSeparatorWriteError(err);
+    if (writeError) {
+      return res.status(writeError.statusCode).json({ error: writeError.message });
+    }
+
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
@@ -115,12 +318,16 @@ router.get('/', auth, async (req, res) => {
         s.comments,
         s.status,
         s.depleted_at,
+        s.file_path,
         s.created_by,
+        s.created_at,
         u_created.name AS created_by_name,
         s.updated_by,
         s.updated_at,
-        u_updated.name AS updated_by_name
+        u_updated.name AS updated_by_name,
+        ss.name AS structure_name
       FROM separators s
+      LEFT JOIN separator_structure ss ON ss.sep_str_id = s.structure_id
       LEFT JOIN users u_created ON u_created.user_id = s.created_by
       LEFT JOIN users u_updated ON u_updated.user_id = s.updated_by
       ORDER BY s.name;
@@ -307,6 +514,46 @@ router.delete('/files/:fileId', auth, async (req, res) => {
   }
 });
 
+router.get('/:id/report', auth, async (req, res) => {
+  const separatorId = Number(req.params.id);
+
+  if (!Number.isInteger(separatorId)) {
+    return res.status(400).json({ error: 'Некорректный sep_id' });
+  }
+
+  try {
+    const report = await getSeparatorReport(pool, separatorId);
+    res.json(report);
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки отчёта по сепаратору' });
+  }
+});
+
+router.get('/:id/delete-check', auth, async (req, res) => {
+  const separatorId = Number(req.params.id);
+
+  if (!Number.isInteger(separatorId)) {
+    return res.status(400).json({ error: 'Некорректный sep_id' });
+  }
+
+  try {
+    const check = await getSeparatorDeleteCheck(pool, separatorId);
+    res.json(check);
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка проверки удаления сепаратора' });
+  }
+});
+
 // UPDATE
 router.put('/:id', auth, async (req, res) => {
   const { id } = req.params;
@@ -333,14 +580,41 @@ router.put('/:id', auth, async (req, res) => {
     return res.status(400).json({ error: 'Название сепаратора обязательно' });
   }
 
-  if (!Number.isInteger(structure_id)) {
-    return res.status(400).json({ error: 'Некорректная структура' });
+  if (!Number.isInteger(structure_id) || structure_id <= 0) {
+    return res.status(400).json({ error: 'Выберите тип структуры сепаратора' });
   }
 
   const cleanName = name.trim();
+  const cleanStatus = status || 'available';
 
-  const cleanDepletedAt =
-    status === 'available' ? null : (depleted_at || null);
+  if (!ALLOWED_SEPARATOR_STATUSES.includes(cleanStatus)) {
+    return res.status(400).json({ error: 'Некорректный статус сепаратора' });
+  }
+
+  let newVals;
+
+  try {
+    newVals = {
+      name: cleanName,
+      supplier: optionalText(supplier),
+      brand: optionalText(brand),
+      batch: optionalText(batch),
+      structure_id,
+      air_perm: optionalNumber(air_perm, 'Воздушная проницаемость'),
+      air_perm_units: optionalText(air_perm_units),
+      thickness_um: optionalNumber(thickness_um, 'Толщина'),
+      porosity: optionalNumber(porosity, 'Пористость'),
+      comments: optionalText(comments),
+      status: cleanStatus,
+      depleted_at: cleanStatus === 'available' ? null : optionalDate(depleted_at, 'Дата списания'),
+      file_path: optionalText(file_path)
+    };
+  } catch (err) {
+    const writeError = getSeparatorWriteError(err);
+    return res.status(writeError?.statusCode || 400).json({
+      error: writeError?.message || 'Проверьте поля сепаратора'
+    });
+  }
 
   try {
     const current = await pool.query(
@@ -350,8 +624,6 @@ router.put('/:id', auth, async (req, res) => {
     if (current.rowCount === 0) {
       return res.status(404).json({ error: 'Сепаратор не найден' });
     }
-
-    const newVals = { name: cleanName, supplier: supplier || null, brand: brand || null, batch: batch || null, structure_id, air_perm: air_perm ?? null, air_perm_units: air_perm_units || null, thickness_um: thickness_um ?? null, porosity: porosity ?? null, comments: comments || null, status: status || 'available', depleted_at: cleanDepletedAt, file_path: file_path || null };
 
     const result = await pool.query(
       `
@@ -392,6 +664,11 @@ router.put('/:id', auth, async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
+    const writeError = getSeparatorWriteError(err);
+    if (writeError) {
+      return res.status(writeError.statusCode).json({ error: writeError.message });
+    }
+
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
@@ -406,21 +683,7 @@ router.delete('/:id', auth, async (req, res) => {
   }
 
   try {
-    const dependencies = await collectDependencyConflicts(pool, [
-      {
-        key: 'battery_sep_config',
-        label: 'аккумуляторы с этим сепаратором',
-        query: `
-          SELECT b.battery_id AS id, b.battery_notes AS name
-          FROM battery_sep_config bsc
-          JOIN batteries b ON b.battery_id = bsc.battery_id
-          WHERE bsc.separator_id = $1
-          ORDER BY b.battery_id
-          LIMIT 25
-        `,
-        params: [id]
-      }
-    ]);
+    const dependencies = await collectSeparatorDeleteDependencies(pool, id);
 
     if (dependencies.length > 0) {
       return sendDependencyConflict(
