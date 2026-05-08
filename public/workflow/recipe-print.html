@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Печатный отчёт по рецепту</title>
+    <link rel="stylesheet" type="text/css" href="/css/styles.css">
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        max-width: none;
+        background: #fff;
+        color: #222;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .print_report {
+        max-width: 940px;
+        margin: 0 auto;
+        padding: 18px 22px 34px;
+      }
+
+      .report_actions {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .report_header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        align-items: end;
+        margin-bottom: 9px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #1f2933;
+      }
+
+      .report_title {
+        margin: 0 0 2px;
+        color: #5f6875;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .report_subtitle {
+        margin: 0;
+        color: #222;
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.1;
+      }
+
+      .report_status_box {
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      .report_status_label {
+        display: block;
+        color: #687484;
+        font-size: 11px;
+      }
+
+      .report_status_value {
+        display: block;
+        color: #1f2933;
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .report_meta {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px 18px;
+        margin: 0 0 11px;
+      }
+
+      .report_section {
+        margin-top: 14px;
+        padding-top: 8px;
+        border-top: 1px solid #cfd5dd;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .report_section h2 {
+        margin: 0 0 6px;
+        color: #465465;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .report_field_grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px 18px;
+      }
+
+      .report_field {
+        display: grid;
+        grid-template-columns: 8.8rem minmax(0, 1fr);
+        gap: 6px;
+        align-items: start;
+        min-width: 0;
+      }
+
+      .report_meta .report_field {
+        grid-template-columns: 5.4rem minmax(0, 1fr);
+      }
+
+      .report_field_wide {
+        grid-column: 1 / -1;
+      }
+
+      .report_label {
+        color: #687484;
+        font-size: 11px;
+      }
+
+      .report_value {
+        color: #1f252d;
+        font-weight: 500;
+      }
+
+      .report_value.report_number {
+        display: block;
+      }
+
+      .report_text_value {
+        white-space: pre-wrap;
+        font-weight: 400;
+      }
+
+      .report_table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 4px;
+        font-size: 11.5px;
+      }
+
+      .report_table th,
+      .report_table td {
+        border: 0;
+        border-bottom: 1px solid #e3e7ec;
+        padding: 4px 6px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .report_table th {
+        border-bottom-color: #9aa4b2;
+        color: #505d6d;
+        background: transparent;
+        font-size: 10.5px;
+        font-weight: 700;
+      }
+
+      .report_table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .report_number {
+        text-align: right;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .muted {
+        color: #666;
+      }
+
+      @page {
+        margin: 14mm 12mm;
+      }
+
+      @media print {
+        .report_actions {
+          display: none;
+        }
+
+        .print_report {
+          max-width: none;
+          padding: 0;
+        }
+
+        .report_section {
+          margin-top: 11px;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .report_header,
+        .report_meta,
+        .report_field_grid {
+          grid-template-columns: 1fr;
+        }
+
+        .report_status_box {
+          text-align: left;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="print_report">
+      <div class="report_actions">
+        <button type="button" id="printReportBtn" title="Печать отчёта">Печать</button>
+        <button type="button" id="closeReportBtn" title="Закрыть отчёт">Закрыть</button>
+      </div>
+
+      <div id="reportRoot">
+        <p class="muted">Загрузка отчёта…</p>
+      </div>
+    </main>
+
+    <script src="/js/recipe-print.js"></script>
+  </body>
+</html>

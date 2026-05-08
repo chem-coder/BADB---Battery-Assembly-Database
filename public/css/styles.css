@@ -291,6 +291,7 @@ body[data-page="electrodes"] .electrode-filter-summary {
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-row,
+body[data-page="recipes"] .recipe-filter-row,
 body[data-page="separators"] .separator-filter-row {
   display: flex;
   flex-wrap: wrap;
@@ -300,6 +301,7 @@ body[data-page="separators"] .separator-filter-row {
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-field,
+body[data-page="recipes"] .recipe-filter-field,
 body[data-page="separators"] .separator-filter-field {
   display: flex;
   flex-direction: column;
@@ -308,6 +310,7 @@ body[data-page="separators"] .separator-filter-field {
 }
 
 body[data-page="electrolytes"] .electrolyte-filter-field:first-child,
+body[data-page="recipes"] .recipe-filter-field:first-child,
 body[data-page="separators"] .separator-filter-field:first-child {
   flex: 1 1 18rem;
   min-width: min(18rem, 100%);
@@ -315,6 +318,8 @@ body[data-page="separators"] .separator-filter-field:first-child {
 
 body[data-page="electrolytes"] .electrolyte-filter-field span,
 body[data-page="electrolytes"] .electrolyte-filter-summary,
+body[data-page="recipes"] .recipe-filter-field span,
+body[data-page="recipes"] .recipe-filter-summary,
 body[data-page="separators"] .separator-filter-field span,
 body[data-page="separators"] .separator-filter-summary {
   margin-right: 0;
@@ -324,6 +329,8 @@ body[data-page="separators"] .separator-filter-summary {
 
 body[data-page="electrolytes"] .electrolyte-filter-row input,
 body[data-page="electrolytes"] .electrolyte-filter-row select,
+body[data-page="recipes"] .recipe-filter-row input,
+body[data-page="recipes"] .recipe-filter-row select,
 body[data-page="separators"] .separator-filter-row input,
 body[data-page="separators"] .separator-filter-row select {
   width: 100%;
@@ -332,6 +339,11 @@ body[data-page="separators"] .separator-filter-row select {
 body[data-page="electrolytes"] .electrolyte-filter-summary,
 body[data-page="separators"] .separator-filter-summary {
   align-self: center;
+}
+
+body[data-page="recipes"] .recipe-filter-summary {
+  flex: 1 0 100%;
+  align-self: flex-start;
 }
 
 body[data-page="electrodes"] .electrode-section > fieldset {
@@ -668,6 +680,7 @@ body[data-page="BAL"] #exitBatteriesBtn {
 body[data-page="tapes"] #tapesList,
 body[data-page="electrodes"] #all-cut-batches-list,
 body[data-page="electrolytes"] #electrolytesList,
+body[data-page="recipes"] #recipesList,
 body[data-page="separators"] #separatorsList,
 body[data-page="projectsList"] #projectsList,
 body[data-page="BAL"] #batteriesList {
@@ -708,6 +721,7 @@ body[data-page="BAL"] #batteriesList {
 }
 
 body[data-page="electrolytes"] .electrolyte-empty-row,
+body[data-page="recipes"] .recipe-empty-row,
 body[data-page="separators"] .separator-empty-row {
   justify-content: flex-start;
   color: #667085;

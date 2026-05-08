@@ -4,14 +4,15 @@ Created: 2026-05-06
 Edited: 2026-05-08
 Status: future idea
 Verified against code: light check 2026-05-08
-Source paths: `docs/archive/superseded/2026-05-06-future-backlog/BADB_VANILLA_REFERENCE_PAGE_UPGRADE_PLAN.md`, `docs/instructions/vanilla_ui_patterns.md`, `public/js/badb-ui.js`, `public/reference/electrolytes.html`, `public/js/electrolytes.js`, `public/reference/separators.html`, `public/js/separators.js`, `public/workflow/1-tapes.html`, `public/workflow/2-electrodes.html`, `public/workflow/3-batteries.html`
+Source paths: `docs/archive/superseded/2026-05-06-future-backlog/BADB_VANILLA_REFERENCE_PAGE_UPGRADE_PLAN.md`, `docs/instructions/vanilla_ui_patterns.md`, `public/js/badb-ui.js`, `public/reference/electrolytes.html`, `public/js/electrolytes.js`, `public/reference/separators.html`, `public/js/separators.js`, `public/reference/recipes.html`, `public/js/recipes.js`, `public/workflow/recipe-print.html`, `public/js/recipe-print.js`, `routes/recipes.js`, `public/workflow/1-tapes.html`, `public/workflow/2-electrodes.html`, `public/workflow/3-batteries.html`
 
 This is a future rollout plan for making remaining vanilla reference pages feel closer to the current Tapes, Electrode Batches, Batteries, and Electrolytes interaction pattern.
 
 Reference-page print reports are part of the broader rollout. Electrolytes and
-Separators now have record print reports; remaining planned report/list-printing
-work includes record reports for Projects and Users, a printable Departments
-list, and a general pattern for printing list views.
+Separators now have record print reports; Recipes now has a simple record print
+report for recipe metadata and composition. Remaining planned report/list-
+printing work includes record reports for Projects and Users, a printable
+Departments list, and a general pattern for printing list views.
 
 Materials are out of scope for this rollout. The current Materials tree/composition workflow is good enough for the current release direction and should not be redesigned casually.
 
@@ -44,6 +45,10 @@ Light code checks through 2026-05-07 also found:
 - Separators uses the same row-open, sticky-header, inside-header delete, print
   report, and client-side filter pattern with fields that actually exist on
   separators: text, status, and structure.
+- Recipes uses row-open behavior, page-local filters for text and existing
+  electrode role, an opened-record sticky header, list-level print/duplicate,
+  inside-header delete, and a simple record print report at
+  `/workflow/recipe-print.html`.
 
 Treat this doc as future guidance for the remaining rollout, not as proof that every item below is implemented.
 
@@ -96,11 +101,10 @@ If helper code needs many page-specific exceptions, keep that behavior local.
 
 Finish pages in small passes:
 
-1. Recipes row-open, sticky header, inside-form delete, and later print report.
-2. Projects row-open, inside-form delete, and later project report.
-3. Users row-open, inside-form delete, and later user report; avoid a heavy sticky header unless it clearly helps.
-4. Departments row-open and delete only if the dependency rules are clear; add printable departments list as a reporting pass.
-5. List-view printing pattern after at least one record report proves the report style.
+1. Projects row-open, inside-form delete, and later project report.
+2. Users row-open, inside-form delete, and later user report; avoid a heavy sticky header unless it clearly helps.
+3. Departments row-open and delete only if the dependency rules are clear; add printable departments list as a reporting pass.
+4. List-view printing pattern after at least one record report proves the report style.
 
 Good pairings:
 
@@ -129,21 +133,31 @@ implemented.
 The separator filters intentionally do not include project filtering because
 separators do not currently have project links.
 
+## Recipes Follow-Up
+
+Recipes is current for this pass: row-open behavior, page-local filters,
+opened-record sticky header, save/print/exit/delete in the sticky header, delete
+only inside the opened record, list-level print and duplicate actions, and a
+backend delete-check plus simple record print report are implemented.
+
+The recipe filters intentionally use fields already returned by `/api/recipes`:
+name/variant/notes text, material names from recipe lines, and the existing
+electrode role. The print report intentionally stays simple: recipe metadata,
+description, composition rows, and direct tape usage without redesigning the
+recipe/material model or expanding into full traceability.
+
 ## Print Report Candidates
 
 Completed record reports:
 
 - Electrolytes
+- Recipes
 - Separators
 
 Planned record reports:
 
 - Projects
 - Users
-
-Likely useful, but not yet explicitly required by the current reporting request:
-
-- Recipes.
 
 Planned list reports:
 

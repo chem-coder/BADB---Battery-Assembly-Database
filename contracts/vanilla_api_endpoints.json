@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "public/js/**/*.js",
-  "updatedAt": "2026-05-07",
+  "updatedAt": "2026-05-08",
   "normalization": {
     "pathParams": ":param",
     "query": "?:query"
@@ -407,6 +407,22 @@
       "auth": "auth",
       "request": "PUT recipe header and lines with updated_by server-derived; DELETE none",
       "response": "updated recipe JSON or delete status",
+      "sources": ["public/js/recipes.js"]
+    },
+    {
+      "path": "/api/recipes/:param/report",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "recipe print/report payload with recipe metadata, composition lines, and direct tape usage",
+      "sources": ["public/js/recipe-print.js"]
+    },
+    {
+      "path": "/api/recipes/:param/delete-check",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "recipe delete dependency check",
       "sources": ["public/js/recipes.js"]
     },
     {
