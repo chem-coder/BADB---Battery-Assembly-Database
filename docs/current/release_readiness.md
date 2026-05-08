@@ -1,7 +1,7 @@
 # BADB Release Readiness
 
 Created: 2026-05-06
-Edited: 2026-05-07
+Edited: 2026-05-08
 Status: current
 
 This file tracks only the current release-control state. Do not use it for future ideas, long worklogs, or archived rationale.
@@ -39,6 +39,13 @@ Archived notes and generated materials are historical context only.
 - Electrolytes reference page polish: row-open workflow, sticky record header,
   typed delete confirmation, dependency preflight, file section status,
   stricter type/status validation, and unsaved-change guards.
+- Vanilla reference/workflow page polish: Separators, Projects, Users, Recipes,
+  and Departments now follow the row-open/sticky-header pattern appropriate to
+  each page; Projects, Recipes, Electrolytes, and Separators have record print
+  reports.
+- UI consistency pass: button labels/tooltips, duplicate icon, filter count
+  punctuation, Electrolytes/Separators record-open scroll behavior, and the coin
+  create dirty-marker edge case were corrected.
 
 ## Last Verified Checkpoint
 
@@ -77,9 +84,24 @@ Batteries UX/status follow-up verified on 2026-05-07:
 - Browser check passed for Batteries list filters: text search, derived
   `Открыт`, `pouch`, reset, and empty-result message.
 
+Vanilla UI consistency checkpoint verified on 2026-05-08 at commit `974ffce`:
+
+- `git diff --check HEAD~1 HEAD` passed.
+- `node --check` passed for changed vanilla JavaScript files.
+- `npm test` passed.
+- `npm run contract:vanilla` passed: 147 fetch calls, 129 endpoint method
+  contracts, 3 dynamic fetch contracts, 211 Express routes, 47 HTML script
+  references, 33 HTML link references.
+- `npm run smoke:vanilla` passed: 233 checks, 0 failures. The smoke harness
+  restored the old dump and applied `d028`, `d029`, `d030`, and `d031`.
+- Manual spot checks found the current UI usable; exact destructive battery
+  delete and Windows/lab DB checks remain listed below until explicitly
+  verified.
+
 ## Must Verify Before Pilot
 
-- Full smoke test passes on the pilot-target database or a faithful restored copy.
+- Full smoke test passes on the pilot-target database or a faithful restored
+  copy. Local restored-copy smoke passed on 2026-05-08.
 - `d031` is applied to the Windows production/pilot DB before pilot use.
 - Guided battery delete is manually tested for:
   - hard blocker with cycling data;

@@ -99,28 +99,36 @@ or inserted in trigger-safe paired order while preserving original
 Backend/API dependency: `d031_harden_battery_stack_validate_trigger.sql`.
 Notes: The vanilla service already handles trigger-safe ordering.
 
-### Electrolyte Reference Page Reports And Filters
+### Electrolyte Reference Page UX, Files, And Report
 
 Status: pending
 Priority: normal
-Source: `docs/current/electrolytes.md`
-Expected Vue behavior: if Vue owns an electrolytes page, mirror the current
-filter and print-report expectations where relevant.
-Backend/API dependency: electrolyte list/detail/report routes.
-Notes: Verify current Vue scope before implementing.
+Source: `docs/current/electrolytes.md`, `public/reference/electrolytes.html`, `public/js/electrolytes.js`
+Expected Vue behavior: if Vue owns an Electrolytes reference page, mirror the
+current vanilla behavior where relevant: row-open list items, text/status/type
+filters, result count below filters, list-level duplicate and print, opened
+record sticky header, save/print/exit/delete in the header, file upload,
+download, and delete, delete-check before record deletion, record print report,
+and unsaved-change guards.
+Backend/API dependency: electrolyte list/detail/report/file/delete-check routes.
+Notes: Do not add project filters unless electrolyte project links are actually
+implemented.
 
-### Separator Reference Page Reports And Filters
+### Separator Reference Page UX, Files, And Report
 
 Status: pending
 Priority: normal
-Source: `docs/current/separators.md`
-Expected Vue behavior: if Vue owns a separators page, mirror the current
-row-open, status/structure/text filters, inside-record delete, and print-report
-expectations where relevant. Do not add project filters unless separator project
-links are actually implemented.
+Source: `docs/current/separators.md`, `public/reference/separators.html`, `public/js/separators.js`
+Expected Vue behavior: if Vue owns a Separators reference page, mirror the
+current vanilla behavior where relevant: row-open list items,
+text/status/structure filters, result count below filters, list-level duplicate
+and print, opened-record sticky header, save/print/exit/delete in the header,
+file upload, download, and delete, delete-check before record deletion, and
+record print report. Do not add project filters unless separator project links
+are actually implemented.
 Backend/API dependency: `GET /api/separators/:id/report` and
-`GET /api/separators/:id/delete-check`.
-Notes: Current Vue scope should be checked before implementation.
+`GET /api/separators/:id/delete-check`, plus separator file routes.
+Notes: This is no longer hypothetical parity; current vanilla has this behavior.
 
 ### Project Access Terminology
 
