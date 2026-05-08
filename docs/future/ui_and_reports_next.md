@@ -1,10 +1,10 @@
 # UI And Reports Future Work
 
 Created: 2026-05-06
-Edited: 2026-05-07
+Edited: 2026-05-08
 Status: future idea
-Verified against code: light check 2026-05-07
-Source paths: `docs/archive/superseded/2026-05-06-future-backlog/UI Styling Consistency Plan.md`, `docs/archive/superseded/2026-05-06-future-backlog/Printout Design.md`, `docs/archive/superseded/2026-05-06-root-doc-transition/DALIA_MIGRATION_GUIDE.md`, `public/css/styles.css`, `public/workflow/tape-print.html`, `public/workflow/electrode-batch-print.html`, `public/workflow/battery-print.html`, `public/workflow/electrolyte-print.html`, `client-web/src/pages/`
+Verified against code: light check 2026-05-08
+Source paths: `docs/archive/superseded/2026-05-06-future-backlog/UI Styling Consistency Plan.md`, `docs/archive/superseded/2026-05-06-future-backlog/Printout Design.md`, `docs/archive/superseded/2026-05-06-root-doc-transition/DALIA_MIGRATION_GUIDE.md`, `public/css/styles.css`, `public/workflow/tape-print.html`, `public/workflow/electrode-batch-print.html`, `public/workflow/battery-print.html`, `public/workflow/electrolyte-print.html`, `public/workflow/recipe-print.html`, `client-web/src/pages/`
 
 This file preserves future UI consistency and report-layout guidance. It is not a redesign request.
 
@@ -66,6 +66,7 @@ Current print report references:
 - `public/workflow/electrode-batch-print.html`
 - `public/workflow/battery-print.html`
 - `public/workflow/electrolyte-print.html`
+- `public/workflow/recipe-print.html`
 
 Future print reports should follow the same technical print-sheet spirit:
 
@@ -87,6 +88,7 @@ Completed record reports:
 
 - Electrolytes;
 - Projects;
+- Recipes;
 - Separators.
 
 Record reports to add in upcoming bounded passes:
@@ -98,10 +100,6 @@ List reports to add in upcoming bounded passes:
 - Departments list;
 - reusable list-view print pattern for pages where printing the current list is
   useful.
-
-Recipes may also need a report because recipes are scientific work products, but
-that should be handled as its own scoped decision with the recipe-line editor in
-view.
 
 ## Numeric And Table Guidance
 

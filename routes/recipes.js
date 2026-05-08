@@ -18,6 +18,140 @@ router.get('/test', async (req, res) => {
 
 // -------- RECIPES --------
 
+async function collectRecipeDeleteDependencies(db, recipeId) {
+  return collectDependencyConflicts(db, [
+    {
+      key: 'tapes',
+      label: 'ленты с этим рецептом',
+      query: `
+        SELECT tape_id AS id, name
+        FROM tapes
+        WHERE tape_recipe_id = $1
+        ORDER BY tape_id
+        LIMIT 25
+      `,
+      params: [recipeId]
+    }
+  ]);
+}
+
+async function getRecipeDeleteCheck(db, recipeId) {
+  const exists = await db.query(
+    'SELECT tape_recipe_id FROM tape_recipes WHERE tape_recipe_id = $1',
+    [recipeId]
+  );
+
+  if (exists.rowCount === 0) {
+    const err = new Error('Рецепт не найден');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const dependencies = await collectRecipeDeleteDependencies(db, recipeId);
+
+  return {
+    tape_recipe_id: recipeId,
+    can_delete: dependencies.length === 0,
+    message: dependencies.length > 0
+      ? 'Нельзя удалить рецепт: он используется в лентах.'
+      : '',
+    dependencies
+  };
+}
+
+async function getRecipeReport(db, recipeId) {
+  const recipeResult = await db.query(
+    `
+    SELECT
+      r.tape_recipe_id,
+      r.role,
+      r.name,
+      r.variant_label,
+      r.notes,
+      r.created_by,
+      r.created_at,
+      u_created.name AS created_by_name,
+      r.updated_by,
+      r.updated_at,
+      u_updated.name AS updated_by_name
+    FROM tape_recipes r
+    LEFT JOIN users u_created ON u_created.user_id = r.created_by
+    LEFT JOIN users u_updated ON u_updated.user_id = r.updated_by
+    WHERE r.tape_recipe_id = $1
+    `,
+    [recipeId]
+  );
+
+  if (recipeResult.rowCount === 0) {
+    const err = new Error('Рецепт не найден');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const linesResult = await db.query(
+    `
+    SELECT
+      rl.recipe_line_id,
+      rl.material_id,
+      m.name AS material_name,
+      m.role AS material_role,
+      rl.recipe_role,
+      rl.include_in_pct,
+      rl.slurry_percent,
+      rl.line_notes
+    FROM tape_recipe_lines rl
+    JOIN materials m ON m.material_id = rl.material_id
+    WHERE rl.tape_recipe_id = $1
+    ORDER BY
+      CASE rl.recipe_role
+        WHEN 'cathode_active' THEN 1
+        WHEN 'anode_active' THEN 1
+        WHEN 'binder' THEN 2
+        WHEN 'additive' THEN 3
+        WHEN 'solvent' THEN 4
+        ELSE 9
+      END,
+      m.name ASC,
+      rl.recipe_line_id
+    `,
+    [recipeId]
+  );
+
+  const usageResult = await db.query(
+    `
+    SELECT
+      t.tape_id,
+      t.name,
+      t.project_id,
+      p.name AS project_name,
+      COALESCE(tape_project_names.project_names, p.name) AS project_names,
+      r.role,
+      t.created_at
+    FROM tapes t
+    LEFT JOIN tape_recipes r
+      ON r.tape_recipe_id = t.tape_recipe_id
+    LEFT JOIN projects p
+      ON p.project_id = t.project_id
+    LEFT JOIN LATERAL (
+      SELECT string_agg(DISTINCT p_linked.name, ', ' ORDER BY p_linked.name) AS project_names
+      FROM tape_projects tp
+      JOIN projects p_linked
+        ON p_linked.project_id = tp.project_id
+      WHERE tp.tape_id = t.tape_id
+    ) tape_project_names ON true
+    WHERE t.tape_recipe_id = $1
+    ORDER BY t.created_at DESC NULLS LAST, t.tape_id DESC
+    `,
+    [recipeId]
+  );
+
+  return {
+    recipe: recipeResult.rows[0],
+    lines: linesResult.rows,
+    tape_usage: usageResult.rows
+  };
+}
+
 // CREATE: new recipe + lines
 router.post('/', auth, async (req, res) => {
   const {
@@ -33,7 +167,7 @@ router.post('/', auth, async (req, res) => {
   if (
     !name ||
     !role ||
-    !Array.isArray(lines) || 
+    !Array.isArray(lines) ||
     lines.length === 0
   ) {
     return res.status(400).json({ error: 'Некорректные данные запроса' });
@@ -215,7 +349,7 @@ router.get('/', auth, async (req, res) => {
   }
 
   try {
-        let sql = `
+    let sql = `
       SELECT
         r.tape_recipe_id,
         r.role,
@@ -226,6 +360,7 @@ router.get('/', auth, async (req, res) => {
         r.created_at,
         act.active_material_name,
         act.active_percent,
+        mats.material_names,
         u_created.name AS created_by_name,
         r.updated_by,
         r.updated_at,
@@ -243,6 +378,12 @@ router.get('/', auth, async (req, res) => {
           AND rl.recipe_role IN ('cathode_active','anode_active')
         LIMIT 1
       ) act ON true
+      LEFT JOIN LATERAL (
+        SELECT string_agg(DISTINCT m.name, ', ' ORDER BY m.name) AS material_names
+        FROM tape_recipe_lines rl
+        JOIN materials m ON m.material_id = rl.material_id
+        WHERE rl.tape_recipe_id = r.tape_recipe_id
+      ) mats ON true
     `;
 
     const params = [];
@@ -265,6 +406,42 @@ router.get('/', auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+router.get('/:id/report', auth, async (req, res) => {
+  const recipeId = Number(req.params.id);
+
+  if (!Number.isInteger(recipeId)) {
+    return res.status(400).json({ error: 'Некорректный tape_recipe_id' });
+  }
+
+  try {
+    res.json(await getRecipeReport(pool, recipeId));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки печатного отчёта по рецепту' });
+  }
+});
+
+router.get('/:id/delete-check', auth, async (req, res) => {
+  const recipeId = Number(req.params.id);
+
+  if (!Number.isInteger(recipeId)) {
+    return res.status(400).json({ error: 'Некорректный tape_recipe_id' });
+  }
+
+  try {
+    res.json(await getRecipeDeleteCheck(pool, recipeId));
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка проверки удаления рецепта' });
   }
 });
 
@@ -498,20 +675,7 @@ router.delete('/:id', auth, async (req, res) => {
   }
 
   try {
-    const dependencies = await collectDependencyConflicts(pool, [
-      {
-        key: 'tapes',
-        label: 'ленты с этим рецептом',
-        query: `
-          SELECT tape_id AS id, name
-          FROM tapes
-          WHERE tape_recipe_id = $1
-          ORDER BY tape_id
-          LIMIT 25
-        `,
-        params: [recipeId]
-      }
-    ]);
+    const dependencies = await collectRecipeDeleteDependencies(pool, recipeId);
 
     if (dependencies.length > 0) {
       return sendDependencyConflict(

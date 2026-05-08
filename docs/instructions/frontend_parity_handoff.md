@@ -134,6 +134,21 @@ Backend/API dependency: internal values may remain `public`, `department`, and
 `confidential`.
 Notes: This is terminology parity, not a schema or permission change.
 
+### Recipe Reference Page Report And Record UX
+
+Status: pending
+Priority: normal
+Source: `public/reference/recipes.html`, `public/js/recipes.js`, `routes/recipes.js`
+Expected Vue behavior: if Vue owns the Recipes reference page, mirror row-open
+editing, text/material-name and electrode-role filters, list-level print and
+duplicate actions, sticky-header save/print/exit/delete placement, and the
+simple recipe print report where relevant.
+Backend/API dependency: `GET /api/recipes` includes material names for list
+search, `GET /api/recipes/:id/delete-check` reports delete blockers, and
+`GET /api/recipes/:id/report` returns recipe metadata with composition lines
+and direct tape usage.
+Notes: Do not redesign the recipe/material relationship for parity.
+
 ## Maintenance Rules
 
 - Keep this file short.

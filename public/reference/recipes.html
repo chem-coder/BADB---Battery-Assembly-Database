@@ -9,7 +9,7 @@
     <title>Recipes</title>
     <link rel="stylesheet" type="text/css" href="/css/styles.css">
 
-    <style> 
+    <style>
 
       /* ---------- details toggle ---------- */
 
@@ -99,7 +99,7 @@
       .measure-mode input {
         margin: 0;
       }
-      
+
     </style>
   </head>
 
@@ -119,6 +119,23 @@
       autocomplete="off"
       required
     />
+
+    <div id="recipe_sticky_header" class="record-sticky-header" hidden>
+      <div class="record-sticky-info">
+        <div class="record-sticky-title">
+          <span id="recipe_sticky_title">Новый рецепт</span>
+          <span id="recipe-global-dirty" class="badb-dirty-flag">Не сохранено</span>
+        </div>
+        <div id="recipe_sticky_meta" class="record-sticky-meta">—</div>
+      </div>
+      <div class="form-actions record-sticky-actions">
+        <button id="saveBtn" type="button" title="Сохранить рецепт">Сохранить</button>
+        <button id="printRecipeBtn" type="button" title="Печать отчёта по рецепту" hidden>Печать</button>
+        <button id="clearBtn" type="button" title="Выйти из записи">Выйти</button>
+        <button id="deleteRecipeBtn" type="button" class="button-danger" title="Удалить рецепт" hidden>Удалить</button>
+        <span id="recipe-sticky-status" class="inline_status" aria-live="polite"></span>
+      </div>
+    </div>
 
     <!-- Form hidden by default; shown on create/edit -->
     <form name="recipe-form" autocomplete="off" hidden>
@@ -185,21 +202,44 @@
             </thead>
             <tbody id="recipe-lines-rows"></tbody>
           </table>
-        <button type="button" id="add-recipe-line">+ Добавить компонент</button>
+        <button type="button" id="add-recipe-line" title="Добавить компонент рецепта">+ Добавить компонент</button>
         <br>
         <a href="/reference/materials.html" target="_blank" class="ref-link">
           Управление материалами
-        </a>      
+        </a>
       </fieldset>
-
-      <button id="saveBtn" type="button">Сохранить запись</button>
-      <button id="clearBtn" type="button">Выйти</button><br>
     </form>
 
     <div class="status-feedback" aria-live="polite"></div>
+
+    <div id="recipe_filters" class="recipe-filter-row" aria-label="Фильтры списка рецептов">
+      <label class="recipe-filter-field" for="recipe-filter-text">
+        <span>Поиск</span>
+        <input
+          id="recipe-filter-text"
+          type="search"
+          placeholder="Название, заметки, материалы..."
+          autocomplete="off"
+        />
+      </label>
+
+      <label class="recipe-filter-field" for="recipe-filter-role">
+        <span>Роль</span>
+        <select id="recipe-filter-role">
+          <option value="">Все роли</option>
+          <option value="cathode">катод</option>
+          <option value="anode">анод</option>
+        </select>
+      </label>
+
+      <button id="clearRecipeFiltersBtn" type="button" title="Сбросить фильтры">Сбросить</button>
+      <span id="recipe-filter-summary" class="recipe-filter-summary" aria-live="polite"></span>
+    </div>
+
     <ul id="recipesList" class="users-list"></ul>
 
     <script src="/js/auth.js"></script>
-    <script src="/js/recipes.js"></script>
+    <script src="/js/badb-ui.js?v=badb-ui-20260507a"></script>
+    <script src="/js/recipes.js?v=recipes-polish-20260508a"></script>
   </body>
 </html>
