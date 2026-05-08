@@ -59,6 +59,10 @@ Light code checks through 2026-05-07 also found:
   electrode role, an opened-record sticky header, list-level print/duplicate,
   inside-header delete, and a simple record print report at
   `/workflow/recipe-print.html`.
+- Departments uses row-open list behavior, an opened-record sticky header,
+  helper-backed top-scroll behavior, inside-header save/exit actions, and
+  unsaved-change guards for exit, record switching, logout, and browser unload.
+  Departments does not expose delete, duplicate, or print actions in this pass.
 
 Treat this doc as future guidance for the remaining rollout, not as proof that every item below is implemented.
 
@@ -113,7 +117,7 @@ If helper code needs many page-specific exceptions, keep that behavior local.
 
 Finish pages in small passes:
 
-1. Departments row-open and delete only if the dependency rules are clear; add printable departments list as a reporting pass.
+1. Department delete only if a backend delete route and dependency rules are introduced later.
 2. Users record print report.
 3. List-view printing pattern after record reports prove the report style.
 
@@ -169,6 +173,16 @@ control sit on the top row, department/status/reset sit on the second row, and
 the result count stays below all controls.
 
 A Users print report is still future work.
+
+## Departments Follow-Up
+
+Departments is current for this pass: row-open list items, no list action
+buttons, an opened-record sticky header, save/exit in the sticky header, shared
+top-scroll behavior, and unsaved-change guards for exit, logout, record
+switching, and browser unload are implemented.
+
+Delete is not exposed because Departments does not currently have a delete
+route or dependency-check route.
 
 ## Recipes Follow-Up
 

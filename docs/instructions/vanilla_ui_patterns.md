@@ -105,6 +105,11 @@ Required common tooltips:
 - list open/edit icon, if present: title + `aria-label` `Открыть запись`
 - filter reset button: `Сбросить фильтры`
 
+Use `📑` as the canonical list-level duplicate icon. The Electrolytes page is
+the reference for the correct duplicate icon treatment. Do not use `📄` or
+another duplicate icon on other vanilla pages unless Dalia explicitly approves
+a page-specific exception.
+
 Standard placement:
 
 - `Печать`: both list-level icon and opened-record sticky/header button when a
@@ -146,6 +151,13 @@ Use this structure:
 
 Do not let count text compete with controls in a crowded row. On pages with
 multi-row filters, the count still belongs below the full filter block.
+
+When a filter includes a user/lead/operator dropdown and a `Текущий
+пользователь` shortcut, the shortcut button belongs directly next to that
+specific dropdown on the same filter line. Do not place it underneath the
+dropdown, at the end of the whole filter row, or beside an unrelated filter.
+If the filter block is too crowded, split the filter block into two rows and
+keep the user dropdown plus `Текущий пользователь` together.
 
 ## Derived Status Controls
 

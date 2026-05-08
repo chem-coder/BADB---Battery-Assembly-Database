@@ -552,6 +552,134 @@ body[data-page="users"] .user-filter-summary {
   }
 }
 
+body[data-page="departments"] .department-filter-row {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) minmax(22rem, auto) auto;
+  gap: 0.65rem 0.85rem;
+  align-items: end;
+  margin: 0.35rem 0 0.8rem;
+}
+
+body[data-page="departments"] .department-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+body[data-page="departments"] .department-filter-field span,
+body[data-page="departments"] .department-filter-summary {
+  margin-right: 0;
+  color: #667085;
+  font-size: 0.86rem;
+}
+
+body[data-page="departments"] .department-filter-row input,
+body[data-page="departments"] .department-filter-row select {
+  width: 100%;
+}
+
+body[data-page="departments"] .department-filter-head {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: end;
+  gap: 0.25rem 0.5rem;
+}
+
+body[data-page="departments"] .department-filter-head span {
+  grid-column: 1 / -1;
+}
+
+body[data-page="departments"] .department-filter-head select {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+body[data-page="departments"] .department-filter-head .badb-current-user-button {
+  grid-column: 2;
+  grid-row: 2;
+  width: max-content;
+  min-height: calc(1.45em + 0.64rem + 2px);
+  padding: 0.32rem 0.65rem;
+  margin: 0;
+  white-space: nowrap;
+}
+
+body[data-page="departments"] .department-filter-reset {
+  justify-self: start;
+  white-space: nowrap;
+}
+
+body[data-page="departments"] .department-filter-summary {
+  grid-column: 1 / -1;
+  align-self: start;
+  justify-self: start;
+}
+
+body[data-page="departments"] .department-head-field {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: end;
+  gap: 0.25rem 0.5rem;
+}
+
+body[data-page="departments"] .department-head-field label {
+  grid-column: 1 / -1;
+}
+
+body[data-page="departments"] .department-head-field select {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+body[data-page="departments"] .department-head-field .badb-current-user-button {
+  grid-column: 2;
+  grid-row: 2;
+  width: max-content;
+  min-height: calc(1.45em + 0.64rem + 2px);
+  padding: 0.32rem 0.65rem;
+  margin: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  body[data-page="departments"] .department-filter-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  body[data-page="departments"] .department-filter-search {
+    grid-column: 1 / -1;
+  }
+
+  body[data-page="departments"] .department-filter-head {
+    grid-column: 1;
+  }
+
+  body[data-page="departments"] .department-filter-reset {
+    grid-column: 2;
+  }
+
+  body[data-page="departments"] .department-filter-summary {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  body[data-page="departments"] .department-filter-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-page="departments"] .department-filter-head,
+  body[data-page="departments"] .department-filter-reset,
+  body[data-page="departments"] .department-filter-summary {
+    grid-column: 1;
+  }
+}
+
 body[data-page="electrodes"] .electrode-section > fieldset {
   margin-top: 0.55rem;
 }
@@ -893,6 +1021,7 @@ body[data-page="electrolytes"] #electrolytesList,
 body[data-page="recipes"] #recipesList,
 body[data-page="separators"] #separatorsList,
 body[data-page="users"] #usersList,
+body[data-page="departments"] #departmentsList,
 body[data-page="projectsList"] #projectsList,
 body[data-page="BAL"] #batteriesList {
   border-top: 1px solid #d8dee6;
@@ -944,7 +1073,8 @@ body[data-page="electrolytes"] .electrolyte-empty-row,
 body[data-page="recipes"] .recipe-empty-row,
 body[data-page="separators"] .separator-empty-row,
 body[data-page="projectsList"] .project-empty-row,
-body[data-page="users"] .user-empty-row {
+body[data-page="users"] .user-empty-row,
+body[data-page="departments"] .department-empty-row {
   justify-content: flex-start;
   color: #667085;
   font-size: 0.95rem;

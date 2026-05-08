@@ -15,23 +15,65 @@
       <h1>Отделы</h1>
     </header>
 
-    <div class="status-feedback" aria-live="polite"></div>
+    <button id="addDepartmentBtn" type="button" class="add-user" title="Добавить отдел">+ Добавить отдел</button>
 
-    <table class="departments-table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Название</th>
-          <th>Руководитель</th>
-          <th>Действия</th>
-        </tr>
-      </thead>
-      <tbody id="departmentsTableBody"></tbody>
-    </table>
+    <div id="department_sticky_header" class="record-sticky-header" hidden>
+      <div class="record-sticky-info">
+        <div class="record-sticky-title">
+          <span id="department_sticky_title">Новый отдел</span>
+          <span id="department-global-dirty" class="badb-dirty-flag">Не сохранено</span>
+        </div>
+        <div id="department_sticky_meta" class="record-sticky-meta">—</div>
+      </div>
+      <div class="form-actions record-sticky-actions">
+        <button id="saveDepartmentBtn" type="submit" form="departmentForm" title="Сохранить изменения">Сохранить</button>
+        <button id="exitDepartmentBtn" type="button" title="Вернуться к списку, не выходя из аккаунта">Выйти</button>
+        <span id="department-sticky-status" class="inline_status" aria-live="polite"></span>
+      </div>
+    </div>
 
-    <button id="addDepartmentBtn" type="button" class="add-row-button">+ Добавить отдел</button>
+    <fieldset id="departmentFieldset" hidden>
+      <legend id="departmentFormLegend">Новый отдел</legend>
+
+      <form id="departmentForm" class="form-grid cols-2" autocomplete="off">
+        <div class="form-field">
+          <label for="departmentName">Название</label>
+          <input id="departmentName" name="name" required autocomplete="off">
+        </div>
+
+        <div class="form-field department-head-field">
+          <label for="departmentHeadUser">Руководитель</label>
+          <select id="departmentHeadUser" name="head_user_id"></select>
+        </div>
+      </form>
+    </fieldset>
+
+    <div id="departments-page-status" class="status-feedback" aria-live="polite"></div>
+
+    <div id="department_filters" class="department-filter-row" aria-label="Фильтры списка отделов">
+      <label class="department-filter-field department-filter-search" for="department-filter-text">
+        <span>Поиск</span>
+        <input
+          id="department-filter-text"
+          type="search"
+          placeholder="Название или руководитель..."
+          autocomplete="off"
+        />
+      </label>
+
+      <label class="department-filter-field department-filter-head" for="department-filter-head">
+        <span>Руководитель</span>
+        <select id="department-filter-head"></select>
+      </label>
+
+      <button id="clearDepartmentFiltersBtn" class="department-filter-reset" type="button" title="Сбросить фильтры">Сбросить</button>
+      <span id="department-filter-summary" class="department-filter-summary" aria-live="polite"></span>
+    </div>
+
+    <ul id="departmentsList" class="users-list"></ul>
 
     <script src="/js/auth.js"></script>
-    <script src="/js/departments.js"></script>
+    <script src="/js/badb-ui.js?v=badb-ui-20260507a"></script>
+    <script src="/js/departments.js?v=departments-page-upgrade-20260508a"></script>
   </body>
 </html>

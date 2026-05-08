@@ -934,7 +934,7 @@ function renderProjects(projects, options = {}) {
     });
 
     const duplicateBtn = window.BADB_UI.createIconButton({
-      icon: '📄',
+      icon: '📑',
       title: 'Дублировать запись',
       ariaLabel: 'Дублировать запись',
       onClick: () => {

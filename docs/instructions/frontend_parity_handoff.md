@@ -149,6 +149,19 @@ search, `GET /api/recipes/:id/delete-check` reports delete blockers, and
 and direct tape usage.
 Notes: Do not redesign the recipe/material relationship for parity.
 
+### Department Reference Page Record UX
+
+Status: pending
+Priority: normal
+Source: `public/reference/departments.html`, `public/js/departments.js`, `routes/departments.js`
+Expected Vue behavior: if Vue owns a Departments reference page, mirror the
+visible vanilla behavior: row-open list items, opened-record sticky header,
+Save/Exit in the header, no list action buttons, and no duplicate, print, or
+delete action.
+Backend/API dependency: existing Departments routes support list/detail,
+create, and update; no delete route exists.
+Notes: This is visible workflow parity only.
+
 ## Maintenance Rules
 
 - Keep this file short.
