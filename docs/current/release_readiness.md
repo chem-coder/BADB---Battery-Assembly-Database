@@ -1,14 +1,24 @@
 # BADB Release Readiness
 
 Created: 2026-05-06
-Edited: 2026-05-08
+Edited: 2026-05-09
 Status: current
 
 This file tracks only the current release-control state. Do not use it for future ideas, long worklogs, or archived rationale.
 
 ## Current Target
 
-Internal lab pilot / v1 usable release.
+Vanilla v1 release candidate for internal lab pilot.
+
+## Current Status
+
+- Vanilla v1 is a release candidate based on the recorded local automated
+  checks and UI spot checks.
+- Windows/lab database proof is still required before pilot use; specifically,
+  `d031_harden_battery_stack_validate_trigger.sql` must be applied and verified
+  on the Windows/lab database itself.
+- Manual destructive battery flow spot-check is still required before pilot use
+  unless a later checkpoint records it as verified.
 
 ## Current Source Of Truth
 
@@ -98,12 +108,26 @@ Vanilla UI consistency checkpoint verified on 2026-05-08 at commit `974ffce`:
   delete and Windows/lab DB checks remain listed below until explicitly
   verified.
 
+Current release-check commands:
+
+```bash
+git diff --check
+npm test
+npm run contract:vanilla
+npm run smoke:vanilla
+```
+
 ## Must Verify Before Pilot
 
-- Full smoke test passes on the pilot-target database or a faithful restored
-  copy. Local restored-copy smoke passed on 2026-05-08.
-- `d031` is applied to the Windows production/pilot DB before pilot use.
-- Guided battery delete is manually tested for:
+- Full smoke test passes on a faithful restored copy of the pilot-target
+  database. Local restored-copy smoke passed on 2026-05-08; the smoke harness
+  must not be pointed at the live Windows/lab database.
+- Windows/lab database proof: `d031_harden_battery_stack_validate_trigger.sql`
+  is applied to the Windows production/pilot DB before pilot use, and the
+  verification query from `docs/instructions/apply_migrations.md` returns the
+  expected values.
+- Manual destructive battery flow spot-check: guided battery delete is manually
+  tested for:
   - hard blocker with cycling data;
   - delete with electrodes returned as available;
   - delete with electrodes returned as scrapped;

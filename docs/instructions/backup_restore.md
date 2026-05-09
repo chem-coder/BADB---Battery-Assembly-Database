@@ -1,7 +1,7 @@
 # Backup And Restore
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-09
 Status: instruction
 Verified against code: 2026-05-06
 Source paths: `scripts/backup.js`, `package.json`, `scripts/launchd/README.md`, `scripts/launchd/install.sh`, `config/index.js`
@@ -137,3 +137,32 @@ psql -d badb_app_v1 -f badb_app_v1_full.sql
 ```
 
 Prefer `scripts/backup.js` for routine work because it adds checksums, manifests, logging, retention, and restore verification.
+
+## After Restoring An Older Dump
+
+After restoring an older dump for release or lab work, apply the current missing
+migrations in order before pilot use. For the current 0424-style restored dump,
+the post-dump set is:
+
+```bash
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d028_tape_projects_many_to_many.sql
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d029_electrode_cut_batch_projects_many_to_many.sql
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d030_battery_projects_many_to_many.sql
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d031_harden_battery_stack_validate_trigger.sql
+```
+
+On Windows/lab, use `migrations_ASCII/` for the same files if encoding is a
+risk. `d031_harden_battery_stack_validate_trigger.sql` must be applied and
+verified on the Windows/lab database before pilot use.
+
+After the migration proof is recorded, run the current release checks from the
+repo checkout:
+
+```bash
+npm run contract:vanilla
+npm run smoke:vanilla
+```
+
+`npm run smoke:vanilla` restores into its own throwaway `badb_app_v1_smoke...`
+database and does not prove the Windows/lab database has `d031`; use the
+verification query in `docs/instructions/apply_migrations.md` for that proof.

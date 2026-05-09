@@ -1,12 +1,17 @@
 # Testing And Release Checks
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-09
 Status: instruction
-Verified against code: 2026-05-06
+Verified against code: 2026-05-09
 Source paths: `package.json`, `scripts/check_vanilla_api_contract.js`, `scripts/smoke_vanilla_api.js`, `contracts/vanilla_api_endpoints.json`
 
 This is the canonical release-check runbook for BADB.
+
+Current release posture: vanilla v1 release candidate. Local automated checks
+support the release candidate only; pilot readiness still requires explicit
+Windows/lab database proof and the manual destructive battery flow spot-check
+listed in `docs/current/release_readiness.md`.
 
 ## Standard Checks After Code Changes
 
@@ -27,6 +32,9 @@ npm test
 npm run contract:vanilla
 npm run smoke:vanilla
 ```
+
+These are the current release-check commands. Record exact command output or
+pass/fail summaries in the release evidence.
 
 For frontend workflow or visual changes, also open the affected page in a browser and verify the user flow directly.
 
@@ -71,11 +79,16 @@ npm run smoke:vanilla
 
 This runs `scripts/smoke_vanilla_api.js`.
 
+A current successful full smoke run is expected to finish with zero failures;
+the last recorded release checkpoint was 233 checks, 0 failures. If the check
+count changes because the smoke surface changes, update the release readiness
+record with the new count.
+
 The smoke harness:
 
 - checks the vanilla API contract first;
 - restores a SQL dump into a throwaway database;
-- applies post-dump migrations through `d031`;
+- applies current post-dump migrations `d028`, `d029`, `d030`, and `d031`;
 - starts the Express API against the throwaway database with `AUTH_BYPASS=true`;
 - exercises vanilla-facing GET and write paths;
 - checks selected dependency/conflict behavior;
@@ -97,10 +110,13 @@ badb_app_v1_smoke
 ```
 
 This guard prevents accidental destructive work against the real database.
+Do not point the smoke harness at the Windows/lab pilot database; it is a
+throwaway restored-copy check, not proof that the lab database is migrated.
 
 ## Smoke Migration Coverage
 
-The smoke harness applies these migrations after restoring the dump:
+The current smoke harness applies these migrations after restoring the dump, in
+this order:
 
 - `d028_tape_projects_many_to_many.sql`
 - `d029_electrode_cut_batch_projects_many_to_many.sql`
@@ -108,6 +124,11 @@ The smoke harness applies these migrations after restoring the dump:
 - `d031_harden_battery_stack_validate_trigger.sql`
 
 That means smoke evidence covers the hardened battery stack trigger, including the service requirement that pouch/cylindrical stack inserts are safe even when the API payload arrives cathode-first.
+
+Windows/lab pilot use still requires direct proof that
+`d031_harden_battery_stack_validate_trigger.sql` has been applied to the
+Windows/lab database itself. Use the verification query from
+`docs/instructions/apply_migrations.md` and record the result before pilot use.
 
 ## Release Evidence To Record
 
@@ -118,6 +139,8 @@ For a release or merge review, record:
 - database checked or restored;
 - exact commands run;
 - pass/fail result for `git diff --check`, `npm test`, `npm run contract:vanilla`, and `npm run smoke:vanilla`;
+- Windows/lab database `d031` verification result before pilot use;
+- manual destructive battery flow spot-check result before pilot use;
 - any skipped check and the reason.
 
 If a migration is required for the changed behavior, release readiness requires proof that the target database has it or that the deployment process will apply it before users reach the changed path.
