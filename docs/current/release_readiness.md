@@ -14,9 +14,10 @@ Vanilla v1 release candidate for internal lab pilot.
 
 - Vanilla v1 is a release candidate based on the recorded local automated
   checks and UI spot checks.
-- Windows/lab database proof is still required before pilot use; specifically,
-  `d031_harden_battery_stack_validate_trigger.sql` must be applied and verified
-  on the Windows/lab database itself.
+- Windows/lab database proof is still required before pilot use. The target
+  database must show current `public.schema_migrations` counts and the
+  `d031_harden_battery_stack_validate_trigger.sql` trigger behavior on the
+  Windows/lab database itself.
 - Manual destructive battery flow spot-check is still required before pilot use
   unless a later checkpoint records it as verified.
 
@@ -24,11 +25,14 @@ Vanilla v1 release candidate for internal lab pilot.
 
 1. Code in `BADB_main/`.
 2. SQL migrations in `migrations/`.
-3. Automated checks and smoke tests.
-4. Current working docs in `docs/current/`, `docs/rules/`, and `docs/instructions/`.
-5. Formal mirror in `Документация ЕСПД/`.
+3. `public.schema_migrations` in the target database for applied migration state.
+4. Automated checks and smoke tests.
+5. Current working docs in `docs/current/`, `docs/rules/`, and `docs/instructions/`.
+6. Formal mirror in `Документация ЕСПД/`.
 
 Archived notes and generated materials are historical context only.
+Flat `migrations_log.txt` files are human checkpoint notes only, not the
+authoritative migration ledger.
 
 ## Recently Completed
 
@@ -43,7 +47,12 @@ Archived notes and generated materials are historical context only.
   filters with reset and empty-result messaging.
 - Battery stack DB trigger hardening in `d031_harden_battery_stack_validate_trigger.sql`.
 - Trigger-safe pouch/cyl stack insert order: `A1, C1, A2, C2`, preserving original `position_index`.
-- Vanilla smoke harness now applies `d031` after restoring the old dump.
+- Migration ledger creation in `d032_create_schema_migrations_table.sql`;
+  current migration files exist through Dima `020` and Dalia `d032`, with 41
+  SQL files in both `migrations/` and `migrations_ASCII/`.
+- Vanilla smoke harness now applies the post-dump migrations needed for the
+  current restored-copy schema, including `002`, `018`, `019`, `020`, and
+  `d028` through `d032`.
 - Battery/electrode/materials/capacity/runbook docs were compressed into the canonical docs system.
 - Formal `Документация ЕСПД/` mirror was updated from the canonical docs.
 - Electrolytes reference page polish: row-open workflow, sticky record header,
@@ -102,11 +111,19 @@ Vanilla UI consistency checkpoint verified on 2026-05-08 at commit `974ffce`:
 - `npm run contract:vanilla` passed: 147 fetch calls, 129 endpoint method
   contracts, 3 dynamic fetch contracts, 211 Express routes, 47 HTML script
   references, 33 HTML link references.
-- `npm run smoke:vanilla` passed: 233 checks, 0 failures. The smoke harness
-  restored the old dump and applied `d028`, `d029`, `d030`, and `d031`.
+- `npm run smoke:vanilla` passed: 233 checks, 0 failures.
 - Manual spot checks found the current UI usable; exact destructive battery
   delete and Windows/lab DB checks remain listed below until explicitly
   verified.
+
+Migration ledger checkpoint verified on 2026-05-09:
+
+- `node --check scripts/smoke_vanilla_api.js` passed.
+- Local `badb_app_v1` has authoritative `schema_migrations` rows from `d032`
+  with `dima = 21` and `dalia = 20`.
+- `npm run smoke:vanilla` passed: 241 checks, 0 failures. The smoke harness
+  restored the old dump and applied `002`, `018`, `019`, `020`, and `d028`
+  through `d032`.
 
 Current release-check commands:
 
@@ -120,12 +137,12 @@ npm run smoke:vanilla
 ## Must Verify Before Pilot
 
 - Full smoke test passes on a faithful restored copy of the pilot-target
-  database. Local restored-copy smoke passed on 2026-05-08; the smoke harness
+  database. Local restored-copy smoke passed on 2026-05-09; the smoke harness
   must not be pointed at the live Windows/lab database.
-- Windows/lab database proof: `d031_harden_battery_stack_validate_trigger.sql`
-  is applied to the Windows production/pilot DB before pilot use, and the
-  verification query from `docs/instructions/apply_migrations.md` returns the
-  expected values.
+- Windows/lab database proof: the Windows production/pilot DB has
+  `public.schema_migrations` counts of `dima = 21` and `dalia = 20`; then the
+  `d031` verification query from `docs/instructions/apply_migrations.md`
+  returns the expected values.
 - Manual destructive battery flow spot-check: guided battery delete is manually
   tested for:
   - hard blocker with cycling data;

@@ -1,7 +1,7 @@
 # AI Rules From Dalia
 
 Created: 2026-05-06
-Edited: 2026-05-07
+Edited: 2026-05-09
 Status: rule
 
 These are standing rules for AI agents and collaborators working in `BADB_main`.
@@ -60,11 +60,12 @@ Use this order when sources disagree:
 
 1. Current code.
 2. Current migrations.
-3. Tests, smoke checks, and contract checks.
-4. Approved Dalia rules and working notes.
-5. Canonical docs in `BADB_main/docs/current`, `BADB_main/docs/rules`, and `BADB_main/docs/instructions`.
-6. `BADB_main/Документация ЕСПД` as a formal mirror.
-7. Inbox, generated, archived, or historical material only after verification.
+3. `public.schema_migrations` in the target database for applied migration state.
+4. Tests, smoke checks, and contract checks.
+5. Approved Dalia rules and working notes.
+6. Canonical docs in `BADB_main/docs/current`, `BADB_main/docs/rules`, and `BADB_main/docs/instructions`.
+7. `BADB_main/Документация ЕСПД` as a formal mirror.
+8. Inbox, generated, archived, or historical material only after verification.
 
 ## Fix The Root Cause
 
@@ -89,12 +90,23 @@ Migration files in `BADB_main/migrations/` must be duplicated in `BADB_main/migr
 
 The ASCII mirror is required for the Windows PC where the production database is used. It must stay and must be updated alongside the main migrations folder.
 
-Migration logs must be updated when a migration is run:
+`public.schema_migrations` is the authoritative ledger for applied migration
+state. It starts with `d032_create_schema_migrations_table.sql`, which
+backfills the historical baseline. Future migrations should record themselves
+in `public.schema_migrations` as part of the migration file.
+
+The flat migration logs are human checkpoint notes only:
 
 - `BADB_main/migrations/migrations_log.txt`
 - `BADB_main/migrations_ASCII/migrations_log.txt`
 
-The log should identify who ran the migration as clearly as possible. Do not guess silently if the context is ambiguous.
+Update those logs when a human migration checkpoint changes, but do not use
+them to prove target database state. Query `public.schema_migrations` for proof.
+If a flat log and `public.schema_migrations` disagree, investigate and treat
+the target database ledger as authoritative after direct verification.
+
+The log should identify who ran or verified the migration checkpoint as clearly
+as possible. Do not guess silently if the context is ambiguous.
 
 ## Approval Model
 

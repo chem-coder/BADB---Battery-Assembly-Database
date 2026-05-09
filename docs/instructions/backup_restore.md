@@ -3,8 +3,8 @@
 Created: 2026-05-06
 Edited: 2026-05-09
 Status: instruction
-Verified against code: 2026-05-06
-Source paths: `scripts/backup.js`, `package.json`, `scripts/launchd/README.md`, `scripts/launchd/install.sh`, `config/index.js`
+Verified against code: 2026-05-09
+Source paths: `scripts/backup.js`, `package.json`, `scripts/launchd/README.md`, `scripts/launchd/install.sh`, `config/index.js`, `migrations/README.md`, `scripts/smoke_vanilla_api.js`
 
 Use `scripts/backup.js` for normal BADB backups. It wraps `pg_dump`, writes checksum and manifest files, records a log, and can verify or restore backups.
 
@@ -141,19 +141,36 @@ Prefer `scripts/backup.js` for routine work because it adds checksums, manifests
 ## After Restoring An Older Dump
 
 After restoring an older dump for release or lab work, apply the current missing
-migrations in order before pilot use. For the current 0424-style restored dump,
-the post-dump set is:
+migrations in order before pilot use. Run these commands from `BADB_main`, not
+the outer `RENERA` workspace.
+
+For the current 0424-style restored dump, the post-dump set is:
 
 ```bash
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/002_raw_submissions.sql
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/018_department_real_names_and_assignments.sql
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/019_cycling_summary_extra_metrics.sql
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/020_cycling_active_mass.sql
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d028_tape_projects_many_to_many.sql
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d029_electrode_cut_batch_projects_many_to_many.sql
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d030_battery_projects_many_to_many.sql
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d031_harden_battery_stack_validate_trigger.sql
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d032_create_schema_migrations_table.sql
 ```
 
 On Windows/lab, use `migrations_ASCII/` for the same files if encoding is a
-risk. `d031_harden_battery_stack_validate_trigger.sql` must be applied and
-verified on the Windows/lab database before pilot use.
+risk. `d032_create_schema_migrations_table.sql` should be run last in the
+catch-up set because it verifies earlier migration effects before creating the
+baseline ledger rows.
+
+After `d032`, `public.schema_migrations` is the authoritative migration ledger.
+The flat `migrations_log.txt` files are only human checkpoint notes. A current
+local `badb_app_v1` ledger reports `dima = 21` and `dalia = 20`; use the same
+stream-count query from `docs/instructions/apply_migrations.md` on the restored
+or Windows/lab target.
+
+`d031_harden_battery_stack_validate_trigger.sql` must also be verified on the
+Windows/lab database before pilot use.
 
 After the migration proof is recorded, run the current release checks from the
 repo checkout:
@@ -164,5 +181,6 @@ npm run smoke:vanilla
 ```
 
 `npm run smoke:vanilla` restores into its own throwaway `badb_app_v1_smoke...`
-database and does not prove the Windows/lab database has `d031`; use the
-verification query in `docs/instructions/apply_migrations.md` for that proof.
+database and does not prove the Windows/lab database has current
+`schema_migrations` counts or `d031`; use the verification queries in
+`docs/instructions/apply_migrations.md` for that proof.

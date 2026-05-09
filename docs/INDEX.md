@@ -24,6 +24,7 @@ Status: current
 - [Git Workflow](instructions/git_workflow.md)
 - [UI API DB Mapping](instructions/ui_api_db_mapping.md)
 - [Vanilla UI Patterns](instructions/vanilla_ui_patterns.md)
+- [Windows Migration Catch-Up](instructions/windows_migration_catchup.md)
 - [Workflow State Refactor Pattern](instructions/workflow_state_refactor.md)
 
 ## Current Feature Docs

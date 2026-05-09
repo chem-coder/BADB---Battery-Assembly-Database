@@ -3,8 +3,8 @@
 Created: 2026-05-06
 Edited: 2026-05-09
 Status: instruction
-Verified against code: 2026-05-06
-Source paths: `package.json`, `server.js`, `app.js`, `config/index.js`, `db/pool.js`, `middleware/auth.js`, `client-web/package.json`, `client-web/vite.config.js`
+Verified against code: 2026-05-09
+Source paths: `package.json`, `server.js`, `app.js`, `config/index.js`, `db/pool.js`, `middleware/auth.js`, `client-web/package.json`, `client-web/vite.config.js`, `migrations/README.md`
 
 This is the canonical local startup note for `BADB_main`.
 
@@ -12,8 +12,13 @@ This is the canonical local startup note for `BADB_main`.
 
 - PostgreSQL must be running.
 - The target database must exist and be migrated through the current required
-  migrations. For pilot use, the Windows/lab database must have
-  `d031_harden_battery_stack_validate_trigger.sql` applied and verified.
+  migrations: Dima's stream through `020_cycling_active_mass.sql` and Dalia's
+  stream through `d032_create_schema_migrations_table.sql`.
+- `public.schema_migrations` is the authoritative ledger for applied migration
+  state. Current local `badb_app_v1` reports `dima = 21` and `dalia = 20`.
+  The flat `migrations_log.txt` files are checkpoint notes only.
+- For pilot use, the Windows/lab database must have the current ledger counts
+  and `d031_harden_battery_stack_validate_trigger.sql` applied and verified.
 - Node dependencies must be installed in `BADB_main/`.
 - Vue dependencies must also be installed in `BADB_main/client-web/` when using the Vue dev server.
 
@@ -147,19 +152,22 @@ npm run dev
 
 The old instruction to change the default DB user in `config/index.js` is superseded by environment overrides.
 
-Before Windows/lab pilot use, apply and verify the required `d031` trigger
-hardening on the lab database:
+Before Windows/lab pilot use, apply the current catch-up set through `d032` and
+verify both the migration ledger and the required `d031` trigger hardening on
+the lab database. Commands run from `BADB_main`, not the outer `RENERA`
+workspace.
 
 ```powershell
 cd C:\path\to\BADB_main
 $env:DB_USER = "postgres"
 $env:DB_NAME = "badb_app_v1"
-psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d031_harden_battery_stack_validate_trigger.sql
+# Then follow docs/instructions/windows_migration_catchup.md.
 ```
 
-Then run the verification query documented in
+Use `docs/instructions/windows_migration_catchup.md` for the full ordered
+catch-up set. Then run the ledger and trigger verification queries documented in
 `docs/instructions/apply_migrations.md` against the same Windows/lab database
-and record the result.
+and record the results.
 
 Current release-check commands from the repo checkout:
 
@@ -169,4 +177,5 @@ npm run smoke:vanilla
 ```
 
 The smoke command uses a throwaway `badb_app_v1_smoke...` database. It is not a
-substitute for direct `d031` proof on the Windows/lab database.
+substitute for direct `schema_migrations` and `d031` proof on the Windows/lab
+database.

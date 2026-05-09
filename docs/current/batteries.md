@@ -1,7 +1,7 @@
 # Batteries
 
 Created: 2026-05-06
-Edited: 2026-05-07
+Edited: 2026-05-09
 Status: current
 Verified against code: 2026-05-07
 
@@ -218,8 +218,9 @@ anode-before-cathode paired order while preserving original `position_index`
 values. This makes valid cathode-first API payloads safe under the hardened
 trigger. The insert sequence is `A1, C1, A2, C2`, not `A1, A2, C1, C2`.
 
-The vanilla smoke harness applies `d031` automatically after restoring the old
-dump, so smoke evidence covers the hardened trigger path.
+The vanilla smoke harness applies the current post-dump migration set through
+`d032` after restoring the old dump, so smoke evidence covers the hardened
+trigger path and the restored-copy migration ledger baseline.
 
 ## Release Checks
 

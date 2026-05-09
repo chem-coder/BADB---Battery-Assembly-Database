@@ -1,7 +1,7 @@
 # Electrode Stack Rules
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-09
 Status: rule
 Verified against code: 2026-05-06
 
@@ -163,8 +163,9 @@ Current `saveBatteryElectrodeStack()` follows this rule through
 is safe under `d031`, and the saved display order still follows
 `position_index`.
 
-Smoke setup applies `d031` after restoring the vanilla dump, so vanilla smoke
-checks exercise the hardened trigger.
+Smoke setup applies the current post-dump migration set through `d032` after
+restoring the vanilla dump, so vanilla smoke checks exercise the hardened
+trigger and the restored-copy migration ledger baseline.
 
 ## UI State
 

@@ -25,10 +25,15 @@ const DEFAULT_DUMP = fs.existsSync(LOCAL_ONLY_DUMP) ? LOCAL_ONLY_DUMP : LEGACY_D
 const DEFAULT_DB = 'badb_app_v1_smoke';
 const DEFAULT_LOGIN = 'dkmaraulayte';
 const POST_DUMP_MIGRATIONS = [
+  path.join(ROOT, 'migrations', '002_raw_submissions.sql'),
+  path.join(ROOT, 'migrations', '018_department_real_names_and_assignments.sql'),
+  path.join(ROOT, 'migrations', '019_cycling_summary_extra_metrics.sql'),
+  path.join(ROOT, 'migrations', '020_cycling_active_mass.sql'),
   path.join(ROOT, 'migrations', 'd028_tape_projects_many_to_many.sql'),
   path.join(ROOT, 'migrations', 'd029_electrode_cut_batch_projects_many_to_many.sql'),
   path.join(ROOT, 'migrations', 'd030_battery_projects_many_to_many.sql'),
-  path.join(ROOT, 'migrations', 'd031_harden_battery_stack_validate_trigger.sql')
+  path.join(ROOT, 'migrations', 'd031_harden_battery_stack_validate_trigger.sql'),
+  path.join(ROOT, 'migrations', 'd032_create_schema_migrations_table.sql')
 ];
 
 function parseArgs(argv) {

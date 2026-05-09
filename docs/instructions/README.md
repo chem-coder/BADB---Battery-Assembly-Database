@@ -1,7 +1,7 @@
 # Instructions
 
 Created: 2026-05-06
-Edited: 2026-05-07
+Edited: 2026-05-09
 Status: instruction
 
 This folder is for recurring workflows: tests, migrations, release checks, documentation updates, and cleanup procedures.
@@ -20,4 +20,5 @@ This folder is for recurring workflows: tests, migrations, release checks, docum
 - [Testing And Release Checks](testing_release.md)
 - [UI API DB Mapping](ui_api_db_mapping.md)
 - [Vanilla UI Patterns](vanilla_ui_patterns.md)
+- [Windows Migration Catch-Up](windows_migration_catchup.md)
 - [Workflow State Refactor Pattern](workflow_state_refactor.md)

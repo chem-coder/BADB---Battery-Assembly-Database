@@ -3,12 +3,21 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
+Current migration file state as of 2026-05-09:
+
+- `migrations/` has 41 SQL files.
+- `migrations_ASCII/` has 41 SQL files.
+- Dima's numeric stream exists through `020_cycling_active_mass.sql`.
+- Dalia's `dNNN` stream exists through `d032_create_schema_migrations_table.sql`.
+- Live local `badb_app_v1` has authoritative `public.schema_migrations`
+  counts of `dima = 21` and `dalia = 20`.
+
 ## How to apply
 
-No automated runner exists yet — migrations are applied manually:
+No automated runner exists yet — migrations are applied manually from
+`BADB_main`, not the outer `RENERA` workspace:
 
 ```bash
-# From repo root:
 for f in migrations/*.sql; do
   echo "Applying $(basename $f)..."
   psql -U Dalia -d badb_app_v1 -f "$f"
@@ -17,6 +26,17 @@ done
 
 Every migration uses `IF NOT EXISTS` / `IF EXISTS` guards where
 possible, so re-running is safe — already-applied steps are no-ops.
+
+Migration application is recorded in `public.schema_migrations`, the
+authoritative migration ledger, starting with
+`d032_create_schema_migrations_table.sql`. Historical rows before `d032`
+are a baseline: they prove the database was brought to the current
+migration set before the ledger was created, but their exact original
+application timestamps are unknown.
+
+The flat `migrations_log.txt` files are human checkpoint notes only. They are
+useful release breadcrumbs, but they are not authoritative for any target
+database.
 
 The `migrations_ASCII/` folder is a functionally equivalent ASCII-safe
 mirror for Windows/encoding-sensitive use. Mirror files do not need to
@@ -32,7 +52,7 @@ namespace so migrations never collide:
 | Namespace         | Who   | Pattern                                      |
 | ----------------- | ----- | -------------------------------------------- |
 | `NNN_*.sql`       | Dima  | Plain 3-digit counter (`001_*` … `020_*`)    |
-| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d023_*`)      |
+| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d032_*`)      |
 
 Alphabetical ordering of `ls migrations/` gives:
 
@@ -100,8 +120,35 @@ Full timeline is in the git log. High-level:
   `badb_app_v1` has this applied. It updates
   `validate_battery_stack()` so pouch/cylindrical stacks allow equal
   cathode/anode counts or one extra anode, but not one extra cathode.
-  The vanilla smoke harness also applies `d031` automatically to its
-  throwaway database because the restored dump predates that migration.
+- `d032_create_schema_migrations_table` — creates
+  `public.schema_migrations`, verifies key current migration effects,
+  and records the current migration baseline. The vanilla smoke harness
+  also applies current post-dump migrations automatically to its
+  throwaway database because the restored dump predates them.
+
+## Check migration ledger
+
+Current databases should have a `public.schema_migrations` row for every
+SQL migration in `migrations/`:
+
+```bash
+psql -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations GROUP BY migration_stream ORDER BY migration_stream;"
+psql -d badb_app_v1 -c "SELECT migration_name, applied_at, source FROM schema_migrations ORDER BY migration_name;"
+```
+
+Rows with `source = 'd032_baseline'` are historical backfill rows.
+Future migrations should insert their own row with a real `applied_at`
+as part of the migration file.
+
+Expected stream counts for a current migrated database:
+
+```text
+dalia = 20
+dima = 21
+```
+
+Dima has 21 rows even though the numeric stream is through `020` because two
+independent historical migrations use the `008_*.sql` prefix.
 
 ## When you open a PR
 
