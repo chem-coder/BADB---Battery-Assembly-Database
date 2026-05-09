@@ -1,99 +1,40 @@
 # Battery Status Workflow Next
 
 Created: 2026-05-07
-Edited: 2026-05-07
-Status: partially implemented
-Verified against code: status workflow, status dropdown save/display behavior, and simple list filters implemented 2026-05-07; remaining future work listed below
+Edited: 2026-05-09
+Status: future idea
+Verified against current docs/code: cleanup pass 2026-05-09
 
-Source paths to inspect before implementation:
+Current source of truth:
 
+- `docs/current/batteries.md`
+- `docs/rules/battery_lifecycle_rules.md`
+- `docs/instructions/frontend_parity_handoff.md`
 - `public/js/3-batteries.js`
 - `routes/batteries.js`
 - `services/batteryAssemblyService.js`
 - `services/batteryCatalogService.js`
 - `services/batteryLifecycleService.js`
-- `docs/current/batteries.md`
-- `docs/rules/battery_lifecycle_rules.md`
 
-This document records the battery status decision and remaining follow-up work.
-The core status workflow below was implemented on 2026-05-07; rework/reopen
-actions and any explicit old-data cleanup pass remain future work. A small
-client-side list-filter pass is implemented and noted below.
+The core battery status workflow and simple Batteries list filters are current
+behavior. This document tracks only follow-up work that remains future.
 
-## Target Status Model
+## Current Behavior Pointer
 
-Use the existing `batteries.status` column if possible. No schema change is
-expected for this pass.
+Do not reimplement the status model from this future note. Current behavior is
+documented in `docs/current/batteries.md`:
 
-Target statuses:
+- blank/`NULL` and legacy `disassembled` display as derived `Открыт`;
+- `Открыт` is not user-selectable;
+- post-assembly selectable statuses are `Собран`, `На тестировании`,
+  `Завершён`, and `Брак`;
+- ordinary read/report endpoints do not promote status on fetch;
+- current list filters are client-side text, derived status, and form factor.
 
-- blank/`NULL`: system-derived `Открыт`
-- `assembled`: `Собран`
-- `testing`: `На тестировании`
-- `completed`: `Завершён`
-- `failed`: `Брак`
+Vue parity for the current status behavior is tracked in
+`docs/instructions/frontend_parity_handoff.md`.
 
-The old persistent `disassembled` status should stop being treated as a normal
-current-status choice. Disassembly should be an event/action recorded in history,
-not a long-term status label that competes with `Открыт`.
-
-## Assembly Completeness
-
-A battery is assembly-complete when the required assembly records exist:
-
-- form-factor config;
-- electrode sources;
-- saved electrode stack;
-- separator config;
-- electrolyte config.
-
-QC and electrochemistry are not required for `Собран`.
-
-## Dropdown Rule
-
-Before assembly-complete:
-
-- the status control displays `Открыт`;
-- the status control is disabled;
-- the user cannot choose another status.
-
-After assembly-complete:
-
-- the app auto-sets status to `Собран` when the final required section is saved;
-- the status control becomes editable;
-- the user can choose only:
-  - `Собран`;
-  - `На тестировании`;
-  - `Завершён`;
-  - `Брак`.
-
-The user must not manually choose `Открыт` from the dropdown. `Открыт` is a
-system-derived editable/incomplete state, not a user-selected lifecycle outcome.
-
-Implemented frontend/backend details:
-
-- `battery_status` shows `Открыт` only as disabled derived display before
-  assembly completion;
-- after assembly completion, the enabled dropdown contains only `assembled`,
-  `testing`, `completed`, and `failed`;
-- `battery_status` is handled by a dedicated change handler, not generic dirty
-  form mutation handlers;
-- manual status PATCH responses must be used to refresh frontend battery/QC
-  state before re-rendering the dropdown;
-- `PATCH /api/batteries/:id` validates status against assembly completeness and
-  rejects blank/open, `disassembled`, unknown, or premature selectable statuses;
-- legacy `disassembled` is display-normalized as `Открыт` and remains
-  reassemblable through normal save flows.
-
-## No Hidden Write On Read
-
-Do not change battery status just because a record was opened or fetched.
-
-If old records already contain enough assembly data but still have blank status,
-handle that with an explicit migration, maintenance command, or deliberate
-cleanup pass. Ordinary read/report endpoints should not silently rewrite status.
-
-## Rework
+## Rework Or Reopen Action
 
 If an assembled, testing, completed, or failed battery needs rework, that should
 be a deliberate action, not a casual dropdown selection.
@@ -106,40 +47,32 @@ Possible action labels:
 The exact UI label can be decided during implementation. The important rule is
 that reopening/rework should be explicit and auditable.
 
-Status as of 2026-05-07: not implemented in this cleanup pass.
+## Advanced List Filters
 
-## List Filters
+The current Batteries page already has simple client-side filters. Additional
+filters remain future work only if the current list becomes hard to scan.
 
-The Batteries page has simple top-of-list filters so users can find records
-without misusing status values.
+Possible future filters:
 
-Implemented filters as of 2026-05-07:
+- project multi-select;
+- date range;
+- operator/creator;
+- backend/list-query filtering for large datasets.
 
-- status;
-- form factor;
-- text search by battery id, visible list label, notes, project
-  labels/names, active material label, visible size/config label, creator, and
-  date text;
-- reset button.
-
-Status filtering should include the derived `Открыт` state.
-
-Status as of 2026-05-07: the small client-side filter pass is implemented.
-Project multi-select, date range, operator filter, and backend/list-query
-filtering remain future work.
+Keep any first pass page-local unless the dataset size proves backend filtering
+is needed.
 
 ## Old Data Cleanup
 
-Ordinary read/report endpoints no longer rewrite status. If old complete records
-still have blank/`NULL` or `disassembled` status, handle them later with an
-explicit migration, maintenance command, or deliberate cleanup pass.
+Ordinary read/report endpoints no longer rewrite status. If old complete
+records still have blank/`NULL` or `disassembled` status, handle them later with
+an explicit migration, maintenance command, or deliberate cleanup pass.
 
-## Implementation Guardrails
+## Guardrails
 
 - Do not add a new status schema unless the existing column cannot support the
   workflow safely.
 - Do not make `Открыт` user-selectable.
 - Do not let a read-only fetch endpoint mutate status.
-- Keep disassembly/delete semantics separate: delete is for mistaken DB records;
-  disassembly/rework is lifecycle behavior.
-- Update current docs only after the behavior is implemented and verified.
+- Keep disassembly/delete semantics separate: delete is for mistaken DB
+  records; disassembly/rework is lifecycle behavior.

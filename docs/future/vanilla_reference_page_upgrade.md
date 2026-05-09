@@ -1,252 +1,92 @@
 # Vanilla Reference Page Upgrade
 
 Created: 2026-05-06
-Edited: 2026-05-08
+Edited: 2026-05-09
 Status: future idea
-Verified against code: light check 2026-05-08
-Source paths: `docs/archive/superseded/2026-05-06-future-backlog/BADB_VANILLA_REFERENCE_PAGE_UPGRADE_PLAN.md`, `docs/instructions/vanilla_ui_patterns.md`, `public/js/badb-ui.js`, `public/reference/electrolytes.html`, `public/js/electrolytes.js`, `public/reference/separators.html`, `public/js/separators.js`, `public/reference/projects.html`, `public/js/projects.js`, `public/workflow/project-print.html`, `public/js/project-print.js`, `public/reference/users.html`, `public/js/users.js`, `public/reference/recipes.html`, `public/js/recipes.js`, `public/workflow/recipe-print.html`, `public/js/recipe-print.js`, `routes/recipes.js`, `public/workflow/1-tapes.html`, `public/workflow/2-electrodes.html`, `public/workflow/3-batteries.html`
-
-This is a future rollout plan for making remaining vanilla reference pages feel closer to the current Tapes, Electrode Batches, Batteries, and Electrolytes interaction pattern.
-
-Reference-page print reports are part of the broader rollout. Electrolytes,
-Separators, Projects, and Recipes now have record print reports; remaining
-planned report/list-printing work includes a record report for Users, a printable
-Departments list, and a general pattern for printing list views.
-
-Materials are out of scope for this rollout. The current Materials tree/composition workflow is good enough for the current release direction and should not be redesigned casually.
-
-## Current Baseline
-
-Current workflow pages already provide the design reference:
-
-- Tapes;
-- Electrode Batches;
-- Batteries.
-
-Light code checks through 2026-05-07 also found:
-
-- `public/js/badb-ui.js` exists as a shared vanilla UI helper;
-- Tapes has compact page-local list filters for text, current visible
-  workflow/status label, project, tape type, and coating sidedness;
-- Batteries has compact page-local list filters for text, derived status, and
-  form factor;
-- Electrode Batches has page-local list filters for text, project, tape, type,
-  source-tape sidedness, and target form factor; tape selection reveals the
-  add-batch action instead of creating a duplicate selected-tape list;
-- Electrolytes uses a sticky record header and helper-backed scroll/status behavior;
-- Electrolytes has page-local client-side list filters for text, status, and type;
-- Electrolytes delete confirmation uses `DELETE ELECTROLYTE <id>`;
-- Electrolytes guards unsaved edits during exit, logout, record switching, and browser unload;
-- Electrolytes has a record print report at `/workflow/electrolyte-print.html`;
-- Electrolytes visual QA was confirmed on 2026-05-06 for row-open behavior,
-  list-level duplicate visibility/behavior, inside-header delete placement,
-  sticky-header overlap, and unsaved-change guard behavior.
-- Separators uses the same row-open, sticky-header, inside-header delete, print
-  report, and client-side filter pattern with fields that actually exist on
-  separators: text, status, and structure.
-- Projects uses row-open with shared top-scroll behavior, page-local filters
-  for text/status/access level/department/lead, an opened-record sticky header,
-  unsaved-change guards for exit/record switching/logout/browser unload, and
-  in-record delete that surfaces backend dependency blockers clearly.
-- Projects has a modest record print report at `/workflow/project-print.html`
-  backed by `GET /api/projects/:id/report`, including project fields, access
-  grants, users with access, downstream counts, and connected tape/electrode
-  batch/battery lists.
-- Users uses row-open behavior, page-local filters for text, role, department,
-  and active status, an opened-record sticky header, inside-header save/exit,
-  and inside-header delete using the existing `/api/users/:id` security rules.
-- Recipes uses row-open behavior, page-local filters for text and existing
-  electrode role, an opened-record sticky header, list-level print/duplicate,
-  inside-header delete, and a simple record print report at
-  `/workflow/recipe-print.html`.
-- Departments uses row-open list behavior, an opened-record sticky header,
-  helper-backed top-scroll behavior, inside-header save/exit actions, and
-  unsaved-change guards for exit, record switching, logout, and browser unload.
-  Departments does not expose delete, duplicate, or print actions in this pass.
-
-Treat this doc as future guidance for the remaining rollout, not as proof that every item below is implemented.
-
-## Core Pattern
-
-Use this interaction pattern where practical:
-
-- row summary opens the record;
-- remove pencil edit buttons when row-open behavior is clear;
-- keep Duplicate list-level only where duplication is genuinely useful;
-- keep Print list-level or sticky-header level when a report exists;
-- move Delete inside the opened form or sticky record header;
-- use typed confirmation for destructive deletes when the page requires it;
-  Projects intentionally uses a normal browser confirm because backend
-  dependency checks are the real safety mechanism there;
-- show dependency/blocker messages before typed confirmation when dependencies exist;
-- sticky header contains record label, compact metadata, dirty flag, action buttons, and action feedback;
-- Save keeps the record open;
-- Exit returns to the list/default view;
-- opening a record scrolls to the top.
-
-For top-of-page scroll behavior, use the document-scroller pattern in
-`docs/instructions/vanilla_ui_patterns.md`. Do not target a sticky header with
-`scrollIntoView()` when the requirement is to return the page to the top. Sticky
-headers can already be visible while the document remains scrolled down.
-
-Use Russian labels throughout.
-
-## Helper Boundary
-
-Shared helper code may own presentation mechanics:
-
-- sticky record header shell;
-- compact record title/metadata slots;
-- dirty/saved marker rendering;
-- status message timing and class names;
-- row-open affordance;
-- common icon/action-button presentation.
-
-Keep workflow rules page-local:
-
-- save behavior;
-- delete/disassembly safety rules;
-- dirty-state calculation;
-- form-specific state;
-- backend dependency checks;
-- domain validation.
+Verified against current docs/code: cleanup pass 2026-05-09
 
-If helper code needs many page-specific exceptions, keep that behavior local.
+Current source of truth:
 
-## Suggested Rollout
+- `docs/current/vanilla_reference_pages.md`
+- `docs/current/users.md`
+- `docs/current/departments.md`
+- `docs/current/projects.md`
+- `docs/current/recipes.md`
+- `docs/current/electrolytes.md`
+- `docs/current/separators.md`
+- `docs/instructions/vanilla_ui_patterns.md`
+- `docs/instructions/frontend_parity_handoff.md`
 
-Finish pages in small passes:
+This document tracks only remaining future vanilla reference-page work. Current
+row-open behavior, sticky opened-record headers, filters, duplicate/delete
+boundaries, and implemented print reports belong in `docs/current/` and should
+not be re-specified here.
 
-1. Department delete only if a backend delete route and dependency rules are introduced later.
-2. Users record print report.
-3. List-view printing pattern after record reports prove the report style.
+Materials remain out of scope for this rollout. The current Materials
+tree/composition workflow is good enough for the current release direction and
+should not be redesigned casually.
 
-Good pairings:
+## Remaining Future Work
 
-- Electrolytes and Separators for similar reference-table behavior;
-- shared CSS/helper cleanup after one page proves the pattern.
+### Users Print Report
 
-Avoid one huge implementation pass across all reference pages.
+Users currently have no print report. If the team still wants one later, define
+a small record report before implementation:
 
-## Electrolytes Follow-Up
+- record identity and role;
+- department and position;
+- active status;
+- last successful login if useful for operations.
 
-Electrolytes is current for this pass: row-open behavior, page-local list
-filters, list-level duplicate, opened-record sticky header, inside-header
-delete, unsaved-change guards, and the record print report are implemented.
+Do not add list-level print or duplicate actions to Users as part of this item
+unless Dalia explicitly expands the scope.
 
-Other reference pages may add their own page-local filters later when list size
-or workflow needs justify it. Do not introduce a shared cross-page filter
-framework until at least a few pages prove the same pattern.
+### Departments List Or Report Printing
 
-## Separators Follow-Up
+Departments currently have no print report or list-print action. If printing is
+still desired later, decide whether the useful output is:
 
-Separators is current for this pass: row-open behavior, page-local filters,
-list-level duplicate, opened-record sticky header, inside-header delete,
-unsaved-change guards, backend delete-check, and the record print report are
-implemented.
+- a compact Departments list report;
+- a single Department record report;
+- both, as separate print pages.
 
-The separator filters intentionally do not include project filtering because
-separators do not currently have project links.
+Keep the first pass compact: department name, head, and only the member details
+that users actually need on paper.
 
-## Projects Follow-Up
+### Broader List-View Printing
 
-Projects is current for this pass: row-open behavior, page-local filters,
-list-level duplicate, list-level print, opened-record sticky header,
-opened-record print, in-record delete, backend dependency-blocker messaging,
-unsaved-change guards, and a simple record print report with access users and
-connected-record lists are implemented.
+A reusable list-view print pattern is still future work. Start with one page
+where users really need the current filtered list on paper, then decide whether
+the pattern should stay page-local or become shared helper behavior.
 
-## Users Follow-Up
+Initial guardrails:
 
-Users is current for this pass: row-open behavior, page-local filters, opened
-record sticky header, save/exit in the sticky header, delete only inside the
-opened record, and unsaved-change guards for exit, logout, record switching,
-and browser unload are implemented.
+- print the currently visible/filterable list, not an unrelated backend export;
+- keep list columns page-specific;
+- avoid a shared cross-page framework until multiple pages prove the same shape;
+- keep app chrome out of the print page.
 
-The user filters intentionally use fields already returned by `/api/users`:
-name/login text, role, department, and active status. Delete visibility mirrors
-the current route policy: administrators can delete any user, and non-admin
-users can delete only themselves.
+### Future Filters
 
-The Users filter layout is intentionally fixed: search and the role/current-user
-control sit on the top row, department/status/reset sit on the second row, and
-the result count stays below all controls.
+Only add filters that are not already implemented in the current page. Before
+planning filter work, check `docs/current/vanilla_reference_pages.md` and the
+page-specific current doc.
 
-A Users print report is still future work.
+Future filter candidates should be justified by real list growth or workflow
+friction. Keep them page-local first, and do not introduce schema changes or a
+shared filter framework unless a later bounded pass proves the need.
 
-## Departments Follow-Up
+## Vue Parity Boundary
 
-Departments is current for this pass: row-open list items, no list action
-buttons, an opened-record sticky header, save/exit in the sticky header, shared
-top-scroll behavior, and unsaved-change guards for exit, logout, record
-switching, and browser unload are implemented.
+Vue parity is tracked in `docs/instructions/frontend_parity_handoff.md`, not in
+this future note. Add a future-doc Vue item only for genuinely future behavior
+that is not already covered by that handoff.
 
-Delete is not exposed because Departments does not currently have a delete
-route or dependency-check route.
+## Guardrails
 
-## Recipes Follow-Up
-
-Recipes is current for this pass: row-open behavior, page-local filters,
-opened-record sticky header, save/print/exit/delete in the sticky header, delete
-only inside the opened record, list-level print and duplicate actions, and a
-backend delete-check plus simple record print report are implemented.
-
-The recipe filters intentionally use fields already returned by `/api/recipes`:
-name/variant/notes text, material names from recipe lines, and the existing
-electrode role. The print report intentionally stays simple: recipe metadata,
-description, composition rows, and direct tape usage without redesigning the
-recipe/material model or expanding into full traceability.
-
-## Print Report Candidates
-
-Completed record reports:
-
-- Electrolytes
-- Projects
-- Recipes
-- Separators
-
-Future-only record report ideas, not part of the current version:
-
-- Users
-
-Future-only list report ideas, not part of the current version:
-
-- Departments list;
-- general list-view print pattern for reference/workflow tables where a compact
-  table output is useful.
-
-Print report design guidance lives in `docs/future/ui_and_reports_next.md`.
-
-## Delete Confirmation Phrases
-
-Use page-specific typed phrases:
-
-- `DELETE ELECTROLYTE <id>`
-- `DELETE SEPARATOR <id>`
-- `DELETE RECIPE <id>`
-- `DELETE USER <id>`
-- `DELETE DEPARTMENT <id>`
-
-Projects intentionally does not use a typed phrase; use a normal browser
-confirm and rely on backend dependency blockers.
-
-Never imply safe deletion unless backend dependency checks actually support it.
-
-## Verification For Each Page
-
-Run at least:
-
-```bash
-node --check public/js/<changed-page>.js
-git diff --check
-npm run contract:vanilla
-```
-
-Run `npm run smoke:vanilla` after meaningful API, route, delete, dependency, or print-report changes.
-
-Visually check desktop and mobile width for sticky-header overlap, long Russian labels, and button wrapping.
-
-For row-open or delete-panel scroll work, also browser-test from a deliberately
-scrolled mid-page position and confirm that the page top or guided panel becomes
-visible after the real click.
+- Do not rebuild implemented reference-page behavior from this document.
+- Do not change Materials as part of this rollout.
+- Do not add Department delete unless a separate backend route and dependency
+  design are deliberately introduced.
+- Do one report or one list-print pass at a time.
+- Use Russian labels throughout.

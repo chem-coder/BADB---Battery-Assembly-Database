@@ -1,18 +1,33 @@
 # UI And Reports Future Work
 
 Created: 2026-05-06
-Edited: 2026-05-08
+Edited: 2026-05-09
 Status: future idea
-Verified against code: light check 2026-05-08
-Source paths: `docs/archive/superseded/2026-05-06-future-backlog/UI Styling Consistency Plan.md`, `docs/archive/superseded/2026-05-06-future-backlog/Printout Design.md`, `docs/archive/superseded/2026-05-06-root-doc-transition/DALIA_MIGRATION_GUIDE.md`, `public/css/styles.css`, `public/workflow/tape-print.html`, `public/workflow/electrode-batch-print.html`, `public/workflow/battery-print.html`, `public/workflow/electrolyte-print.html`, `public/workflow/recipe-print.html`, `client-web/src/pages/`
+Verified against current docs/code: cleanup pass 2026-05-09
 
-This file preserves future UI consistency and report-layout guidance. It is not a redesign request.
+Current source of truth:
 
-## Interactive UI Direction
+- `docs/current/vanilla_reference_pages.md`
+- `docs/current/tapes.md`
+- `docs/current/electrodes.md`
+- `docs/current/batteries.md`
+- `docs/current/projects.md`
+- `docs/current/recipes.md`
+- `docs/current/electrolytes.md`
+- `docs/current/separators.md`
+- `docs/instructions/vanilla_ui_patterns.md`
+- `docs/instructions/frontend_parity_handoff.md`
 
-Goal: make vanilla pages and Vue pages feel like one calm technical application without broad rewrites.
+This file preserves only future UI consistency and print-layout guidance. It is
+not a redesign request, and it should not restate reports or page behavior that
+already exist.
 
-Preferred direction:
+## Future Interactive UI Direction
+
+Goal: make future vanilla and Vue work feel like one calm technical application
+without broad rewrites.
+
+Preferred direction for future styling passes:
 
 - use shared visual tokens where possible;
 - keep scientific/process inputs visually primary;
@@ -20,10 +35,11 @@ Preferred direction:
 - use amber for dirty/unsaved state;
 - reserve red for real errors;
 - use transient saved feedback instead of persistent visual noise;
-- use plain grey disabled/readonly fields unless a stronger locked-state style is deliberately needed;
+- use plain grey disabled/readonly fields unless a stronger locked-state style
+  is deliberately needed;
 - avoid changing save logic during styling passes.
 
-Preferred text:
+Preferred text for future save-status consistency:
 
 ```text
 Не сохранено
@@ -36,7 +52,8 @@ Preferred text:
 First safe pass should be mostly CSS:
 
 - add or reuse design tokens in `public/css/styles.css`;
-- normalize dirty flags, inline status messages, disabled fields, and small lock banners;
+- normalize dirty flags, inline status messages, disabled fields, and small
+  lock banners only where the current page has not already been handled;
 - avoid backend changes;
 - avoid save/autosave logic changes;
 - avoid selector or ID renames used by JavaScript;
@@ -45,30 +62,18 @@ First safe pass should be mostly CSS:
 Typography note:
 
 - Vue uses the Rosatom font stack;
-- vanilla pages should not switch fonts until the font assets are intentionally available to the Express-served `public/` tree and dense pages are visually checked.
+- vanilla pages should not switch fonts until the font assets are intentionally
+  available to the Express-served `public/` tree and dense pages are visually
+  checked.
 
-## Vue Form Cleanup Direction
+Vue parity is not tracked here. Use
+`docs/instructions/frontend_parity_handoff.md` for pending Vue behavior that
+must match current vanilla/backend behavior.
 
-The old PrimeVue migration guide is historical. Current Vue page names must be checked in `client-web/src/pages/` before starting any cleanup.
+## Future Print Report Direction
 
-Useful preserved rules:
-
-- keep existing save behavior and payload shape unless the task explicitly changes it;
-- replace native controls with PrimeVue components only when the surrounding page already uses that pattern or the migration is scoped to one page;
-- do not rename route paths, component files, CSS hooks, or API fields just to make a form look cleaner;
-- after each page pass, run the Vue build/checks used by the project and do a browser smoke check for the edited page.
-
-## Print Report Direction
-
-Current print report references:
-
-- `public/workflow/tape-print.html`
-- `public/workflow/electrode-batch-print.html`
-- `public/workflow/battery-print.html`
-- `public/workflow/electrolyte-print.html`
-- `public/workflow/recipe-print.html`
-
-Future print reports should follow the same technical print-sheet spirit:
+Implemented record reports are documented in `docs/current/`. Future print
+reports should follow the same technical print-sheet spirit:
 
 - high data-to-ink ratio;
 - clear title and compact metadata;
@@ -80,24 +85,19 @@ Future print reports should follow the same technical print-sheet spirit:
 - no decorative gradients, heavy backgrounds, 3D effects, or unnecessary icons;
 - `window.print()` action available.
 
-Print-page styling does not need to match the interactive form styling exactly. Print pages are their own technical output format.
+Print-page styling does not need to match the interactive form styling exactly.
+Print pages are their own technical output format.
 
 ## Planned Report Backlog
 
-Completed record reports:
-
-- Electrolytes;
-- Projects;
-- Recipes;
-- Separators.
-
-Future-only report ideas, not part of the current version:
+Future-only record report idea:
 
 - Users.
 
-Future-only list report ideas, not part of the current version:
+Future-only list/report ideas:
 
-- Departments list;
+- Departments list or Department report printing, after Dalia chooses the useful
+  paper output;
 - reusable list-view print pattern for pages where printing the current list is
   useful.
 
