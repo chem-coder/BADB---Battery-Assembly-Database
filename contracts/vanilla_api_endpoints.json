@@ -234,6 +234,14 @@
       "sources": ["public/js/electrolytes.js"]
     },
     {
+      "path": "/api/electrolytes/files/:param/download",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "electrolyte file bytes with content-type and content-disposition headers",
+      "sources": ["public/js/electrolytes.js"]
+    },
+    {
       "path": "/api/materials",
       "methods": ["GET", "POST"],
       "auth": "auth",
@@ -535,6 +543,14 @@
       "auth": "auth",
       "request": "none",
       "response": "delete status",
+      "sources": ["public/js/separators.js"]
+    },
+    {
+      "path": "/api/separators/files/:param/download",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "separator file bytes with content-type and content-disposition headers",
       "sources": ["public/js/separators.js"]
     },
     {

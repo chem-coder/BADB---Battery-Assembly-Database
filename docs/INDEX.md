@@ -1,7 +1,7 @@
 # Documentation Index
 
 Created: 2026-05-06
-Edited: 2026-05-08
+Edited: 2026-05-09
 Status: current
 
 ## Operating Rules
@@ -33,14 +33,20 @@ Status: current
 - [Capacity Calculations](current/capacity_calculations.md)
 - [Cycling](current/cycling.md)
 - [Dashboard](current/dashboard.md)
+- [Departments](current/departments.md)
 - [Electrodes](current/electrodes.md)
 - [Electrolytes](current/electrolytes.md)
 - [Materials](current/materials.md)
 - [Project Links](current/project_links.md)
+- [Projects](current/projects.md)
 - [Release Readiness](current/release_readiness.md)
+- [Recipes](current/recipes.md)
 - [Repo Map](current/repo_map.md)
 - [Separators](current/separators.md)
+- [Tapes](current/tapes.md)
 - [Traceability](current/traceability.md)
+- [Users](current/users.md)
+- [Vanilla Reference Pages](current/vanilla_reference_pages.md)
 
 ## Rule Docs
 

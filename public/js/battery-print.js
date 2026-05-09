@@ -29,12 +29,12 @@ function formatFormFactor(value) {
 }
 
 function formatStatus(value) {
-  if (!value) return 'В сборке';
+  if (!value) return 'Открыт';
   if (value === 'assembled') return 'Собран';
   if (value === 'testing') return 'На тестировании';
   if (value === 'completed') return 'Завершён';
   if (value === 'failed') return 'Брак';
-  if (value === 'disassembled') return 'Разобран';
+  if (value === 'disassembled') return 'Открыт';
   return value;
 }
 

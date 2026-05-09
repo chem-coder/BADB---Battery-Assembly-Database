@@ -18,6 +18,12 @@ done
 Every migration uses `IF NOT EXISTS` / `IF EXISTS` guards where
 possible, so re-running is safe — already-applied steps are no-ops.
 
+The `migrations_ASCII/` folder is a functionally equivalent ASCII-safe
+mirror for Windows/encoding-sensitive use. Mirror files do not need to
+be byte-identical copies, but they must produce the same schema/data
+effects; use ASCII-safe SQL forms such as PostgreSQL Unicode escapes for
+non-ASCII stored values instead of changing migration behavior.
+
 ## Naming convention — two namespaces
 
 Two developers work on this DB in parallel; each uses its own numeric

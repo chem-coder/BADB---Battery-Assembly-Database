@@ -561,6 +561,20 @@ async function runWriteSmoke(client, seed, context) {
     made.separatorFileId = (await client.post(`/api/separators/${made.separatorId}/files`, {
       entries: [{ file_name: 'separator.txt', mime_type: 'text/plain', file_content_base64: fileBase64 }]
     }))?.[0]?.separator_file_id;
+    client.assertEqual(Boolean(made.separatorFileId), true, 'separator file upload returns file id');
+    const separatorReport = await client.get(`/api/separators/${made.separatorId}/report`);
+    client.assertEqual(separatorReport.separator?.sep_id, made.separatorId, 'separator report returns current separator');
+    client.assertEqual(
+      separatorReport.files?.some((file) => Number(file.separator_file_id) === Number(made.separatorFileId)),
+      true,
+      'separator report includes uploaded file metadata'
+    );
+    if (made.separatorFileId) {
+      const separatorDownload = await client.get(`/api/separators/files/${made.separatorFileId}/download`);
+      client.assertEqual(separatorDownload, 'BADB smoke file', 'separator file download returns uploaded bytes');
+    }
+    const clearSeparatorDeleteCheck = await client.get(`/api/separators/${made.separatorId}/delete-check`);
+    client.assertEqual(clearSeparatorDeleteCheck.can_delete, true, 'separator delete preflight allows unused separator');
 
     const electrolyte = await client.post('/api/electrolytes', {
       name: `Codex Smoke Electrolyte ${suffix}`,
@@ -592,6 +606,20 @@ async function runWriteSmoke(client, seed, context) {
     made.electrolyteFileId = (await client.post(`/api/electrolytes/${made.electrolyteId}/files`, {
       entries: [{ file_name: 'electrolyte.txt', mime_type: 'text/plain', file_content_base64: fileBase64 }]
     }))?.[0]?.electrolyte_file_id;
+    client.assertEqual(Boolean(made.electrolyteFileId), true, 'electrolyte file upload returns file id');
+    const electrolyteReport = await client.get(`/api/electrolytes/${made.electrolyteId}/report`);
+    client.assertEqual(electrolyteReport.electrolyte?.electrolyte_id, made.electrolyteId, 'electrolyte report returns current electrolyte');
+    client.assertEqual(
+      electrolyteReport.files?.some((file) => Number(file.electrolyte_file_id) === Number(made.electrolyteFileId)),
+      true,
+      'electrolyte report includes uploaded file metadata'
+    );
+    if (made.electrolyteFileId) {
+      const electrolyteDownload = await client.get(`/api/electrolytes/files/${made.electrolyteFileId}/download`);
+      client.assertEqual(electrolyteDownload, 'BADB smoke file', 'electrolyte file download returns uploaded bytes');
+    }
+    const unusedElectrolyteDeleteCheck = await client.get(`/api/electrolytes/${made.electrolyteId}/delete-check`);
+    client.assertEqual(unusedElectrolyteDeleteCheck.can_delete, true, 'electrolyte delete preflight allows unused electrolyte');
 
     made.materialId = (await client.post('/api/materials', {
       name: `Codex Smoke Material ${suffix}`,
@@ -1257,11 +1285,20 @@ async function runWriteSmoke(client, seed, context) {
       separator_id: made.separatorId,
       separator_notes: 'smoke separator dependency check'
     });
+    const blockedSeparatorDeleteCheck = await client.get(`/api/separators/${made.separatorId}/delete-check`);
+    client.assertEqual(blockedSeparatorDeleteCheck.can_delete, false, 'separator delete preflight blocks battery use');
+    client.assertEqual(
+      blockedSeparatorDeleteCheck.dependencies?.some((dependency) => dependency.key === 'battery_sep_config'),
+      true,
+      'separator delete preflight reports battery separator dependency'
+    );
     await client.expectDependencyConflict('DELETE', `/api/separators/${made.separatorId}`);
     await client.patch(`/api/batteries/battery_sep_config/${made.batteryId}`, {
       separator_id: null,
       separator_notes: null
     });
+    const unblockedSeparatorDeleteCheck = await client.get(`/api/separators/${made.separatorId}/delete-check`);
+    client.assertEqual(unblockedSeparatorDeleteCheck.can_delete, true, 'separator delete preflight clears after battery reset');
     await client.post('/api/batteries/battery_electrolyte', {
       battery_id: made.batteryId,
       electrolyte_id: made.electrolyteId,
@@ -1270,6 +1307,11 @@ async function runWriteSmoke(client, seed, context) {
     });
     const blockedElectrolyteDeleteCheck = await client.get(`/api/electrolytes/${made.electrolyteId}/delete-check`);
     client.assertEqual(blockedElectrolyteDeleteCheck.can_delete, false, 'electrolyte delete preflight blocks battery use');
+    client.assertEqual(
+      blockedElectrolyteDeleteCheck.dependencies?.some((dependency) => dependency.key === 'battery_electrolyte'),
+      true,
+      'electrolyte delete preflight reports battery electrolyte dependency'
+    );
     await client.expectDependencyConflict('DELETE', `/api/electrolytes/${made.electrolyteId}`);
     await client.patch(`/api/batteries/battery_electrolyte/${made.batteryId}`, {
       electrolyte_id: existingElectrolyteId,
