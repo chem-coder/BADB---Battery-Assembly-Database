@@ -9,7 +9,7 @@ Dima contributes via feature branches → Pull Requests into Dalia's main.
 
 - **Server:** Node.js + Express 5 (modular), PostgreSQL 16 (badb_app_v1, 42 tables — Dalia's production DB)
 - **Client (VBA):** Excel VBA (DatabaseUI.xlam)
-- **Client (Web):** Vue 3 + PrimeVue 4 + Vite (planned)
+- **Client (Web):** current vanilla v1 UI in `public/`; Vue 3 + PrimeVue 4 + Vite in `client-web/` for assigned parity/SPA work
 - **Contracts:** JSON Schema draft-07 (contracts/)
 
 ## Repo structure
@@ -30,12 +30,12 @@ BADB-Battery-Assembly-Database/
 │   ├── submit.js       — /api/submit: append-only raw_submissions
 │   └── (13 CRUD route files, ~130 endpoints)
 ├── migrations/         — forward-only SQL migrations
-├── public/             — Dalia's static HTML (DO NOT MODIFY)
+├── public/             — vanilla v1 static web UI (current source for implemented web workflows)
 ├── contracts/          — JSON Schema contracts (versioned)
 │   └── schemas/        — versioned schemas (v1)
 ├── client/             — Excel VBA client
 │   └── src/            — .bas/.cls/.frm modules
-└── client-web/         — Vue 3 frontend
+└── client-web/         — Vue 3 frontend; tracks vanilla parity where assigned
     └── src/
         ├── components/
         │   ├── AppHeader.vue      — top header bar
@@ -75,9 +75,15 @@ lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null
 - **BADB server:** port **3003** (`config/index.js` → `PORT || 3003`)
 - **Vite dev server:** port **5173**
 - **Port 3000** — was Dalia's old standalone server. After integration, only port 3003 is used.
-- **Browser URL:** http://localhost:5173
+- **Vanilla browser URL:** http://localhost:3003
+- **Vue browser URL:** http://localhost:5173
 
 ### How API requests flow (CRITICAL)
+
+Vanilla v1 pages in `public/` are served by Express on `localhost:3003` and call
+same-origin `/api/*`.
+
+Vue dev pages are served by Vite on `localhost:5173` and must use the proxy:
 
 ```
 Browser (5173) → /api/* (relative) → Vite proxy → localhost:3003 → PostgreSQL
@@ -101,9 +107,11 @@ Axios `baseURL` MUST be empty string `''` in dev. Direct cross-origin requests
 2. auth_log is append-only — never UPDATE or DELETE
 3. Contracts are versioned — new version = new file, never edit v1
 4. Migrations are forward-only — no DROP TABLE, no destructive ALTERs
-5. Do NOT modify public/ — Dalia's HTML files
-6. LAN-only system — no external API calls
-7. Optimistic locking — WHERE version = $expected, 409 on mismatch
+5. `public/` is the current vanilla v1 web UI source. Modify it intentionally for vanilla UI/report workflow tasks and verify changed JS with `node --check`.
+6. `docs/current/`, `docs/rules/`, and `docs/instructions/` are maintained future-agent sources. Update relevant docs when behavior, workflows, setup, or source-of-truth assumptions change.
+7. Do NOT edit `Документация ЕСПД/` unless the task explicitly asks for ESPD/formal documentation updates.
+8. LAN-only system — no external API calls
+9. Optimistic locking — WHERE version = $expected, 409 on mismatch
 
 ## Tape export (context menu)
 
@@ -114,43 +122,26 @@ Right-click any tape row → export full tape data (all process steps) in Excel/
 - CrudTable emit: `@export({ format, items })` — parent handles data collection
 - CrudTable prop: `export-badge` — external count shown in menu labels
 
-## Frontend component architecture
+## Frontend source-of-truth rules
 
-All CRUD pages follow the **constructor pattern** — reusable components from Design System, pages only define data + custom cells.
+Vanilla v1 in `public/` is the reference for implemented web workflows. Use
+`docs/instructions/vanilla_ui_patterns.md` for shared vanilla behavior and
+`docs/instructions/frontend_parity_handoff.md` when Vue must match vanilla.
 
-### CrudTable.vue (universal table component)
-Extracted 1-to-1 from DesignSystemPage Section 9. Includes ALL features:
-- Sticky toolbar (name editing, CSV export, rows-per-page, column count)
-- Excel-like column filters (overlay with search, checkboxes, apply/reset)
-- Row selection (click, Shift+range, Ctrl+toggle) with visual highlight
-- Custom context menu (glass-card, "Удалить" with multi-select count)
-- Auto-fit column width on resizer double-click
-- Pagination with filter reset
+### Vue component architecture
 
-**Usage in a page:**
-```vue
-<CrudTable :columns="columns" :data="items" id-field="item_id"
-  table-name="Название" show-add @add="..." @delete="..." @row-click="...">
-  <template #col-fieldName="{ data }">custom render</template>
-</CrudTable>
-```
+`client-web/` contains reusable Vue components such as `CrudTable.vue`,
+`PageHeader.vue`, `SaveIndicator.vue`, and feature-specific editors. They are
+available building blocks, not blanket behavior rules.
 
-### SaveIndicator.vue (save/unsave indicator)
-Goes into PageHeader `#actions` slot. Two states: unsaved (ochre) / saved (green with checkmark animation, fades after 2s).
+For Vue parity surfaces, do not assume generic `CrudTable` behavior is correct.
+If vanilla uses row-open editing, page-specific filters, sticky opened-record
+headers, typed delete confirmation, or no list-level delete, Vue must match that
+behavior even when an older Vue component pattern differs.
 
-```vue
-<PageHeader title="..." icon="...">
-  <template #actions>
-    <SaveIndicator :visible="..." :saved="..." @save="..." @cancel="..." />
-  </template>
-</PageHeader>
-```
-
-### Adding a new CRUD page
-1. Define `columns` array (field, header, width, sortable, filterable)
-2. Load data from API
-3. Use `<CrudTable>` + `<SaveIndicator>` — zero table CSS needed
-4. Add custom `#col-{field}` slots only for non-standard cells (badges, dates, etc.)
+Use `client-web/src/config/navigation.js` for Vue sidebar/router labels and
+routes. Keep labels aligned with vanilla where the route mirrors a vanilla
+surface.
 
 ## Remotes
 
@@ -187,10 +178,16 @@ Goes into PageHeader `#actions` slot. Two states: unsaved (ochre) / saved (green
 | `middleware/` | Express middleware | Source only |
 | `routes/` | Express route handlers | Source only |
 | `migrations/` | SQL migrations | Forward-only. Never edit existing files |
-| `public/` | Dalia's HTML | READ-ONLY. Never modify, never delete |
+| `public/` | Vanilla v1 UI | Current implemented web workflow source. Modify only for assigned vanilla UI/report work; never commit generated output |
 | `contracts/` | JSON Schema .json | Versioned. Never edit v1 files |
 | `client/src/` | VBA .bas, .cls, .frm | Source only |
 | `client-web/src/` | Vue 3 source | Source only. Never `node_modules/`, `dist/` |
+| `docs/current/` | Current domain docs | Markdown only. Keep in sync with verified behavior |
+| `docs/rules/` | Approved rules | Markdown only. Update only for approved rule changes |
+| `docs/instructions/` | Agent instructions | Markdown only. Keep workflow handoffs current |
+| `docs/future/` | Future-facing notes | Markdown only. Not a source of truth for current behavior |
+| `docs/archive/` | Inbox/archive docs | Markdown only after conversion; not source of truth |
+| `docs/*.md` | Docs indexes | Markdown only. Keep navigation/status accurate |
 | `.gitignore` | Git ignore rules | OK to update |
 | `CLAUDE.md` | AI instructions | OK to update |
 | `README.md` | Project readme | OK to update |
@@ -201,7 +198,7 @@ Goes into PageHeader `#actions` slot. Two states: unsaved (ochre) / saved (green
 | Path / Pattern | Reason |
 |----------------|--------|
 | `obsidian_badb/`, `badb-vault-master/` | Personal Obsidian vault — local only |
-| `docs/`, `local/` | Course documents, drafts — local only |
+| `local/` | Local-only drafts/workspace |
 | `node_modules/` | Dependencies — install from package.json |
 | `.env`, `.env.*` | Secrets — NEVER in git |
 | `*.log` | Logs — ephemeral |
@@ -210,20 +207,21 @@ Goes into PageHeader `#actions` slot. Two states: unsaved (ochre) / saved (green
 | `.DS_Store`, `Thumbs.db` | OS metadata |
 | `.claude/` | Claude Code local state |
 
+### Explicit-assignment paths
+
+| Path / Pattern | Rule |
+|----------------|------|
+| `Документация ЕСПД/` | Formal ESPD mirror. Do not edit for routine app, parity, or agent-doc work; touch only when the task explicitly asks for ESPD/formal documentation updates |
+
 ### Pre-commit check script
 
 ```bash
 FORBIDDEN=$(git diff --cached --name-only 2>/dev/null | grep -E \
-  "obsidian_badb/|badb-vault-master/|docs/|local/|node_modules/|\.env|\.log$|dist/|build/|~\\$|\.tmp$|\.DS_Store|Thumbs\.db|\.claude/")
+  "obsidian_badb/|badb-vault-master/|local/|node_modules/|\.env|\.log$|dist/|build/|~\\$|\.tmp$|\.DS_Store|Thumbs\.db|\.claude/")
 
 if [ -n "$FORBIDDEN" ]; then
   echo "BLOCKED: forbidden files in commit:"
   echo "$FORBIDDEN"
-  exit 1
-fi
-
-if git diff --cached --name-only | grep -q "^public/"; then
-  echo "BLOCKED: public/ must not be modified (Dalia's code)"
   exit 1
 fi
 
@@ -249,7 +247,7 @@ echo "Pre-commit check: PASSED"
 1. Run pre-commit check script (above)
 2. `git diff --cached --stat` — review what goes in
 3. Confirm NO forbidden paths in output
-4. Confirm public/ untouched
+4. Confirm any `public/` changes are intentional vanilla workflow changes and have been checked
 5. Confirm no secrets (.env, passwords, tokens) in diff
 6. `node -e "require('./app')"` — syntax check passes
 
