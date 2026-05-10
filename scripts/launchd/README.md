@@ -17,7 +17,7 @@ What it does:
 2. Writes it to `~/Library/LaunchAgents/com.badb.backup.plist`.
 3. Validates the plist (`plutil -lint`).
 4. Loads the agent into launchd (`launchctl bootstrap`).
-5. Triggers an immediate smoke-test run so you can see it working.
+5. Triggers one immediate backup test run so you can see the launchd job working.
 
 The plist itself is NOT committed — only the template is. This keeps the
 setup reproducible without leaking per-user paths into git.

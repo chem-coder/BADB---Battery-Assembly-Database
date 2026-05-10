@@ -49,30 +49,33 @@ current vanilla release checks.
 | `modBuild.Build_Import_All` | Import `src/` → VBA project |
 | `modBuild.Build_Make_Addin` | Build DatabaseUI.xlam from template |
 
-## Data Contracts
+## Historical Data Contracts
 
-JSON Schema files in `contracts/schemas/` define the format for each data submission type. See `tape_prepare.v1.json` for the first contract.
+The old Excel design expected client-local JSON Schema files under
+`contracts/schemas/`, but that folder is not present in the current `client/`
+tree. Treat those contract references as historical notes.
 
-Before using the Excel client, confirm the relevant contracts still match the
-current server behavior.
+Before using the Excel client, confirm the relevant current server contracts,
+routes, auth requirements, and payload shapes against `BADB_main` code.
 
 ## Project Structure
 
 ```
-├── src/              VBA source code
+├── README.md
+├── CLAUDE.md
+├── .gitignore
+├── src/              Dormant legacy VBA source snapshot
 │   ├── classes/      Class modules (.cls)
-│   ├── modules/      Standard modules (.bas)
-│   └── forms/        UserForms (future)
-├── contracts/        Data contracts (JSON Schema)
-│   ├── schemas/      Submission type schemas
-│   └── enums/        Shared enumerations
-├── docs/             Documentation
-├── template/         Excel template for building .xlam
-├── tests/            Test scripts
-└── archive/          Previous versions (reference)
+│   ├── commands/     Command modules (.bas)
+│   ├── config/       Configuration modules (.bas)
+│   ├── forms/        UserForms (.frm)
+│   ├── ribbon/       Ribbon/router modules (.bas)
+│   ├── services/     Service modules (.bas)
+│   └── utils/        Utility/build modules (.bas)
+└── archive/          Previous versions and reference material
 ```
 
 ## Team
 
 - **Dima** — Excel/VBA, architecture, data contracts
-- **Dalya** — Server (Node.js + Express + PostgreSQL)
+- **Dalia** — Server (Node.js + Express + PostgreSQL)

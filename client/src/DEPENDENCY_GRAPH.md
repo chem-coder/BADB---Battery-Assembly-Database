@@ -2,6 +2,12 @@
 **Generated:** 2026-03-13
 **Codebase:** /sessions/gallant-optimistic-darwin/mnt/BADB/client/src/
 
+Status: generated legacy snapshot. This file describes dormant Excel/VBA
+client material from an old generated analysis path. It is preserved as
+historical reference only and is not current BADB source of truth. Verify every
+route, role, contract, workbook assumption, and module claim against current
+`BADB_main` code before using it for implementation.
+
 ---
 
 ## Module Inventory (31 files)

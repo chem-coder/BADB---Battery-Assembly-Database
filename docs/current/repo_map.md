@@ -1,9 +1,9 @@
 # Repo Map
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-10
 Status: current
-Verified against code: light check 2026-05-06
+Verified against code: light check 2026-05-10
 Source paths: current `BADB_main` directory listing
 
 This is a concise map of the active `BADB_main` repository. It replaces older workspace maps that mentioned stale outer folders and old parallel app copies.
@@ -23,7 +23,7 @@ This is a concise map of the active `BADB_main` repository. It replaces older wo
 - `migrations_ASCII/`: ASCII-safe migration mirror for Windows/encoding-sensitive use.
 - `public/`: vanilla static frontend.
 - `client-web/`: Vue frontend.
-- `client/`: Excel/VBA client material, if still supported.
+- `client/`: dormant legacy Excel/VBA material; not the current v1 operating surface.
 - `__tests__/`: backend/service/unit tests.
 - `scripts/`: backup, smoke, contract, parser, and launchd helpers.
 - `sql_scripts/`: SQL reset/debug/inspection helpers.
