@@ -76,7 +76,7 @@ case "$cmd" in
     echo "Loaded $LABEL"
 
     # Dry-run test: trigger once now to verify it works
-    echo "Triggering first run now to smoke-test..."
+    echo "Triggering first backup test run now..."
     launchctl kickstart "gui/$(id -u)/$LABEL" || true
     sleep 3
     LOG="$REPO_ROOT/sql_backups/auto/backup.log"
