@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "public/js/**/*.js",
-  "updatedAt": "2026-05-08",
+  "updatedAt": "2026-05-10",
   "normalization": {
     "pathParams": ":param",
     "query": "?:query"
@@ -60,7 +60,7 @@
     {
       "path": "/api/batteries/:param/electrode-cut-batches?:query",
       "methods": ["GET"],
-      "auth": "route currently has no auth middleware",
+      "auth": "auth",
       "request": "query includes tape_id and optionally selected_batch_id",
       "response": "compatible electrode cut batch list",
       "sources": ["public/js/3-batteries.js"]
@@ -68,7 +68,7 @@
     {
       "path": "/api/batteries/:param/report",
       "methods": ["GET"],
-      "auth": "route currently has no auth middleware",
+      "auth": "auth",
       "request": "none",
       "response": "battery print/report payload",
       "sources": ["public/js/battery-print.js"]
@@ -660,7 +660,7 @@
     {
       "path": "/api/tapes/:param/report",
       "methods": ["GET"],
-      "auth": "route currently has no auth middleware",
+      "auth": "auth",
       "request": "none",
       "response": "tape print/report payload",
       "sources": ["public/js/tape-print.js"]

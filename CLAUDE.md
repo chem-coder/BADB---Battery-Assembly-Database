@@ -257,9 +257,9 @@ echo "Pre-commit check: PASSED"
 
 When running a code audit (bug search), follow this two-phase process.
 
-### Phase 1 — Discovery (agents)
+### Phase 1 — Discovery (optional agents)
 
-Launch parallel agents to scan for bug candidates by category (security, data integrity, frontend state, error handling, etc.). Agents are good at broad coverage — they can quickly flag suspicious patterns across many files.
+Use parallel agents only when the active environment and user request explicitly allow delegated/subagent work. When delegation is not explicitly allowed, do the discovery locally by reading/searching the codebase. Broad agent scans can be useful for bug candidates by category (security, data integrity, frontend state, error handling, etc.), but they are optional, not mandatory.
 
 **Agent output = hypotheses, not facts.** Agents match patterns (e.g. "CRUD route without rowCount check") but frequently do not read surrounding code carefully enough to confirm the issue is real.
 
