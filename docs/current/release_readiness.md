@@ -1,7 +1,7 @@
 # BADB Release Readiness
 
 Created: 2026-05-06
-Edited: 2026-05-09
+Edited: 2026-05-10
 Status: current
 
 This file tracks only the current release-control state. Do not use it for future ideas, long worklogs, or archived rationale.
@@ -66,7 +66,23 @@ authoritative migration ledger.
   punctuation, Electrolytes/Separators record-open scroll behavior, and the coin
   create dirty-marker edge case were corrected.
 
-## Last Verified Checkpoint
+## Latest Verified Checkpoint
+
+Latest recorded release checkpoint: verified on 2026-05-09.
+
+- `node --check scripts/smoke_vanilla_api.js` passed.
+- Local `badb_app_v1` has authoritative `schema_migrations` rows from `d032`
+  with `dima = 21` and `dalia = 20`.
+- `npm run smoke:vanilla` passed: 241 checks, 0 failures. The smoke harness
+  restored the old dump and applied `002`, `018`, `019`, `020`, and `d028`
+  through `d032`.
+
+No later smoke count is recorded in this file. Older smoke counts below are
+historical only and do not replace the 241-check checkpoint above.
+
+## Historical Checkpoints
+
+Earlier checkpoints are retained only as release history.
 
 Verified on 2026-05-06:
 
@@ -115,15 +131,6 @@ Vanilla UI consistency checkpoint verified on 2026-05-08 at commit `974ffce`:
 - Manual spot checks found the current UI usable; exact destructive battery
   delete and Windows/lab DB checks remain listed below until explicitly
   verified.
-
-Migration ledger checkpoint verified on 2026-05-09:
-
-- `node --check scripts/smoke_vanilla_api.js` passed.
-- Local `badb_app_v1` has authoritative `schema_migrations` rows from `d032`
-  with `dima = 21` and `dalia = 20`.
-- `npm run smoke:vanilla` passed: 241 checks, 0 failures. The smoke harness
-  restored the old dump and applied `002`, `018`, `019`, `020`, and `d028`
-  through `d032`.
 
 Current release-check commands:
 

@@ -1,7 +1,7 @@
 # HOW_TO Systematize Documents
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-10
 Status: instruction
 
 Use this process to turn scattered notes, markdown files, text files, and converted Word documents into a small, useful documentation system.
@@ -103,39 +103,54 @@ Needs Dalia decision:
 9. Update `docs/INDEX.md`.
 10. Update `Документация ЕСПД/` only after the working docs are coherent.
 
-## Canonical Domain Docs To Build First
+## Canonical Docs To Maintain First
 
-Start with the domains that most often affect release safety:
+Start with the current docs that most often affect release safety and agent
+decisions:
 
 ```text
 docs/current/batteries.md
 docs/current/electrodes.md
 docs/current/tapes.md
 docs/current/materials.md
+docs/current/capacity_calculations.md
 docs/current/cycling.md
-docs/current/uploads_files.md
-docs/current/auth_access.md
-docs/current/migrations.md
-docs/current/testing_release.md
+docs/current/release_readiness.md
+docs/current/architecture.md
+docs/current/repo_map.md
+docs/current/vanilla_reference_pages.md
 ```
 
-Suggested rule docs:
+Maintain these instruction docs for recurring work:
 
 ```text
-docs/rules/battery_lifecycle_rules.md
-docs/rules/electrode_stack_rules.md
-docs/rules/data_integrity_rules.md
-docs/rules/auth_policy.md
-docs/rules/documentation_policy.md
+docs/instructions/apply_migrations.md
+docs/instructions/db_schema_verification.md
+docs/instructions/testing_release.md
+docs/instructions/run_local.md
+docs/instructions/frontend_parity_handoff.md
 ```
 
-Suggested future docs:
+Maintain these rule docs:
+
+```text
+docs/rules/ai_rules_from_dalia.md
+docs/rules/auth_policy.md
+docs/rules/battery_lifecycle_rules.md
+docs/rules/electrode_stack_rules.md
+docs/rules/material_composition_rules.md
+docs/rules/schema_api_naming.md
+```
+
+Maintain these future docs only for real future ideas:
 
 ```text
 docs/future/feature_backlog.md
-docs/future/modules.md
+docs/future/battery_status_workflow_next.md
 docs/future/dashboard_next.md
+docs/future/ui_and_reports_next.md
 docs/future/upload_storage_transition.md
+docs/future/vanilla_reference_page_upgrade.md
 ```
 
 ## Compression Rule

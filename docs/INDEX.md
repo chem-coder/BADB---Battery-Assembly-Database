@@ -1,7 +1,7 @@
 # Documentation Index
 
 Created: 2026-05-06
-Edited: 2026-05-09
+Edited: 2026-05-10
 Status: current
 
 ## Operating Rules
@@ -9,7 +9,6 @@ Status: current
 - [AI Rules From Dalia](rules/ai_rules_from_dalia.md)
 - [Documentation Systematization HOW_TO](instructions/HOW_TO_SYSTEMATIZE_DOCS.md)
 - [Frontend Parity Handoff](instructions/frontend_parity_handoff.md)
-- [Docs Triage Audit 2026-05-06](archive/docs_triage_audit_2026-05-06.md)
 
 ## Instruction Docs
 
@@ -68,6 +67,10 @@ Status: current
 - [Upload Storage Transition](future/upload_storage_transition.md)
 - [UI And Reports Future Work](future/ui_and_reports_next.md)
 - [Vanilla Reference Page Upgrade](future/vanilla_reference_page_upgrade.md)
+
+## Historical Context
+
+- [Docs Triage Audit 2026-05-06](archive/superseded/2026-05-06-inbox-cleanup/docs_audit_report.md) is historical archive context, not current source of truth.
 
 ## Formal Mirror
 

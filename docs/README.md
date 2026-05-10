@@ -1,7 +1,7 @@
 # BADB Documentation Hub
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-10
 Status: current
 
 This folder is the working documentation hub for `BADB_main`.
@@ -10,13 +10,20 @@ This folder is the working documentation hub for `BADB_main`.
 
 When documents disagree, use this priority order:
 
-1. Current code in `BADB_main/`.
-2. Current database migrations in `BADB_main/migrations/` and `BADB_main/migrations_ASCII/`.
-3. Passing tests, smoke checks, and contract checks.
-4. Approved Dalia rules and working notes.
-5. `docs/current/`, `docs/rules/`, and `docs/instructions/`.
-6. `Документация ЕСПД/`, which is a formal mirror and should be updated from the working docs.
-7. Archived, generated, or inbox documents, which are never source of truth until triaged.
+1. Current code in `BADB_main/`, including SQL migrations in `migrations/`
+   and `migrations_ASCII/`.
+2. Passing tests, smoke checks, contract checks, and live database state where
+   relevant. `public.schema_migrations` is the authoritative applied-migration
+   ledger for a target database.
+3. `docs/current/` for verified existing behavior.
+4. `docs/rules/` for approved rules and constraints.
+5. `docs/instructions/` for recurring work instructions.
+6. `Документация ЕСПД/`, which is a formal mirror and should be updated from
+   the working docs.
+7. `docs/future/` for ideas and proposals only, not current behavior.
+8. `docs/archive/` for historical context only. Archived, generated, or inbox
+   documents are never current source of truth until triaged into the working
+   docs above.
 
 ## Folder Roles
 
@@ -24,8 +31,8 @@ When documents disagree, use this priority order:
 |---|---|
 | `current/` | Existing system behavior, verified against code. |
 | `rules/` | Hard rules for agents and colleagues. Breaking these needs explicit approval. |
-| `future/` | Ideas, proposals, and possible features. Not promises. |
 | `instructions/` | How to do recurring work: tests, migrations, releases, doc updates. |
+| `future/` | Ideas, proposals, and possible features. Not current behavior and not promises. |
 | `archive/inbox/` | Raw documents Dalia wants reviewed and systematized. |
 | `archive/superseded/` | Old documents kept for history after triage. |
 | `archive/external_generated/` | AI/colleague-generated documents that are not trusted until verified. |
