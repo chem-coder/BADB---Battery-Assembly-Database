@@ -1,11 +1,18 @@
 # BADB Excel Client
 
-DatabaseUI.xlam — Excel add-in for laboratory data entry.
-Part of the BADB (Battery Assembly Database) system.
+Status: dormant legacy / preserved historical client material.
 
-## Overview
+`DatabaseUI.xlam` was an Excel add-in concept for laboratory data entry. The
+current BADB v1 operating surface is the vanilla web UI in `public/`, with Vue
+in `client-web/` for assigned parity work. This `client/` folder is kept for
+reference and possible future revival; do not treat it as the current primary
+client.
 
-Operators use Excel to enter battery production data (tape preparation, electrode cutting, battery assembly, QC results). Data is packaged as JSON and sent to the BADB server (Node.js + PostgreSQL) via HTTP API.
+## Historical Overview
+
+The intended Excel flow packaged laboratory data as JSON and sent it to the
+BADB server via HTTP API. If this client is revived, verify every route,
+contract, auth rule, and workbook assumption against current code first.
 
 ## Architecture
 
@@ -21,9 +28,13 @@ Ribbon → Router → cmd (UI) → svc (logic) → util (errors, logs)
 - **cfgApp.bas** — all constants (commands, roles, paths, column indices).
 - **AppContext.cls** — session state (user, role, authorization).
 
-## Getting Started
+## Historical Build Notes
 
-1. Open `template/DatabaseUI_template.xlam` in Excel
+These commands describe the old Excel/VBA workflow. They are not part of the
+current vanilla release checks.
+
+1. Open `template/DatabaseUI_template.xlam` in Excel if the template exists on
+   the branch/workstation.
 2. In VBA Editor → Immediate Window:
    ```
    modBuild.Build_Import_All
@@ -41,6 +52,9 @@ Ribbon → Router → cmd (UI) → svc (logic) → util (errors, logs)
 ## Data Contracts
 
 JSON Schema files in `contracts/schemas/` define the format for each data submission type. See `tape_prepare.v1.json` for the first contract.
+
+Before using the Excel client, confirm the relevant contracts still match the
+current server behavior.
 
 ## Project Structure
 

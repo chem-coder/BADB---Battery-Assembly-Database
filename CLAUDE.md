@@ -7,8 +7,8 @@ Dima contributes via feature branches → Pull Requests into Dalia's main.
 
 ## Stack
 
-- **Server:** Node.js + Express 5 (modular), PostgreSQL 16 (badb_app_v1, 42 tables — Dalia's production DB)
-- **Client (VBA):** Excel VBA (DatabaseUI.xlam)
+- **Server:** Node.js + Express 5 (modular), PostgreSQL 16 (`badb_app_v1`, 65 public tables)
+- **Client (VBA):** dormant legacy Excel VBA material in `client/` (DatabaseUI.xlam context, not the current v1 operating surface)
 - **Client (Web):** current vanilla v1 UI in `public/`; Vue 3 + PrimeVue 4 + Vite in `client-web/` for assigned parity/SPA work
 - **Contracts:** JSON Schema draft-07 (contracts/)
 
@@ -28,7 +28,7 @@ BADB-Battery-Assembly-Database/
 │   ├── index.js        — route registration
 │   ├── auth.js         — /api/auth: login, register, me
 │   ├── submit.js       — /api/submit: append-only raw_submissions
-│   └── (13 CRUD route files, ~130 endpoints)
+│   └── (modular route files; current contract check sees 211 Express routes)
 ├── migrations/         — forward-only SQL migrations
 ├── public/             — vanilla v1 static web UI (current source for implemented web workflows)
 ├── contracts/          — JSON Schema contracts (versioned)
@@ -55,7 +55,9 @@ BADB-Battery-Assembly-Database/
 |---------|--------------------------------------------------|
 | dev     | `npm run dev` (server :3003 + Vite :5173)        |
 | server  | `node server.js` (port 3003)                     |
-| test    | VBA: cmdSelfTest.RunAll()                        |
+| test    | `npm test`                                      |
+| contract | `npm run contract:vanilla`                    |
+| smoke   | `npm run smoke:vanilla`                        |
 
 ### Dev server lifecycle (MANDATORY)
 
@@ -106,7 +108,7 @@ Axios `baseURL` MUST be empty string `''` in dev. Direct cross-origin requests
 1. raw_submissions is append-only — never UPDATE or DELETE
 2. auth_log is append-only — never UPDATE or DELETE
 3. Contracts are versioned — new version = new file, never edit v1
-4. Migrations are forward-only — no DROP TABLE, no destructive ALTERs
+4. Migrations are forward-only — no DROP TABLE, no destructive ALTERs. `schema_migrations` is the authoritative applied-migration ledger; flat migration logs are human checkpoints.
 5. `public/` is the current vanilla v1 web UI source. Modify it intentionally for vanilla UI/report workflow tasks and verify changed JS with `node --check`.
 6. `docs/current/`, `docs/rules/`, and `docs/instructions/` are maintained future-agent sources. Update relevant docs when behavior, workflows, setup, or source-of-truth assumptions change.
 7. Do NOT edit `Документация ЕСПД/` unless the task explicitly asks for ESPD/formal documentation updates.

@@ -1,3 +1,12 @@
+Manual SQL scripts for BADB.
+
+WARNING:
+- These scripts are manual dev/admin tools, not normal app workflow.
+- Always verify the database name before running anything.
+- Reset scripts are destructive and dev-only unless Dalia explicitly says
+  otherwise.
+- Prefer tracked migrations for schema changes.
+
 How to run these scripts:
 
 From psql, do:

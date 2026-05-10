@@ -47,10 +47,12 @@ Expected output shape (`{ datapoints, summary, meta }`):
   detected_format}` plus any RU metadata fields (`sample_name`, `date`,
   `time`, `instrument`, `channel`, `user_comment`) when the file has them
 
-Reference snapshots are in `expected/` — see `expected_en_summary.json`
-and `expected_ru_meta.json` below.
+Reference snapshots are stored beside the fixtures:
 
-## Expected output snapshots
+- `expected_en.json`
+- `expected_ru.json`
+
+## Expected output examples
 
 ### `elitech_en_minimal.txt` — first cycle summary
 
