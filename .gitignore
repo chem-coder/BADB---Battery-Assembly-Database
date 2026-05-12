@@ -23,6 +23,7 @@ ql.local/
 sql_backups/auto/
 
 # Local full database backups; may contain people/data/password hashes.
+sql_backups/
 sql_backups/local_only/
 sql_backups/*_full*.sql
 sql_backups/*dump*.sql
