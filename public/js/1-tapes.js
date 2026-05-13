@@ -95,6 +95,10 @@ const tapePageState = window.tapePageState = {
     coating: {
       sidednessAuto: true
     },
+    mixing: {
+      wetMixingAuto: true,
+      lastAutoWetMixingId: ''
+    },
     panels: {
       mixing: {
         dryParamsVisible: false,
@@ -394,6 +398,8 @@ function setSectionsOpen(nextOpen, { render = true } = {}) {
 
 function resetSectionState() {
   state.ui.coating.sidednessAuto = true;
+  state.ui.mixing.wetMixingAuto = true;
+  state.ui.mixing.lastAutoWetMixingId = '';
   state.ui.sections.visibility = {
     '0-general-info': true,
     '0-tape-recipe-materials': false,
@@ -3362,8 +3368,12 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
       ...restoredMixing,
       ...deriveMixingTimeline(restoredMixing)
     });
+    state.ui.mixing.wetMixingAuto = false;
+    state.ui.mixing.lastAutoWetMixingId = '';
   } else {
     setWorkflowStep('mixing', defaults.mixing);
+    state.ui.mixing.wetMixingAuto = true;
+    state.ui.mixing.lastAutoWetMixingId = '';
   }
 
   if (stepsByCode.coating) {
@@ -4154,6 +4164,12 @@ function attachWorkflowStateSync() {
   bindValueField('2c-dry-box-atmosphere', 'maintenance_dry_box', 'atmosphere');
   bindValueField('2c-dry-box-other-parameters', 'maintenance_dry_box', 'other_parameters');
   bindValueField('2c-dry-box-comments', 'maintenance_dry_box', 'comments');
+
+  const slurryVolumeInput = document.getElementById('1-mixing-slurry_volume_ml');
+  if (slurryVolumeInput) {
+    slurryVolumeInput.addEventListener('input', applyWetMixingMethodAutoSelection);
+    slurryVolumeInput.addEventListener('change', applyWetMixingMethodAutoSelection);
+  }
 }
 
 function attachSectionStateSync() {
@@ -4605,12 +4621,64 @@ function updateMixParamsVisibility() {
   });
 }
 
+function getWetMixingMethodIdForVolume(slurryVolumeMl) {
+  const volume = Number(slurryVolumeMl);
+  if (!Number.isFinite(volume) || volume <= 0) return '';
+  if (volume < 15) return '1';
+  if (volume <= 150) return '2';
+  if (volume <= 450) return '3';
+  if (volume <= 750) return '4';
+  if (volume >= 1500 && volume <= 3500) return '5';
+  return '';
+}
+
+function canAutoUpdateWetMixingMethod(currentId) {
+  const current = String(currentId || '');
+  return (
+    !current ||
+    state.ui.mixing.wetMixingAuto ||
+    current === String(state.ui.mixing.lastAutoWetMixingId || '')
+  );
+}
+
+function applyWetMixingMethodAutoSelection() {
+  const step = state.workflow.mixing;
+  if (!step) return;
+
+  const nextId = getWetMixingMethodIdForVolume(step.slurry_volume_ml);
+  const currentId = String(step.wet_mixing_id || '');
+  if (!canAutoUpdateWetMixingMethod(currentId)) return;
+  if (currentId === nextId) return;
+
+  state.ui.mixing.wetMixingAuto = true;
+  state.ui.mixing.lastAutoWetMixingId = nextId;
+  setWorkflowStep('mixing', {
+    ...step,
+    wet_mixing_id: nextId
+  });
+  setElValue('1-mixing-wet_mixing_id', nextId);
+  updateMixParamsVisibility();
+}
+
 // ---- Mixing params show/hide (empty method => hide params) ----
 const dryMixSelect = document.getElementById('1-mixing-dry_mixing_id');
 const wetMixSelect = document.getElementById('1-mixing-wet_mixing_id');
 
 if (dryMixSelect) dryMixSelect.addEventListener('change', updateMixParamsVisibility);
-if (wetMixSelect) wetMixSelect.addEventListener('change', updateMixParamsVisibility);
+if (wetMixSelect) {
+  wetMixSelect.addEventListener('change', () => {
+    const selectedId = String(wetMixSelect.value || '');
+    state.ui.mixing.wetMixingAuto = !selectedId;
+    state.ui.mixing.lastAutoWetMixingId = '';
+    if (state.workflow.mixing) {
+      setWorkflowStep('mixing', {
+        ...state.workflow.mixing,
+        wet_mixing_id: selectedId
+      });
+    }
+    updateMixParamsVisibility();
+  });
+}
 
 document.getElementById('1-mixing-save-btn').onclick = () => trackPendingSave(withInlineSaveStatus('1-mixing-save-btn', async () => {
   

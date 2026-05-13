@@ -90,7 +90,7 @@ The smoke harness:
 - checks the vanilla API contract first;
 - restores a SQL dump into a throwaway database;
 - applies current post-dump migrations needed by the restored dump, including
-  `002`, `018`, `019`, `020`, and `d028` through `d033`;
+  `002`, `018`, `019`, `020`, and `d028` through `d034`;
 - starts the Express API against the throwaway database with `AUTH_BYPASS=true`;
 - exercises vanilla-facing GET and write paths;
 - checks selected dependency/conflict behavior;
@@ -130,10 +130,11 @@ this order:
 - `d031_harden_battery_stack_validate_trigger.sql`
 - `d032_create_schema_migrations_table.sql`
 - `d033_add_coating_side2_gap_and_drying_speed.sql`
+- `d034_update_wet_mixing_methods.sql`
 
 `d032_create_schema_migrations_table.sql` creates the authoritative
 `public.schema_migrations` ledger and backfills the current baseline. A current
-migrated database should report `dima = 21` and `dalia = 21` after `d033` from:
+migrated database should report `dima = 21` and `dalia = 22` after `d034` from:
 
 ```bash
 psql -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations GROUP BY migration_stream ORDER BY migration_stream;"

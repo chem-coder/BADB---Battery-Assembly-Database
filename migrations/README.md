@@ -5,12 +5,12 @@ Forward-only SQL migrations applied in alphabetical order to
 
 Current migration file state as of 2026-05-13:
 
-- `migrations/` has 42 SQL files.
-- `migrations_ASCII/` has 42 SQL files.
+- `migrations/` has 43 SQL files.
+- `migrations_ASCII/` has 43 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d033_add_coating_side2_gap_and_drying_speed.sql`.
+- Dalia's `dNNN` stream exists through `d034_update_wet_mixing_methods.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 21` after `d033` is applied.
+  counts of `dima = 21` and `dalia = 22` after `d034` is applied.
 
 ## How to apply
 
@@ -52,7 +52,7 @@ namespace so migrations never collide:
 | Namespace         | Who   | Pattern                                      |
 | ----------------- | ----- | -------------------------------------------- |
 | `NNN_*.sql`       | Dima  | Plain 3-digit counter (`001_*` … `020_*`)    |
-| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d033_*`)      |
+| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d034_*`)      |
 
 Alphabetical ordering of `ls migrations/` gives:
 
@@ -128,6 +128,8 @@ Full timeline is in the git log. High-level:
 - `d033_add_coating_side2_gap_and_drying_speed` — adds `gap_um_side2`
   to `tape_step_coating` and `drying_speed_text` to `tape_step_drying`
   for the current lab coating/drying workflow.
+- `d034_update_wet_mixing_methods` — updates wet mixing method labels and
+  adds the 1 L ACEY and 5 L GELON mixer options.
 
 ## Check migration ledger
 
@@ -146,7 +148,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 21
+dalia = 22
 dima = 21
 ```
 

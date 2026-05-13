@@ -157,16 +157,17 @@ psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d030_battery_projects_many_
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d031_harden_battery_stack_validate_trigger.sql
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d032_create_schema_migrations_table.sql
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d033_add_coating_side2_gap_and_drying_speed.sql
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d034_update_wet_mixing_methods.sql
 ```
 
 On Windows/lab, use `migrations_ASCII/` for the same files if encoding is a
 risk. `d032_create_schema_migrations_table.sql` should be run before later
-ledger-aware migrations such as `d033`, because it verifies earlier migration
+ledger-aware migrations such as `d033` and `d034`, because it verifies earlier migration
 effects before creating the baseline ledger rows.
 
 After `d032`, `public.schema_migrations` is the authoritative migration ledger.
 The flat `migrations_log.txt` files are only human checkpoint notes. A current
-local `badb_app_v1` ledger reports `dima = 21` and `dalia = 21` after `d033`;
+local `badb_app_v1` ledger reports `dima = 21` and `dalia = 22` after `d034`;
 use the same stream-count query from `docs/instructions/apply_migrations.md`
 on the restored or Windows/lab target.
 

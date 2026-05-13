@@ -34,7 +34,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd030_battery_projects_many_to_many.sql'),
   path.join(ROOT, 'migrations', 'd031_harden_battery_stack_validate_trigger.sql'),
   path.join(ROOT, 'migrations', 'd032_create_schema_migrations_table.sql'),
-  path.join(ROOT, 'migrations', 'd033_add_coating_side2_gap_and_drying_speed.sql')
+  path.join(ROOT, 'migrations', 'd033_add_coating_side2_gap_and_drying_speed.sql'),
+  path.join(ROOT, 'migrations', 'd034_update_wet_mixing_methods.sql')
 ];
 
 function parseArgs(argv) {

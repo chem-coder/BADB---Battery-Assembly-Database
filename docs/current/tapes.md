@@ -119,6 +119,23 @@ Planning supports two modes:
 The UI shows planned quantities, expanded calculation rows, and live slurry
 solids summary from the selected instances and actual values.
 
+The mixing section stores `slurry_volume_ml` and the selected wet mixing method.
+When slurry volume changes, the vanilla UI can auto-fill the wet mixing method
+while the field is blank or still auto-selected. The user can override the
+method manually; manual selection stops further auto-overwrite until the field
+is cleared.
+
+Current auto-selection ranges:
+
+- `< 15 ml`: manual mixing;
+- `15-150 ml`: magnetic stirrer;
+- `>150-450 ml`: GELON GN-VM-7 vacuum mixer, 500 ml;
+- `>450-750 ml`: ACEY ACEY-EVM-1L vacuum mixer, 1 L;
+- `1500-3500 ml`: GELON GN-PM-5L double planetary mixer, 5 L.
+
+Volumes between `750` and `1500 ml`, above `3500 ml`, or invalid/blank volumes
+do not auto-select a wet mixing method.
+
 ## Dry Box State
 
 After pressed-tape drying, the page exposes the dry-box section.

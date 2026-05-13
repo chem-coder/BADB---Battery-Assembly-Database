@@ -15,12 +15,12 @@ The flat `migrations_log.txt` files are human checkpoint notes only.
 
 Current migration file state as of 2026-05-13:
 
-- `migrations/` has 42 SQL files.
-- `migrations_ASCII/` has 42 SQL files.
+- `migrations/` has 43 SQL files.
+- `migrations_ASCII/` has 43 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d033_add_coating_side2_gap_and_drying_speed.sql`.
+- Dalia's `dNNN` stream exists through `d034_update_wet_mixing_methods.sql`.
 - Live local `badb_app_v1` has `schema_migrations` counts of `dima = 21`
-  and `dalia = 21` after `d033` is applied. Dima has 21 rows because the
+  and `dalia = 22` after `d034` is applied. Dima has 21 rows because the
   historical numeric stream includes two independent `008_*.sql` files.
 
 ## Source Folders
@@ -56,7 +56,7 @@ note gives a smaller explicit post-dump set:
 
 ```text
 001_... through 020_...
-d013_... through d033_add_coating_side2_gap_and_drying_speed.sql
+d013_... through d034_update_wet_mixing_methods.sql
 ```
 
 The current vanilla smoke restored-copy path applies only the migrations missing
@@ -73,6 +73,7 @@ d030_battery_projects_many_to_many.sql
 d031_harden_battery_stack_validate_trigger.sql
 d032_create_schema_migrations_table.sql
 d033_add_coating_side2_gap_and_drying_speed.sql
+d034_update_wet_mixing_methods.sql
 ```
 
 Do not treat a local smoke pass as proof that the Windows/lab database has these
@@ -120,6 +121,7 @@ The vanilla smoke harness restores the old dump into a throwaway database and th
 - `migrations/d031_harden_battery_stack_validate_trigger.sql`
 - `migrations/d032_create_schema_migrations_table.sql`
 - `migrations/d033_add_coating_side2_gap_and_drying_speed.sql`
+- `migrations/d034_update_wet_mixing_methods.sql`
 
 This is the expected migration set for the current smoke harness. If a future
 branch adds a post-dump migration, update `scripts/smoke_vanilla_api.js` and
@@ -134,10 +136,10 @@ psql -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations
 psql -d badb_app_v1 -c "SELECT migration_name, applied_at, source FROM schema_migrations ORDER BY migration_name;"
 ```
 
-Expected after `d033`:
+Expected after `d034`:
 
 ```text
-dalia: 21 rows
+dalia: 22 rows
 dima: 21 rows
 ```
 
@@ -173,5 +175,5 @@ The lab database is not considered ready for pilot use until the ledger proves
 the current migration baseline and this check proves `d031` is present.
 
 As of 2026-05-13, the flat checkpoint logs note Dima's stream through `020`
-and Dalia's stream through `d033`; `public.schema_migrations` remains the
+and Dalia's stream through `d034`; `public.schema_migrations` remains the
 authoritative ledger.

@@ -175,7 +175,7 @@ Current `saveBatteryElectrodeStack()` follows this rule through
 is safe under `d031`, and the saved display order still follows
 `position_index`.
 
-Smoke setup applies the current post-dump migration set through `d033` after
+Smoke setup applies the current post-dump migration set through `d034` after
 restoring the vanilla dump, so vanilla smoke checks exercise the hardened
 trigger and the restored-copy migration ledger baseline.
 
