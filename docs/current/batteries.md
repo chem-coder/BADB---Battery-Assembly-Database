@@ -1,7 +1,7 @@
 # Batteries
 
 Created: 2026-05-06
-Edited: 2026-05-12
+Edited: 2026-05-13
 Status: current
 Verified against code: 2026-05-07
 
@@ -153,6 +153,14 @@ Current high-level behavior:
   sidedness rules;
 - stack picker and selected-stack rows show electrode id, mass, and calculated
   per-electrode capacity;
+- for pouch/cylindrical batteries, the user enters cathode count and chooses
+  whether anodes equal cathodes or use one extra anode; the anode count is
+  calculated by the page;
+- the N/P helper lets the user enter desired anode excess percent and then
+  calculates a target anode capacity per anode from the prescribed anode count;
+  the table highlights a recommended anode set, preferring the lightest
+  available anodes at or just above that per-anode target; it shows per-anode
+  deltas and lets the user apply the suggested set with a button;
 - saved stack electrodes are marked used by the backend;
 - saved stacks are read by `position_index`;
 - a `disassembled` battery with no rows in `battery_electrodes` may be

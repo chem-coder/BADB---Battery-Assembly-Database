@@ -22,6 +22,27 @@
         color: #8a8f99;
       }
 
+      .stack_cathode_block,
+      .stack_anode_block {
+        margin-top: 14px;
+        padding: 10px 12px;
+        border: 1px solid transparent;
+        border-left-width: 4px;
+        border-radius: 8px;
+      }
+
+      .stack_cathode_block {
+        border-color: #d9e7fb;
+        border-left-color: #8fb3e8;
+        background: #f7fbff;
+      }
+
+      .stack_anode_block {
+        border-color: #eadcf5;
+        border-left-color: #b89add;
+        background: #fbf8ff;
+      }
+
       #battery_stack_target_counts {
         margin-bottom: 12px;
       }
@@ -29,6 +50,36 @@
       #battery_stack_target_counts input {
         max-width: 90px;
         margin-right: 16px;
+      }
+
+      .battery-stack-target-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: 10px 18px;
+      }
+
+      .battery-stack-target-field {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .battery-stack-anode-mode {
+        display: inline-flex;
+        gap: 4px;
+      }
+
+      .battery-stack-anode-mode button {
+        min-height: 32px;
+        padding: 4px 10px;
+      }
+
+      .battery-stack-anode-mode button[aria-pressed="true"] {
+        border-color: #6f8fb3;
+        background: #eef5fb;
+        color: #2f577d;
+        font-weight: 700;
       }
 
       .battery-capacity-summary {
@@ -125,6 +176,16 @@
         padding-right: 4px;
       }
 
+      .stack_cathode_block .stack_table tbody td,
+      tr.battery-stack-summary-cathode td {
+        background: #f7fbff;
+      }
+
+      .stack_anode_block .stack_table tbody td,
+      tr.battery-stack-summary-anode td {
+        background: #fbf8ff;
+      }
+
       .battery-electrode-capacity-cell {
         min-width: 160px;
         padding-left: 16px;
@@ -138,6 +199,91 @@
         color: #748094;
         font-size: 0.88em;
         line-height: 1.2;
+      }
+
+      .battery-np-assist {
+        margin: 12px 0 14px;
+        padding: 10px 12px;
+        border: 1px solid #d6dde8;
+        border-radius: 8px;
+        background: #fbfcfe;
+      }
+
+      .battery-np-assist[hidden] {
+        display: none !important;
+      }
+
+      .battery-np-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 14px;
+        margin-bottom: 8px;
+      }
+
+      .battery-np-controls input {
+        max-width: 90px;
+      }
+
+      .battery-np-select-btn {
+        margin-left: auto;
+      }
+
+      .battery-np-select-feedback {
+        min-width: 110px;
+        color: #46712b;
+        font-weight: 600;
+      }
+
+      .battery-np-target-label,
+      .battery-np-summary {
+        color: #5e6572;
+        font-size: 0.92em;
+      }
+
+      .battery-np-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 6px 14px;
+      }
+
+      .battery-np-summary-item {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+
+      .battery-np-summary-item strong {
+        color: #263245;
+      }
+
+      .battery-np-warning {
+        margin-top: 8px;
+        color: #8a5a00;
+      }
+
+      .battery-np-delta-cell {
+        min-width: 120px;
+      }
+
+      .battery-np-guidance-primary {
+        font-weight: 600;
+      }
+
+      .battery-np-guidance-secondary {
+        color: #748094;
+        font-size: 0.88em;
+        line-height: 1.2;
+      }
+
+      .battery-np-best-candidate,
+      .battery-np-best-candidate td {
+        background: #f3f8ed;
+      }
+
+      .battery-np-best-label {
+        color: #46712b;
+        font-weight: 700;
       }
 
       .battery-derived-inline {
@@ -406,23 +552,79 @@
                 <div id="battery_stack_target_counts" hidden>
                   <p id="battery_stack_target_intro">Укажите количество электродов в стеке:</p>
 
-                  <label for="stack_target_cathodes">Катодов</label>
-                  <input
-                    id="stack_target_cathodes"
-                    type="number"
-                    min="0"
-                    step="1"
-                  >
+                  <div class="battery-stack-target-row">
+                    <div class="battery-stack-target-field">
+                      <label for="stack_target_cathodes">Катодов</label>
+                      <input
+                        id="stack_target_cathodes"
+                        type="number"
+                        min="1"
+                        step="1"
+                      >
+                    </div>
 
-                  <label for="stack_target_anodes">Анодов</label>
-                  <input
-                    id="stack_target_anodes"
-                    type="number"
-                    min="0"
-                    step="1"
-                  >
+                    <div class="battery-stack-target-field">
+                      <span>Анодов</span>
+                      <div class="battery-stack-anode-mode" role="group" aria-label="Режим количества анодов">
+                        <button
+                          type="button"
+                          id="stack_anode_mode_same"
+                          data-anode-mode="same"
+                          title="Количество анодов равно количеству катодов"
+                          aria-pressed="true"
+                        >= катодам</button>
+                        <button
+                          type="button"
+                          id="stack_anode_mode_plus_one"
+                          data-anode-mode="plus_one"
+                          title="Количество анодов на один больше количества катодов"
+                          aria-pressed="false"
+                        >+1 анод</button>
+                      </div>
+                    </div>
+
+                    <div class="battery-stack-target-field">
+                      <label for="stack_target_anodes">Итого анодов</label>
+                      <input
+                        id="stack_target_anodes"
+                        type="number"
+                        min="0"
+                        step="1"
+                        readonly
+                      >
+                    </div>
+                  </div>
 
                   <div id="battery_stack_target_hint" class="field-hint"></div>
+                </div>
+
+                <div id="battery_np_assist" class="battery-np-assist" hidden>
+                  <div class="battery-np-controls">
+                    <label for="battery_np_excess_percent">Избыток анода, %</label>
+                    <input
+                      id="battery_np_excess_percent"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder="10"
+                    >
+                    <span id="battery_np_target_label" class="battery-np-target-label"></span>
+                    <button
+                      type="button"
+                      id="battery_np_select_suggested_btn"
+                      class="btn_secondary battery-np-select-btn"
+                      title="Выбрать предложенный набор анодов"
+                      disabled
+                    >
+                      Выбрать предложенные аноды
+                    </button>
+                    <span
+                      id="battery_np_select_feedback"
+                      class="battery-np-select-feedback"
+                      aria-live="polite"
+                    ></span>
+                  </div>
+                  <div id="battery_np_summary" class="battery-np-summary"></div>
                 </div>
 
                 <div class="stack_cathode_block">
@@ -454,6 +656,7 @@
                         <th>ID электрода</th>
                         <th>m, g</th>
                         <th title="Расчётная ёмкость по фактически введённой массе и составу; не измерение после циклирования">Расч. ёмк., мАч</th>
+                        <th title="Ёмкость этого анода минус целевая ёмкость одного анода">A − средн.</th>
                         <th>Выбрать</th>
                       </tr>
                     </thead>

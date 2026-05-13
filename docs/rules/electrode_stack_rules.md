@@ -1,7 +1,7 @@
 # Electrode Stack Rules
 
 Created: 2026-05-06
-Edited: 2026-05-09
+Edited: 2026-05-13
 Status: rule
 Verified against code: 2026-05-06
 
@@ -108,6 +108,18 @@ Current count rules:
 
 For pouch and cylindrical stacks, one extra cathode is invalid.
 
+In the vanilla UI for pouch/cylindrical stacks, the operator edits the cathode
+count and chooses an anode-count mode: equal to cathodes or `+1` anode. The UI
+then computes the anode count; the backend/DB trigger still enforce the count
+rules.
+
+The N/P helper is advisory. It uses the computed anode count to divide the
+target total anode capacity into a per-anode target, then highlights a
+recommended anode set. It should not silently auto-select electrodes, change
+stack validation, or change saved `position_index` semantics. If the operator
+uses the "select suggested anodes" button, it is still only a UI selection
+shortcut before the normal stack save.
+
 ## Source Matching
 
 Every selected stack electrode must belong to the saved source cut batch for
@@ -175,7 +187,8 @@ ordinary page-level form fields.
 Rules:
 
 - coin target counts are fixed and read-only;
-- pouch and cylindrical target counts are editable;
+- pouch and cylindrical cathode target counts are editable, while anode target
+  counts are computed from the equal/`+1` anode mode;
 - invalid target counts disable stack selection;
 - once a role reaches its target count, remaining unselected checkboxes for
   that role are disabled;

@@ -1,7 +1,7 @@
 # Materials And Capacity Future Work
 
 Created: 2026-05-06
-Edited: 2026-05-12
+Edited: 2026-05-13
 Status: future idea
 
 This file preserves useful future ideas extracted during Batch 2. It is not
@@ -40,10 +40,10 @@ Possible later work:
 
 Possible later work:
 
-- assisted electrode matching for battery assembly: user gives target capacity
-  and desired anode excess/N/P percent, then the app ranks available electrodes
-  by closest calculated capacity match while leaving final selection to the
-  operator;
+- advanced electrode matching beyond the current N/P helper: combinatorial
+  optimization for unusual capacity distributions, saved/default N/P presets by
+  tape or project, and optional sorting modes after real lab usage proves the
+  need;
 - frozen historical capacity snapshots;
 - min, max, spread, and standard deviation for electrode batch capacity;
 - energy calculations in Wh after voltage model decisions;

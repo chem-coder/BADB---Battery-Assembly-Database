@@ -1,7 +1,7 @@
 # Capacity Calculations
 
 Created: 2026-05-06
-Edited: 2026-05-12
+Edited: 2026-05-13
 Status: current
 Verified against code: 2026-05-06
 
@@ -209,6 +209,28 @@ Battery capacity is derived from selected battery stack electrodes. The vanilla
 Batteries page shows the calculated per-electrode capacity in the stack picker
 and the selected-stack summary, alongside electrode id and mass, so the operator
 can compare cathode/anode capacity before saving the stack.
+
+The Batteries page also provides N/P assistance. The user enters desired anode
+excess percent, and the page calculates:
+
+```text
+target_np_ratio = 1 + excess_percent / 100
+```
+
+```text
+target_anode_total = total_cathode_capacity * target_np_ratio
+```
+
+```text
+target_anode_per_electrode = target_anode_total / prescribed_anode_count
+```
+
+The anode table highlights a recommended anode set, not a greedy single next
+row. The page prefers the lightest available anodes at or just above the
+per-electrode target. Each anode row shows its delta against that per-electrode
+target, and the user may either select manually or apply the suggested set with
+the page button. This is a selection aid only; it does not silently auto-select
+electrodes or weaken stack validation.
 
 Current battery summary values include:
 

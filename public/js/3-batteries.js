@@ -119,6 +119,8 @@ const state = {
     selectedAnodes: [],
     targetCathodeCount: null,
     targetAnodeCount: null,
+    targetAnodeMode: 'same',
+    targetAnodeExcessPercent: null,
     readOnly: false,
     hideSelectionBlocks: false,
     loadedAssemblyComplete: false
@@ -358,6 +360,7 @@ function getCurrentBatteryStackSnapshot() {
   return JSON.stringify({
     targetCathodeCount: state.stack.targetCathodeCount,
     targetAnodeCount: state.stack.targetAnodeCount,
+    targetAnodeMode: state.stack.targetAnodeMode,
     selectedCathodes: state.stack.selectedCathodes.map(e => ({
       electrode_id: e.electrode_id,
       electrode_mass_g: e.electrode_mass_g ?? null
@@ -913,9 +916,38 @@ function setSelectedAnodes(anodes) {
   state.stack.selectedAnodes = normalizeElectrodeRecords(anodes);
 }
 
-function setStackTargetCounts({ cathodes = null, anodes = null } = {}) {
+function isMultiElectrodeFormFactor(formFactor) {
+  return formFactor === 'pouch' || formFactor === 'cylindrical';
+}
+
+function normalizeStackAnodeMode(mode) {
+  return mode === 'plus_one' ? 'plus_one' : 'same';
+}
+
+function getDefaultStackAnodeMode() {
+  const { formFactor } = getStackSelectionContext();
+  return isMultiElectrodeFormFactor(formFactor) ? 'plus_one' : 'same';
+}
+
+function deriveStackAnodeMode(cathodes, anodes) {
+  return Number.isInteger(cathodes) && Number.isInteger(anodes) && anodes === cathodes + 1
+    ? 'plus_one'
+    : 'same';
+}
+
+function computeStackAnodeCount(cathodes, mode) {
+  if (!Number.isInteger(cathodes) || cathodes <= 0) return null;
+  return cathodes + (normalizeStackAnodeMode(mode) === 'plus_one' ? 1 : 0);
+}
+
+function setStackTargetCounts({ cathodes = null, anodes = null, anodeMode = null } = {}) {
   state.stack.targetCathodeCount = cathodes;
   state.stack.targetAnodeCount = anodes;
+  state.stack.targetAnodeMode = anodeMode
+    ? normalizeStackAnodeMode(anodeMode)
+    : Number.isInteger(cathodes) && Number.isInteger(anodes)
+      ? deriveStackAnodeMode(cathodes, anodes)
+      : getDefaultStackAnodeMode();
 }
 
 function setStackTargetCountsFromCurrentStack() {
@@ -1041,17 +1073,38 @@ function parsePositiveIntegerInput(inputId) {
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
+function parseNonNegativeNumberInput(inputId) {
+  const rawValue = document.getElementById(inputId)?.value || '';
+  const value = Number(rawValue);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 function syncStackTargetCountStateFromDom() {
   const { formFactor } = getStackSelectionContext();
 
-  if (formFactor !== 'pouch' && formFactor !== 'cylindrical') {
+  if (!isMultiElectrodeFormFactor(formFactor)) {
     syncFixedStackTargetCountsFromConfig();
     return;
   }
 
+  const cathodes = parsePositiveIntegerInput('stack_target_cathodes');
+  const anodeMode = normalizeStackAnodeMode(state.stack.targetAnodeMode);
+
   setStackTargetCounts({
-    cathodes: parsePositiveIntegerInput('stack_target_cathodes'),
-    anodes: parsePositiveIntegerInput('stack_target_anodes')
+    cathodes,
+    anodes: computeStackAnodeCount(cathodes, anodeMode),
+    anodeMode
+  });
+}
+
+function setStackAnodeModeFromUi(mode) {
+  const anodeMode = normalizeStackAnodeMode(mode);
+  const cathodes = state.stack.targetCathodeCount;
+
+  setStackTargetCounts({
+    cathodes,
+    anodes: computeStackAnodeCount(cathodes, anodeMode),
+    anodeMode
   });
 }
 
@@ -1136,6 +1189,7 @@ function captureSectionState(sectionKey) {
     return JSON.stringify({
       targetCathodeCount: state.stack.targetCathodeCount,
       targetAnodeCount: state.stack.targetAnodeCount,
+      targetAnodeMode: state.stack.targetAnodeMode,
       selectedCathodes: state.stack.selectedCathodes.map(e => ({
         electrode_id: e.electrode_id,
         electrode_mass_g: e.electrode_mass_g ?? null
@@ -1209,7 +1263,7 @@ function getStackTargetCounts() {
     return { cathodes: 1, anodes: 1, valid: true, fixed: true };
   }
 
-  if (formFactor === 'pouch' || formFactor === 'cylindrical') {
+  if (isMultiElectrodeFormFactor(formFactor)) {
     const cathodes = state.stack.targetCathodeCount;
     const anodes = state.stack.targetAnodeCount;
     const valid = Number.isInteger(cathodes) &&
@@ -1217,7 +1271,13 @@ function getStackTargetCounts() {
       cathodes > 0 &&
       (anodes === cathodes || anodes === cathodes + 1);
 
-    return { cathodes: cathodes || 0, anodes: anodes || 0, valid, fixed: false };
+    return {
+      cathodes: cathodes || 0,
+      anodes: anodes || 0,
+      valid,
+      fixed: false,
+      anodeMode: state.stack.targetAnodeMode
+    };
   }
 
   return { cathodes: 0, anodes: 0, valid: false, fixed: true };
@@ -1229,7 +1289,8 @@ function syncFixedStackTargetCountsFromConfig() {
   if (targets.fixed) {
     setStackTargetCounts({
       cathodes: targets.cathodes,
-      anodes: targets.anodes
+      anodes: targets.anodes,
+      anodeMode: deriveStackAnodeMode(targets.cathodes, targets.anodes)
     });
   }
 }
@@ -1238,10 +1299,11 @@ function renderStackTargetCountControls() {
   syncFixedStackTargetCountsFromConfig();
 
   const { formFactor } = getStackSelectionContext();
-  const isMultiElectrodeCell = formFactor === 'pouch' || formFactor === 'cylindrical';
+  const isMultiElectrodeCell = isMultiElectrodeFormFactor(formFactor);
   const root = document.getElementById('battery_stack_target_counts');
   const cathodesInput = document.getElementById('stack_target_cathodes');
   const anodesInput = document.getElementById('stack_target_anodes');
+  const anodeModeButtons = Array.from(document.querySelectorAll('[data-anode-mode]'));
   const hint = document.getElementById('battery_stack_target_hint');
 
   if (!root) return;
@@ -1255,8 +1317,16 @@ function renderStackTargetCountControls() {
 
   if (anodesInput) {
     anodesInput.value = state.stack.targetAnodeCount ?? '';
+    anodesInput.readOnly = true;
     anodesInput.disabled = !isMultiElectrodeCell || state.stack.readOnly;
   }
+
+  anodeModeButtons.forEach((button) => {
+    const isPressed = button.dataset.anodeMode === state.stack.targetAnodeMode;
+    button.hidden = !isMultiElectrodeCell;
+    button.disabled = !isMultiElectrodeCell || state.stack.readOnly;
+    button.setAttribute('aria-pressed', String(isPressed));
+  });
 
   if (!hint) return;
 
@@ -1267,8 +1337,8 @@ function renderStackTargetCountControls() {
 
   const targets = getStackTargetCounts();
   hint.textContent = targets.valid
-    ? 'Можно выбрать ровно указанное количество электродов. Анодов должно быть столько же, сколько катодов, или на один больше.'
-    : 'Укажите количество катодов и анодов. Анодов должно быть столько же, сколько катодов, или на один больше.';
+    ? 'Аноды рассчитываются автоматически: столько же, сколько катодов, или на один больше.'
+    : 'Укажите количество катодов и выберите режим количества анодов.';
 }
 
 function getSelectedElectrodesByRole(role) {
@@ -1322,6 +1392,7 @@ function handleStackElectrodeClick(event, role) {
   if (event.currentTarget.disabled) return;
 
   toggleStackElectrodeSelection(role, event.currentTarget.value);
+  setBatteryNpSelectionFeedback('');
   renderStackSummary();
   renderStackUiState();
   updateDirtyFlags();
@@ -1370,6 +1441,9 @@ function renderStackUiState() {
     cb.checked = idListIncludes(selectedAnodeIds, cb.value);
     cb.disabled = cb.dataset.available !== 'true';
   });
+
+  renderBatteryNpAssist();
+  renderAnodeNpGuidance();
 
   if (state.stack.readOnly || !isBatteryStackInteractable()) {
     cathodeCheckboxes.forEach(cb => { cb.disabled = true; });
@@ -1436,7 +1510,7 @@ function renderStackUiState() {
     return;
   }
 
-  if (formFactor === 'pouch' || formFactor === 'cylindrical') {
+  if (isMultiElectrodeFormFactor(formFactor)) {
     if (!targets.valid) {
       cathodeCheckboxes.forEach(cb => { cb.disabled = true; });
       anodeCheckboxes.forEach(cb => { cb.disabled = true; });
@@ -2400,10 +2474,43 @@ function formatBatteryRatio(value, digits = 3) {
   return Number.isFinite(num) ? num.toFixed(digits) : '—';
 }
 
+function formatBatteryCapacityDelta(value, digits = 3) {
+  const num = toFiniteBatteryNumber(value);
+  if (!Number.isFinite(num)) return '—';
+  const sign = num > 0 ? '+' : '';
+  return `${sign}${num.toFixed(digits)} мАч`;
+}
+
 function sumFiniteBatteryValues(values) {
   const numeric = (Array.isArray(values) ? values : []).filter((value) => Number.isFinite(value));
   if (!numeric.length) return null;
   return numeric.reduce((sum, value) => sum + value, 0);
+}
+
+function getBatteryCapacityTotalStatus(rows) {
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  if (!sourceRows.length) {
+    return { total: 0, missingCount: 0, hasRows: false, isComplete: true };
+  }
+
+  let total = 0;
+  let missingCount = 0;
+
+  sourceRows.forEach((row) => {
+    const capacity = toFiniteBatteryNumber(row?.capacity_actual_mAh);
+    if (Number.isFinite(capacity) && capacity > 0) {
+      total += capacity;
+    } else {
+      missingCount += 1;
+    }
+  });
+
+  return {
+    total,
+    missingCount,
+    hasRows: true,
+    isComplete: missingCount === 0
+  };
 }
 
 function getBatteryElectrodeAreaCm2(row) {
@@ -2574,6 +2681,321 @@ function buildBatteryCapacitySummaryFromSelections() {
     limiting_areal_capacity_theoretical_mAh_cm2: limitingArealCapacityTheoretical,
     limiting_areal_capacity_actual_mAh_cm2: limitingArealCapacityActual
   };
+}
+
+function shouldShowBatteryNpAssist() {
+  const { formFactor, coinMode } = getStackSelectionContext();
+  if (formFactor === 'coin') return coinMode === 'full_cell';
+  return isMultiElectrodeFormFactor(formFactor);
+}
+
+function buildBatteryNpRecommendedAnodeSet({ targetAnodeTotal, targetAnodeCount }) {
+  const prescribedCount = Number.isInteger(targetAnodeCount) ? targetAnodeCount : 0;
+  const targetTotal = toFiniteBatteryNumber(targetAnodeTotal);
+
+  if (!(prescribedCount > 0) || !(Number.isFinite(targetTotal) && targetTotal > 0)) {
+    return {
+      perAnodeTarget: null,
+      recommendedAnodeIds: new Set(),
+      recommendedAnodeTotal: null,
+      isComplete: false
+    };
+  }
+
+  const perAnodeTarget = targetTotal / prescribedCount;
+  const availableCandidates = state.reference.anodeElectrodes
+    .map((row) => ({
+      row,
+      electrodeId: normalizeNumberId(row?.electrode_id),
+      capacity: toFiniteBatteryNumber(row?.capacity_actual_mAh)
+    }))
+    .filter((item) =>
+      item.electrodeId !== null &&
+      Number.isFinite(item.capacity) &&
+      item.capacity > 0 &&
+      isAvailableElectrodeStatus(item.row?.status_code)
+    );
+
+  const aboveTarget = availableCandidates
+    .filter((item) => item.capacity >= perAnodeTarget)
+    .sort((a, b) =>
+      (a.capacity - b.capacity) ||
+      ((a.electrodeId ?? 0) - (b.electrodeId ?? 0))
+    );
+  const belowTarget = availableCandidates
+    .filter((item) => item.capacity < perAnodeTarget)
+    .sort((a, b) =>
+      (b.capacity - a.capacity) ||
+      ((a.electrodeId ?? 0) - (b.electrodeId ?? 0))
+    );
+
+  const recommendedRows = [];
+  [...aboveTarget, ...belowTarget].some((item) => {
+    if (recommendedRows.length >= prescribedCount) return true;
+    recommendedRows.push(item);
+    return false;
+  });
+
+  const recommendedAnodeIds = new Set(recommendedRows.map((item) => item.electrodeId));
+  const recommendedAnodeTotal = recommendedRows.length
+    ? recommendedRows.reduce((sum, item) => sum + item.capacity, 0)
+    : null;
+
+  return {
+    perAnodeTarget,
+    recommendedAnodeIds,
+    recommendedAnodeTotal,
+    isComplete: recommendedRows.length === prescribedCount
+  };
+}
+
+function getBatteryNpAssistContext() {
+  const { cathodes, anodes } = getEffectiveBatterySelections();
+  const cathodeStatus = getBatteryCapacityTotalStatus(cathodes);
+  const excessPercent = toFiniteBatteryNumber(state.stack.targetAnodeExcessPercent);
+  const hasTarget = Number.isFinite(excessPercent) && excessPercent >= 0;
+  const targetRatio = hasTarget ? 1 + (excessPercent / 100) : null;
+  const canCalculateTarget =
+    shouldShowBatteryNpAssist() &&
+    hasTarget &&
+    cathodeStatus.hasRows &&
+    cathodeStatus.isComplete &&
+    cathodeStatus.total > 0;
+  const targetAnodeTotal = canCalculateTarget ? cathodeStatus.total * targetRatio : null;
+  const targets = getStackTargetCounts();
+
+  const context = {
+    cathodes,
+    anodes,
+    cathodeStatus,
+    excessPercent,
+    hasTarget,
+    targetRatio,
+    canCalculateTarget,
+    targetAnodeTotal,
+    targets,
+    perAnodeTarget: null,
+    recommendedAnodeIds: new Set(),
+    recommendedAnodeTotal: null,
+    recommendedAnodeSetComplete: false
+  };
+
+  if (canCalculateTarget && targets.valid) {
+    const recommendedSet = buildBatteryNpRecommendedAnodeSet({
+      targetAnodeTotal,
+      targetAnodeCount: targets.anodes
+    });
+
+    context.perAnodeTarget = recommendedSet.perAnodeTarget;
+    context.recommendedAnodeIds = recommendedSet.recommendedAnodeIds;
+    context.recommendedAnodeTotal = recommendedSet.recommendedAnodeTotal;
+    context.recommendedAnodeSetComplete = recommendedSet.isComplete;
+  }
+
+  return context;
+}
+
+function renderBatteryNpDeltaCell() {
+  const cell = document.createElement('td');
+  cell.className = 'battery-np-delta-cell';
+  return cell;
+}
+
+function setBatteryNpGuidanceCell(cell, primaryText, secondaryText = '', extraClass = '') {
+  cell.classList.toggle('battery-np-best-label', extraClass === 'best');
+  cell.replaceChildren();
+
+  const primary = document.createElement('div');
+  primary.className = 'battery-np-guidance-primary';
+  primary.textContent = primaryText;
+  cell.appendChild(primary);
+
+  if (secondaryText) {
+    const secondary = document.createElement('div');
+    secondary.className = 'battery-np-guidance-secondary';
+    secondary.textContent = secondaryText;
+    cell.appendChild(secondary);
+  }
+}
+
+let batteryNpFeedbackTimer = null;
+
+function setBatteryNpSelectionFeedback(message = '') {
+  const feedback = document.getElementById('battery_np_select_feedback');
+  if (!feedback) return;
+
+  feedback.textContent = message;
+
+  if (batteryNpFeedbackTimer) {
+    clearTimeout(batteryNpFeedbackTimer);
+    batteryNpFeedbackTimer = null;
+  }
+
+  if (message) {
+    batteryNpFeedbackTimer = setTimeout(() => {
+      feedback.textContent = '';
+      batteryNpFeedbackTimer = null;
+    }, 2500);
+  }
+}
+
+function renderAnodeNpGuidance() {
+  const context = getBatteryNpAssistContext();
+  const selectedIds = context.anodes.map((row) => normalizeNumberId(row.electrode_id));
+
+  document.querySelectorAll('[data-anode-electrode-row="true"]').forEach((rowEl) => {
+    const electrodeId = normalizeNumberId(rowEl.dataset.electrodeId);
+    const electrode = state.reference.anodeElectrodes.find((row) => idsMatch(row.electrode_id, electrodeId));
+    const deltaCell = rowEl.querySelector('.battery-np-delta-cell');
+    const isSelected = idListIncludes(selectedIds, electrodeId);
+    const isRecommended = electrodeId !== null && context.recommendedAnodeIds.has(electrodeId);
+
+    rowEl.classList.toggle('battery-np-best-candidate', isRecommended);
+
+    if (!deltaCell) return;
+
+    if (!shouldShowBatteryNpAssist()) {
+      setBatteryNpGuidanceCell(deltaCell, '—');
+      return;
+    }
+
+    if (!context.hasTarget) {
+      setBatteryNpGuidanceCell(deltaCell, '—');
+      return;
+    }
+
+    if (!context.canCalculateTarget) {
+      setBatteryNpGuidanceCell(deltaCell, '—');
+      return;
+    }
+
+    const capacity = toFiniteBatteryNumber(electrode?.capacity_actual_mAh);
+    if (!(Number.isFinite(capacity) && capacity > 0) || !Number.isFinite(context.perAnodeTarget)) {
+      setBatteryNpGuidanceCell(deltaCell, '—');
+      return;
+    }
+
+    const delta = capacity - context.perAnodeTarget;
+    const note = isRecommended
+      ? (isSelected ? 'предложен, выбран' : 'предложен')
+      : (isSelected ? 'выбран' : '');
+    setBatteryNpGuidanceCell(
+      deltaCell,
+      formatBatteryCapacityDelta(delta),
+      note,
+      isRecommended ? 'best' : ''
+    );
+  });
+}
+
+function renderBatteryNpAssist() {
+  const root = document.getElementById('battery_np_assist');
+  const targetLabel = document.getElementById('battery_np_target_label');
+  const summaryRoot = document.getElementById('battery_np_summary');
+  const selectSuggestedBtn = document.getElementById('battery_np_select_suggested_btn');
+
+  if (!root || !targetLabel || !summaryRoot) return;
+
+  const shouldShow = Boolean(state.selection.currentBatteryId) && shouldShowBatteryNpAssist();
+  root.hidden = !shouldShow;
+
+  if (!shouldShow) {
+    targetLabel.textContent = '';
+    summaryRoot.innerHTML = '';
+    if (selectSuggestedBtn) selectSuggestedBtn.disabled = true;
+    setBatteryNpSelectionFeedback('');
+    return;
+  }
+
+  const context = getBatteryNpAssistContext();
+  const canSelectSuggested =
+    context.recommendedAnodeSetComplete &&
+    isBatteryStackInteractable() &&
+    !state.stack.readOnly;
+
+  if (selectSuggestedBtn) {
+    selectSuggestedBtn.disabled = !canSelectSuggested;
+  }
+
+  if (!context.hasTarget) {
+    targetLabel.textContent = 'Введите избыток, чтобы рассчитать целевую ёмкость анодов.';
+    summaryRoot.innerHTML = '<span>Выберите катоды вручную, затем задайте избыток анода для подсказок по анодам.</span>';
+    setBatteryNpSelectionFeedback('');
+    return;
+  }
+
+  targetLabel.textContent = `Целевой N/P: ${formatBatteryRatio(context.targetRatio)}`;
+
+  if (!context.cathodeStatus.hasRows) {
+    summaryRoot.innerHTML = '<span>Выберите катоды, чтобы рассчитать целевую суммарную ёмкость анодов.</span>';
+    setBatteryNpSelectionFeedback('');
+    return;
+  }
+
+  if (!context.cathodeStatus.isComplete || !(context.cathodeStatus.total > 0)) {
+    summaryRoot.innerHTML = '<span>Для выбранных катодов не хватает расчётной ёмкости.</span>';
+    setBatteryNpSelectionFeedback('');
+    return;
+  }
+
+  const perAnodeTargetText = Number.isFinite(context.perAnodeTarget)
+    ? formatBatteryCapacity(context.perAnodeTarget)
+    : '—';
+  const recommendedSetText = context.recommendedAnodeSetComplete
+    ? formatBatteryCapacity(context.recommendedAnodeTotal)
+    : 'недостаточно подходящих анодов';
+
+  summaryRoot.innerHTML = `
+    <div class="battery-np-summary-grid">
+      <div class="battery-np-summary-item">
+        <span>Катоды</span>
+        <strong>${escapeHtml(`${context.cathodes.length} / ${context.targets.cathodes || '—'}`)}</strong>
+      </div>
+      <div class="battery-np-summary-item">
+        <span>Σ катодов</span>
+        <strong>${escapeHtml(formatBatteryCapacity(context.cathodeStatus.total))}</strong>
+      </div>
+      <div class="battery-np-summary-item">
+        <span>Цель Σ анодов</span>
+        <strong>${escapeHtml(formatBatteryCapacity(context.targetAnodeTotal))}</strong>
+      </div>
+      <div class="battery-np-summary-item">
+        <span>Цель на 1 анод</span>
+        <strong>${escapeHtml(perAnodeTargetText)}</strong>
+      </div>
+      <div class="battery-np-summary-item">
+        <span>Рекоменд. набор</span>
+        <strong>${escapeHtml(recommendedSetText)}</strong>
+      </div>
+    </div>
+    <div class="battery-np-warning">Предложенные аноды подсвечены в таблице. Δ показывает ёмкость анода относительно цели на один анод.</div>
+  `;
+}
+
+function selectBatteryNpSuggestedAnodes() {
+  const context = getBatteryNpAssistContext();
+  if (
+    !context.recommendedAnodeSetComplete ||
+    !isBatteryStackInteractable() ||
+    state.stack.readOnly
+  ) {
+    return;
+  }
+
+  const recommendedIds = Array.from(context.recommendedAnodeIds);
+  const recommendedAnodes = recommendedIds
+    .map((electrodeId) =>
+      state.reference.anodeElectrodes.find((row) => idsMatch(row.electrode_id, electrodeId))
+    )
+    .filter(Boolean);
+
+  if (!recommendedAnodes.length) return;
+
+  setSelectedAnodes(recommendedAnodes);
+  renderStackSummary();
+  renderStackUiState();
+  updateDirtyFlags();
+  setBatteryNpSelectionFeedback('Аноды выбраны');
 }
 
 function escapeHtml(value) {
@@ -4331,9 +4753,16 @@ function resetBatterySectionState() {
   setQcState(getDefaultQcState());
 }
 
+function resetBatteryNpAssistState() {
+  state.stack.targetAnodeExcessPercent = null;
+  const input = document.getElementById('battery_np_excess_percent');
+  if (input) input.value = '';
+}
+
 function resetBatteryPageStateForRestore() {
   clearBatteryRestoreFieldsets();
   resetBatterySectionState();
+  resetBatteryNpAssistState();
   resetElectrodeSelection();
   resetBatteryDeleteFlow();
 }
@@ -5161,6 +5590,8 @@ function renderAnodeElectrodeTable() {
   state.reference.anodeElectrodes.forEach((e, index) => {
     
     const tr = document.createElement('tr');
+    tr.dataset.anodeElectrodeRow = 'true';
+    tr.dataset.electrodeId = e.electrode_id;
     tr.classList.toggle('stack-electrode-unavailable', !isAvailableElectrodeStatus(e.status_code));
     
     const numCell = document.createElement('td');
@@ -5176,6 +5607,8 @@ function renderAnodeElectrodeTable() {
     tr.appendChild(massCell);
 
     tr.appendChild(renderBatteryElectrodeCapacityCell(e));
+
+    tr.appendChild(renderBatteryNpDeltaCell());
     
     const selectCell = document.createElement('td');
     
@@ -5246,6 +5679,10 @@ function renderStackSummary() {
   stack.forEach((e,index)=>{
     
     const tr = document.createElement('tr');
+    const roleClass = e.role === 'Катод'
+      ? 'battery-stack-summary-cathode'
+      : 'battery-stack-summary-anode';
+    tr.classList.add(roleClass);
     
     const posCell = document.createElement('td');
     posCell.textContent = index+1;
@@ -5270,6 +5707,8 @@ function renderStackSummary() {
   });
 
   renderBatteryCapacitySummary();
+  renderBatteryNpAssist();
+  renderAnodeNpGuidance();
   
 }
 
@@ -5362,11 +5801,11 @@ function validateStackBalance() {
     return true;
   }
 
-  if (formFactor === 'pouch' || formFactor === 'cylindrical') {
+  if (isMultiElectrodeFormFactor(formFactor)) {
     if (!targets.valid) {
       showBatteryInlineStatus(
         statusTargetId,
-        'Укажите количество катодов и анодов. Анодов должно быть столько же, сколько катодов, или на один больше.',
+        'Укажите количество катодов и выберите режим количества анодов.',
         true
       );
       return false;
@@ -5448,10 +5887,10 @@ function validateStackSelection() {
   
   /* ----- full-cell / pouch / cylindrical rules ----- */
 
-  if ((formFactor === 'pouch' || formFactor === 'cylindrical') && !targets.valid) {
+  if (isMultiElectrodeFormFactor(formFactor) && !targets.valid) {
     showBatteryInlineStatus(
       statusTargetId,
-      'Укажите количество катодов и анодов. Анодов должно быть столько же, сколько катодов, или на один больше.',
+      'Укажите количество катодов и выберите режим количества анодов.',
       true
     );
     return false;
@@ -5604,7 +6043,7 @@ function trimStackSelectionForCurrentMode() {
     return;
   }
 
-  if ((formFactor === 'pouch' || formFactor === 'cylindrical') && targets.valid) {
+  if (isMultiElectrodeFormFactor(formFactor) && targets.valid) {
     setSelectedCathodes(state.stack.selectedCathodes.slice(0, targets.cathodes));
     setSelectedAnodes(state.stack.selectedAnodes.slice(0, targets.anodes));
   }
@@ -5697,6 +6136,7 @@ function resetBatteryPageState({ openForm = false } = {}) {
 
   document.querySelector('form[name="battery_assembly_log_form"]').reset();
 
+  resetBatteryNpAssistState();
   resetElectrodeSelection();
   renderFormFactorSections();
   renderCoinCellModeUi();
@@ -6216,6 +6656,9 @@ const pouchCaseSizeSelect = document.getElementById('pouch_case_size_code');
 const cylSizeSelect = document.getElementById('cyl_size_code');
 const stackTargetCathodesInput = document.getElementById('stack_target_cathodes');
 const stackTargetAnodesInput = document.getElementById('stack_target_anodes');
+const stackAnodeModeButtons = Array.from(document.querySelectorAll('[data-anode-mode]'));
+const batteryNpExcessInput = document.getElementById('battery_np_excess_percent');
+const batteryNpSelectSuggestedBtn = document.getElementById('battery_np_select_suggested_btn');
 
 coinCellModeSelect.addEventListener('change', () => {
   handleCoinCellModeChange();
@@ -6244,6 +6687,7 @@ if (cylSizeSelect) {
 [stackTargetCathodesInput, stackTargetAnodesInput].forEach((input) => {
   if (!input) return;
   input.addEventListener('input', () => {
+    setBatteryNpSelectionFeedback('');
     syncStackTargetCountStateFromDom();
     trimStackSelectionForCurrentMode();
     renderStackSummary();
@@ -6251,6 +6695,34 @@ if (cylSizeSelect) {
     updateDirtyFlags();
   });
 });
+
+stackAnodeModeButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    if (button.disabled) return;
+    setBatteryNpSelectionFeedback('');
+    syncStackTargetCountStateFromDom();
+    setStackAnodeModeFromUi(button.dataset.anodeMode);
+    trimStackSelectionForCurrentMode();
+    renderStackSummary();
+    renderStackUiState();
+    updateDirtyFlags();
+  });
+});
+
+if (batteryNpExcessInput) {
+  batteryNpExcessInput.addEventListener('input', () => {
+    setBatteryNpSelectionFeedback('');
+    state.stack.targetAnodeExcessPercent = parseNonNegativeNumberInput('battery_np_excess_percent');
+    renderBatteryNpAssist();
+    renderAnodeNpGuidance();
+  });
+}
+
+if (batteryNpSelectSuggestedBtn) {
+  batteryNpSelectSuggestedBtn.addEventListener('click', () => {
+    selectBatteryNpSuggestedAnodes();
+  });
+}
 
 projectFilterSelect
 .addEventListener('change', async () => {
