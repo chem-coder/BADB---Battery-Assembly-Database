@@ -1,7 +1,7 @@
 # Batteries
 
 Created: 2026-05-06
-Edited: 2026-05-09
+Edited: 2026-05-12
 Status: current
 Verified against code: 2026-05-07
 
@@ -151,6 +151,8 @@ Current high-level behavior:
   sources;
 - compatible source batches are filtered by tape, shape, form factor, and
   sidedness rules;
+- stack picker and selected-stack rows show electrode id, mass, and calculated
+  per-electrode capacity;
 - saved stack electrodes are marked used by the backend;
 - saved stacks are read by `position_index`;
 - a `disassembled` battery with no rows in `battery_electrodes` may be

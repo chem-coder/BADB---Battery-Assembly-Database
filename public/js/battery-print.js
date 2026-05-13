@@ -256,8 +256,8 @@ function renderStackSection(report) {
               <th>ID электрода</th>
               <th>ID партии</th>
               <th class="report_number">m, г</th>
-              <th class="report_number">C факт, мАч</th>
-              <th class="report_number">C теор, мАч</th>
+              <th class="report_number">C расч. по факт. массе, мАч</th>
+              <th class="report_number">C по рецепту, мАч</th>
             </tr>
           </thead>
           <tbody>
@@ -396,8 +396,8 @@ function renderCapacitySection(report) {
         <thead>
           <tr>
             <th>Показатель</th>
-            <th>Факт</th>
-            <th>Теория</th>
+            <th>Расчёт по факт. массе</th>
+            <th>По рецепту</th>
           </tr>
         </thead>
         <tbody>

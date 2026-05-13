@@ -109,6 +109,37 @@
         color: #344054;
       }
 
+      .stack_table {
+        border-collapse: separate;
+        border-spacing: 0 4px;
+      }
+
+      .stack_table th,
+      .stack_table td {
+        padding: 3px 18px 3px 4px;
+        vertical-align: top;
+      }
+
+      .stack_table th:last-child,
+      .stack_table td:last-child {
+        padding-right: 4px;
+      }
+
+      .battery-electrode-capacity-cell {
+        min-width: 160px;
+        padding-left: 16px;
+      }
+
+      .battery-electrode-capacity-primary {
+        font-weight: 600;
+      }
+
+      .battery-electrode-capacity-secondary {
+        color: #748094;
+        font-size: 0.88em;
+        line-height: 1.2;
+      }
+
       .battery-derived-inline {
         margin-top: 0.35rem;
         color: #667085;
@@ -403,6 +434,7 @@
                         <th>№</th>
                         <th>ID электрода</th>
                         <th>m, g</th>
+                        <th title="Расчётная ёмкость по фактически введённой массе и составу; не измерение после циклирования">Расч. ёмк., мАч</th>
                         <th>Выбрать</th>
                       </tr>
                     </thead>
@@ -421,6 +453,7 @@
                         <th>№</th>
                         <th>ID электрода</th>
                         <th>m, g</th>
+                        <th title="Расчётная ёмкость по фактически введённой массе и составу; не измерение после циклирования">Расч. ёмк., мАч</th>
                         <th>Выбрать</th>
                       </tr>
                     </thead>
@@ -439,6 +472,7 @@
                       <th>ID электрода</th>
                       <th>Роль</th>
                       <th>m, g</th>
+                      <th title="Расчётная ёмкость по фактически введённой массе и составу; не измерение после циклирования">Расч. ёмк., мАч</th>
                     </tr>
                   </thead>
 

@@ -2359,6 +2359,27 @@ function formatBatteryCapacity(value, digits = 3) {
   return Number.isFinite(num) ? `${num.toFixed(digits)} мАч` : '—';
 }
 
+function renderBatteryElectrodeCapacityCell(row) {
+  const cell = document.createElement('td');
+  cell.className = 'battery-electrode-capacity-cell';
+  cell.title = 'Расчётная ёмкость по фактически введённой массе и составу; не измерение после циклирования.';
+
+  const primary = document.createElement('div');
+  primary.className = 'battery-electrode-capacity-primary';
+  primary.textContent = formatBatteryCapacity(row?.capacity_actual_mAh);
+  cell.appendChild(primary);
+
+  const theoreticalCapacity = toFiniteBatteryNumber(row?.capacity_theoretical_mAh);
+  if (Number.isFinite(theoreticalCapacity)) {
+    const secondary = document.createElement('div');
+    secondary.className = 'battery-electrode-capacity-secondary';
+    secondary.textContent = `по рецепту: ${formatBatteryCapacity(theoreticalCapacity)}`;
+    cell.appendChild(secondary);
+  }
+
+  return cell;
+}
+
 function formatBatteryArea(value, digits = 3) {
   const num = toFiniteBatteryNumber(value);
   return Number.isFinite(num) ? `${num.toFixed(digits)} см²` : '—';
@@ -2655,14 +2676,14 @@ function renderElectrodeGroupCapacityStep(label, rows, capacity, recipeCapacity,
     : null;
   const lines = [
     `Выбрано электродов: ${rows.length}; тип покрытия: ${sidednessText}.`,
-    `Ёмкость одного электрода: ${perElectrodeCapacityText}.`
+    `Расчётная ёмкость одного электрода: ${perElectrodeCapacityText}.`
   ];
 
   if (hasPositiveBatteryValue(perSideCapacity)) {
-    lines.push(`Ёмкость одной стороны одного электрода: ${formatBatteryCapacity(perSideCapacity)} = ${perElectrodeCapacityText} / ${sideCount}.`);
+    lines.push(`Расчётная ёмкость одной стороны одного электрода: ${formatBatteryCapacity(perSideCapacity)} = ${perElectrodeCapacityText} / ${sideCount}.`);
   }
 
-  lines.push(`Суммарная ёмкость выбранных электродов: ${formatBatteryCapacity(capacity)}.`);
+  lines.push(`Суммарная расчётная ёмкость выбранных электродов: ${formatBatteryCapacity(capacity)}.`);
 
   if (hasPositiveBatteryValue(recipeCapacity)) {
     lines.push(`Суммарная ёмкость по рецепту: ${formatBatteryCapacity(recipeCapacity)}.`);
@@ -2726,9 +2747,9 @@ function renderBatteryCapacityDetails(summary, cathodes, anodes) {
     const limitingRole = getBatteryLimitingRole(summary, cathodes, anodes);
     const limitingLabel = limitingRole === 'cathode' ? 'катоды' : 'аноды';
     const limitingArea = limitingRole === 'cathode' ? summary.cathode_area_cm2 : summary.anode_area_cm2;
-    stackLines.push(`Лимитирующая ёмкость: ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} = меньшее из суммарной ёмкости катодов и анодов; в этом стеке ограничивают ${limitingLabel}.`);
+    stackLines.push(`Расчётная лимитирующая ёмкость: ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} = меньшее из суммарной расчётной ёмкости катодов и анодов; в этом стеке ограничивают ${limitingLabel}.`);
     if (hasPositiveBatteryValue(summary.np_actual)) {
-      stackLines.push(`N/P: ${formatBatteryRatio(summary.np_actual)} = суммарная ёмкость анодов / суммарная ёмкость катодов.`);
+      stackLines.push(`N/P: ${formatBatteryRatio(summary.np_actual)} = суммарная расчётная ёмкость анодов / суммарная расчётная ёмкость катодов.`);
     }
     if (hasPositiveBatteryValue(summary.limiting_areal_capacity_actual_mAh_cm2) && hasPositiveBatteryValue(limitingArea)) {
       stackLines.push(`Лимитирующая ёмкость на площадь: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2)} = ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} / ${formatBatteryArea(limitingArea)}.`);
@@ -2736,7 +2757,7 @@ function renderBatteryCapacityDetails(summary, cathodes, anodes) {
   } else if (hasPositiveBatteryValue(summary.limiting_capacity_actual_mAh)) {
     const limitingRole = getBatteryLimitingRole(summary, cathodes, anodes);
     const limitingArea = limitingRole === 'cathode' ? summary.cathode_area_cm2 : summary.anode_area_cm2;
-    stackLines.push(`Лимитирующая ёмкость: ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} = ёмкость выбранной стороны.`);
+    stackLines.push(`Расчётная лимитирующая ёмкость: ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} = расчётная ёмкость выбранной стороны.`);
     if (hasPositiveBatteryValue(summary.limiting_areal_capacity_actual_mAh_cm2) && hasPositiveBatteryValue(limitingArea)) {
       stackLines.push(`Лимитирующая ёмкость на площадь: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2)} = ${formatBatteryCapacity(summary.limiting_capacity_actual_mAh)} / ${formatBatteryArea(limitingArea)}.`);
     }
@@ -2809,7 +2830,7 @@ function renderBatteryCapacitySummary() {
       'На площадь',
       formatBatteryArealCapacity(summary.limiting_areal_capacity_actual_mAh_cm2),
       `по рецепту: ${formatBatteryArealCapacity(summary.limiting_areal_capacity_theoretical_mAh_cm2)}`,
-      'Расчётная лимитирующая ёмкость, нормированная на площадь лимитирующих электродов.'
+      'Расчётная лимитирующая ёмкость по фактической массе/составу, нормированная на площадь лимитирующих электродов.'
     ));
   }
 
@@ -2818,7 +2839,7 @@ function renderBatteryCapacitySummary() {
       'N/P',
       formatBatteryRatio(summary.np_actual),
       `по рецепту: ${formatBatteryRatio(summary.np_theoretical)}`,
-      'N/P по фактически введённым массам электродов. Вторичная строка — расчётное отношение по рецепту.'
+      'N/P по расчётной ёмкости из фактически введённых масс электродов. Вторичная строка — расчётное отношение по рецепту.'
     ));
   }
 
@@ -2858,7 +2879,7 @@ function renderElectrolyteCapacityRatio({ targetId, assemblyState, summary }) {
     ? `; по рецепту: ${formatBatteryElectrolyteRatio(theoreticalRatio)}`
     : '';
 
-  target.textContent = `Электролит / ёмкость: расч. по факт. массе ${formatBatteryElectrolyteRatio(actualRatio)}${secondary}`;
+  target.textContent = `Электролит / расчётная ёмкость: по факт. массе ${formatBatteryElectrolyteRatio(actualRatio)}${secondary}`;
   target.hidden = false;
 }
 
@@ -5100,6 +5121,8 @@ function renderCathodeElectrodeTable() {
     const massCell = document.createElement('td');
     massCell.textContent = e.electrode_mass_g ?? '';
     tr.appendChild(massCell);
+
+    tr.appendChild(renderBatteryElectrodeCapacityCell(e));
     
     const selectCell = document.createElement('td');
     
@@ -5151,6 +5174,8 @@ function renderAnodeElectrodeTable() {
     const massCell = document.createElement('td');
     massCell.textContent = e.electrode_mass_g ?? '';
     tr.appendChild(massCell);
+
+    tr.appendChild(renderBatteryElectrodeCapacityCell(e));
     
     const selectCell = document.createElement('td');
     
@@ -5237,6 +5262,8 @@ function renderStackSummary() {
     const massCell = document.createElement('td');
     massCell.textContent = e.electrode_mass_g ?? '';
     tr.appendChild(massCell);
+
+    tr.appendChild(renderBatteryElectrodeCapacityCell(e));
     
     body.appendChild(tr);
     

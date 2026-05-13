@@ -1,7 +1,7 @@
 # Capacity Calculations
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-05-12
 Status: current
 Verified against code: 2026-05-06
 
@@ -159,6 +159,12 @@ capacity_actual_mAh =
   active_material_mass_actual_g * specific_capacity_mah_g
 ```
 
+`capacity_actual_mAh` is an internal compatibility name. It means calculated
+capacity from the recorded actual electrode mass/composition inputs. It is not
+measured discharge capacity from cycling data. User-facing labels should say
+`Расчётная ёмкость`, `расчёт по факт. массе`, or equivalent wording rather than
+presenting the value as measured factual capacity.
+
 ```text
 areal_capacity_mAh_cm2 = capacity_mAh / electrode_area_cm2
 ```
@@ -199,7 +205,10 @@ The Electrodes page and electrode batch print report use this summary.
 
 ## Battery Summary
 
-Battery capacity is derived from selected battery stack electrodes.
+Battery capacity is derived from selected battery stack electrodes. The vanilla
+Batteries page shows the calculated per-electrode capacity in the stack picker
+and the selected-stack summary, alongside electrode id and mass, so the operator
+can compare cathode/anode capacity before saving the stack.
 
 Current battery summary values include:
 
