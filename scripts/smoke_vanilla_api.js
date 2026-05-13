@@ -33,7 +33,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd029_electrode_cut_batch_projects_many_to_many.sql'),
   path.join(ROOT, 'migrations', 'd030_battery_projects_many_to_many.sql'),
   path.join(ROOT, 'migrations', 'd031_harden_battery_stack_validate_trigger.sql'),
-  path.join(ROOT, 'migrations', 'd032_create_schema_migrations_table.sql')
+  path.join(ROOT, 'migrations', 'd032_create_schema_migrations_table.sql'),
+  path.join(ROOT, 'migrations', 'd033_add_coating_side2_gap_and_drying_speed.sql')
 ];
 
 function parseArgs(argv) {
@@ -829,9 +830,10 @@ async function runWriteSmoke(client, seed, context) {
       comments: 'smoke coating',
       foil_id: 1,
       coating_id: 1,
-      coating_sidedness: 'one_sided',
+      coating_sidedness: 'two_sided',
       gap_um: 100,
-      coat_temp_c: 25,
+      gap_um_side2: 105,
+      coat_temp_c: null,
       coat_time_min: 10,
       method_comments: 'smoke'
     });
@@ -843,6 +845,7 @@ async function runWriteSmoke(client, seed, context) {
       temperature_c: 80,
       atmosphere: 'vacuum',
       target_duration_min: 60,
+      drying_speed_text: 'smoke speed',
       other_parameters: 'none'
     });
     await client.get(`/api/tapes/${made.tapeId}/steps/drying?operation_code=drying_pressed_tape`);

@@ -37,6 +37,7 @@ async function getTapeStepByCode(pool, tapeId, code) {
       d.temperature_c,
       d.atmosphere,
       d.target_duration_min,
+      d.drying_speed_text,
       d.other_parameters
     `;
   }
@@ -72,6 +73,7 @@ async function getTapeStepByCode(pool, tapeId, code) {
       c.coating_id,
       c.coating_sidedness,
       c.gap_um,
+      c.gap_um_side2,
       c.coat_temp_c,
       c.coat_time_min,
       c.method_comments
@@ -288,6 +290,7 @@ async function getTapeReport(pool, tapeId) {
         d.temperature_c,
         d.atmosphere,
         d.target_duration_min,
+        d.drying_speed_text,
         d.other_parameters,
         mix.slurry_volume_ml,
         mix.dry_mixing_id,
@@ -309,6 +312,7 @@ async function getTapeReport(pool, tapeId) {
         c.coating_sidedness,
         COALESCE(cm.comments, cm.name) AS coating_method_label,
         c.gap_um,
+        c.gap_um_side2,
         c.coat_temp_c,
         c.coat_time_min,
         c.method_comments,

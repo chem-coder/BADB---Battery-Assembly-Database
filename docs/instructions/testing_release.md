@@ -1,9 +1,9 @@
 # Testing And Release Checks
 
 Created: 2026-05-06
-Edited: 2026-05-09
+Edited: 2026-05-13
 Status: instruction
-Verified against code: 2026-05-09
+Verified against code: 2026-05-13
 Source paths: `package.json`, `scripts/check_vanilla_api_contract.js`, `scripts/smoke_vanilla_api.js`, `contracts/vanilla_api_endpoints.json`
 
 This is the canonical release-check runbook for BADB.
@@ -81,7 +81,7 @@ npm run smoke:vanilla
 This runs `scripts/smoke_vanilla_api.js`.
 
 A current successful full smoke run is expected to finish with zero failures;
-the last recorded release checkpoint was 241 checks, 0 failures. If the check
+the last recorded release checkpoint on 2026-05-13 was 241 checks, 0 failures. If the check
 count changes because the smoke surface changes, update the release readiness
 record with the new count.
 
@@ -90,7 +90,7 @@ The smoke harness:
 - checks the vanilla API contract first;
 - restores a SQL dump into a throwaway database;
 - applies current post-dump migrations needed by the restored dump, including
-  `002`, `018`, `019`, `020`, and `d028` through `d032`;
+  `002`, `018`, `019`, `020`, and `d028` through `d033`;
 - starts the Express API against the throwaway database with `AUTH_BYPASS=true`;
 - exercises vanilla-facing GET and write paths;
 - checks selected dependency/conflict behavior;
@@ -129,10 +129,11 @@ this order:
 - `d030_battery_projects_many_to_many.sql`
 - `d031_harden_battery_stack_validate_trigger.sql`
 - `d032_create_schema_migrations_table.sql`
+- `d033_add_coating_side2_gap_and_drying_speed.sql`
 
 `d032_create_schema_migrations_table.sql` creates the authoritative
 `public.schema_migrations` ledger and backfills the current baseline. A current
-migrated database should report `dima = 21` and `dalia = 20` from:
+migrated database should report `dima = 21` and `dalia = 21` after `d033` from:
 
 ```bash
 psql -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations GROUP BY migration_stream ORDER BY migration_stream;"

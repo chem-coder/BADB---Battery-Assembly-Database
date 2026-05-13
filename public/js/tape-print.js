@@ -358,6 +358,7 @@ function renderStepDetails(step) {
     return `
       ${renderCompactStepHeader(step)}
       ${renderStepLine(dryingDetails)}
+      ${renderStepMetaRow('Скорость протяжки', step.drying_speed_text, { hideIfEmpty: true })}
       ${renderStepMetaRow('Примечания', step.comments, { hideIfEmpty: true })}
       ${renderStepMetaRow('Доп. параметры', step.other_parameters, { hideIfEmpty: true })}
     `;
@@ -420,9 +421,12 @@ function renderStepDetails(step) {
       ${renderStepSpacer()}
       ${renderStepMetaRow('Фольга', step.foil_type || '—')}
       ${renderStepLine(step.coating_method_label || '—')}
-      ${renderStepMetaRow('Зазор', step.gap_um != null ? `${step.gap_um} мкм` : '—')}
-      ${renderStepMetaRow('Температура', step.coat_temp_c != null ? `${step.coat_temp_c} °C` : '—')}
-      ${renderStepMetaRow('Примечания к методу', step.method_comments, { hideIfEmpty: true })}
+      ${renderStepMetaRow(
+        step.coating_sidedness === 'two_sided' ? 'Зазор, сторона 1' : 'Зазор',
+        step.gap_um != null ? `${step.gap_um} мкм` : '—'
+      )}
+      ${renderStepMetaRow('Зазор, сторона 2', step.gap_um_side2 != null ? `${step.gap_um_side2} мкм` : null, { hideIfEmpty: true })}
+      ${renderStepMetaRow('Комментарий к нанесению и сушке', step.method_comments, { hideIfEmpty: true })}
     `;
   }
 

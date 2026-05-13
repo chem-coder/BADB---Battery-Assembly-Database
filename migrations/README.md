@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-05-09:
+Current migration file state as of 2026-05-13:
 
-- `migrations/` has 41 SQL files.
-- `migrations_ASCII/` has 41 SQL files.
+- `migrations/` has 42 SQL files.
+- `migrations_ASCII/` has 42 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d032_create_schema_migrations_table.sql`.
+- Dalia's `dNNN` stream exists through `d033_add_coating_side2_gap_and_drying_speed.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 20`.
+  counts of `dima = 21` and `dalia = 21` after `d033` is applied.
 
 ## How to apply
 
@@ -52,7 +52,7 @@ namespace so migrations never collide:
 | Namespace         | Who   | Pattern                                      |
 | ----------------- | ----- | -------------------------------------------- |
 | `NNN_*.sql`       | Dima  | Plain 3-digit counter (`001_*` … `020_*`)    |
-| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d032_*`)      |
+| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d033_*`)      |
 
 Alphabetical ordering of `ls migrations/` gives:
 
@@ -125,6 +125,9 @@ Full timeline is in the git log. High-level:
   and records the current migration baseline. The vanilla smoke harness
   also applies current post-dump migrations automatically to its
   throwaway database because the restored dump predates them.
+- `d033_add_coating_side2_gap_and_drying_speed` — adds `gap_um_side2`
+  to `tape_step_coating` and `drying_speed_text` to `tape_step_drying`
+  for the current lab coating/drying workflow.
 
 ## Check migration ledger
 
@@ -143,7 +146,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 20
+dalia = 21
 dima = 21
 ```
 

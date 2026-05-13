@@ -144,6 +144,7 @@ async function saveDryingStep(pool, { tapeId, code, body, userId }) {
     temperature_c,
     atmosphere,
     target_duration_min,
+    drying_speed_text,
     other_parameters
   } = body;
 
@@ -153,7 +154,8 @@ async function saveDryingStep(pool, { tapeId, code, body, userId }) {
     const previous = await client.query(
       `
       SELECT ps.performed_by, ps.started_at, ps.comments,
-             sub.temperature_c, sub.atmosphere, sub.target_duration_min, sub.other_parameters
+             sub.temperature_c, sub.atmosphere, sub.target_duration_min,
+             sub.drying_speed_text, sub.other_parameters
       FROM tape_process_steps ps
       LEFT JOIN tape_step_drying sub ON sub.step_id = ps.step_id
       WHERE ps.tape_id = $1 AND ps.operation_type_id = $2
@@ -174,13 +176,14 @@ async function saveDryingStep(pool, { tapeId, code, body, userId }) {
     await client.query(
       `
       INSERT INTO tape_step_drying
-        (step_id, temperature_c, atmosphere, target_duration_min, other_parameters)
-      VALUES ($1,$2,$3,$4,$5)
+        (step_id, temperature_c, atmosphere, target_duration_min, drying_speed_text, other_parameters)
+      VALUES ($1,$2,$3,$4,$5,$6)
       ON CONFLICT (step_id)
       DO UPDATE SET
         temperature_c = EXCLUDED.temperature_c,
         atmosphere = EXCLUDED.atmosphere,
         target_duration_min = EXCLUDED.target_duration_min,
+        drying_speed_text = EXCLUDED.drying_speed_text,
         other_parameters = EXCLUDED.other_parameters
       `,
       [
@@ -188,6 +191,7 @@ async function saveDryingStep(pool, { tapeId, code, body, userId }) {
         finiteNumberOrNull(temperature_c),
         valueOrNull(atmosphere),
         finiteNumberOrNull(target_duration_min),
+        valueOrNull(drying_speed_text),
         valueOrNull(other_parameters)
       ]
     );
@@ -224,6 +228,7 @@ async function saveDryingStep(pool, { tapeId, code, body, userId }) {
         temperature_c: finiteNumberOrNull(temperature_c),
         atmosphere: valueOrNull(atmosphere),
         target_duration_min: finiteNumberOrNull(target_duration_min),
+        drying_speed_text: valueOrNull(drying_speed_text),
         other_parameters: valueOrNull(other_parameters)
       }
     };
@@ -392,6 +397,7 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
     coating_id,
     coating_sidedness,
     gap_um,
+    gap_um_side2,
     coat_temp_c,
     coat_time_min,
     method_comments
@@ -404,7 +410,7 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
       `
       SELECT ps.performed_by, ps.started_at, ps.comments,
              sub.foil_id, sub.coating_id, sub.coating_sidedness, sub.gap_um,
-             sub.coat_temp_c, sub.coat_time_min, sub.method_comments
+             sub.gap_um_side2, sub.coat_temp_c, sub.coat_time_min, sub.method_comments
       FROM tape_process_steps ps
       LEFT JOIN tape_step_coating sub ON sub.step_id = ps.step_id
       WHERE ps.tape_id = $1 AND ps.operation_type_id = $2
@@ -424,14 +430,15 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
     await client.query(
       `
       INSERT INTO tape_step_coating
-        (step_id, foil_id, coating_id, coating_sidedness, gap_um, coat_temp_c, coat_time_min, method_comments)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        (step_id, foil_id, coating_id, coating_sidedness, gap_um, gap_um_side2, coat_temp_c, coat_time_min, method_comments)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       ON CONFLICT (step_id)
       DO UPDATE SET
         foil_id = EXCLUDED.foil_id,
         coating_id = EXCLUDED.coating_id,
         coating_sidedness = EXCLUDED.coating_sidedness,
         gap_um = EXCLUDED.gap_um,
+        gap_um_side2 = EXCLUDED.gap_um_side2,
         coat_temp_c = EXCLUDED.coat_temp_c,
         coat_time_min = EXCLUDED.coat_time_min,
         method_comments = EXCLUDED.method_comments
@@ -442,6 +449,7 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
         numberOrNull(coating_id),
         valueOrNull(coating_sidedness),
         finiteNumberOrNull(gap_um),
+        finiteNumberOrNull(gap_um_side2),
         finiteNumberOrNull(coat_temp_c),
         finiteNumberOrNull(coat_time_min),
         valueOrNull(method_comments)
@@ -459,6 +467,7 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
         coating_id: numberOrNull(coating_id),
         coating_sidedness: valueOrNull(coating_sidedness),
         gap_um: finiteNumberOrNull(gap_um),
+        gap_um_side2: finiteNumberOrNull(gap_um_side2),
         coat_temp_c: finiteNumberOrNull(coat_temp_c),
         coat_time_min: finiteNumberOrNull(coat_time_min),
         method_comments: valueOrNull(method_comments)

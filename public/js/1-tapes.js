@@ -1037,6 +1037,7 @@ function getDefaultWorkflowState() {
       temperature_c: '80',
       atmosphere: 'vacuum',
       target_duration_min: '120',
+      drying_speed_text: '',
       other_parameters: ''
     },
     drying_tape: {
@@ -1049,6 +1050,7 @@ function getDefaultWorkflowState() {
       temperature_c: '80',
       atmosphere: 'vacuum',
       target_duration_min: '120',
+      drying_speed_text: '',
       other_parameters: ''
     },
     drying_pressed_tape: {
@@ -1061,6 +1063,7 @@ function getDefaultWorkflowState() {
       temperature_c: '80',
       atmosphere: 'vacuum',
       target_duration_min: '120',
+      drying_speed_text: '',
       other_parameters: ''
     },
     maintenance_dry_box: {
@@ -1115,6 +1118,7 @@ function getDefaultWorkflowState() {
       coating_id: '',
       coating_sidedness: '',
       gap_um: '',
+      gap_um_side2: '',
       coat_temp_c: '',
       coat_time_min: '',
       method_comments: ''
@@ -1230,15 +1234,17 @@ function addMinutesToDateTime(date, time, durationMinutes) {
   return splitIsoToDateTime(base.toISOString());
 }
 
-const DRYING_TAPE_PREFILL_MATRIX = {
-  anode: {
-    dr_blade: { temperature_c: '80', atmosphere: 'vacuum', target_duration_min: '45' },
-    coater_machine: { temperature_c: '80', atmosphere: 'air', target_duration_min: '20' }
-  },
-  cathode: {
-    dr_blade: { temperature_c: '80', atmosphere: 'vacuum', target_duration_min: '90' },
-    coater_machine: { temperature_c: '80', atmosphere: 'air', target_duration_min: '30' }
-  }
+const DRYING_TAPE_PREFILL_DEFAULTS = {
+  two_sided: { temperature_c: '125', atmosphere: 'air', target_duration_min: '15' },
+  one_sided_anode: { temperature_c: '80', atmosphere: 'vacuum', target_duration_min: '5' },
+  one_sided_cathode: { temperature_c: '80', atmosphere: 'vacuum', target_duration_min: '30' },
+  one_sided_default: { temperature_c: '80', atmosphere: 'vacuum', target_duration_min: '30' }
+};
+
+const DRYING_DEFAULTISH_VALUES = {
+  temperature_c: new Set(['', '80', '125']),
+  atmosphere: new Set(['', 'air', 'vacuum']),
+  target_duration_min: new Set(['', '5', '15', '20', '30', '45', '90', '120'])
 };
 
 function getNormalizedTapeRole() {
@@ -1256,8 +1262,24 @@ function getNormalizedCoatingMethodKey() {
 
 function getDryingTapePrefillValues() {
   const role = getNormalizedTapeRole();
-  const methodKey = getNormalizedCoatingMethodKey();
-  return DRYING_TAPE_PREFILL_MATRIX[role]?.[methodKey] || null;
+  const sidedness = state.workflow.coating?.coating_sidedness;
+  if (sidedness === 'two_sided') {
+    return DRYING_TAPE_PREFILL_DEFAULTS.two_sided;
+  }
+  if (role === 'anode') {
+    return DRYING_TAPE_PREFILL_DEFAULTS.one_sided_anode;
+  }
+  if (role === 'cathode') {
+    return DRYING_TAPE_PREFILL_DEFAULTS.one_sided_cathode;
+  }
+  return DRYING_TAPE_PREFILL_DEFAULTS.one_sided_default;
+}
+
+function shouldReplaceDryingDefault(field, currentValue, nextDefaultValue) {
+  const current = String(currentValue ?? '').trim();
+  if (!current) return true;
+  if (current === String(nextDefaultValue ?? '').trim()) return false;
+  return DRYING_DEFAULTISH_VALUES[field]?.has(current) ?? false;
 }
 
 function applyDryingTapePrefillFromCoating({
@@ -1286,13 +1308,25 @@ function applyDryingTapePrefillFromCoating({
   }
 
   if (defaults) {
-    if (forceDefaults || !String(drying.temperature_c || '').trim()) {
+    if (
+      forceDefaults
+        ? shouldReplaceDryingDefault('temperature_c', drying.temperature_c, defaults.temperature_c)
+        : !String(drying.temperature_c || '').trim()
+    ) {
       patch.temperature_c = defaults.temperature_c;
     }
-    if (forceDefaults || !String(drying.atmosphere || '').trim()) {
+    if (
+      forceDefaults
+        ? shouldReplaceDryingDefault('atmosphere', drying.atmosphere, defaults.atmosphere)
+        : !String(drying.atmosphere || '').trim()
+    ) {
       patch.atmosphere = defaults.atmosphere;
     }
-    if (forceDefaults || !String(drying.target_duration_min || '').trim()) {
+    if (
+      forceDefaults
+        ? shouldReplaceDryingDefault('target_duration_min', drying.target_duration_min, defaults.target_duration_min)
+        : !String(drying.target_duration_min || '').trim()
+    ) {
       patch.target_duration_min = defaults.target_duration_min;
     }
   }
@@ -1389,11 +1423,28 @@ function renderDryingStep(step, prefix) {
   setElValue(`${prefix}-other_param`, step.other_parameters);
 }
 
+function syncCoatingGapUi() {
+  const sidedness = state.workflow.coating?.coating_sidedness;
+  const isTwoSided = sidedness === 'two_sided';
+  const label = document.getElementById('2-coating-gap-um-label');
+  const side2Row = document.getElementById('2-coating-gap-side2-row');
+
+  if (label) {
+    label.textContent = isTwoSided
+      ? 'Зазор, мкм, сторона 1: '
+      : 'Зазор, мкм: ';
+  }
+  if (side2Row) {
+    side2Row.hidden = !isTwoSided;
+  }
+}
+
 function renderCoatingDryingBridgeControls() {
   const step = state.workflow.drying_tape || {};
   setElValue('2-coating-dry-temp', step.temperature_c);
   setElValue('2-coating-dry-atmosphere', step.atmosphere);
   setElValue('2-coating-dry-duration', step.target_duration_min);
+  setElValue('2-coating-dry-speed', step.drying_speed_text);
 }
 
 function renderDryingAmStep() {
@@ -1489,9 +1540,10 @@ function renderCoatingStep() {
   setElValue('2-coating-coating_id', step.coating_id);
   setElValue('2-coating-sidedness', step.coating_sidedness);
   setElValue('2-coating-gap-um', step.gap_um);
-  setElValue('2-coating-temp-c', step.coat_temp_c);
+  setElValue('2-coating-gap-um-side2', step.gap_um_side2);
   setElValue('2-coating-time-min', step.coat_time_min);
   setElValue('2-coating-method-comments', step.method_comments);
+  syncCoatingGapUi();
   renderCoatingDryingBridgeControls();
 }
 
@@ -3201,6 +3253,7 @@ function normalizeDryingRestoreStep(drying) {
     temperature_c: drying.temperature_c ?? '',
     atmosphere: drying.atmosphere ?? 'vacuum',
     target_duration_min: drying.target_duration_min ?? '',
+    drying_speed_text: drying.drying_speed_text ?? '',
     other_parameters: drying.other_parameters ?? ''
   };
 }
@@ -3325,6 +3378,7 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
       coating_id: stepsByCode.coating.coating_id ?? '',
       coating_sidedness: stepsByCode.coating.coating_sidedness ?? '',
       gap_um: stepsByCode.coating.gap_um ?? '',
+      gap_um_side2: stepsByCode.coating.gap_um_side2 ?? '',
       coat_temp_c: stepsByCode.coating.coat_temp_c ?? '',
       coat_time_min: stepsByCode.coating.coat_time_min ?? '',
       method_comments: stepsByCode.coating.method_comments ?? ''
@@ -4068,12 +4122,13 @@ function attachWorkflowStateSync() {
   bindValueField('2-coating-coating_id', 'coating', 'coating_id');
   bindValueField('2-coating-sidedness', 'coating', 'coating_sidedness');
   bindValueField('2-coating-gap-um', 'coating', 'gap_um');
-  bindValueField('2-coating-temp-c', 'coating', 'coat_temp_c');
+  bindValueField('2-coating-gap-um-side2', 'coating', 'gap_um_side2');
   bindValueField('2-coating-time-min', 'coating', 'coat_time_min');
   bindValueField('2-coating-method-comments', 'coating', 'method_comments');
   bindValueField('2-coating-dry-temp', 'drying_tape', 'temperature_c');
   bindValueField('2-coating-dry-atmosphere', 'drying_tape', 'atmosphere');
   bindValueField('2-coating-dry-duration', 'drying_tape', 'target_duration_min');
+  bindValueField('2-coating-dry-speed', 'drying_tape', 'drying_speed_text');
 
   bindValueField('2-calendering-operator', 'calendering', 'performed_by');
   bindValueField('2-calendering-date', 'calendering', 'date');
@@ -4418,6 +4473,7 @@ function buildDryingPayload(stepKey) {
     temperature_c: Number(step.temperature_c) || null,
     atmosphere: step.atmosphere || null,
     target_duration_min: Number(step.target_duration_min) || null,
+    drying_speed_text: step.drying_speed_text || null,
     other_parameters: step.other_parameters || null
   };
 }
@@ -4636,9 +4692,6 @@ function applyCoatingMethodDefaultsToState({ force = false } = {}) {
   if (force || !String(step.gap_um || '').trim()) {
     patch.gap_um = method.gap_um ?? '';
   }
-  if (force || !String(step.coat_temp_c || '').trim()) {
-    patch.coat_temp_c = method.coat_temp_c ?? '';
-  }
   if (force || !String(step.coat_time_min || '').trim()) {
     patch.coat_time_min = method.coat_time_min ?? '10';
   }
@@ -4648,6 +4701,16 @@ function applyCoatingMethodDefaultsToState({ force = false } = {}) {
     (state.ui.coating.sidednessAuto || !String(step.coating_sidedness || '').trim())
   ) {
     patch.coating_sidedness = defaultSidedness;
+  }
+  const nextSidedness = patch.coating_sidedness || step.coating_sidedness;
+  const nextGap = patch.gap_um || step.gap_um;
+  const currentSide2 = String(step.gap_um_side2 || '').trim();
+  const side2LooksAuto =
+    !currentSide2 ||
+    currentSide2 === String(step.gap_um || '').trim() ||
+    currentSide2 === String(method.gap_um || '').trim();
+  if (nextSidedness === 'two_sided' && side2LooksAuto) {
+    patch.gap_um_side2 = nextGap || method.gap_um || '';
   }
   if (Object.keys(patch).length > 0) {
     setWorkflowStep('coating', {
@@ -4673,9 +4736,18 @@ document.getElementById('2-coating-save-btn').onclick = () => trackPendingSave(w
 
   const step = state.workflow.coating;
   const gapValue = step.gap_um;
+  const gapSide2Value = step.gap_um_side2;
+  const isTwoSided = step.coating_sidedness === 'two_sided';
   
   if (!gapValue || !Number.isFinite(Number(gapValue)) || Number(gapValue) <= 0) {
     showInlineStatus('2-coating-save-btn', 'Укажите зазор, мкм', true);
+    return;
+  }
+  if (
+    isTwoSided &&
+    (!gapSide2Value || !Number.isFinite(Number(gapSide2Value)) || Number(gapSide2Value) <= 0)
+  ) {
+    showInlineStatus('2-coating-save-btn', 'Укажите зазор стороны 2, мкм', true);
     return;
   }
   
@@ -4687,7 +4759,8 @@ document.getElementById('2-coating-save-btn').onclick = () => trackPendingSave(w
     coating_id: step.coating_id || null,
     coating_sidedness: step.coating_sidedness || null,
     gap_um: gapValue,
-    coat_temp_c: step.coat_temp_c || null,
+    gap_um_side2: isTwoSided ? gapSide2Value : null,
+    coat_temp_c: null,
     coat_time_min: step.coat_time_min || null,
     method_comments: step.method_comments || null
   };
@@ -4738,6 +4811,15 @@ document
 .addEventListener('change', () => {
   if (state.form.isRestoringTape) return;
   state.ui.coating.sidednessAuto = false;
+  const step = state.workflow.coating;
+  if (step.coating_sidedness === 'two_sided' && !String(step.gap_um_side2 || '').trim()) {
+    setWorkflowStep('coating', {
+      ...step,
+      gap_um_side2: step.gap_um || ''
+    });
+  }
+  applyDryingTapePrefillFromCoating({ forceDefaults: true });
+  renderCoatingStep();
 });
 
 document.getElementById('2-coating-date').addEventListener('change', () => {
@@ -4982,7 +5064,8 @@ document.addEventListener('click', (e) => {
 [
   '2-coating-dry-temp',
   '2-coating-dry-atmosphere',
-  '2-coating-dry-duration'
+  '2-coating-dry-duration',
+  '2-coating-dry-speed'
 ].forEach((id) => {
   const el = document.getElementById(id);
   if (!el) return;

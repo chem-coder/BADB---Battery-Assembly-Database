@@ -1,6 +1,6 @@
 ---
 title: Комплект технической документации BADB
-status: draft v0.1.10 — 2026-05-09
+status: draft v0.1.11 — 2026-05-13
 author: Меняйлов Д.С.
 ---
 
@@ -152,6 +152,7 @@ author: Меняйлов Д.С.
 | 2026-05-07 | 0.1.9-docfix | Codex по правкам Мараулайте Д.К. | **Уточнение батарейного UX и статусов.** В документе 04 зафиксировано: до завершения обязательных записей сборки статус показывает заблокированный «Открыт»; после сборки доступны только «Собран», «На тестировании», «Завершён», «Брак»; старые `disassembled` отображаются как «Открыт» и могут быть собраны повторно. Для guided delete указано, что после нажатия «Удалить запись» страница прокручивается к верхней части карточки с направляемым блоком удаления. Добавлено описание фильтров списка аккумуляторов: поиск, статус, форм-фактор и сброс. |
 | 2026-05-09 | 0.1.10 | Codex по правкам Мараулайте Д.К. | **Синхронизация ЕСПД с cleaned working docs и vanilla v1 release candidate.** Во всех документах версия/дата обновлены на 0.1.10 / 09.05.2026. Current behavior sections переведены на vanilla v1 как источник истины: `public/` pages, page-local filters, row-open/sticky-header pattern, reports for tapes/electrode batches/batteries/projects/recipes/electrolytes/separators, DB-backed files for materials/electrolytes/separators, battery electrochem notes/files, destructive-action safety. Vue оставлен только как отдельный frontend synchronization/handoff concern. Добавлены release/pilot readiness constraints: локальные checks подтверждают release candidate, но Windows/lab DB `d031` proof и manual destructive battery flow spot-check остаются обязательными перед пилотом. |
 | 2026-05-09 | 0.1.10-migfix | Codex по правкам Мараулайте Д.К. | **Синхронизация migration/release mirror после d032 cleanup.** Зафиксировано: `schema_migrations` — authoritative migration ledger; `d032_create_schema_migrations_table.sql` создаёт и backfill-ит ledger; flat `migrations_log.txt` — только checkpoint notes. Обновлены счётчики: 41 SQL-файл в `migrations/` и 41 в `migrations_ASCII/`, диапазон Dalia `d013`–`d032`, live public tables = 65, latest `npm run smoke:vanilla` = 241 checks / 0 failures, post-dump smoke order включает `002`, `018`, `019`, `020`, `d028`, `d029`, `d030`, `d031`, `d032`. Pilot readiness теперь требует proof по `schema_migrations` (`dima=21`, `dalia=20`) и `d031` trigger proof. |
+| 2026-05-13 | 0.1.11-tape-coating | Codex по правкам Мараулайте Д.К. | **Синхронизация после d033.** Добавлена миграция `d033_add_coating_side2_gap_and_drying_speed.sql` и ASCII-зеркало: второй зазор нанесения для 2-сторонней ленты и текстовое поле скорости протяжки через сушильную камеру. Текущий счётчик миграций: 42 SQL-файла в `migrations/` и 42 в `migrations_ASCII/`; ожидаемый ledger после `d033`: `dima=21`, `dalia=21`; post-dump smoke order теперь включает `d033`. |
 | | | | |
 
 ---

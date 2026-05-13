@@ -1,9 +1,9 @@
 # Tapes
 
 Created: 2026-05-09
-Edited: 2026-05-09
+Edited: 2026-05-13
 Status: current
-Verified against code: 2026-05-09
+Verified against code: 2026-05-13
 
 Source paths:
 
@@ -77,9 +77,23 @@ Computed status order:
 - `finished` / `Завершено`.
 
 The coating step is considered complete only when its header is saved and
-`foil_id`, `coating_id`, and `gap_um` are present. The weighing step is
-complete only when required included-in-percent recipe lines have actual mass or
-volume values.
+`foil_id`, `coating_id`, and the required gap fields are present. One-sided
+coating requires `gap_um`; two-sided coating requires both `gap_um` and
+`gap_um_side2`. The retired `coat_temp_c` column remains in the database for
+compatibility, but the vanilla UI no longer shows or saves a coating-temperature
+field. The weighing step is complete only when required included-in-percent
+recipe lines have actual mass or volume values.
+
+Current coating/drying UI details:
+
+- two-sided coating shows separate side 1 and side 2 coating gaps;
+- inline drying saves drying temperature, atmosphere, duration, and
+  `drying_speed_text`;
+- the visible coating comment is a shared coating/drying operator note stored in
+  `tape_step_coating.method_comments`;
+- default inline drying values are `125 °C`, air, and `15 min` for two-sided
+  coating; `80 °C`, vacuum, and `5 min` for one-sided anode tapes; and
+  `80 °C`, vacuum, and `30 min` for one-sided cathode tapes.
 
 ## Recipe Instances And Actuals
 

@@ -38,6 +38,9 @@ Future decisions:
 - decide whether scientists need separate explicit fields for one-sided and
   two-sided tape thickness instead of the current sidedness plus initial/final
   thickness fields;
+- consider dropping the retired `tape_step_coating.coat_temp_c` column after a
+  later version proves no historical/imported data needs it. In v1.1 it stays in
+  the schema but is hidden from the vanilla coating UI and saved as `NULL`;
 - confirm whether the Excel note `Зазор по щупам 220 мкм` maps to the current
   coating gap field or represents a separate measurement;
 - make `мАч/см2` visibility in the UI explicit wherever scientists need it and

@@ -452,20 +452,17 @@
             <br>
             
             <div class="mix-params" id="2-coating-params">
-              <label for="2-coating-gap-um">Зазор, мкм: </label>
+              <label for="2-coating-gap-um" id="2-coating-gap-um-label">Зазор, мкм: </label>
               <input id="2-coating-gap-um" type="number" step="0.1" min="0" required><br>
               
-              <label for="2-coating-temp-c">Температура нанесения, °C: </label>
-              <input id="2-coating-temp-c" type="number" step="0.1"><br>
+              <div id="2-coating-gap-side2-row" hidden>
+                <label for="2-coating-gap-um-side2">Зазор, мкм, сторона 2: </label>
+                <input id="2-coating-gap-um-side2" type="number" step="0.1" min="0"><br>
+              </div>
               
               <label for="2-coating-time-min">Длительность нанесения (приблизительно), мин: </label>
               <input id="2-coating-time-min" type="number" step="1" min="0"><br>
-              
-              <label for="2-coating-method-comments">Комментарий: </label>
-              <textarea id="2-coating-method-comments"></textarea><br>
             </div>
-
-            <h4>Параметры сушки (в процессе нанесения):</h4>
 
             <label for="2-coating-dry-temp">Температура сушки, °C:</label>
             <input id="2-coating-dry-temp" type="number" step="1" min="-273"><br>
@@ -477,6 +474,12 @@
 
             <label for="2-coating-dry-duration">Длительность, мин:</label>
             <input id="2-coating-dry-duration" type="number" step="1" min="0"><br>
+
+            <label for="2-coating-dry-speed">Скорость протяжки через сушильную камеру:</label>
+            <input id="2-coating-dry-speed" type="text"><br>
+
+            <label for="2-coating-method-comments">Комментарий к нанесению и сушке: </label>
+            <textarea id="2-coating-method-comments"></textarea><br>
             
             <button type="button" id="2-coating-save-btn" title="Сохранить этап нанесения">Сохранить этап нанесения</button>
             <span class="inline-save-status" aria-live="polite"></span>

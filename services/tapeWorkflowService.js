@@ -17,6 +17,14 @@ function hasSavedHeader(step) {
   return Boolean(step) && isFilled(step.performed_by) && isFilled(step.started_at);
 }
 
+function hasCompleteCoatingGaps(step) {
+  if (!isFilled(step?.gap_um)) return false;
+  if (step?.coating_sidedness === 'two_sided') {
+    return isFilled(step.gap_um_side2);
+  }
+  return true;
+}
+
 function computeTapeWorkflowStatus({ recipeMeta, stepsByCode }) {
   const recipeComplete =
     recipeMeta.total_lines > 0 &&
@@ -35,7 +43,7 @@ function computeTapeWorkflowStatus({ recipeMeta, stepsByCode }) {
       hasSavedHeader(stepsByCode.coating) &&
       isFilled(stepsByCode.coating?.foil_id) &&
       isFilled(stepsByCode.coating?.coating_id) &&
-      isFilled(stepsByCode.coating?.gap_um),
+      hasCompleteCoatingGaps(stepsByCode.coating),
     drying_tape: hasSavedHeader(stepsByCode.drying_tape),
     calendering: hasSavedHeader(stepsByCode.calendering),
     drying_pressed_tape: hasSavedHeader(stepsByCode.drying_pressed_tape)

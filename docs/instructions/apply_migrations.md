@@ -1,9 +1,9 @@
 # Apply Migrations
 
 Created: 2026-05-06
-Edited: 2026-05-09
+Edited: 2026-05-13
 Status: instruction
-Verified against code: 2026-05-09
+Verified against code: 2026-05-13
 Source paths: `migrations/README.md`, `migrations/`, `migrations_ASCII/`, `migrations/migrations_log.txt`, `migrations_ASCII/migrations_log.txt`, `scripts/smoke_vanilla_api.js`
 
 BADB migrations are manual, forward-only SQL files.
@@ -13,15 +13,15 @@ starting with `d032_create_schema_migrations_table.sql`. Older rows were
 backfilled by `d032`; future migration files should insert their own row.
 The flat `migrations_log.txt` files are human checkpoint notes only.
 
-Current migration file state as of 2026-05-09:
+Current migration file state as of 2026-05-13:
 
-- `migrations/` has 41 SQL files.
-- `migrations_ASCII/` has 41 SQL files.
+- `migrations/` has 42 SQL files.
+- `migrations_ASCII/` has 42 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d032_create_schema_migrations_table.sql`.
+- Dalia's `dNNN` stream exists through `d033_add_coating_side2_gap_and_drying_speed.sql`.
 - Live local `badb_app_v1` has `schema_migrations` counts of `dima = 21`
-  and `dalia = 20`. Dima has 21 rows because the historical numeric stream
-  includes two independent `008_*.sql` files.
+  and `dalia = 21` after `d033` is applied. Dima has 21 rows because the
+  historical numeric stream includes two independent `008_*.sql` files.
 
 ## Source Folders
 
@@ -56,7 +56,7 @@ note gives a smaller explicit post-dump set:
 
 ```text
 001_... through 020_...
-d013_... through d032_create_schema_migrations_table.sql
+d013_... through d033_add_coating_side2_gap_and_drying_speed.sql
 ```
 
 The current vanilla smoke restored-copy path applies only the migrations missing
@@ -72,6 +72,7 @@ d029_electrode_cut_batch_projects_many_to_many.sql
 d030_battery_projects_many_to_many.sql
 d031_harden_battery_stack_validate_trigger.sql
 d032_create_schema_migrations_table.sql
+d033_add_coating_side2_gap_and_drying_speed.sql
 ```
 
 Do not treat a local smoke pass as proof that the Windows/lab database has these
@@ -118,6 +119,7 @@ The vanilla smoke harness restores the old dump into a throwaway database and th
 - `migrations/d030_battery_projects_many_to_many.sql`
 - `migrations/d031_harden_battery_stack_validate_trigger.sql`
 - `migrations/d032_create_schema_migrations_table.sql`
+- `migrations/d033_add_coating_side2_gap_and_drying_speed.sql`
 
 This is the expected migration set for the current smoke harness. If a future
 branch adds a post-dump migration, update `scripts/smoke_vanilla_api.js` and
@@ -132,10 +134,10 @@ psql -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations
 psql -d badb_app_v1 -c "SELECT migration_name, applied_at, source FROM schema_migrations ORDER BY migration_name;"
 ```
 
-Expected after `d032`:
+Expected after `d033`:
 
 ```text
-dalia: 20 rows
+dalia: 21 rows
 dima: 21 rows
 ```
 
@@ -170,6 +172,6 @@ the `schema_migrations` stream counts, and the three expected boolean values.
 The lab database is not considered ready for pilot use until the ledger proves
 the current migration baseline and this check proves `d031` is present.
 
-As of 2026-05-09, the flat checkpoint logs note Dima's stream through `020`
-and Dalia's stream through `d032`; `public.schema_migrations` remains the
+As of 2026-05-13, the flat checkpoint logs note Dima's stream through `020`
+and Dalia's stream through `d033`; `public.schema_migrations` remains the
 authoritative ledger.
