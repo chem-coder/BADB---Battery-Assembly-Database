@@ -1,7 +1,7 @@
 # Tapes
 
 Created: 2026-05-09
-Edited: 2026-05-13
+Edited: 2026-05-14
 Status: current
 Verified against code: 2026-05-13
 
@@ -114,10 +114,34 @@ yet. Later weighing save updates the same rows with actual values.
 Planning supports two modes:
 
 - `from_active_mass`: `target_mass_g` is target active material mass;
-- `from_slurry_mass`: `target_mass_g` is total slurry mass.
+- `from_slurry_mass`: `target_mass_g` is the input mass for the UI-labelled
+  slurry-mass planning mode.
 
-The UI shows planned quantities, expanded calculation rows, and live slurry
-solids summary from the selected instances and actual values.
+The UI calculates planned masses-to-weigh for included recipe lines before
+actual weighing:
+
+- recipe percentages come from included `tape_recipe_lines.slurry_percent`
+  rows;
+- `from_active_mass` uses `target_mass_g` as the desired active-material mass;
+- `from_slurry_mass` uses `target_mass_g` as the input mass for the included
+  percent basis, then derives the active-material target from the active-line
+  percent;
+- total dry-component mass is derived from the active-material target and the
+  active-line percent;
+- each included recipe line receives a target dry mass from its recipe percent;
+- if the selected material instance is itself a mixture, the page expands its
+  component fractions and calculates how much of that instance must be weighed
+  to supply the remaining target mass of the requested material;
+- component overlap is accounted for so a premixed instance can satisfy more
+  than one recipe-line target.
+
+Solvent or other rows excluded from percent calculation are recorded as actual
+values, but they are not assigned an automatic planned mass by the dry-component
+planning calculation.
+
+The UI shows planned quantities, expanded calculation rows, difference from
+actual values in reports, and live slurry solids summary from the selected
+instances and actual values.
 
 The mixing section stores `slurry_volume_ml` and the selected wet mixing method.
 When slurry volume changes, the vanilla UI can auto-fill the wet mixing method

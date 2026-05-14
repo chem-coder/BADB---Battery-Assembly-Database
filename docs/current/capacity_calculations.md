@@ -1,7 +1,7 @@
 # Capacity Calculations
 
 Created: 2026-05-06
-Edited: 2026-05-13
+Edited: 2026-05-14
 Status: current
 Verified against code: 2026-05-06
 
@@ -85,6 +85,56 @@ when `measure_mode = 'volume'` and a positive density is known.
 
 If density is missing, the entered volume can still be saved, but mass-based
 derived values remain unavailable.
+
+## Planned Slurry Component Amounts On Tapes
+
+The Tapes page calculates planned masses-to-weigh for the recipe lines selected
+for a tape. The browser UI uses `public/js/1-tapes.js`; the print/report path
+uses matching logic in `services/tapeWorkflowService.js`.
+
+Inputs:
+
+- `tapes.calc_mode`
+- `tapes.target_mass_g`
+- `tape_recipe_lines.recipe_role`
+- `tape_recipe_lines.include_in_pct`
+- `tape_recipe_lines.slurry_percent`
+- selected `tape_recipe_line_actuals.material_instance_id`
+- optional material-instance component fractions
+
+For `calc_mode = 'from_active_mass'`:
+
+```text
+target_active_mass_g = target_mass_g
+total_dry_mass_g = target_active_mass_g / (active_percent / 100)
+line_target_dry_mass_g = total_dry_mass_g * (line_percent / 100)
+```
+
+For `calc_mode = 'from_slurry_mass'`, the current implementation first derives
+the active-material target from the included percent basis:
+
+```text
+total_dry_percent = sum(slurry_percent for include_in_pct lines)
+total_dry_mass_g = target_mass_g * (total_dry_percent / 100)
+target_active_mass_g = total_dry_mass_g * (active_percent / total_dry_percent)
+```
+
+Then it uses the same line target formula as above.
+
+If the selected material instance is a pure material, the planned amount to
+weigh equals that line's target dry mass. If the selected instance is a
+composition, the app expands component fractions:
+
+```text
+instance_mass_to_weigh_g = remaining_target_material_mass_g / material_fraction_in_instance
+```
+
+The expanded components are subtracted from remaining targets for other recipe
+lines, so a premixed instance can satisfy multiple material requirements.
+
+Rows excluded from percent calculation, including the current solvent role, are
+stored as actual values but do not receive an automatic planned dry-component
+mass.
 
 ## Solids Fraction On Tapes
 

@@ -1,7 +1,7 @@
 # Recipes
 
 Created: 2026-05-09
-Edited: 2026-05-09
+Edited: 2026-05-14
 Status: current
 Verified against code: 2026-05-09
 
@@ -56,6 +56,11 @@ Current line roles:
 The page filters available materials by the selected line role. `additive`
 maps to material role `conductive_additive`. Solvent lines are excluded from
 the required 100 percent dry-solids sum.
+
+Included line percentages are used downstream by the Tapes page to calculate
+planned masses-to-weigh for slurry preparation. Excluded rows, including the
+current solvent role, are stored as recipe context and actual values but do not
+receive automatic planned dry-component masses.
 
 `created_by` is server-owned from the authenticated user on create.
 `updated_by` and `updated_at` are set by the backend on update.
