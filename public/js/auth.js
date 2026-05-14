@@ -21,6 +21,15 @@
     });
   }
 
+  function clearBrowserSessionStorage() {
+    try {
+      localStorage.clear();
+    } catch {}
+    try {
+      sessionStorage.clear();
+    } catch {}
+  }
+
   function getToken() {
     try {
       localStorage.removeItem(TOKEN_KEY);
@@ -33,12 +42,17 @@
   }
 
   function setToken(token) {
+    if (!token) {
+      clearBrowserSessionStorage();
+      return;
+    }
+
     try {
-      localStorage.removeItem(TOKEN_KEY);
+      localStorage.clear();
     } catch {}
     try {
-      if (token) sessionStorage.setItem(TOKEN_KEY, token);
-      else sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.clear();
+      sessionStorage.setItem(TOKEN_KEY, token);
     } catch {}
   }
 
@@ -265,8 +279,7 @@
     currentUser = null;
     bypassMode = false;
     resetAuthGate();
-    renderAuthUi();
-    showLogin();
+    window.location.reload();
   }
 
   async function loadSession() {

@@ -458,7 +458,6 @@ function getCurrentSnapshot(stepCode) {
     return serializeSnapshot({
       name: state.form.fields.name || '',
       notes: state.form.fields.notes || '',
-      created_by: state.form.fields.created_by || '',
       project_id: state.form.fields.project_id || '',
       project_ids: state.form.fields.project_ids || [],
       tape_type: state.form.fields.tape_type || '',
@@ -1744,6 +1743,17 @@ async function updateTape(id, data) {
   return res.json();
 }
 
+function getTapeFromLoadedList(tapeId, fallback = null) {
+  const id = Number(tapeId);
+  return state.tapes.items.find((tape) => Number(tape.tape_id) === id) || fallback;
+}
+
+function buildTapeSavePayload() {
+  const data = { ...state.form.fields };
+  delete data.created_by;
+  return data;
+}
+
 async function fetchTapeDryBoxState(tapeId) {
   const res = await fetch(`/api/tapes/${tapeId}/dry-box-state`);
   if (!res.ok) {
@@ -2422,6 +2432,11 @@ function renderUsersSelects() {
       selectedValue
     );
   });
+}
+
+function refreshAuditUserDisplay() {
+  renderUsersSelects();
+  writeTopLevelFormStateToDom();
 }
 
 function renderProjectsSelect() {
@@ -4057,7 +4072,6 @@ function applyDefaultCoatingFoil() {
 function attachTopLevelFormStateSync() {
   const fieldMap = [
     ['notes', form.elements['notes']],
-    ['created_by', form.elements['created_by']],
     ['project_id', form.elements['project_id']],
     ['tape_type', form.elements['tape_type']],
     ['tape_recipe_id', form.elements['tape_recipe_id']],
@@ -4313,7 +4327,7 @@ nameInput.addEventListener('blur', () => {
 
 saveBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('saveBtn', async () => {
   if (!state.form.mode) return;
-  const data = { ...state.form.fields };
+  const data = buildTapeSavePayload();
   
   if (!data.project_id || !data.tape_recipe_id) {
     showInlineStatus('saveBtn', 'Выберите проект и рецепт', true);
@@ -4325,8 +4339,13 @@ saveBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('s
       const created = await createTape(data);
       
       await loadTapes();
+      const createdFromList = getTapeFromLoadedList(created.tape_id, created);
       // keep the form open: switch to edit mode so step buttons keep working
-      setCurrentTape(created, { mode: 'edit' });
+      setCurrentTape(createdFromList, { mode: 'edit', render: false });
+      setTopLevelFormState({
+        ...state.form.fields,
+        created_by: createdFromList?.created_by || ''
+      });
       
       markAllSavedSnapshotsCurrent();
       refreshDirtyFromSnapshots();
@@ -4346,6 +4365,14 @@ saveBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('s
       });
 
       await loadTapes();
+      const updatedFromList = getTapeFromLoadedList(state.selection.currentTapeId);
+      if (updatedFromList) {
+        setCurrentTape(updatedFromList, { mode: 'edit', render: false });
+        setTopLevelFormState({
+          ...state.form.fields,
+          created_by: updatedFromList.created_by || ''
+        });
+      }
       markSavedSnapshot('general_info');
       refreshDirtyFromSnapshots();
       showInlineStatus('saveBtn', 'Изменения сохранены');
@@ -5162,6 +5189,7 @@ resetSectionState();
 attachTopLevelFormStateSync();
 attachWorkflowStateSync();
 attachSectionStateSync();
+window.addEventListener('badb:login', refreshAuditUserDisplay);
 resetTopLevelFormState();
 renderWorkflowState();
 renderPanelState();
