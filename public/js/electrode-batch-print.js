@@ -454,14 +454,11 @@ function renderReport(report) {
   `;
 }
 
-// Read the JWT the Vue SPA saves on login (src/stores/auth.js:4 —
-// STORAGE_KEY = 'badb_auth_token'). Same-origin localStorage is
-// shared: this print page opens from Vue's session, so the token is
-// already there. Without this header the auth middleware returns
-// 401 in any build where AUTH_BYPASS is disabled (prod).
+// Read the same-origin session JWT saved on login. Without this header the auth
+// middleware returns 401 in any build where AUTH_BYPASS is disabled.
 function getAuthHeader() {
   try {
-    const token = localStorage.getItem('badb_auth_token');
+    const token = sessionStorage.getItem('badb_auth_token');
     return token && token !== 'bypass' ? { Authorization: `Bearer ${token}` } : {};
   } catch {
     return {};

@@ -168,7 +168,7 @@ function renderReport(report) {
 
 function getAuthHeader() {
   try {
-    const token = localStorage.getItem('badb_auth_token');
+    const token = sessionStorage.getItem('badb_auth_token');
     return token && token !== 'bypass' ? { Authorization: `Bearer ${token}` } : {};
   } catch {
     return {};

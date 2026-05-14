@@ -22,12 +22,24 @@
   }
 
   function getToken() {
-    return localStorage.getItem(TOKEN_KEY) || '';
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch {}
+    try {
+      return sessionStorage.getItem(TOKEN_KEY) || '';
+    } catch {
+      return '';
+    }
   }
 
   function setToken(token) {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch {}
+    try {
+      if (token) sessionStorage.setItem(TOKEN_KEY, token);
+      else sessionStorage.removeItem(TOKEN_KEY);
+    } catch {}
   }
 
   function normalizeUser(user) {
