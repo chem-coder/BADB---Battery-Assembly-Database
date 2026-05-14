@@ -182,6 +182,9 @@ validated against the latest `drying_pressed_tape` end time.
 Current page behavior:
 
 - entering a tape name in the top add field opens an unsaved new tape;
+- the loaded list is ordered by `created_at DESC`;
+- list row date metadata shows `created_at | updated_at` without visible labels,
+  with full created/updated wording in the tooltip;
 - list row summary opens an existing tape and restores saved steps;
 - list-level print opens the tape report;
 - list-level duplicate creates an unsaved starter copy with copied name, notes,

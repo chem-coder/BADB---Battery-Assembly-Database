@@ -3383,10 +3383,26 @@ function renderTapesList() {
     statusSpan.textContent = ` — Статус: ${getTapeListStatusLabel(t)}`;
     
     const dateSpan = document.createElement('small');
-    const displayDate = t.updated_at || t.created_at;
+    const createdDate = t.created_at
+      ? new Date(t.created_at).toLocaleDateString()
+      : '';
+    const updatedDate = t.updated_at
+      ? new Date(t.updated_at).toLocaleDateString()
+      : '';
+    const dateLabels = [];
+    const dateTitleLabels = [];
+    if (createdDate) {
+      dateLabels.push(createdDate);
+      dateTitleLabels.push(`Создано: ${createdDate}`);
+    }
+    if (updatedDate) {
+      dateLabels.push(updatedDate);
+      dateTitleLabels.push(`Изменено: ${updatedDate}`);
+    }
     dateSpan.style.color = '#666';
-    dateSpan.textContent = displayDate
-      ? ' — ' + new Date(displayDate).toLocaleDateString()
+    dateSpan.title = dateTitleLabels.join('; ');
+    dateSpan.textContent = dateLabels.length
+      ? ` — ${dateLabels.join(' | ')}`
       : '';
 
     const creatorSpan = document.createElement('small');
