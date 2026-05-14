@@ -30,9 +30,9 @@ which properties they actually need to sort, filter, compare, or report.
 
 Possible later work:
 
-- transitive recursive composition expansion for nested material instances;
 - cycle detection for deep composition graphs;
-- shared backend helper for direct and recursive component expansion;
+- shared backend helper so capacity calculations use the same recursive
+  component expansion as tape planning;
 - clearer UI visualization for nested compositions if actual lab usage needs
   more than one direct component level.
 

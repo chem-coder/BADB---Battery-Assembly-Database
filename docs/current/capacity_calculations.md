@@ -251,13 +251,15 @@ The Batteries page and battery print report use this summary.
 
 ## Current Calculation Boundary
 
-The current composition expansion used by tape planning and capacity helpers is
-direct component expansion for selected material instances.
+Tape planning and tape reports expand selected material instances recursively
+through nested component trees. They also calculate dependent rows before top-up
+rows, so minor sources of the same dry ingredient are subtracted even when the
+page display order changes.
 
-If a selected instance has direct rows in `material_instance_components`, those
-rows are used. If it has no rows, the instance is treated as 100 percent of the
-recipe line material. Current capacity/planning helpers do not promise unlimited
-transitive recursive expansion through nested component trees.
+If an instance has no rows in `material_instance_components`, it is treated as
+100 percent of the recipe line material. Cycle-like composition paths are not
+followed infinitely.
 
-Future work may add deeper recursive expansion, frozen capacity snapshots, or
-batch variability statistics, but those are not current behavior.
+Electrode and battery capacity helpers may still need migration to a shared
+recursive composition helper. Future work may also add frozen capacity snapshots
+or batch variability statistics.

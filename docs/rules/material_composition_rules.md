@@ -90,12 +90,13 @@ and smoke coverage, but they are not the preferred way to assert a complete
 
 ## Calculation Boundary
 
-Current downstream calculations use direct component rows for selected material
-instances.
+Tape planning and tape reports recursively expand selected material instances
+through nested `material_instance_components` rows until leaf materials are
+reached. Overlapping dry-material contributions from one recipe line must be
+subtracted before calculating later top-up lines, independent of display order.
 
-Current code does not guarantee unlimited transitive recursive expansion through
-nested instance compositions. Do not document or rely on nested recursive
-calculation until the code explicitly implements and tests it.
+Other downstream helpers should document their own calculation boundary until
+they are explicitly migrated to the same shared recursive behavior.
 
 ## Naming
 

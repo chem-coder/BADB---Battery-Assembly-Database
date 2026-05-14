@@ -190,6 +190,5 @@ Current non-goals:
 - stock accounting or quantity-on-hand tracking;
 - automatic inventory consumption;
 - dynamic arbitrary property definitions;
-- full transitive recursive composition expansion in capacity/planning
-  calculations;
+- shared recursive composition behavior across every capacity helper;
 - Vue parity unless explicitly requested.

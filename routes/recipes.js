@@ -503,10 +503,7 @@ router.get('/:id/lines', auth, async (req, res) => {
       FROM tape_recipe_lines rl
       JOIN materials m ON m.material_id = rl.material_id
       WHERE rl.tape_recipe_id = $1
-      ORDER BY
-        rl.recipe_role,
-        m.name ASC,
-        rl.recipe_line_id;
+      ORDER BY rl.recipe_line_id;
       `,
       [recipeId]
     );

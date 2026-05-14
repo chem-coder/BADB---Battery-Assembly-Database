@@ -273,7 +273,7 @@ async function getTapeReport(pool, tapeId) {
       LEFT JOIN material_properties mp
         ON mp.material_instance_id = a.material_instance_id
       WHERE t.tape_id = $1
-      ORDER BY rl.recipe_role, m.name ASC, rl.recipe_line_id
+      ORDER BY rl.recipe_line_id
       `,
       [tapeId]
     ),
@@ -391,18 +391,46 @@ async function getTapeReport(pool, tapeId) {
   if (selectedInstanceIds.length) {
     const componentsResult = await pool.query(
       `
+      WITH RECURSIVE component_tree AS (
+        SELECT
+          mic.material_instance_component_id,
+          mic.parent_material_instance_id,
+          mic.component_material_instance_id,
+          mic.mass_fraction,
+          ARRAY[
+            mic.parent_material_instance_id,
+            mic.component_material_instance_id
+          ] AS path
+        FROM material_instance_components mic
+        WHERE mic.parent_material_instance_id = ANY($1::int[])
+
+        UNION ALL
+
+        SELECT
+          mic.material_instance_component_id,
+          mic.parent_material_instance_id,
+          mic.component_material_instance_id,
+          mic.mass_fraction,
+          ct.path || mic.component_material_instance_id
+        FROM material_instance_components mic
+        JOIN component_tree ct
+          ON mic.parent_material_instance_id = ct.component_material_instance_id
+        WHERE NOT mic.component_material_instance_id = ANY(ct.path)
+      )
       SELECT
-        mic.parent_material_instance_id,
+        DISTINCT
+        ct.material_instance_component_id,
+        ct.parent_material_instance_id,
+        ct.component_material_instance_id,
         mi.material_id,
         m.role AS material_role,
-        mic.mass_fraction
-      FROM material_instance_components mic
+        ct.mass_fraction
+      FROM component_tree ct
       JOIN material_instances mi
-        ON mi.material_instance_id = mic.component_material_instance_id
+        ON mi.material_instance_id = ct.component_material_instance_id
       JOIN materials m
         ON m.material_id = mi.material_id
-      WHERE mic.parent_material_instance_id = ANY($1::int[])
-      ORDER BY mic.parent_material_instance_id, mic.material_instance_component_id
+      ORDER BY ct.parent_material_instance_id, ct.material_instance_component_id
       `,
       [selectedInstanceIds]
     );
@@ -413,6 +441,7 @@ async function getTapeReport(pool, tapeId) {
         componentsByInstanceId.set(instanceId, []);
       }
       componentsByInstanceId.get(instanceId).push({
+        component_material_instance_id: Number(row.component_material_instance_id),
         material_id: Number(row.material_id),
         material_role: row.material_role || null,
         mass_fraction: Number(row.mass_fraction)

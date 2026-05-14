@@ -32,6 +32,7 @@ const projectMultiSelectOptions = document.getElementById('project-multiselect-o
 const tapeTypeSelect  = document.getElementById('tape_type');
 const recipeSelect    = document.getElementById('tape-recipe-id'); // already added in HTML
 const pendingInstanceComponentLoads = new Set();
+const pendingPlannedComponentLoads = new Set();
 
 const tapePageState = window.tapePageState = {
   form: {
@@ -2568,6 +2569,224 @@ function getInstanceNameFromState(materialId, instanceId) {
   return match?.name || '';
 }
 
+function getStableRecipeLineSortValue(line, fallbackIndex) {
+  const recipeLineId = Number(line?.recipe_line_id);
+  return Number.isFinite(recipeLineId) ? recipeLineId : fallbackIndex;
+}
+
+function aggregateComponentsByMaterial(components) {
+  const byMaterialId = new Map();
+
+  components.forEach((component) => {
+    const materialId = Number(component.material_id ?? component.component_material_id);
+    const fraction = Number(component.mass_fraction);
+
+    if (!Number.isFinite(materialId) || !Number.isFinite(fraction) || fraction <= 0) return;
+
+    const existing = byMaterialId.get(materialId);
+    if (existing) {
+      existing.mass_fraction += fraction;
+      return;
+    }
+
+    byMaterialId.set(materialId, {
+      component_material_instance_id: component.component_material_instance_id ?? null,
+      component_name: component.component_name || component.material_name || '',
+      material_id: materialId,
+      material_name: component.material_name || component.component_name || '',
+      material_role: component.material_role || null,
+      mass_fraction: fraction
+    });
+  });
+
+  return Array.from(byMaterialId.values());
+}
+
+function hasCachedInstanceComponents(instanceId) {
+  return Object.prototype.hasOwnProperty.call(
+    state.recipe.instanceComponentsCache,
+    String(instanceId)
+  );
+}
+
+function ensureInstanceComponentsLoadedForPlanning(instanceId) {
+  if (!instanceId || hasCachedInstanceComponents(instanceId)) return;
+
+  const cacheKey = String(instanceId);
+  if (pendingPlannedComponentLoads.has(cacheKey)) return;
+
+  pendingPlannedComponentLoads.add(cacheKey);
+
+  fetchInstanceComponents(instanceId)
+    .then((components) => {
+      setInstanceComponentsCache({
+        ...state.recipe.instanceComponentsCache,
+        [cacheKey]: components
+      });
+      recalculatePlannedMasses();
+      renderSlurrySolidsSummary();
+    })
+    .catch(console.error)
+    .finally(() => {
+      pendingPlannedComponentLoads.delete(cacheKey);
+    });
+}
+
+function expandInstanceComponentsForPlanning(instanceId, fallbackComponent, seenInstanceIds = new Set()) {
+  if (!instanceId) {
+    return {
+      components: aggregateComponentsByMaterial([fallbackComponent]),
+      pending: false
+    };
+  }
+
+  if (!hasCachedInstanceComponents(instanceId)) {
+    ensureInstanceComponentsLoadedForPlanning(instanceId);
+    return { components: [], pending: true };
+  }
+
+  const directComponents = state.recipe.instanceComponentsCache[String(instanceId)] || [];
+  if (!Array.isArray(directComponents) || directComponents.length === 0) {
+    return {
+      components: aggregateComponentsByMaterial([fallbackComponent]),
+      pending: false
+    };
+  }
+
+  const nextSeen = new Set(seenInstanceIds);
+  nextSeen.add(String(instanceId));
+
+  const expanded = [];
+
+  for (const component of directComponents) {
+    const componentFraction = Number(component.mass_fraction);
+    if (!Number.isFinite(componentFraction) || componentFraction <= 0) continue;
+
+    const componentInstanceId = component.component_material_instance_id;
+    const hasNestedInstance =
+      componentInstanceId &&
+      !nextSeen.has(String(componentInstanceId));
+
+    if (hasNestedInstance) {
+      if (!hasCachedInstanceComponents(componentInstanceId)) {
+        ensureInstanceComponentsLoadedForPlanning(componentInstanceId);
+        return { components: [], pending: true };
+      }
+
+      const nestedResult = expandInstanceComponentsForPlanning(
+        componentInstanceId,
+        {
+          component_material_instance_id: component.component_material_instance_id ?? null,
+          component_name: component.component_name || component.material_name || '',
+          material_id: Number(component.material_id ?? component.component_material_id),
+          material_name: component.material_name || component.component_name || '',
+          material_role: component.material_role || null,
+          mass_fraction: 1
+        },
+        nextSeen
+      );
+
+      if (nestedResult.pending) {
+        return { components: [], pending: true };
+      }
+
+      nestedResult.components.forEach((nestedComponent) => {
+        const nestedFraction = Number(nestedComponent.mass_fraction);
+        if (!Number.isFinite(nestedFraction) || nestedFraction <= 0) return;
+
+        expanded.push({
+          ...nestedComponent,
+          mass_fraction: componentFraction * nestedFraction
+        });
+      });
+
+      continue;
+    }
+
+    expanded.push(component);
+  }
+
+  return {
+    components: aggregateComponentsByMaterial(expanded),
+    pending: false
+  };
+}
+
+function buildMixtureComputationOrder(lines, expandedComponentsByLineId, targetDryByMaterialId) {
+  const materialLineIndexes = new Map();
+
+  lines.forEach((line, index) => {
+    const materialId = Number(line?.material_id);
+    if (!Number.isFinite(materialId) || targetDryByMaterialId[materialId] == null) return;
+
+    if (!materialLineIndexes.has(materialId)) {
+      materialLineIndexes.set(materialId, []);
+    }
+    materialLineIndexes.get(materialId).push(index);
+  });
+
+  const outgoing = new Map(lines.map((_, index) => [index, new Set()]));
+  const incomingCount = new Map(lines.map((_, index) => [index, 0]));
+
+  lines.forEach((line, sourceIndex) => {
+    const lineMaterialId = Number(line?.material_id);
+    const lineId = Number(line?.recipe_line_id);
+    const components = expandedComponentsByLineId.get(lineId) || [];
+
+    components.forEach((component) => {
+      const componentMaterialId = Number(component.material_id ?? component.component_material_id);
+      if (!Number.isFinite(componentMaterialId)) return;
+      if (componentMaterialId === lineMaterialId) return;
+      if (targetDryByMaterialId[componentMaterialId] == null) return;
+
+      const dependentIndexes = materialLineIndexes.get(componentMaterialId) || [];
+      dependentIndexes.forEach((dependentIndex) => {
+        if (dependentIndex === sourceIndex) return;
+        if (outgoing.get(sourceIndex).has(dependentIndex)) return;
+
+        outgoing.get(sourceIndex).add(dependentIndex);
+        incomingCount.set(dependentIndex, (incomingCount.get(dependentIndex) || 0) + 1);
+      });
+    });
+  });
+
+  const sortIndexes = (indexes) => indexes.sort((a, b) => {
+    const sortA = getStableRecipeLineSortValue(lines[a], a);
+    const sortB = getStableRecipeLineSortValue(lines[b], b);
+    if (sortA !== sortB) return sortA - sortB;
+    return a - b;
+  });
+
+  const available = sortIndexes(
+    lines
+      .map((_, index) => index)
+      .filter((index) => (incomingCount.get(index) || 0) === 0)
+  );
+  const ordered = [];
+
+  while (available.length) {
+    const index = available.shift();
+    ordered.push(index);
+
+    sortIndexes(Array.from(outgoing.get(index) || [])).forEach((dependentIndex) => {
+      const nextCount = (incomingCount.get(dependentIndex) || 0) - 1;
+      incomingCount.set(dependentIndex, nextCount);
+      if (nextCount === 0) {
+        available.push(dependentIndex);
+        sortIndexes(available);
+      }
+    });
+  }
+
+  if (ordered.length < lines.length) {
+    const orderedSet = new Set(ordered);
+    sortIndexes(lines.map((_, index) => index).filter((index) => !orderedSet.has(index)))
+      .forEach((index) => ordered.push(index));
+  }
+
+  return ordered;
+}
+
 function recalculatePlannedMasses() {
   const mode = state.form.fields.calc_mode || 'from_active_mass';
   const inputValue = Number(state.form.fields.target_mass_g);
@@ -2698,6 +2917,8 @@ function recalculatePlannedMasses() {
   // contributions per recipe line (for overlap reporting)
   // lineContribByLineId[lineId][materialId] = mass_g
   const lineContribByLineId = {};
+  const expandedComponentsByLineId = new Map();
+  let hasPendingComponents = false;
   
   for (const line of state.recipe.currentLines) {
     const lineId = Number(line.recipe_line_id);
@@ -2705,6 +2926,51 @@ function recalculatePlannedMasses() {
     
     const selectedInstanceId = state.recipe.selectedInstancesByLineId[lineId];
     
+    if (!selectedInstanceId) {
+      state.derived.plannedMassByLineId[lineId] = null;
+      continue;
+    }
+
+    const lineMaterialId = Number(line.material_id);
+    const expandedResult = expandInstanceComponentsForPlanning(
+      selectedInstanceId,
+      {
+        component_material_instance_id: null,
+        component_name: line.material_name,
+        material_id: lineMaterialId,
+        material_name: line.material_name,
+        material_role: null,
+        mass_fraction: 1
+      }
+    );
+
+    if (expandedResult.pending) {
+      state.derived.plannedMassByLineId[lineId] = null;
+      hasPendingComponents = true;
+      continue;
+    }
+
+    expandedComponentsByLineId.set(lineId, expandedResult.components);
+  }
+
+  if (hasPendingComponents) {
+    renderDerivedState();
+    return;
+  }
+
+  const computationOrder = buildMixtureComputationOrder(
+    state.recipe.currentLines,
+    expandedComponentsByLineId,
+    targetDryByMaterialId
+  );
+
+  for (const lineIndex of computationOrder) {
+    const line = state.recipe.currentLines[lineIndex];
+    const lineId = Number(line.recipe_line_id);
+    if (!line) continue;
+
+    const selectedInstanceId = state.recipe.selectedInstancesByLineId[lineId];
+
     if (!selectedInstanceId) {
       state.derived.plannedMassByLineId[lineId] = null;
       continue;
@@ -2718,35 +2984,8 @@ function recalculatePlannedMasses() {
       state.derived.plannedMassByLineId[lineId] = 0;
       continue;
     }
-    
-    // Ensure composition is loaded
-    if (!state.recipe.instanceComponentsCache[selectedInstanceId]) {
-      fetchInstanceComponents(selectedInstanceId)
-      .then(components => {
-        setInstanceComponentsCache({
-          ...state.recipe.instanceComponentsCache,
-          [selectedInstanceId]: components
-        });
-        recalculatePlannedMasses(); // re-run after loading
-      })
-      .catch(console.error);
-      
-      continue; // wait until components are loaded
-    }
-    
-    let components = state.recipe.instanceComponentsCache[selectedInstanceId];
-    
-    // Fallback: no composition defined → treat instance as 100% of itself (solid)
-    if (!components || components.length === 0) {
-      components = [{
-        component_material_instance_id: null,
-        component_name: line.material_name,
-        material_id: lineMaterialId,
-        material_name: line.material_name,
-        material_role: null,
-        mass_fraction: 1
-      }];
-    }
+
+    const components = expandedComponentsByLineId.get(lineId) || [];
     
     // Find the fraction of THIS line's material inside the selected instance (by material_id)
     const match = components.find(c =>
