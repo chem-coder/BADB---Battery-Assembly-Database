@@ -1,9 +1,9 @@
 # Electrodes
 
 Created: 2026-05-06
-Edited: 2026-05-07
+Edited: 2026-05-15
 Status: current
-Verified against code: 2026-05-07
+Verified against code: 2026-05-15
 
 Source paths:
 
@@ -61,6 +61,11 @@ button for creating a new electrode batch from the selected tape.
 
 When a batch form is open, the filter panel and main list are hidden. Exiting
 the form restores the previous filter context.
+
+Electrode cut batch record `created_at` is automatic audit metadata. The opened
+batch form exposes date-only `item_created_at` as `Дата создания` for the
+physical cut batch; it defaults to today and accepts today or past dates only.
+`updated_at` remains automatic.
 
 The old separate "batches for selected tape" display is not used as a second
 visible list. When a tape is selected, the main filtered list is the selected

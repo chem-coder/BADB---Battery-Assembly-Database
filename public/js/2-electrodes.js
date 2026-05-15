@@ -18,6 +18,7 @@
     const electrodeGlobalDirty = document.getElementById('electrode-global-dirty');
     const printElectrodeBatchBtn = document.getElementById('printElectrodeBatchBtn');
     const deleteElectrodeBatchBtn = document.getElementById('deleteElectrodeBatchBtn');
+    const itemCreatedAtInput = document.getElementById('electrodes-item_created_at');
     const batchProjectMultiSelect = document.getElementById('electrode-batch-project-multiselect');
     const batchProjectMultiSelectTrigger = document.getElementById('electrode-batch-project-multiselect-trigger');
     const batchProjectMultiSelectOptions = document.getElementById('electrode-batch-project-multiselect-options');
@@ -36,6 +37,7 @@
 
     function getDefaultCutBatchFormState() {
       return {
+        item_created_at: getTodayDateInputValue(),
         comments: null,
         target_form_factor: null,
         target_config_code: null,
@@ -306,6 +308,23 @@
       return '';
     }
 
+    function formatDateInputValue(value) {
+      if (!value) return '';
+      const date = new Date(value);
+      if (!Number.isFinite(date.getTime())) {
+        return /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? String(value) : '';
+      }
+
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function getTodayDateInputValue() {
+      return formatDateInputValue(new Date());
+    }
+
     function getCurrentElectrodeSectionSnapshot(sectionKey) {
       switch (sectionKey) {
         case 'filters':
@@ -414,6 +433,7 @@
 
     function syncCutBatchFormStateFromDom() {
       setCutBatchFormState({
+        item_created_at: itemCreatedAtInput?.value || null,
         comments: document.getElementById('electrodes-comments').value || null,
         target_form_factor: document.getElementById('electrodes-target_form_factor').value || null,
         target_config_code: document.getElementById('electrodes-target_config_code').value || null,
@@ -584,6 +604,10 @@
     }
 
     function renderCutBatchForm() {
+      if (itemCreatedAtInput) {
+        itemCreatedAtInput.max = getTodayDateInputValue();
+        itemCreatedAtInput.value = state.form.batch.item_created_at || '';
+      }
       document.getElementById('electrodes-comments').value = state.form.batch.comments || '';
       renderBatchProjectMultiSelect();
       renderElectrodeGeometryForm();
@@ -1447,8 +1471,8 @@
       const nextBatches = batchGroups
         .flat()
         .sort((a, b) => {
-          const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+          const aTime = (a.item_created_at || a.created_at) ? new Date(a.item_created_at || a.created_at).getTime() : 0;
+          const bTime = (b.item_created_at || b.created_at) ? new Date(b.item_created_at || b.created_at).getTime() : 0;
           if (bTime !== aTime) return bTime - aTime;
           return Number(b.cut_batch_id) - Number(a.cut_batch_id);
         });
@@ -1715,8 +1739,8 @@
       const targetText = formatCutBatchTarget(batch);
       const geometryText = formatCutBatchGeometry(batch);
       const sidednessText = formatElectrodesSidednessLabel(batch.tape_coating_sidedness);
-      const dateText = batch.created_at
-        ? new Date(batch.created_at).toLocaleDateString('ru-RU')
+      const dateText = (batch.item_created_at || batch.created_at)
+        ? new Date(batch.item_created_at || batch.created_at).toLocaleDateString('ru-RU')
         : '';
 
       return normalizeElectrodeBatchFilterText([
@@ -1836,8 +1860,8 @@
         info.setAttribute('aria-label', `Открыть партию электродов ${batch.cut_batch_id}`);
 
         const title = document.createElement('strong');
-        const dateText = batch.created_at
-          ? new Date(batch.created_at).toLocaleDateString('ru-RU')
+        const dateText = (batch.item_created_at || batch.created_at)
+          ? new Date(batch.item_created_at || batch.created_at).toLocaleDateString('ru-RU')
           : '—';
         const count = Number(batch.electrode_count) || 0;
         const targetText = formatCutBatchTarget(batch);
@@ -1901,6 +1925,7 @@
         created_by: batch.created_by ?? null
       });
       setCutBatchFormState({
+        item_created_at: formatDateInputValue(batch.item_created_at || batch.created_at),
         comments: batch.comments ?? null,
         target_form_factor: batch.target_form_factor ?? null,
         target_config_code: batch.target_config_code ?? null,
@@ -1932,6 +1957,7 @@
       return {
         tape_id: tapeId,
         project_ids: normalizeProjectIds(batchForm.project_ids),
+        item_created_at: batchForm.item_created_at || null,
         comments: batchForm.comments || null,
         target_form_factor: targetFormFactor,
         target_config_code: targetConfigCode,
@@ -3120,6 +3146,11 @@
         }
 
         setCurrentCutBatchId(batch.cut_batch_id);
+        setCutBatchFormState({
+          ...state.form.batch,
+          item_created_at: formatDateInputValue(batch.item_created_at || batch.created_at)
+        });
+        renderCutBatchForm();
         
       } else {
         const payload = buildCutBatchPayload({ tapeId });
@@ -3134,6 +3165,15 @@
           const err = await res.json().catch(() => ({}));
           showElectrodeInlineStatus('saveBtn', err.error || 'Ошибка обновления партии', true);
           return;
+        }
+
+        const batch = await res.json().catch(() => ({}));
+        if (batch?.item_created_at || batch?.created_at) {
+          setCutBatchFormState({
+            ...state.form.batch,
+            item_created_at: formatDateInputValue(batch.item_created_at || batch.created_at)
+          });
+          renderCutBatchForm();
         }
       }
       

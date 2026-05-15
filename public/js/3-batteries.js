@@ -7,6 +7,7 @@ const batteryProjectMultiSelect = document.getElementById('battery-project-multi
 const batteryProjectMultiSelectTrigger = document.getElementById('battery-project-multiselect-trigger');
 const batteryProjectMultiSelectOptions = document.getElementById('battery-project-multiselect-options');
 const createdBySelect = document.getElementById('battery_created_by');
+const itemCreatedAtInput = document.getElementById('battery_item_created_at');
 const batteryListFilterTextInput = document.getElementById('battery-list-filter-text');
 const batteryListFilterStatusSelect = document.getElementById('battery-list-filter-status');
 const batteryListFilterFormFactorSelect = document.getElementById('battery-list-filter-form-factor');
@@ -20,6 +21,7 @@ function getDefaultMetaState() {
     project_id: null,
     project_ids: [],
     created_by: null,
+    item_created_at: getTodayDateInputValue(),
     form_factor: null,
     battery_notes: null
   };
@@ -1025,9 +1027,30 @@ function syncMetaStateFromDom() {
       (document.getElementById('battery_project_ids')?.value || '').split(',')
     ),
     created_by: document.getElementById('battery_created_by')?.value || null,
+    item_created_at: itemCreatedAtInput?.value || null,
     form_factor: document.getElementById('battery_form_factor')?.value || null,
     battery_notes: document.getElementById('battery_notes')?.value || null
   });
+}
+
+function formatDateInputValue(value) {
+  if (!value) return '';
+
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getTodayDateInputValue() {
+  return formatDateInputValue(new Date());
 }
 
 function syncConfigStateFromDom() {
@@ -2156,6 +2179,10 @@ function renderMetaForm() {
     projectIdsInput.value = normalizeProjectIds(state.meta.project_ids).join(',');
   }
   createdBySelect.value = state.meta.created_by ?? '';
+  if (itemCreatedAtInput) {
+    itemCreatedAtInput.max = getTodayDateInputValue();
+    itemCreatedAtInput.value = state.meta.item_created_at ?? '';
+  }
   formFactorSelect.value = state.meta.form_factor ?? '';
 
   document.getElementById('battery_notes').value =
@@ -4774,6 +4801,7 @@ function applyBatteryMetaToState(data) {
     project_id: battery.project_id ?? null,
     project_ids: normalizeProjectIds(battery.project_ids || battery.project_id),
     created_by: battery.created_by ?? null,
+    item_created_at: formatDateInputValue(battery.item_created_at || battery.created_at),
     form_factor: battery.form_factor ?? null,
     battery_notes: battery.battery_notes ?? battery.notes ?? null
   });
@@ -5094,6 +5122,7 @@ function getBatteryListStatusFilterValue(status) {
 
 function getBatteryListSearchText(battery) {
   const status = getBatteryStatusLabel(battery.status);
+  const createdDate = formatBatteryListDate(battery.item_created_at, battery.created_at);
   const updatedDate = formatBatteryListDate(battery.updated_at, battery.created_at);
   const sizeInfo = formatBatteryVisibleSizeInfo(battery);
   const materialsInfo = formatBatteryActiveMaterials(battery);
@@ -5108,6 +5137,7 @@ function getBatteryListSearchText(battery) {
     battery.project_id,
     battery.form_factor,
     status,
+    createdDate,
     updatedDate,
     materialsInfo,
     sizeInfo,
@@ -5188,6 +5218,7 @@ function renderBatteriesList() {
     li.className = 'user-row';
 
     const status = getBatteryStatusLabel(b.status);
+    const createdDate = formatBatteryListDate(b.item_created_at, b.created_at);
     const updatedDate = formatBatteryListDate(b.updated_at, b.created_at);
     const sizeInfo = formatBatteryVisibleSizeInfo(b);
     const materialsInfo = formatBatteryActiveMaterials(b);
@@ -5208,7 +5239,12 @@ function renderBatteriesList() {
 
     const dateSpan = document.createElement('small');
     dateSpan.style.color = '#666';
-    dateSpan.textContent = updatedDate ? ` — ${updatedDate}` : '';
+    dateSpan.textContent = [createdDate, updatedDate].filter(Boolean).join(' | ');
+    dateSpan.textContent = dateSpan.textContent ? ` — ${dateSpan.textContent}` : '';
+    dateSpan.title = [
+      createdDate ? `Дата создания: ${createdDate}` : '',
+      updatedDate ? `Изменено: ${updatedDate}` : ''
+    ].filter(Boolean).join('; ');
 
     const materialsSpan = document.createElement('small');
     materialsSpan.style.color = '#666';
@@ -6217,6 +6253,7 @@ function buildBatteryHeaderPayloadFromState() {
     ...(activeConfig || {}),
     project_id: state.meta.project_id ? Number(state.meta.project_id) : null,
     project_ids: normalizeProjectIds(state.meta.project_ids).map(Number),
+    item_created_at: state.meta.item_created_at || null,
     form_factor: state.meta.form_factor || null,
     battery_notes: state.meta.battery_notes || null
   };
@@ -6330,6 +6367,9 @@ function applySavedBatteryHeaderState(battery, headerPayload, buttonMode) {
     project_id: battery?.project_id ?? headerPayload.project_id ?? null,
     project_ids: normalizeProjectIds(battery?.project_ids || headerPayload.project_ids || headerPayload.project_id),
     created_by: battery?.created_by ?? null,
+    item_created_at: formatDateInputValue(
+      battery?.item_created_at || headerPayload.item_created_at || battery?.created_at
+    ),
     form_factor: battery?.form_factor ?? headerPayload.form_factor ?? null,
     battery_notes: battery?.battery_notes ?? battery?.notes ?? headerPayload.battery_notes ?? null
   });
@@ -6631,6 +6671,7 @@ async function populateBatteryForm(battery) {
     project_id: battery.project_id ?? null,
     project_ids: normalizeProjectIds(battery.project_ids || battery.project_id),
     created_by: battery.created_by ?? null,
+    item_created_at: formatDateInputValue(battery.item_created_at || battery.created_at),
     form_factor: battery.form_factor ?? null,
     battery_notes: battery.notes ?? battery.battery_notes ?? null
   });

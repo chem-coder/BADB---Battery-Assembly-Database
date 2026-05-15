@@ -203,7 +203,7 @@ async function listElectrodeCutBatchesByTape(pool, tapeId) {
     ) ec
       ON ec.cut_batch_id = b.cut_batch_id
     WHERE b.tape_id = $1
-    ORDER BY b.created_at DESC, b.cut_batch_id DESC
+    ORDER BY b.item_created_at DESC, b.created_at DESC, b.cut_batch_id DESC
     `,
     [tapeId]
   );
@@ -221,6 +221,7 @@ async function getTapeReport(pool, tapeId) {
         t.project_id,
         t.tape_recipe_id,
         t.created_by,
+        t.item_created_at,
         t.created_at,
         t.updated_at,
         t.status,
@@ -485,6 +486,7 @@ async function getTape(pool, id) {
         t.project_id,
         t.tape_recipe_id,
         t.created_by,
+        t.item_created_at,
         t.created_at,
         t.status,
         t.availability_status,

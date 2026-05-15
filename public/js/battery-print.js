@@ -21,6 +21,20 @@ function formatDateTime(value) {
   return date.toLocaleString('ru-RU');
 }
 
+function formatDateOnly(value) {
+  if (!value) return '';
+
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) return `${match[3]}.${match[2]}.${match[1]}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleDateString('ru-RU');
+}
+
 function formatFormFactor(value) {
   if (value === 'coin') return 'Монеточный';
   if (value === 'pouch') return 'Пакетный';
@@ -469,7 +483,7 @@ function renderReport(report) {
       ${renderRow('Проект', battery.project_names || battery.project_name || '—')}
       ${renderRow('Форм-фактор', formatFormFactor(battery.form_factor))}
       ${renderRow('Оператор', battery.created_by_name || '—')}
-      ${renderRow('Создан', formatDateTime(battery.created_at), { numeric: true })}
+      ${renderRow('Создан', formatDateOnly(battery.item_created_at) || formatDateTime(battery.created_at), { numeric: true })}
       ${renderRow('Обновлён', formatDateTime(battery.updated_at), { numeric: true })}
     </div>
 

@@ -37,6 +37,46 @@ function statusError(message, statusCode) {
   return err;
 }
 
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeOptionalItemCreatedAtDate(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const raw = String(value).trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw statusError('Дата создания должна быть в формате ГГГГ-ММ-ДД', 400);
+  }
+
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    throw statusError('Некорректная дата создания', 400);
+  }
+
+  if (raw > getTodayDateString()) {
+    throw statusError('Дата создания не может быть в будущем', 400);
+  }
+
+  return raw;
+}
+
 function normalizeCutBatchGeometry({
   target_form_factor,
   target_config_code,
@@ -198,7 +238,7 @@ async function listElectrodeCutBatches(pool) {
       GROUP BY cut_batch_id
     ) ec
       ON ec.cut_batch_id = b.cut_batch_id
-    ORDER BY b.created_at DESC, b.cut_batch_id DESC
+    ORDER BY b.item_created_at DESC, b.created_at DESC, b.cut_batch_id DESC
     `
   );
 
@@ -208,6 +248,7 @@ async function listElectrodeCutBatches(pool) {
 async function createElectrodeCutBatch(pool, payload, createdBy) {
   const tapeId = Number(payload.tape_id);
   const geometry = normalizeCutBatchGeometry(payload);
+  const itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
 
   if (geometry.error) {
     throw statusError(geometry.error, 400);
@@ -259,9 +300,10 @@ async function createElectrodeCutBatch(pool, payload, createdBy) {
         diameter_mm,
         length_mm,
         width_mm,
+        item_created_at,
         comments
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10::date, CURRENT_DATE),$11)
       RETURNING *
       `,
       [
@@ -274,6 +316,7 @@ async function createElectrodeCutBatch(pool, payload, createdBy) {
         geometry.diameter_mm,
         geometry.length_mm,
         geometry.width_mm,
+        itemCreatedAtDate,
         payload.comments || null
       ]
     );
@@ -363,6 +406,7 @@ async function createElectrodeCutBatch(pool, payload, createdBy) {
 }
 
 async function updateElectrodeCutBatch(pool, cutBatchId, payload, userId) {
+  const itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
   const client = await pool.connect();
 
   try {
@@ -380,6 +424,8 @@ async function updateElectrodeCutBatch(pool, cutBatchId, payload, userId) {
         diameter_mm,
         length_mm,
         width_mm,
+        item_created_at,
+        created_at,
         comments
       FROM electrode_cut_batches
       WHERE cut_batch_id = $1
@@ -422,6 +468,7 @@ async function updateElectrodeCutBatch(pool, cutBatchId, payload, userId) {
       diameter_mm: geometry.diameter_mm,
       length_mm: geometry.length_mm,
       width_mm: geometry.width_mm,
+      item_created_at: itemCreatedAtDate ?? current.item_created_at,
       comments: payload.comments !== undefined ? (payload.comments || null) : current.comments,
       project_ids: projectIds
     };
@@ -437,10 +484,11 @@ async function updateElectrodeCutBatch(pool, cutBatchId, payload, userId) {
         diameter_mm = $5,
         length_mm = $6,
         width_mm = $7,
-        comments = $8,
-        updated_by = $9,
+        item_created_at = $8,
+        comments = $9,
+        updated_by = $10,
         updated_at = now()
-      WHERE cut_batch_id = $10
+      WHERE cut_batch_id = $11
       RETURNING *
       `,
       [
@@ -451,6 +499,7 @@ async function updateElectrodeCutBatch(pool, cutBatchId, payload, userId) {
         newVals.diameter_mm,
         newVals.length_mm,
         newVals.width_mm,
+        newVals.item_created_at,
         newVals.comments,
         userId,
         cutBatchId
@@ -560,6 +609,7 @@ async function getElectrodeCutBatchReport(pool, cutBatchId) {
       b.diameter_mm,
       b.length_mm,
       b.width_mm,
+      b.item_created_at,
       b.created_at,
       b.updated_at,
       b.created_by,

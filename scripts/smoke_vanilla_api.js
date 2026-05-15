@@ -35,7 +35,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd031_harden_battery_stack_validate_trigger.sql'),
   path.join(ROOT, 'migrations', 'd032_create_schema_migrations_table.sql'),
   path.join(ROOT, 'migrations', 'd033_add_coating_side2_gap_and_drying_speed.sql'),
-  path.join(ROOT, 'migrations', 'd034_update_wet_mixing_methods.sql')
+  path.join(ROOT, 'migrations', 'd034_update_wet_mixing_methods.sql'),
+  path.join(ROOT, 'migrations', 'd035_add_item_created_at_dates.sql')
 ];
 
 function parseArgs(argv) {
@@ -152,6 +153,19 @@ function runSmokeSql(context, sql) {
     '-c',
     sql
   ], { quiet: true }).trim();
+}
+
+function formatDateOnly(value) {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 async function getFreePort() {
@@ -750,12 +764,14 @@ async function runWriteSmoke(client, seed, context) {
       project_ids: tapeProjectIds,
       tape_recipe_id: existingRecipeId,
       created_by: forgedUserId,
+      item_created_at: '2024-01-02',
       notes: 'smoke',
       calc_mode: 'from_active_mass',
       target_mass_g: 1.5
     });
     made.tapeId = tape.tape_id;
     client.assertEqual(tape.created_by, userId, 'tape create ignores browser-created created_by');
+    client.assertEqual(formatDateOnly(tape.item_created_at), '2024-01-02', 'tape create stores physical item date');
     client.assertEqual(
       Array.isArray(tape.project_ids) && tape.project_ids.map(Number).includes(Number(made.projectId)),
       true,
@@ -768,11 +784,13 @@ async function runWriteSmoke(client, seed, context) {
       project_ids: [projectId],
       tape_recipe_id: existingRecipeId,
       created_by: forgedUserId,
+      item_created_at: '2024-01-03',
       notes: 'smoke update',
       calc_mode: 'from_slurry_mass',
       target_mass_g: 2.5
     });
     client.assertEqual(updatedTape.created_by, userId, 'tape update preserves server-owned created_by');
+    client.assertEqual(formatDateOnly(updatedTape.item_created_at), '2024-01-03', 'tape update preserves physical item date');
 
     await client.put(`/api/tapes/${made.tapeId}`, {
       name: `Codex Smoke Tape ${suffix} Updated`,
@@ -875,6 +893,7 @@ async function runWriteSmoke(client, seed, context) {
       tape_id: made.tapeId,
       project_ids: [projectId],
       created_by: forgedUserId,
+      item_created_at: '2024-02-02',
       target_form_factor: 'coin',
       target_config_code: '2032',
       shape: 'circle',
@@ -887,19 +906,22 @@ async function runWriteSmoke(client, seed, context) {
       userId,
       'electrode cut batch create ignores browser-created created_by'
     );
+    client.assertEqual(formatDateOnly(cutBatch.item_created_at), '2024-02-02', 'electrode cut batch create stores physical item date');
     client.assertEqual(
       Array.isArray(cutBatch.project_ids) && cutBatch.project_ids.map(Number).includes(Number(projectId)),
       true,
       'electrode cut batch create stores tape project link'
     );
-    await client.put(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}`, {
+    const updatedCutBatch = await client.put(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}`, {
       project_ids: [projectId],
       target_form_factor: 'coin',
       target_config_code: '2032',
+      item_created_at: '2024-02-03',
       shape: 'circle',
       diameter_mm: 15.9,
       comments: 'smoke cut update'
     });
+    client.assertEqual(formatDateOnly(updatedCutBatch.item_created_at), '2024-02-03', 'electrode cut batch update preserves physical item date');
     const foil = await client.post(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/foil-masses`, {
       mass_g: 0.0123
     });
@@ -960,10 +982,12 @@ async function runWriteSmoke(client, seed, context) {
       project_id: projectId,
       form_factor: 'coin',
       created_by: forgedUserId,
+      item_created_at: '2024-03-02',
       battery_notes: `Codex Smoke Battery ${suffix}`
     });
     made.batteryId = battery.battery_id;
     client.assertEqual(battery.created_by, userId, 'battery create ignores browser-created created_by');
+    client.assertEqual(formatDateOnly(battery.item_created_at), '2024-03-02', 'battery create stores physical item date');
     const identityBattery = await client.post('/api/batteries', {
       project_id: projectId,
       project_ids: [projectId],
@@ -1010,9 +1034,11 @@ async function runWriteSmoke(client, seed, context) {
       project_id: projectId,
       form_factor: 'coin',
       created_by: forgedUserId,
+      item_created_at: '2024-03-03',
       battery_notes: `Codex Smoke Battery ${suffix} Updated`
     });
     client.assertEqual(patchedBattery.created_by, userId, 'battery update preserves server-owned created_by');
+    client.assertEqual(formatDateOnly(patchedBattery.item_created_at), '2024-03-03', 'battery update preserves physical item date');
     await client.patch(`/api/batteries/${made.batteryId}`, {
       status: 'assembled'
     }, [400]);

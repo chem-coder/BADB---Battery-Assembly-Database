@@ -38,6 +38,46 @@ function hasOwn(payload, key) {
   return Object.prototype.hasOwnProperty.call(payload || {}, key);
 }
 
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeOptionalItemCreatedAtDate(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const raw = String(value).trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw statusError('Дата создания аккумулятора должна быть в формате ГГГГ-ММ-ДД', 400);
+  }
+
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    throw statusError('Некорректная дата создания аккумулятора', 400);
+  }
+
+  if (raw > getTodayDateString()) {
+    throw statusError('Дата создания аккумулятора не может быть в будущем', 400);
+  }
+
+  return raw;
+}
+
 function hasSourcePayload(payload = {}) {
   return [
     'cathode_tape_id',
@@ -145,7 +185,7 @@ async function saveIdentityConfig(queryable, batteryId, formFactor, payload, use
 async function fetchCurrentIdentityContext(queryable, batteryId) {
   const [batteryRes, coinRes, sourcesRes, projectsRows] = await Promise.all([
     queryable.query(
-      'SELECT project_id, form_factor, created_by, battery_notes, status FROM batteries WHERE battery_id = $1',
+      'SELECT project_id, form_factor, created_by, item_created_at, battery_notes, status FROM batteries WHERE battery_id = $1',
       [batteryId]
     ),
     queryable.query(
@@ -191,6 +231,7 @@ async function createBattery(pool, payload, createdByUserId) {
   const includesSources = hasSourcePayload(payload);
   const projectId = Number(finalProjectIds[0]);
   const formFactor = payload.form_factor || null;
+  const itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
 
   if (!Number.isInteger(projectId)) {
     throw statusError('Выберите хотя бы один проект аккумулятора', 400);
@@ -223,15 +264,17 @@ async function createBattery(pool, payload, createdByUserId) {
         created_by,
         created_at,
         updated_at,
+        item_created_at,
         battery_notes
       )
-      VALUES ($1, $2, $3, now(), now(), $4)
+      VALUES ($1, $2, $3, now(), now(), COALESCE($4::date, CURRENT_DATE), $5)
       RETURNING *
       `,
       [
         projectId,
         formFactor,
         createdByUserId,
+        itemCreatedAtDate,
         payload.battery_notes || null
       ]
     );
@@ -278,6 +321,7 @@ async function listBatteries(pool) {
       b.created_by,
       u_created.name AS created_by_name,
       b.battery_notes AS notes,
+      b.item_created_at,
       b.created_at,
       b.updated_by,
       b.updated_at,
@@ -323,7 +367,7 @@ async function listBatteries(pool) {
       ON TRUE
     LEFT JOIN electrode_cut_batches anode_batch
       ON anode_batch.cut_batch_id = anode_src.cut_batch_id
-    ORDER BY b.battery_id DESC
+    ORDER BY b.item_created_at DESC, b.created_at DESC, b.battery_id DESC
     `
   );
 
@@ -353,6 +397,7 @@ async function getBattery(pool, batteryId) {
       b.created_by,
       u.name AS created_by_name,
       b.battery_notes AS notes,
+      b.item_created_at,
       b.created_at,
       b.updated_at
     FROM batteries b
@@ -430,6 +475,7 @@ async function updateBattery(pool, batteryId, payload, userId) {
 
   const currentContext = await fetchCurrentIdentityContext(pool, batteryId);
   const current = currentContext.battery;
+  const itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
   const payloadProjectIds = getPayloadProjectIds(payload);
   const finalProjectIds = payloadProjectIds || currentContext.projectIds || [current.project_id];
 
@@ -437,6 +483,7 @@ async function updateBattery(pool, batteryId, payload, userId) {
     project_id: finalProjectIds[0] || current.project_id,
     form_factor: payload.form_factor !== undefined ? payload.form_factor : current.form_factor,
     created_by: current.created_by,
+    item_created_at: itemCreatedAtDate ?? current.item_created_at,
     battery_notes: payload.battery_notes !== undefined ? payload.battery_notes : current.battery_notes,
     status: payload.status !== undefined ? payload.status : current.status,
   };
@@ -468,23 +515,34 @@ async function updateBattery(pool, batteryId, payload, userId) {
         project_id = $1,
         form_factor = $2,
         created_by = $3,
-        battery_notes = $4,
-        status = $5,
-        updated_by = $6,
+        item_created_at = $4,
+        battery_notes = $5,
+        status = $6,
+        updated_by = $7,
         updated_at = now()
-      WHERE battery_id = $7
+      WHERE battery_id = $8
       RETURNING
         battery_id,
         project_id,
         form_factor,
         created_by,
+        item_created_at,
         battery_notes AS notes,
         status,
         created_at,
         updated_by,
         updated_at
       `,
-      [newVals.project_id, newVals.form_factor, newVals.created_by, newVals.battery_notes, newVals.status, userId, batteryId]
+      [
+        newVals.project_id,
+        newVals.form_factor,
+        newVals.created_by,
+        newVals.item_created_at,
+        newVals.battery_notes,
+        newVals.status,
+        userId,
+        batteryId
+      ]
     );
 
     if (result.rows.length === 0) {

@@ -349,7 +349,7 @@ async function getProjectReport(db, projectId) {
              t.name,
              t.status,
              t.availability_status,
-             t.created_at,
+             COALESCE(t.item_created_at::timestamp, t.created_at) AS created_at,
              t.updated_at,
              r.role AS tape_role,
              r.name AS recipe_name,
@@ -378,7 +378,7 @@ async function getProjectReport(db, projectId) {
              ecb.length_mm,
              ecb.width_mm,
              ecb.comments,
-             ecb.created_at,
+             COALESCE(ecb.item_created_at::timestamp, ecb.created_at) AS created_at,
              u_created.name AS created_by_name,
              COALESCE(ec.electrode_count, 0)::int AS electrode_count,
              (
@@ -418,7 +418,7 @@ async function getProjectReport(db, projectId) {
              b.form_factor,
              b.status,
              b.battery_notes AS notes,
-             b.created_at,
+             COALESCE(b.item_created_at::timestamp, b.created_at) AS created_at,
              b.updated_at,
              u_created.name AS created_by_name
       FROM batteries b

@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-05-13:
+Current migration file state as of 2026-05-15:
 
-- `migrations/` has 43 SQL files.
-- `migrations_ASCII/` has 43 SQL files.
+- `migrations/` has 44 SQL files.
+- `migrations_ASCII/` has 44 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d034_update_wet_mixing_methods.sql`.
+- Dalia's `dNNN` stream exists through `d035_add_item_created_at_dates.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 22` after `d034` is applied.
+  counts of `dima = 21` and `dalia = 23` after `d035` is applied.
 
 ## How to apply
 
@@ -52,7 +52,7 @@ namespace so migrations never collide:
 | Namespace         | Who   | Pattern                                      |
 | ----------------- | ----- | -------------------------------------------- |
 | `NNN_*.sql`       | Dima  | Plain 3-digit counter (`001_*` … `020_*`)    |
-| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d034_*`)      |
+| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d035_*`)      |
 
 Alphabetical ordering of `ls migrations/` gives:
 
@@ -130,6 +130,9 @@ Full timeline is in the git log. High-level:
   for the current lab coating/drying workflow.
 - `d034_update_wet_mixing_methods` — updates wet mixing method labels and
   adds the 1 L ACEY and 5 L GELON mixer options.
+- `d035_add_item_created_at_dates` — adds user-facing physical creation dates
+  to tapes, electrode cut batches, and batteries while keeping `created_at` as
+  automatic audit metadata.
 
 ## Check migration ledger
 
@@ -148,7 +151,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 22
+dalia = 23
 dima = 21
 ```
 

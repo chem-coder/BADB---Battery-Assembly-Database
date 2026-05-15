@@ -1,9 +1,9 @@
 # Apply Migrations
 
 Created: 2026-05-06
-Edited: 2026-05-13
+Edited: 2026-05-15
 Status: instruction
-Verified against code: 2026-05-13
+Verified against code: 2026-05-15
 Source paths: `migrations/README.md`, `migrations/`, `migrations_ASCII/`, `migrations/migrations_log.txt`, `migrations_ASCII/migrations_log.txt`, `scripts/smoke_vanilla_api.js`
 
 BADB migrations are manual, forward-only SQL files.
@@ -13,14 +13,14 @@ starting with `d032_create_schema_migrations_table.sql`. Older rows were
 backfilled by `d032`; future migration files should insert their own row.
 The flat `migrations_log.txt` files are human checkpoint notes only.
 
-Current migration file state as of 2026-05-13:
+Current migration file state as of 2026-05-15:
 
-- `migrations/` has 43 SQL files.
-- `migrations_ASCII/` has 43 SQL files.
+- `migrations/` has 44 SQL files.
+- `migrations_ASCII/` has 44 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d034_update_wet_mixing_methods.sql`.
+- Dalia's `dNNN` stream exists through `d035_add_item_created_at_dates.sql`.
 - Live local `badb_app_v1` has `schema_migrations` counts of `dima = 21`
-  and `dalia = 22` after `d034` is applied. Dima has 21 rows because the
+  and `dalia = 23` after `d035` is applied. Dima has 21 rows because the
   historical numeric stream includes two independent `008_*.sql` files.
 
 ## Source Folders
@@ -56,7 +56,7 @@ note gives a smaller explicit post-dump set:
 
 ```text
 001_... through 020_...
-d013_... through d034_update_wet_mixing_methods.sql
+d013_... through d035_add_item_created_at_dates.sql
 ```
 
 The current vanilla smoke restored-copy path applies only the migrations missing
@@ -74,6 +74,7 @@ d031_harden_battery_stack_validate_trigger.sql
 d032_create_schema_migrations_table.sql
 d033_add_coating_side2_gap_and_drying_speed.sql
 d034_update_wet_mixing_methods.sql
+d035_add_item_created_at_dates.sql
 ```
 
 Do not treat a local smoke pass as proof that the Windows/lab database has these
@@ -122,6 +123,7 @@ The vanilla smoke harness restores the old dump into a throwaway database and th
 - `migrations/d032_create_schema_migrations_table.sql`
 - `migrations/d033_add_coating_side2_gap_and_drying_speed.sql`
 - `migrations/d034_update_wet_mixing_methods.sql`
+- `migrations/d035_add_item_created_at_dates.sql`
 
 This is the expected migration set for the current smoke harness. If a future
 branch adds a post-dump migration, update `scripts/smoke_vanilla_api.js` and
@@ -136,10 +138,10 @@ psql -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations
 psql -d badb_app_v1 -c "SELECT migration_name, applied_at, source FROM schema_migrations ORDER BY migration_name;"
 ```
 
-Expected after `d034`:
+Expected after `d035`:
 
 ```text
-dalia: 22 rows
+dalia: 23 rows
 dima: 21 rows
 ```
 
@@ -174,6 +176,6 @@ the `schema_migrations` stream counts, and the three expected boolean values.
 The lab database is not considered ready for pilot use until the ledger proves
 the current migration baseline and this check proves `d031` is present.
 
-As of 2026-05-13, the flat checkpoint logs note Dima's stream through `020`
-and Dalia's stream through `d034`; `public.schema_migrations` remains the
+As of 2026-05-15, the flat checkpoint logs note Dima's stream through `020`
+and Dalia's stream through `d035`; `public.schema_migrations` remains the
 authoritative ledger.

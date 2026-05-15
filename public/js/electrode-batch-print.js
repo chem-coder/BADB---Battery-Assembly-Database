@@ -23,6 +23,20 @@ function formatDateTime(value) {
   return date.toLocaleString('ru-RU');
 }
 
+function formatDateOnly(value) {
+  if (!value) return '';
+
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) return `${match[3]}.${match[2]}.${match[1]}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleDateString('ru-RU');
+}
+
 function formatRole(value) {
   if (value === 'cathode') return 'Катодная';
   if (value === 'anode') return 'Анодная';
@@ -431,7 +445,7 @@ function renderReport(report) {
     <div class="report_meta">
       ${renderRow('Проект', batch.project_names || batch.project_name || '—')}
       ${renderRow('Оператор', batch.created_by_name || '—')}
-      ${renderRow('Создана', formatDateTime(batch.created_at), { numeric: true })}
+      ${renderRow('Создана', formatDateOnly(batch.item_created_at) || formatDateTime(batch.created_at), { numeric: true })}
       ${renderRow('Обновлена', formatDateTime(batch.updated_at), { numeric: true })}
     </div>
 

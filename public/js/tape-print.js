@@ -21,6 +21,20 @@ function formatDateTime(value) {
   return date.toLocaleString('ru-RU');
 }
 
+function formatDateOnly(value) {
+  if (!value) return '';
+
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) return `${match[3]}.${match[2]}.${match[1]}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleDateString('ru-RU');
+}
+
 function parseDate(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -575,7 +589,7 @@ function renderReport(report) {
       ${renderRow('Оператор', tape.created_by_name || '—')}
       ${renderRow('Расчёт', formatCalcMode(tape.calc_mode))}
       ${renderRow('Цель АМ', tape.target_mass_g != null ? formatMass(tape.target_mass_g) : '—', { numeric: true })}
-      ${renderRow('Создана', formatDateTime(tape.created_at), { numeric: true })}
+      ${renderRow('Создана', formatDateOnly(tape.item_created_at) || formatDateTime(tape.created_at), { numeric: true })}
       ${renderRow('Обновлена', formatDateTime(tape.updated_at), { numeric: true })}
     </div>
 

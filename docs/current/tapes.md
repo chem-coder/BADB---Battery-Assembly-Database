@@ -1,9 +1,9 @@
 # Tapes
 
 Created: 2026-05-09
-Edited: 2026-05-14
+Edited: 2026-05-15
 Status: current
-Verified against code: 2026-05-13
+Verified against code: 2026-05-15
 
 Source paths:
 
@@ -182,9 +182,10 @@ validated against the latest `drying_pressed_tape` end time.
 Current page behavior:
 
 - entering a tape name in the top add field opens an unsaved new tape;
-- the loaded list is ordered by `created_at DESC`;
-- list row date metadata shows `created_at | updated_at` without visible labels,
-  with full created/updated wording in the tooltip;
+- the loaded list is ordered by `item_created_at DESC`, then record
+  `created_at DESC`;
+- list row date metadata shows `item_created_at | updated_at` without visible
+  labels, with full created/updated wording in the tooltip;
 - list row summary opens an existing tape and restores saved steps;
 - list-level print opens the tape report;
 - list-level duplicate creates an unsaved starter copy with copied name, notes,
@@ -193,9 +194,10 @@ Current page behavior:
 - the opened tape has a sticky header with tape id/name, metadata, dirty flag,
   save/create, print, exit, delete, and inline save status;
 - the record name is edited by clicking the title;
-- `created_at` is automatic by default, but the opened record exposes a
-  date-only `Дата создания` field for old-data backfill; the backend accepts
-  today or past dates only, while `updated_at` remains automatic;
+- record `created_at` is automatic audit metadata;
+- user-facing `item_created_at` is exposed as date-only `Дата создания` for the
+  physical tape; it defaults to today and accepts today or past dates only,
+  while `updated_at` remains automatic;
 - save keeps the record open;
 - delete lives only inside the opened record header;
 - unsaved changes are guarded during exit, logout, record switching, and browser

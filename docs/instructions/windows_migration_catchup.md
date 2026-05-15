@@ -1,7 +1,7 @@
 # Windows Migration Catch-Up
 
 Created: 2026-05-09
-Edited: 2026-05-13
+Edited: 2026-05-15
 Status: instruction
 Source paths: `migrations_ASCII/`, `migrations/README.md`, `docs/instructions/apply_migrations.md`, `/Users/Dalia/Developer/RENERA/BADB_WINDOWS_MIGRATION_CATCHUP_NOTE.md`
 
@@ -12,12 +12,12 @@ Run commands from `BADB_main`, not the outer `RENERA` workspace.
 
 ## Current Migration State
 
-- `migrations/` has 43 SQL files.
-- `migrations_ASCII/` has 43 SQL files.
+- `migrations/` has 44 SQL files.
+- `migrations_ASCII/` has 44 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d034_update_wet_mixing_methods.sql`.
+- Dalia's `dNNN` stream exists through `d035_add_item_created_at_dates.sql`.
 - Current local `badb_app_v1` has `public.schema_migrations` counts of
-  `dima = 21` and `dalia = 22` after `d034` is applied.
+  `dima = 21` and `dalia = 23` after `d035` is applied.
 
 `public.schema_migrations` is the authoritative applied-migration ledger. The
 flat `migrations_log.txt` files are human checkpoint notes only.
@@ -53,6 +53,7 @@ psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d031
 psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d032_create_schema_migrations_table.sql
 psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d033_add_coating_side2_gap_and_drying_speed.sql
 psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d034_update_wet_mixing_methods.sql
+psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d035_add_item_created_at_dates.sql
 ```
 
 These are intended as a catch-up set. Most are guarded with `IF NOT EXISTS`,
@@ -62,7 +63,7 @@ fails.
 
 ## Verify The Ledger
 
-After `d032` through `d034` succeed:
+After `d032` through `d035` succeed:
 
 ```powershell
 psql -U $env:DB_USER -d $env:DB_NAME -c "SELECT migration_stream, count(*) FROM schema_migrations GROUP BY migration_stream ORDER BY migration_stream;"
@@ -71,7 +72,7 @@ psql -U $env:DB_USER -d $env:DB_NAME -c "SELECT migration_stream, count(*) FROM 
 Expected current result:
 
 ```text
-dalia | 22
+dalia | 23
 dima  | 21
 ```
 

@@ -126,7 +126,7 @@ async function getRecipeReport(db, recipeId) {
       p.name AS project_name,
       COALESCE(tape_project_names.project_names, p.name) AS project_names,
       r.role,
-      t.created_at
+      COALESCE(t.item_created_at::timestamp, t.created_at) AS created_at
     FROM tapes t
     LEFT JOIN tape_recipes r
       ON r.tape_recipe_id = t.tape_recipe_id
@@ -140,7 +140,7 @@ async function getRecipeReport(db, recipeId) {
       WHERE tp.tape_id = t.tape_id
     ) tape_project_names ON true
     WHERE t.tape_recipe_id = $1
-    ORDER BY t.created_at DESC NULLS LAST, t.tape_id DESC
+    ORDER BY t.item_created_at DESC NULLS LAST, t.created_at DESC NULLS LAST, t.tape_id DESC
     `,
     [recipeId]
   );

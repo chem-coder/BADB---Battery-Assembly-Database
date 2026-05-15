@@ -1,13 +1,14 @@
 # Batteries
 
 Created: 2026-05-06
-Edited: 2026-05-13
+Edited: 2026-05-15
 Status: current
-Verified against code: 2026-05-07
+Verified against code: 2026-05-15
 
 Source paths:
 
 - `routes/batteries.js`
+- `services/batteryCatalogService.js`
 - `services/batteryLifecycleService.js`
 - `services/batteryElectrodeSourceService.js`
 - `services/batteryElectrodeStackService.js`
@@ -94,6 +95,18 @@ Status filtering uses the same display normalization as the list:
 blank/`NULL` and legacy `disassembled` are treated as derived `Открыт`.
 Filtering is page-local UI state. It must not mutate `batteries.status` or
 change allowed status transitions.
+
+## Creation Dates
+
+Battery record `created_at` is automatic audit metadata and is not user-editable.
+The opened battery form exposes date-only `item_created_at` as `Дата создания`
+for the physical battery. It defaults to today and accepts today or past dates
+only, so old lab data can be entered without rewriting the record audit
+timestamp.
+
+The list displays the user-facing physical creation date next to the automatic
+updated date (`item_created_at | updated_at`) and keeps full wording in the
+tooltip.
 
 ## Status Workflow
 
@@ -229,8 +242,9 @@ values. This makes valid cathode-first API payloads safe under the hardened
 trigger. The insert sequence is `A1, C1, A2, C2`, not `A1, A2, C1, C2`.
 
 The vanilla smoke harness applies the current post-dump migration set through
-`d032` after restoring the old dump, so smoke evidence covers the hardened
-trigger path and the restored-copy migration ledger baseline.
+`d035` after restoring the old dump, so smoke evidence covers the hardened
+trigger path, the restored-copy migration ledger baseline, and physical
+`item_created_at` date columns.
 
 ## Release Checks
 

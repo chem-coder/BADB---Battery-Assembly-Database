@@ -26,7 +26,7 @@ function getTodayDateString() {
   return `${year}-${month}-${day}`;
 }
 
-function normalizeOptionalCreatedAtDate(value) {
+function normalizeOptionalItemCreatedAtDate(value) {
   if (value === undefined || value === null || value === '') {
     return null;
   }
@@ -70,7 +70,7 @@ async function createTape(pool, payload, createdBy) {
   const projectIds = normalizeTapeProjectIds(payload);
   const projectId = getPrimaryProjectId(projectIds);
   const recipeId = parseOptionalId(payload.tape_recipe_id);
-  const createdAtDate = normalizeOptionalCreatedAtDate(payload.created_at);
+  const itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
 
   const client = await pool.connect();
   try {
@@ -85,11 +85,12 @@ async function createTape(pool, payload, createdBy) {
         created_by,
         created_at,
         updated_at,
+        item_created_at,
         notes,
         calc_mode,
         target_mass_g
       )
-      VALUES ($1,$2,$3,$4,COALESCE($5::timestamptz, now()),now(),$6,$7,$8)
+      VALUES ($1,$2,$3,$4,now(),now(),COALESCE($5::date, CURRENT_DATE),$6,$7,$8)
       RETURNING *
       `,
       [
@@ -97,7 +98,7 @@ async function createTape(pool, payload, createdBy) {
         projectId,
         recipeId,
         createdBy,
-        createdAtDate,
+        itemCreatedAtDate,
         payload.notes ?? null,
         payload.calc_mode ?? null,
         payload.target_mass_g ?? null
@@ -126,6 +127,7 @@ async function listTapes(pool, role) {
       t.tape_recipe_id,
       t.created_by,
       t.created_at,
+      t.item_created_at,
       t.updated_at,
       t.status,
       t.availability_status,
@@ -168,8 +170,8 @@ async function listTapes(pool, role) {
   `;
 
   const result = role
-    ? await pool.query(baseQuery + ' WHERE r.role = $1 ORDER BY t.created_at DESC', [role])
-    : await pool.query(baseQuery + ' ORDER BY t.created_at DESC');
+    ? await pool.query(baseQuery + ' WHERE r.role = $1 ORDER BY t.item_created_at DESC, t.created_at DESC', [role])
+    : await pool.query(baseQuery + ' ORDER BY t.item_created_at DESC, t.created_at DESC');
 
   const rows = result.rows || [];
   const statusMap = await fetchWorkflowStatusMap(pool, rows.map((row) => row.tape_id));
@@ -186,14 +188,14 @@ async function updateTape(pool, id, payload, userId) {
   const projectIds = normalizeTapeProjectIds(payload);
   const projectId = getPrimaryProjectId(projectIds);
   const recipeId = parseOptionalId(payload.tape_recipe_id);
-  const createdAtDate = normalizeOptionalCreatedAtDate(payload.created_at);
+  const itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const current = await client.query(
-      'SELECT tape_id, name, project_id, tape_recipe_id, created_by, created_at, notes, calc_mode, target_mass_g FROM tapes WHERE tape_id = $1',
+      'SELECT tape_id, name, project_id, tape_recipe_id, created_by, created_at, item_created_at, notes, calc_mode, target_mass_g FROM tapes WHERE tape_id = $1',
       [id]
     );
 
@@ -211,7 +213,7 @@ async function updateTape(pool, id, payload, userId) {
         project_id = $2,
         tape_recipe_id = $3,
         created_by = $4,
-        created_at = COALESCE($5::timestamptz, created_at),
+        item_created_at = COALESCE($5::date, item_created_at),
         notes = $6,
         calc_mode = $7,
         target_mass_g = $8,
@@ -225,7 +227,7 @@ async function updateTape(pool, id, payload, userId) {
         projectId,
         recipeId,
         current.rows[0].created_by,
-        createdAtDate,
+        itemCreatedAtDate,
         payload.notes ?? null,
         payload.calc_mode ?? null,
         payload.target_mass_g ?? null,
@@ -253,7 +255,7 @@ async function updateTape(pool, id, payload, userId) {
         project_ids: projectIds,
         tape_recipe_id: recipeId,
         created_by: current.rows[0].created_by,
-        created_at: result.rows[0].created_at,
+        item_created_at: result.rows[0].item_created_at,
         notes: payload.notes ?? null,
         calc_mode: payload.calc_mode ?? null,
         target_mass_g: payload.target_mass_g ?? null
