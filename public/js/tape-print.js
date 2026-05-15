@@ -426,7 +426,8 @@ function renderStepDetails(step) {
       )}
       ${renderStepSpacer()}
       ${renderStepLine('Вязкость:')}
-      ${renderStepLine(step.viscosity_cp != null ? `${step.viscosity_cp} cP` : '—')}
+      ${renderStepLine(step.viscosity_cp != null ? `${step.viscosity_cp} мПа·с` : '—')}
+      ${step.viscosity_conditions ? renderStepLine(step.viscosity_conditions) : ''}
     `;
   }
 

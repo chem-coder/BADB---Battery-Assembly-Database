@@ -391,7 +391,7 @@
           </div>
           
           <h4>Вязкость</h4>
-          <label for="wet-viscosity_cP">Вязкость, cP: </label>
+          <label for="wet-viscosity_cP">Вязкость, мПа·с: </label>
           <input id="wet-viscosity_cP"
           name="viscosity_cP"
           type="number"
@@ -399,6 +399,11 @@
           min="0"
           step="0.1"
           placeholder="Например: 1200"><br>
+          <label for="wet-viscosity-conditions">Условия измерения вязкости: </label>
+          <input id="wet-viscosity-conditions"
+          name="viscosity_conditions"
+          type="text"
+          placeholder="Например: #3, 6 об/мин"><br>
           
           <button type="button" id="1-mixing-save-btn" title="Сохранить этап перемешивания">Сохранить этап перемешивания</button>
           <span class="inline-save-status" aria-live="polite"></span>

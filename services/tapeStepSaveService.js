@@ -293,7 +293,8 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
     wet_duration_min,
     wet_end_time,
     wet_rpm,
-    viscosity_cP
+    viscosity_cP,
+    viscosity_conditions
   } = body;
 
   const result = await runInTransaction(pool, async (client) => {
@@ -305,7 +306,8 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
              sub.slurry_volume_ml,
              sub.dry_mixing_id, sub.dry_start_time, sub.dry_duration_min, sub.dry_rpm,
              sub.wet_mixing_id, sub.wet_start_time, sub.wet_duration_min, sub.wet_rpm,
-             sub.viscosity_cp
+             sub.viscosity_cp,
+             sub.viscosity_conditions
       FROM tape_process_steps ps
       LEFT JOIN tape_step_mixing sub ON sub.step_id = ps.step_id
       WHERE ps.tape_id = $1 AND ps.operation_type_id = $2
@@ -328,9 +330,9 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
         (step_id, slurry_volume_ml,
         dry_mixing_id, dry_start_time, dry_duration_min, dry_end_time, dry_rpm,
         wet_mixing_id, wet_start_time, wet_duration_min, wet_end_time, wet_rpm,
-        viscosity_cP)
+        viscosity_cP, viscosity_conditions)
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
       ON CONFLICT (step_id)
       DO UPDATE SET
         slurry_volume_ml  = EXCLUDED.slurry_volume_ml,
@@ -344,7 +346,8 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
         wet_duration_min  = EXCLUDED.wet_duration_min,
         wet_end_time      = EXCLUDED.wet_end_time,
         wet_rpm           = EXCLUDED.wet_rpm,
-        viscosity_cP      = EXCLUDED.viscosity_cP
+        viscosity_cP      = EXCLUDED.viscosity_cP,
+        viscosity_conditions = EXCLUDED.viscosity_conditions
       `,
       [
         stepId,
@@ -359,7 +362,8 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
         finiteNumberOrNull(wet_duration_min),
         valueOrNull(wet_end_time),
         valueOrNull(wet_rpm),
-        finiteNumberOrNull(viscosity_cP)
+        finiteNumberOrNull(viscosity_cP),
+        valueOrNull(viscosity_conditions)
       ]
     );
 
@@ -379,7 +383,8 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
         wet_start_time: valueOrNull(wet_start_time),
         wet_duration_min: finiteNumberOrNull(wet_duration_min),
         wet_rpm: valueOrNull(wet_rpm),
-        viscosity_cp: finiteNumberOrNull(viscosity_cP)
+        viscosity_cp: finiteNumberOrNull(viscosity_cP),
+        viscosity_conditions: valueOrNull(viscosity_conditions)
       }
     };
   });

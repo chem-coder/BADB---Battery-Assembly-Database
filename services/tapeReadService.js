@@ -59,7 +59,8 @@ async function getTapeStepByCode(pool, tapeId, code) {
       m.wet_duration_min,
       m.wet_end_time,
       m.wet_rpm,
-      m.viscosity_cP
+      m.viscosity_cP,
+      m.viscosity_conditions
     `;
   }
 
@@ -307,6 +308,7 @@ async function getTapeReport(pool, tapeId) {
         mix.wet_end_time,
         mix.wet_rpm,
         mix.viscosity_cp,
+        mix.viscosity_conditions,
         c.foil_id,
         f.type AS foil_type,
         c.coating_id,

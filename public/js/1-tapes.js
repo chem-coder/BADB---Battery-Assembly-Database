@@ -1117,7 +1117,8 @@ function getDefaultWorkflowState() {
       wet_end_date: '',
       wet_end_time: '',
       wet_rpm: '',
-      viscosity_cP: ''
+      viscosity_cP: '',
+      viscosity_conditions: ''
     },
     coating: {
       performed_by: '',
@@ -1558,6 +1559,7 @@ function renderMixingStep() {
   setElValue('wet-duration-min', step.wet_duration_min);
   setElValue('wet-rpm', step.wet_rpm);
   setElValue('wet-viscosity_cP', step.viscosity_cP);
+  setElValue('wet-viscosity-conditions', step.viscosity_conditions);
   updateMixParamsVisibility();
 }
 
@@ -3658,7 +3660,8 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
       wet_mixing_id: stepsByCode.mixing.wet_mixing_id ?? '',
       wet_duration_min: stepsByCode.mixing.wet_duration_min ?? '',
       wet_rpm: stepsByCode.mixing.wet_rpm ?? '',
-      viscosity_cP: stepsByCode.mixing.viscosity_cp ?? ''
+      viscosity_cP: stepsByCode.mixing.viscosity_cp ?? '',
+      viscosity_conditions: stepsByCode.mixing.viscosity_conditions ?? ''
     };
     setWorkflowStep('mixing', {
       ...restoredMixing,
@@ -4419,6 +4422,7 @@ function attachWorkflowStateSync() {
   bindValueField('wet-duration-min', 'mixing', 'wet_duration_min');
   bindValueField('wet-rpm', 'mixing', 'wet_rpm');
   bindValueField('wet-viscosity_cP', 'mixing', 'viscosity_cP');
+  bindValueField('wet-viscosity-conditions', 'mixing', 'viscosity_conditions');
 
   bindValueField('2-coating-operator', 'coating', 'performed_by');
   bindValueField('2-coating-date', 'coating', 'date');
@@ -5016,7 +5020,8 @@ document.getElementById('1-mixing-save-btn').onclick = () => trackPendingSave(wi
     wet_duration_min: step.wet_duration_min || null,
     wet_end_time: combineDateAndTime(derived.wet_end_date, derived.wet_end_time),
     wet_rpm: step.wet_rpm || null,
-    viscosity_cP: step.viscosity_cP || null
+    viscosity_cP: step.viscosity_cP || null,
+    viscosity_conditions: step.viscosity_conditions || null
   };
   
   const res = await fetch(

@@ -5,12 +5,12 @@ Forward-only SQL migrations applied in alphabetical order to
 
 Current migration file state as of 2026-05-15:
 
-- `migrations/` has 45 SQL files.
-- `migrations_ASCII/` has 45 SQL files.
+- `migrations/` has 46 SQL files.
+- `migrations_ASCII/` has 46 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d036_add_prism_form_factor.sql`.
+- Dalia's `dNNN` stream exists through `d037_add_viscosity_conditions.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 24` after `d036` is applied.
+  counts of `dima = 21` and `dalia = 25` after `d037` is applied.
 
 ## How to apply
 
@@ -52,7 +52,7 @@ namespace so migrations never collide:
 | Namespace         | Who   | Pattern                                      |
 | ----------------- | ----- | -------------------------------------------- |
 | `NNN_*.sql`       | Dima  | Plain 3-digit counter (`001_*` … `020_*`)    |
-| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d036_*`)      |
+| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d037_*`)      |
 
 Alphabetical ordering of `ls migrations/` gives:
 
@@ -136,6 +136,8 @@ Full timeline is in the git log. High-level:
 - `d036_add_prism_form_factor` — adds `prism` as a supported battery and
   electrode target form factor, using pouch-like configuration and stack rules
   until dedicated prism configuration fields are known.
+- `d037_add_viscosity_conditions` — adds optional viscosity measurement
+  conditions to tape mixing, for example spindle/speed notes.
 
 ## Check migration ledger
 
@@ -154,7 +156,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 24
+dalia = 25
 dima = 21
 ```
 

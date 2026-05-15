@@ -149,6 +149,11 @@ while the field is blank or still auto-selected. The user can override the
 method manually; manual selection stops further auto-overwrite until the field
 is cleared.
 
+The same section stores viscosity in `мПа·с` and an optional viscosity
+conditions note, such as spindle and speed (`#3, 6 об/мин`). The conditions
+field is optional and should be left blank when the measurement setup is
+unknown.
+
 Current auto-selection ranges:
 
 - `< 15 ml`: manual mixing;

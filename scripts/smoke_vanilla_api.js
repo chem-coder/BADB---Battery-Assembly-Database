@@ -37,7 +37,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd033_add_coating_side2_gap_and_drying_speed.sql'),
   path.join(ROOT, 'migrations', 'd034_update_wet_mixing_methods.sql'),
   path.join(ROOT, 'migrations', 'd035_add_item_created_at_dates.sql'),
-  path.join(ROOT, 'migrations', 'd036_add_prism_form_factor.sql')
+  path.join(ROOT, 'migrations', 'd036_add_prism_form_factor.sql'),
+  path.join(ROOT, 'migrations', 'd037_add_viscosity_conditions.sql')
 ];
 
 function parseArgs(argv) {
@@ -842,8 +843,15 @@ async function runWriteSmoke(client, seed, context) {
       wet_start_time: now,
       wet_duration_min: 1,
       wet_rpm: '100',
-      viscosity_cP: 5
+      viscosity_cP: 5,
+      viscosity_conditions: '#3, 6 об/мин'
     });
+    const savedMixing = await client.get(`/api/tapes/${made.tapeId}/steps/by-code/mixing`);
+    client.assertEqual(
+      savedMixing.viscosity_conditions,
+      '#3, 6 об/мин',
+      'tape mixing stores viscosity measurement conditions'
+    );
     await client.post(`/api/tapes/${made.tapeId}/steps/by-code/coating`, {
       performed_by: userId,
       started_at: now,
