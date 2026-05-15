@@ -193,6 +193,9 @@ Current page behavior:
 - the opened tape has a sticky header with tape id/name, metadata, dirty flag,
   save/create, print, exit, delete, and inline save status;
 - the record name is edited by clicking the title;
+- `created_at` is automatic by default, but the opened record exposes a
+  date-only `Дата создания` field for old-data backfill; the backend accepts
+  today or past dates only, while `updated_at` remains automatic;
 - save keeps the record open;
 - delete lives only inside the opened record header;
 - unsaved changes are guarded during exit, logout, record switching, and browser

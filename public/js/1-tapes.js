@@ -24,6 +24,7 @@ const clearTapeListFiltersBtn = document.getElementById('clearTapeListFiltersBtn
 const tapeListFilterSummary = document.getElementById('tape-list-filter-summary');
 
 const createdBySelect = document.getElementById('tape-created-by');
+const createdAtInput = document.getElementById('tape-created-at');
 const dryingOperatorSelect = document.getElementById('0-drying_am-operator');
 const projectSelect   = document.getElementById('project_id');
 const projectMultiSelect = document.getElementById('project-multiselect');
@@ -42,6 +43,7 @@ const tapePageState = window.tapePageState = {
       name: '',
       notes: '',
       created_by: '',
+      created_at: '',
       project_id: '',
       project_ids: [],
       tape_type: '',
@@ -459,6 +461,7 @@ function getCurrentSnapshot(stepCode) {
     return serializeSnapshot({
       name: state.form.fields.name || '',
       notes: state.form.fields.notes || '',
+      created_at: state.form.fields.created_at || '',
       project_id: state.form.fields.project_id || '',
       project_ids: state.form.fields.project_ids || [],
       tape_type: state.form.fields.tape_type || '',
@@ -790,6 +793,7 @@ function getDefaultTopLevelFormFields() {
     name: '',
     notes: '',
     created_by: '',
+    created_at: '',
     project_id: '',
     project_ids: [],
     tape_type: '',
@@ -1181,9 +1185,30 @@ function renderCalcModeLabel() {
       : 'Масса активного материала, г';
 }
 
+function formatDateInputValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? String(value) : '';
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getTodayDateInputValue() {
+  return formatDateInputValue(new Date());
+}
+
 function writeTopLevelFormStateToDom() {
   form.elements['notes'].value = state.form.fields.notes || '';
   form.elements['created_by'].value = state.form.fields.created_by || '';
+  if (createdAtInput) {
+    createdAtInput.max = getTodayDateInputValue();
+    createdAtInput.value = state.form.fields.created_at || '';
+  }
   form.elements['project_id'].value = state.form.fields.project_id || '';
   updateProjectMultiSelectDom();
   form.elements['tape_type'].value = state.form.fields.tape_type || '';
@@ -3581,6 +3606,7 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
     name: (tape?.name || '').trim(),
     notes: tape?.notes || '',
     created_by: tape?.created_by || '',
+    created_at: formatDateInputValue(tape?.created_at),
     project_id: getTapeProjectIds(tape)[0] || '',
     project_ids: getTapeProjectIds(tape),
     tape_type: tape?.role || '',
@@ -4327,6 +4353,7 @@ function applyDefaultCoatingFoil() {
 function attachTopLevelFormStateSync() {
   const fieldMap = [
     ['notes', form.elements['notes']],
+    ['created_at', form.elements['created_at']],
     ['project_id', form.elements['project_id']],
     ['tape_type', form.elements['tape_type']],
     ['tape_recipe_id', form.elements['tape_recipe_id']],
@@ -4599,7 +4626,8 @@ saveBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('s
       setCurrentTape(createdFromList, { mode: 'edit', render: false });
       setTopLevelFormState({
         ...state.form.fields,
-        created_by: createdFromList?.created_by || ''
+        created_by: createdFromList?.created_by || '',
+        created_at: formatDateInputValue(createdFromList?.created_at)
       });
       
       markAllSavedSnapshotsCurrent();
@@ -4625,7 +4653,8 @@ saveBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('s
         setCurrentTape(updatedFromList, { mode: 'edit', render: false });
         setTopLevelFormState({
           ...state.form.fields,
-          created_by: updatedFromList.created_by || ''
+          created_by: updatedFromList.created_by || '',
+          created_at: formatDateInputValue(updatedFromList.created_at)
         });
       }
       markSavedSnapshot('general_info');

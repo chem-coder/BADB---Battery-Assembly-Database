@@ -139,6 +139,15 @@
           <select id="tape-created-by" name="created_by" disabled>
             <option value="">— автоматически —</option>
           </select><br>
+
+          <label for="tape-created-at">Дата создания</label>
+          <input
+            id="tape-created-at"
+            name="created_at"
+            type="date"
+            title="Для ввода старых данных: можно выбрать сегодня или прошлую дату"
+          >
+          <span class="field-hint">для старых данных; будущая дата запрещена</span><br>
           
           <label for="project-multiselect-trigger">Проекты</label>
           <div id="project-multiselect" class="multi-select">

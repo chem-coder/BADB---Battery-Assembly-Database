@@ -18,6 +18,46 @@ function parseOptionalId(value) {
   return value ? Number(value) : null;
 }
 
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeOptionalCreatedAtDate(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const raw = String(value).trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw statusError('Дата создания должна быть в формате ГГГГ-ММ-ДД', 400);
+  }
+
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    throw statusError('Некорректная дата создания', 400);
+  }
+
+  if (raw > getTodayDateString()) {
+    throw statusError('Дата создания не может быть в будущем', 400);
+  }
+
+  return raw;
+}
+
 function defaultWorkflowStatus() {
   return {
     workflow_status_code: 'recipe_materials',
@@ -30,6 +70,7 @@ async function createTape(pool, payload, createdBy) {
   const projectIds = normalizeTapeProjectIds(payload);
   const projectId = getPrimaryProjectId(projectIds);
   const recipeId = parseOptionalId(payload.tape_recipe_id);
+  const createdAtDate = normalizeOptionalCreatedAtDate(payload.created_at);
 
   const client = await pool.connect();
   try {
@@ -48,7 +89,7 @@ async function createTape(pool, payload, createdBy) {
         calc_mode,
         target_mass_g
       )
-      VALUES ($1,$2,$3,$4,now(),now(),$5,$6,$7)
+      VALUES ($1,$2,$3,$4,COALESCE($5::timestamptz, now()),now(),$6,$7,$8)
       RETURNING *
       `,
       [
@@ -56,6 +97,7 @@ async function createTape(pool, payload, createdBy) {
         projectId,
         recipeId,
         createdBy,
+        createdAtDate,
         payload.notes ?? null,
         payload.calc_mode ?? null,
         payload.target_mass_g ?? null
@@ -144,13 +186,14 @@ async function updateTape(pool, id, payload, userId) {
   const projectIds = normalizeTapeProjectIds(payload);
   const projectId = getPrimaryProjectId(projectIds);
   const recipeId = parseOptionalId(payload.tape_recipe_id);
+  const createdAtDate = normalizeOptionalCreatedAtDate(payload.created_at);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const current = await client.query(
-      'SELECT tape_id, name, project_id, tape_recipe_id, created_by, notes, calc_mode, target_mass_g FROM tapes WHERE tape_id = $1',
+      'SELECT tape_id, name, project_id, tape_recipe_id, created_by, created_at, notes, calc_mode, target_mass_g FROM tapes WHERE tape_id = $1',
       [id]
     );
 
@@ -168,12 +211,13 @@ async function updateTape(pool, id, payload, userId) {
         project_id = $2,
         tape_recipe_id = $3,
         created_by = $4,
-        notes = $5,
-        calc_mode = $6,
-        target_mass_g = $7,
-        updated_by = $8,
+        created_at = COALESCE($5::timestamptz, created_at),
+        notes = $6,
+        calc_mode = $7,
+        target_mass_g = $8,
+        updated_by = $9,
         updated_at = now()
-      WHERE tape_id = $9
+      WHERE tape_id = $10
       RETURNING *
       `,
       [
@@ -181,6 +225,7 @@ async function updateTape(pool, id, payload, userId) {
         projectId,
         recipeId,
         current.rows[0].created_by,
+        createdAtDate,
         payload.notes ?? null,
         payload.calc_mode ?? null,
         payload.target_mass_g ?? null,
@@ -208,6 +253,7 @@ async function updateTape(pool, id, payload, userId) {
         project_ids: projectIds,
         tape_recipe_id: recipeId,
         created_by: current.rows[0].created_by,
+        created_at: result.rows[0].created_at,
         notes: payload.notes ?? null,
         calc_mode: payload.calc_mode ?? null,
         target_mass_g: payload.target_mass_g ?? null
