@@ -3485,7 +3485,7 @@ function getTapePrintReportUrl(tapeId) {
 
 function openTapePrintReport(tapeId) {
   if (!tapeId) return;
-  window.open(getTapePrintReportUrl(tapeId), '_blank', 'noopener');
+  window.BADB_AUTH?.openAuthenticatedWindow(getTapePrintReportUrl(tapeId));
 }
 
 async function fetchTapeRestoreData(tape) {
