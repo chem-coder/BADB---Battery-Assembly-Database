@@ -185,17 +185,13 @@ async function deleteInstance(id) {
 }
 
 function openMaterialDetailsPage(materialInstanceId) {
-  window.open(
-    `/reference/material-details.html?material_instance_id=${encodeURIComponent(materialInstanceId)}`,
-    '_blank'
-  );
+  window.location.href =
+    `/reference/material-details.html?material_instance_id=${encodeURIComponent(materialInstanceId)}`;
 }
 
 function openMaterialSourceInfoPage(materialInstanceId) {
-  window.open(
-    `/reference/material-source-info.html?material_instance_id=${encodeURIComponent(materialInstanceId)}`,
-    '_blank'
-  );
+  window.location.href =
+    `/reference/material-source-info.html?material_instance_id=${encodeURIComponent(materialInstanceId)}`;
 }
 
 createMaterialBtn.addEventListener('click', async () => {
