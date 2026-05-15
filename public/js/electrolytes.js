@@ -470,14 +470,7 @@ function getElectrolytePrintReportUrl(id) {
 function openElectrolytePrintReport(id) {
   if (!id) return;
   const url = getElectrolytePrintReportUrl(id);
-  const reportWindow = window.open(url, '_blank');
-
-  if (reportWindow) {
-    reportWindow.opener = null;
-    return;
-  }
-
-  window.location.href = url;
+  window.BADB_AUTH?.openAuthenticatedWindow(url);
 }
 
 function renderElectrolytes(electrolytes, options = {}) {

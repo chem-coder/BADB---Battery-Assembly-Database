@@ -1,7 +1,7 @@
 # Vanilla UI Patterns
 
 Created: 2026-05-07
-Edited: 2026-05-08
+Edited: 2026-05-15
 Status: instruction
 
 Use this when implementing recurring vanilla-page behavior in `public/`.
@@ -118,6 +118,24 @@ Standard placement:
   placement.
 - `Удалить`: opened-record sticky/header button only.
 - `Выйти`: opened-record sticky/header button only.
+
+## Authenticated Report Windows
+
+Open print/report pages with the shared auth helper:
+
+```js
+window.BADB_AUTH.openAuthenticatedWindow(reportUrl);
+```
+
+Do not use raw `window.open(reportUrl, '_blank', 'noopener')` for authenticated
+vanilla report pages. The app stores the active token in `sessionStorage` so
+logout can fully clear browser-held session state. New windows opened with
+`noopener` do not receive that session token and will ask for a fresh login.
+
+The helper opens a new same-origin window, copies the current session token into
+that window's `sessionStorage`, then detaches the opener before navigating to
+the report URL. This keeps report windows authenticated without putting tokens
+in URLs and without returning to persistent `localStorage`.
 
 ## Access Terminology
 

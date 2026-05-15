@@ -911,7 +911,7 @@
 
     function openElectrodeBatchPrintReport(cutBatchId) {
       if (!cutBatchId) return;
-      window.open(getElectrodeBatchPrintReportUrl(cutBatchId), '_blank', 'noopener');
+      window.BADB_AUTH?.openAuthenticatedWindow(getElectrodeBatchPrintReportUrl(cutBatchId));
     }
 
     function getCurrentCutBatchRecord() {

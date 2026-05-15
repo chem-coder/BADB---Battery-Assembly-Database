@@ -4936,7 +4936,7 @@ function getBatteryPrintReportUrl(batteryId) {
 
 function openBatteryPrintReport(batteryId) {
   if (!batteryId) return;
-  window.open(getBatteryPrintReportUrl(batteryId), '_blank', 'noopener');
+  window.BADB_AUTH?.openAuthenticatedWindow(getBatteryPrintReportUrl(batteryId));
 }
 
 async function openBatteryRecord(battery) {

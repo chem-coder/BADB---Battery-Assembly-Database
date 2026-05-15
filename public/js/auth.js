@@ -56,6 +56,42 @@
     } catch {}
   }
 
+  function openAuthenticatedWindow(url, target = '_blank') {
+    const token = getToken();
+    let nextUrl = url;
+
+    try {
+      nextUrl = new URL(url, window.location.origin).href;
+    } catch {}
+
+    const opened = window.open('about:blank', target);
+    if (!opened) {
+      window.location.href = nextUrl;
+      return null;
+    }
+
+    try {
+      opened.localStorage.clear();
+    } catch {}
+    try {
+      opened.sessionStorage.clear();
+      if (token) opened.sessionStorage.setItem(TOKEN_KEY, token);
+    } catch {}
+    try {
+      opened.opener = null;
+    } catch {}
+    try {
+      opened.location.replace(nextUrl);
+    } catch {
+      opened.location.href = nextUrl;
+    }
+    try {
+      opened.focus();
+    } catch {}
+
+    return opened;
+  }
+
   function normalizeUser(user) {
     if (!user) return null;
     return {
@@ -414,6 +450,7 @@
     getCurrentUser: () => currentUser,
     getCurrentUserLabel,
     getAuditUserPlaceholder,
+    openAuthenticatedWindow,
     registerLogoutGuard,
     isReady: () => authReady
   };

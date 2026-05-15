@@ -683,14 +683,7 @@ function getSeparatorPrintReportUrl(id) {
 
 function openSeparatorPrintReport(id) {
   if (!id) return;
-  const reportWindow = window.open(getSeparatorPrintReportUrl(id), '_blank');
-
-  if (reportWindow) {
-    reportWindow.opener = null;
-    return;
-  }
-
-  window.location.href = getSeparatorPrintReportUrl(id);
+  window.BADB_AUTH?.openAuthenticatedWindow(getSeparatorPrintReportUrl(id));
 }
 
 async function saveSeparatorRecord(options = {}) {

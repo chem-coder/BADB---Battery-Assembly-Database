@@ -1022,14 +1022,7 @@ function openProjectPrintReport(id) {
   if (!id) return;
 
   const url = getProjectPrintReportUrl(id);
-  const reportWindow = window.open(url, '_blank');
-
-  if (reportWindow) {
-    reportWindow.opener = null;
-    return;
-  }
-
-  window.location.href = url;
+  window.BADB_AUTH?.openAuthenticatedWindow(url);
 }
 
 
