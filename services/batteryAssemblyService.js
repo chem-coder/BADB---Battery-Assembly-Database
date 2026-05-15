@@ -84,7 +84,7 @@ async function getBatteryAssemblyCompleteness(queryable, batteryId) {
             bc.coin_cell_mode <> 'half_cell'
             OR bc.half_cell_type IS NOT NULL
           )
-        WHEN bc.form_factor = 'pouch' THEN
+        WHEN bc.form_factor IN ('pouch', 'prism') THEN
           bc.pouch_case_size_code IS NOT NULL
           AND (
             bc.pouch_case_size_code <> 'other'
@@ -103,7 +103,7 @@ async function getBatteryAssemblyCompleteness(queryable, batteryId) {
           AND bc.coin_cell_mode = 'half_cell'
           AND bc.half_cell_type = 'anode_vs_li'
           THEN sc.anode_sources > 0 AND sc.cathode_sources = 0
-        WHEN bc.form_factor IN ('coin', 'pouch', 'cylindrical')
+        WHEN bc.form_factor IN ('coin', 'pouch', 'cylindrical', 'prism')
           THEN sc.cathode_sources > 0 AND sc.anode_sources > 0
         ELSE false
       END AS has_sources,
@@ -118,7 +118,7 @@ async function getBatteryAssemblyCompleteness(queryable, batteryId) {
           THEN ec.anodes = 1 AND ec.cathodes = 0
         WHEN bc.form_factor = 'coin'
           THEN ec.cathodes = 1 AND ec.anodes = 1
-        WHEN bc.form_factor IN ('pouch', 'cylindrical')
+        WHEN bc.form_factor IN ('pouch', 'cylindrical', 'prism')
           THEN ec.cathodes >= 1
             AND ec.anodes >= 1
             AND (ec.anodes = ec.cathodes OR ec.anodes = ec.cathodes + 1)

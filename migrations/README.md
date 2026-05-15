@@ -5,12 +5,12 @@ Forward-only SQL migrations applied in alphabetical order to
 
 Current migration file state as of 2026-05-15:
 
-- `migrations/` has 44 SQL files.
-- `migrations_ASCII/` has 44 SQL files.
+- `migrations/` has 45 SQL files.
+- `migrations_ASCII/` has 45 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d035_add_item_created_at_dates.sql`.
+- Dalia's `dNNN` stream exists through `d036_add_prism_form_factor.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 23` after `d035` is applied.
+  counts of `dima = 21` and `dalia = 24` after `d036` is applied.
 
 ## How to apply
 
@@ -52,7 +52,7 @@ namespace so migrations never collide:
 | Namespace         | Who   | Pattern                                      |
 | ----------------- | ----- | -------------------------------------------- |
 | `NNN_*.sql`       | Dima  | Plain 3-digit counter (`001_*` … `020_*`)    |
-| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d035_*`)      |
+| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d036_*`)      |
 
 Alphabetical ordering of `ls migrations/` gives:
 
@@ -118,7 +118,7 @@ Full timeline is in the git log. High-level:
   project links, and battery stack trigger hardening (March-May 2026).
 - `d031_harden_battery_stack_validate_trigger` — current local
   `badb_app_v1` has this applied. It updates
-  `validate_battery_stack()` so pouch/cylindrical stacks allow equal
+  `validate_battery_stack()` so pouch/prism/cylindrical stacks allow equal
   cathode/anode counts or one extra anode, but not one extra cathode.
 - `d032_create_schema_migrations_table` — creates
   `public.schema_migrations`, verifies key current migration effects,
@@ -133,6 +133,9 @@ Full timeline is in the git log. High-level:
 - `d035_add_item_created_at_dates` — adds user-facing physical creation dates
   to tapes, electrode cut batches, and batteries while keeping `created_at` as
   automatic audit metadata.
+- `d036_add_prism_form_factor` — adds `prism` as a supported battery and
+  electrode target form factor, using pouch-like configuration and stack rules
+  until dedicated prism configuration fields are known.
 
 ## Check migration ledger
 
@@ -151,7 +154,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 23
+dalia = 24
 dima = 21
 ```
 

@@ -435,7 +435,7 @@ function hasStartedBatterySection(sectionKey) {
     const formFactor = state.meta.form_factor;
     const configState =
       formFactor === 'coin' ? state.config.coin
-      : formFactor === 'pouch' ? state.config.pouch
+      : isPouchLikeFormFactor(formFactor) ? state.config.pouch
       : formFactor === 'cylindrical' ? state.config.cylindrical
       : null;
 
@@ -498,7 +498,7 @@ function hasStartedBatteryAssemblySection() {
     return hasStartedCoinAssemblySection(state.assembly.coin);
   }
 
-  if (formFactor === 'pouch') {
+  if (isPouchLikeFormFactor(formFactor)) {
     return hasMeaningfulObjectValue(state.assembly.pouch);
   }
 
@@ -530,7 +530,7 @@ function isBatteryConfigSectionComplete() {
     return true;
   }
 
-  if (formFactor === 'pouch') {
+  if (isPouchLikeFormFactor(formFactor)) {
     const pouch = state.config.pouch || {};
 
     if (!pouch.pouch_case_size_code) {
@@ -604,7 +604,7 @@ function isBatteryAssemblySectionComplete() {
   const formFactor = state.meta.form_factor;
   const activeAssembly =
     formFactor === 'coin' ? state.assembly.coin
-    : formFactor === 'pouch' ? state.assembly.pouch
+    : isPouchLikeFormFactor(formFactor) ? state.assembly.pouch
     : formFactor === 'cylindrical' ? state.assembly.cylindrical
     : null;
 
@@ -687,7 +687,7 @@ function getRequiredBatterySourceRolesForContext(context = getBatterySourceRoleC
     return ['cathode', 'anode'];
   }
 
-  if (context.formFactor === 'pouch' || context.formFactor === 'cylindrical') {
+  if (isPouchLikeFormFactor(context.formFactor) || context.formFactor === 'cylindrical') {
     return ['cathode', 'anode'];
   }
 
@@ -833,6 +833,21 @@ function installBatteryDebugInspector() {
   };
 }
 
+function isPouchLikeFormFactor(formFactor) {
+  return formFactor === 'pouch' || formFactor === 'prism';
+}
+
+function formatBatteryFormFactorLabel(value) {
+  const labels = {
+    coin: 'Монеточный',
+    pouch: 'Пакетный',
+    prism: 'Призматическая',
+    cylindrical: 'Цилиндрический'
+  };
+
+  return labels[value] || value || '—';
+}
+
 async function refreshBatteryReferenceData() {
   await Promise.all([
     loadUsers(),
@@ -919,7 +934,7 @@ function setSelectedAnodes(anodes) {
 }
 
 function isMultiElectrodeFormFactor(formFactor) {
-  return formFactor === 'pouch' || formFactor === 'cylindrical';
+  return isPouchLikeFormFactor(formFactor) || formFactor === 'cylindrical';
 }
 
 function normalizeStackAnodeMode(mode) {
@@ -1179,7 +1194,7 @@ function getActiveConfigFieldset() {
   const formFactor = state.meta.form_factor || document.getElementById('battery_form_factor').value;
   
   if (formFactor === 'coin') return document.getElementById('coin_config');
-  if (formFactor === 'pouch') return document.getElementById('pouch_config');
+  if (isPouchLikeFormFactor(formFactor)) return document.getElementById('pouch_config');
   if (formFactor === 'cylindrical') return document.getElementById('cyl_config');
   
   return null;
@@ -1189,7 +1204,7 @@ function getActiveAssemblyFieldset() {
   const formFactor = state.meta.form_factor || document.getElementById('battery_form_factor').value;
   
   if (formFactor === 'coin') return document.getElementById('coin_assembly');
-  if (formFactor === 'pouch') return document.getElementById('pouch_assembly');
+  if (isPouchLikeFormFactor(formFactor)) return document.getElementById('pouch_assembly');
   if (formFactor === 'cylindrical') return document.getElementById('cyl_assembly');
   
   return null;
@@ -1634,7 +1649,7 @@ function isBatteryAssemblyComplete(data) {
           data.coin_config.half_cell_type
         )
       )
-    : formFactor === 'pouch'
+    : isPouchLikeFormFactor(formFactor)
       ? hasPouchConfig
     : formFactor === 'cylindrical'
       ? Boolean(data.cyl_config?.cyl_size_code)
@@ -1649,7 +1664,7 @@ function isBatteryAssemblyComplete(data) {
       ? cathodeSources && !anodeSources
     : formFactor === 'coin' && coinMode === 'half_cell' && halfCellType === 'anode_vs_li'
       ? anodeSources && !cathodeSources
-    : ['coin', 'pouch', 'cylindrical'].includes(formFactor)
+    : ['coin', 'pouch', 'cylindrical', 'prism'].includes(formFactor)
       ? cathodeSources && anodeSources
     : false;
 
@@ -1662,7 +1677,7 @@ function isBatteryAssemblyComplete(data) {
       ? anodes === 1 && cathodes === 0
     : formFactor === 'coin'
       ? cathodes === 1 && anodes === 1
-    : formFactor === 'pouch' || formFactor === 'cylindrical'
+    : isPouchLikeFormFactor(formFactor) || formFactor === 'cylindrical'
       ? cathodes >= 1 && anodes >= 1 && (anodes === cathodes || anodes === cathodes + 1)
     : false;
 
@@ -1698,7 +1713,7 @@ function getBatterySectionSaveButtonId(sectionKey) {
   if (sectionKey === 'battery_assembly') {
     return state.meta.form_factor === 'coin'
       ? 'coin_assembly_save_btn'
-      : state.meta.form_factor === 'pouch'
+      : isPouchLikeFormFactor(state.meta.form_factor)
         ? 'pouch_assembly_save_btn'
         : 'cyl_assembly_save_btn';
   }
@@ -4084,7 +4099,7 @@ function getActiveAssemblyContext() {
     };
   }
 
-  if (formFactor === 'pouch') {
+  if (isPouchLikeFormFactor(formFactor)) {
     return {
       formFactor,
       fieldsetId: 'pouch_assembly',
@@ -4133,7 +4148,7 @@ async function saveAssemblyParams() {
 
   statusTargetId = ctx.formFactor === 'coin'
     ? 'coin_assembly_save_btn'
-    : ctx.formFactor === 'pouch'
+    : isPouchLikeFormFactor(ctx.formFactor)
       ? 'pouch_assembly_save_btn'
       : 'cyl_assembly_save_btn';
 
@@ -4141,7 +4156,7 @@ async function saveAssemblyParams() {
   try {
     const sectionState =
       ctx.formFactor === 'coin' ? { ...state.assembly.coin }
-      : ctx.formFactor === 'pouch' ? { ...state.assembly.pouch }
+      : isPouchLikeFormFactor(ctx.formFactor) ? { ...state.assembly.pouch }
       : ctx.formFactor === 'cylindrical' ? { ...state.assembly.cylindrical }
       : null;
 
@@ -4664,7 +4679,7 @@ async function fetchCompatibleBatteryCutBatches(tapeId, selectedBatchId) {
 function getExpectedBatteryBatchShape() {
   const formFactor = state.meta.form_factor;
   if (formFactor === 'coin') return 'circle';
-  if (formFactor === 'pouch' || formFactor === 'cylindrical') return 'rectangle';
+  if (isPouchLikeFormFactor(formFactor) || formFactor === 'cylindrical') return 'rectangle';
   return null;
 }
 
@@ -5072,7 +5087,7 @@ function formatBatteryVisibleSizeInfo(battery) {
     ].filter(Boolean).join(' / ');
   }
 
-  if (battery.form_factor === 'pouch') {
+  if (isPouchLikeFormFactor(battery.form_factor)) {
     return formatBatteryPouchSize(battery);
   }
 
@@ -5235,7 +5250,7 @@ function renderBatteriesList() {
 
     const statusSpan = document.createElement('small');
     statusSpan.style.color = '#666';
-    statusSpan.textContent = ` — ${b.form_factor} — ${status}`;
+    statusSpan.textContent = ` — ${formatBatteryFormFactorLabel(b.form_factor)} — ${status}`;
 
     const dateSpan = document.createElement('small');
     dateSpan.style.color = '#666';
@@ -5921,7 +5936,7 @@ function validateStackSelection() {
     
   }
   
-  /* ----- full-cell / pouch / cylindrical rules ----- */
+  /* ----- full-cell / pouch / prism / cylindrical rules ----- */
 
   if (isMultiElectrodeFormFactor(formFactor) && !targets.valid) {
     showBatteryInlineStatus(
@@ -5991,11 +6006,11 @@ function renderFormFactorSections() {
   const cylTotalVolumeInput = document.getElementById('cyl_electrolyte_total_ul');
 
   coinConfig.hidden = formFactor !== 'coin';
-  pouchConfig.hidden = formFactor !== 'pouch';
+  pouchConfig.hidden = !isPouchLikeFormFactor(formFactor);
   cylConfig.hidden = formFactor !== 'cylindrical';
 
   coinAssembly.hidden = formFactor !== 'coin';
-  pouchAssembly.hidden = formFactor !== 'pouch';
+  pouchAssembly.hidden = !isPouchLikeFormFactor(formFactor);
   cylAssembly.hidden = formFactor !== 'cylindrical';
 
   if (coinTotalVolumeInput) coinTotalVolumeInput.readOnly = false;
@@ -6244,7 +6259,7 @@ function buildBatteryHeaderPayloadFromState() {
   const formFactor = state.meta.form_factor || null;
   const activeConfig =
     formFactor === 'coin' ? state.config.coin
-    : formFactor === 'pouch' ? state.config.pouch
+    : isPouchLikeFormFactor(formFactor) ? state.config.pouch
     : formFactor === 'cylindrical' ? state.config.cylindrical
     : {};
 
@@ -6290,16 +6305,16 @@ function getBatteryHeaderValidationMessage(headerPayload) {
     }
   }
 
-  if (headerPayload.form_factor === 'pouch') {
+  if (isPouchLikeFormFactor(headerPayload.form_factor)) {
     if (!headerPayload.pouch_case_size_code) {
-      return 'Для пакетного элемента выберите размер.';
+      return 'Для пакетного/призматического элемента выберите размер.';
     }
 
     if (
       headerPayload.pouch_case_size_code === 'other' &&
       !String(headerPayload.pouch_case_size_other || '').trim()
     ) {
-      return 'Для другого размера пакетного элемента заполните размер.';
+      return 'Для другого размера пакетного/призматического элемента заполните размер.';
     }
   }
 

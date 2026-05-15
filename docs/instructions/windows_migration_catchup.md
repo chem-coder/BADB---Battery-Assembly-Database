@@ -12,12 +12,12 @@ Run commands from `BADB_main`, not the outer `RENERA` workspace.
 
 ## Current Migration State
 
-- `migrations/` has 44 SQL files.
-- `migrations_ASCII/` has 44 SQL files.
+- `migrations/` has 45 SQL files.
+- `migrations_ASCII/` has 45 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d035_add_item_created_at_dates.sql`.
+- Dalia's `dNNN` stream exists through `d036_add_prism_form_factor.sql`.
 - Current local `badb_app_v1` has `public.schema_migrations` counts of
-  `dima = 21` and `dalia = 23` after `d035` is applied.
+  `dima = 21` and `dalia = 24` after `d036` is applied.
 
 `public.schema_migrations` is the authoritative applied-migration ledger. The
 flat `migrations_log.txt` files are human checkpoint notes only.
@@ -54,6 +54,7 @@ psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d032
 psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d033_add_coating_side2_gap_and_drying_speed.sql
 psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d034_update_wet_mixing_methods.sql
 psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d035_add_item_created_at_dates.sql
+psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d036_add_prism_form_factor.sql
 ```
 
 These are intended as a catch-up set. Most are guarded with `IF NOT EXISTS`,
@@ -63,7 +64,7 @@ fails.
 
 ## Verify The Ledger
 
-After `d032` through `d035` succeed:
+After `d032` through `d036` succeed:
 
 ```powershell
 psql -U $env:DB_USER -d $env:DB_NAME -c "SELECT migration_stream, count(*) FROM schema_migrations GROUP BY migration_stream ORDER BY migration_stream;"
@@ -72,7 +73,7 @@ psql -U $env:DB_USER -d $env:DB_NAME -c "SELECT migration_stream, count(*) FROM 
 Expected current result:
 
 ```text
-dalia | 23
+dalia | 24
 dima  | 21
 ```
 

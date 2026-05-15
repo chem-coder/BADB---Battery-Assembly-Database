@@ -54,6 +54,7 @@ function formatTarget(batch) {
   const formFactorMap = {
     coin: 'Монеточный',
     pouch: 'Пакетный',
+    prism: 'Призматическая',
     cylindrical: 'Цилиндрический'
   };
   const formFactor = formFactorMap[batch.target_form_factor] || batch.target_form_factor || '';

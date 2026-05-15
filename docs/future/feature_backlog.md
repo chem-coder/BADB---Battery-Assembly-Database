@@ -1,7 +1,7 @@
 # Feature Backlog
 
 Created: 2026-05-06
-Edited: 2026-05-09
+Edited: 2026-05-15
 Status: future idea
 Verified against current docs/code: cleanup pass 2026-05-09
 
@@ -68,6 +68,11 @@ Important themes from the backlog:
 - scientist review before adding new required properties.
 
 ## Assembly And Optimization Ideas
+
+- Define dedicated prism-cell physical configuration fields when the lab
+  confirms which dimensions and shell parameters matter. Current v1.1 stores
+  `form_factor = 'prism'` and reuses the pouch-like size/config path on
+  purpose.
 
 Battery assembly log structure and external reference-source ideas live in
 `docs/future/battery_assembly_logs_next.md`.

@@ -29,7 +29,7 @@ function validatePouchCaseSize(pouchCaseSizeCode, pouchCaseSizeOther) {
   }
 
   if (!ALLOWED_POUCH_CASE_SIZE_CODES.has(pouchCaseSizeCode)) {
-    throw new BatteryCellConfigValidationError('Допустимые размеры pouch case: 103x83, 86x56, other');
+    throw new BatteryCellConfigValidationError('Допустимые размеры пакетного/призматического элемента: 103x83, 86x56, other');
   }
 
   if (

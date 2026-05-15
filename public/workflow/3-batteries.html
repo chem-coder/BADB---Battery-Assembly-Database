@@ -378,6 +378,7 @@
             <option value="">— выбрать —</option>
             <option value="coin">Монеточный</option>
             <option value="pouch">Пакетный</option>
+            <option value="prism">Призматическая</option>
             <option value="cylindrical">Цилиндрический</option>
           </select><br>
 
@@ -456,7 +457,7 @@
               <textarea
                 id="pouch_notes"
                 name="pouch_notes"
-                placeholder="Комментарии по пакетному элементу"
+                placeholder="Комментарии по пакетному или призматическому элементу"
               ></textarea>
             </fieldset>
 
@@ -837,7 +838,7 @@
             </fieldset>
 
             <fieldset id="pouch_assembly" data-formfactor="pouch">
-              <legend>Параметры сборки пауча</legend>
+              <legend>Параметры сборки пакетного/призматического элемента</legend>
 
               <!--Separator-->
               <fieldset>
@@ -1112,9 +1113,10 @@
           <span>Форм-фактор</span>
           <select id="battery-list-filter-form-factor">
             <option value="">Все форм-факторы</option>
-            <option value="coin">coin</option>
-            <option value="pouch">pouch</option>
-            <option value="cylindrical">cylindrical</option>
+            <option value="coin">Монеточный</option>
+            <option value="pouch">Пакетный</option>
+            <option value="prism">Призматическая</option>
+            <option value="cylindrical">Цилиндрический</option>
           </select>
         </label>
 

@@ -35,6 +35,7 @@ Supported form factors:
 
 - `coin`
 - `pouch`
+- `prism`
 - `cylindrical`
 
 Coin batteries also use `battery_coin_config.coin_cell_mode`:
@@ -43,6 +44,12 @@ Coin batteries also use `battery_coin_config.coin_cell_mode`:
 - `full_cell`
 
 Half-cell role behavior is controlled by `half_cell_type`.
+
+`prism` is stored as its own battery `form_factor` and displayed in the UI as
+`Призматическая`. For v1.1 it intentionally reuses the pouch-like config and
+stack path: rectangular electrode batches, one cathode source plus one anode
+source, and the same `battery_pouch_config` size fields. Dedicated prism
+physical configuration fields are future work once the lab defines them.
 
 ## Battery-Owned Sections
 
@@ -88,7 +95,7 @@ Current filters:
   labels/names, active material label, visible size/config label, creator, and
   date text;
 - status: all, `Открыт`, `Собран`, `На тестировании`, `Завершён`, `Брак`;
-- form factor: all, `coin`, `pouch`, `cylindrical`;
+- form factor: all, `coin`, `pouch`, `prism`, `cylindrical`;
 - reset button.
 
 Status filtering uses the same display normalization as the list:
@@ -160,15 +167,15 @@ determine which individual electrodes may appear in the stack picker.
 Current high-level behavior:
 
 - coin half-cell uses one relevant source role;
-- coin full-cell, pouch, and cylindrical batteries use both cathode and anode
-  sources;
+- coin full-cell, pouch, prism, and cylindrical batteries use both cathode and
+  anode sources;
 - compatible source batches are filtered by tape, shape, form factor, and
   sidedness rules;
 - stack picker and selected-stack rows show electrode id, mass, and calculated
   per-electrode capacity;
-- for pouch/cylindrical batteries, the user enters cathode count and chooses
-  whether anodes equal cathodes or use one extra anode; the anode count is
-  calculated by the page;
+- for pouch/prism/cylindrical batteries, the user enters cathode count and
+  chooses whether anodes equal cathodes or use one extra anode; the anode count
+  is calculated by the page;
 - the N/P helper lets the user enter desired anode excess percent and then
   calculates a target anode capacity per anode from the prescribed anode count;
   the table highlights a recommended anode set, preferring the lightest
@@ -178,7 +185,7 @@ Current high-level behavior:
 - saved stacks are read by `position_index`;
 - a `disassembled` battery with no rows in `battery_electrodes` may be
   reassembled directly by selecting and saving a new stack;
-- pouch/cylindrical stacks may have equal cathode/anode counts or one extra
+- pouch/prism/cylindrical stacks may have equal cathode/anode counts or one extra
   anode.
 
 Detailed rules are in `docs/rules/electrode_stack_rules.md`.
@@ -233,18 +240,18 @@ battery record.
 ## d031 Stack Trigger
 
 Migration `d031_harden_battery_stack_validate_trigger.sql` is part of the
-current battery stack safety model. It rejects pouch/cylindrical states where
+current battery stack safety model. It rejects pouch/prism/cylindrical states where
 cathodes exceed anodes.
 
-The stack service inserts valid pouch/cylindrical payloads in trigger-safe
+The stack service inserts valid pouch/prism/cylindrical payloads in trigger-safe
 anode-before-cathode paired order while preserving original `position_index`
 values. This makes valid cathode-first API payloads safe under the hardened
 trigger. The insert sequence is `A1, C1, A2, C2`, not `A1, A2, C1, C2`.
 
 The vanilla smoke harness applies the current post-dump migration set through
-`d035` after restoring the old dump, so smoke evidence covers the hardened
-trigger path, the restored-copy migration ledger baseline, and physical
-`item_created_at` date columns.
+`d036` after restoring the old dump, so smoke evidence covers the hardened
+trigger path, the restored-copy migration ledger baseline, physical
+`item_created_at` date columns, and the prism form-factor constraints.
 
 ## Release Checks
 

@@ -9,13 +9,13 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
         b.form_factor,
         CASE
           WHEN b.form_factor = 'coin' THEN cc.coin_size_code
-          WHEN b.form_factor = 'pouch' THEN pc.pouch_case_size_code
+          WHEN b.form_factor IN ('pouch', 'prism') THEN pc.pouch_case_size_code
           WHEN b.form_factor = 'cylindrical' THEN cy.cyl_size_code
           ELSE NULL
         END AS target_config_code,
         CASE
           WHEN b.form_factor = 'coin' THEN 'circle'
-          WHEN b.form_factor IN ('pouch', 'cylindrical') THEN 'rectangle'
+          WHEN b.form_factor IN ('pouch', 'cylindrical', 'prism') THEN 'rectangle'
           ELSE NULL
         END AS expected_shape
       FROM batteries b

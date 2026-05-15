@@ -38,6 +38,7 @@ function formatDateOnly(value) {
 function formatFormFactor(value) {
   if (value === 'coin') return 'Монеточный';
   if (value === 'pouch') return 'Пакетный';
+  if (value === 'prism') return 'Призматическая';
   if (value === 'cylindrical') return 'Цилиндрический';
   return value || '—';
 }
@@ -175,7 +176,7 @@ function renderConfigSection(report) {
     `;
   }
 
-  if (formFactor === 'pouch') {
+  if (formFactor === 'pouch' || formFactor === 'prism') {
     const config = report.pouch_config || {};
     const pouchSize = config.pouch_case_size_code === 'other'
       ? config.pouch_case_size_other || 'other'

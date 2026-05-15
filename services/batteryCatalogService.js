@@ -129,15 +129,15 @@ function validateRequiredIdentityFields(payload, formFactor) {
     }
   }
 
-  if (formFactor === 'pouch') {
+  if (formFactor === 'pouch' || formFactor === 'prism') {
     if (!payload.pouch_case_size_code) {
-      throw statusError('Для пакетного элемента выберите размер', 400);
+      throw statusError('Для пакетного/призматического элемента выберите размер', 400);
     }
     if (
       payload.pouch_case_size_code === 'other' &&
       !String(payload.pouch_case_size_other || '').trim()
     ) {
-      throw statusError('Для другого размера пакетного элемента заполните размер', 400);
+      throw statusError('Для другого размера пакетного/призматического элемента заполните размер', 400);
     }
   }
 
@@ -159,7 +159,7 @@ async function saveIdentityConfig(queryable, batteryId, formFactor, payload, use
     }
   }
 
-  if (formFactor === 'pouch') {
+  if (formFactor === 'pouch' || formFactor === 'prism') {
     if (isCreate) return savePouchConfig(queryable, configPayload);
     try {
       return await updatePouchConfig(queryable, batteryId, configPayload, userId);

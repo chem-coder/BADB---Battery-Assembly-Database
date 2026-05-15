@@ -107,9 +107,9 @@ Do not test future features here. If a new idea appears, write it down separatel
 - [ ] Confirm stack summary shows one cathode and one anode.
 - [ ] Save the stack and confirm it becomes read-only.
 
-## Pouch Or Cylindrical Cell
+## Pouch, Prism, Or Cylindrical Cell
 
-- [ ] Create or select a pouch or cylindrical battery.
+- [ ] Create or select a pouch, prism, or cylindrical battery.
 - [ ] Confirm both cathode and anode source blocks are available.
 - [ ] Select one cathode tape and compatible cathode cut batch.
 - [ ] Select one anode tape and compatible anode cut batch.
@@ -133,7 +133,7 @@ Do not test future features here. If a new idea appears, write it down separatel
 
 - [ ] The battery project selector allows only projects tied to the selected source batch or batches.
 - [ ] For half-cells, allowed projects come from the selected real electrode batch.
-- [ ] For full cells, pouch cells, and cylindrical cells, allowed projects are the intersection of cathode and anode batch projects.
+- [ ] For full cells, pouch cells, prism cells, and cylindrical cells, allowed projects are the intersection of cathode and anode batch projects.
 - [ ] Deselecting/changing a source batch updates allowed battery projects.
 - [ ] The UI prevents saving a battery with zero battery projects.
 - [ ] The UI prevents saving unrelated battery projects.
@@ -204,7 +204,7 @@ git diff --check
 - [ ] Half-cell anode-vs-Li works through stack save.
 - [ ] Coin full-cell works through stack save, if test data exists.
 - [ ] Pouch or cylindrical target-count behavior works, if test data exists.
-- [ ] Cathode-first valid pouch/cylindrical payloads save under `d031`; backend insert order is trigger-safe and saved positions are preserved.
+- [ ] Cathode-first valid pouch/prism/cylindrical payloads save under `d031`/current trigger function; backend insert order is trigger-safe and saved positions are preserved.
 - [ ] Saved batteries reload correctly.
 - [ ] Unsaved-change guard behaves normally.
 - [ ] No red console errors appear during the tested flows.

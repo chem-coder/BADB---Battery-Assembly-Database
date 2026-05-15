@@ -36,7 +36,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd032_create_schema_migrations_table.sql'),
   path.join(ROOT, 'migrations', 'd033_add_coating_side2_gap_and_drying_speed.sql'),
   path.join(ROOT, 'migrations', 'd034_update_wet_mixing_methods.sql'),
-  path.join(ROOT, 'migrations', 'd035_add_item_created_at_dates.sql')
+  path.join(ROOT, 'migrations', 'd035_add_item_created_at_dates.sql'),
+  path.join(ROOT, 'migrations', 'd036_add_prism_form_factor.sql')
 ];
 
 function parseArgs(argv) {
@@ -922,6 +923,19 @@ async function runWriteSmoke(client, seed, context) {
       comments: 'smoke cut update'
     });
     client.assertEqual(formatDateOnly(updatedCutBatch.item_created_at), '2024-02-03', 'electrode cut batch update preserves physical item date');
+    const prismCutBatch = await client.post('/api/electrodes/electrode-cut-batches', {
+      tape_id: made.tapeId,
+      project_ids: [projectId],
+      target_form_factor: 'prism',
+      target_config_code: '103x83',
+      item_created_at: '2024-02-04',
+      shape: 'rectangle',
+      length_mm: 103,
+      width_mm: 83,
+      comments: 'smoke prism cut'
+    });
+    made.prismCutBatchId = prismCutBatch.cut_batch_id;
+    client.assertEqual(prismCutBatch.target_form_factor, 'prism', 'electrode cut batch create accepts prism target');
     const foil = await client.post(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/foil-masses`, {
       mass_g: 0.0123
     });
@@ -966,6 +980,18 @@ async function runWriteSmoke(client, seed, context) {
       electrode_mass_g: 0.1238,
       cup_number: 5,
       comments: 'smoke lifecycle anode electrode'
+    })).electrode_id;
+    made.prismCathodeElectrodeId = (await client.post('/api/electrodes', {
+      cut_batch_id: made.prismCutBatchId,
+      electrode_mass_g: 0.1241,
+      cup_number: 6,
+      comments: 'smoke prism cathode electrode'
+    })).electrode_id;
+    made.prismAnodeElectrodeId = (await client.post('/api/electrodes', {
+      cut_batch_id: made.prismCutBatchId,
+      electrode_mass_g: 0.1242,
+      cup_number: 7,
+      comments: 'smoke prism anode electrode'
     })).electrode_id;
     await client.put(`/api/electrodes/${made.electrodeId}`, {
       electrode_mass_g: 0.1235,
@@ -1086,6 +1112,25 @@ async function runWriteSmoke(client, seed, context) {
       pouch_notes: 'smoke pouch update'
     });
     client.assertEqual(pouchConfig.pouch_case_size_code, '103x83', 'pouch config update persists size code');
+    made.prismBatteryId = (await client.post('/api/batteries', {
+      project_id: projectId,
+      form_factor: 'prism',
+      created_by: forgedUserId,
+      battery_notes: `Codex Smoke Battery ${suffix} Prism`
+    })).battery_id;
+    const prismConfig = await client.post('/api/batteries/battery_pouch_config', {
+      battery_id: made.prismBatteryId,
+      pouch_case_size_code: '103x83',
+      pouch_case_size_other: null,
+      pouch_notes: 'smoke prism config'
+    });
+    client.assertEqual(prismConfig.pouch_case_size_code, '103x83', 'prism reuses pouch config route');
+    const prismCompatibleBatches = await client.get(`/api/batteries/${made.prismBatteryId}/electrode-cut-batches?tape_id=${made.tapeId}`);
+    client.assertEqual(
+      prismCompatibleBatches.some((batch) => Number(batch.cut_batch_id) === Number(made.prismCutBatchId)),
+      true,
+      'prism battery sees prism rectangular electrode cut batches as compatible'
+    );
     made.cylBatteryId = (await client.post('/api/batteries', {
       project_id: projectId,
       form_factor: 'cylindrical',
@@ -1103,25 +1148,26 @@ async function runWriteSmoke(client, seed, context) {
     });
     client.assertEqual(cylConfig.cyl_size_code, '21700', 'cylindrical config update persists size code');
 
-    for (const [batteryId, label] of [
-      [made.pouchBatteryId, 'pouch'],
-      [made.cylBatteryId, 'cylindrical']
+    for (const [batteryId, label, cutBatchId, cathodeElectrodeId, anodeElectrodeId] of [
+      [made.pouchBatteryId, 'pouch', made.cutBatchId, made.electrodeId, made.anodeElectrodeId],
+      [made.prismBatteryId, 'prism', made.prismCutBatchId, made.prismCathodeElectrodeId, made.prismAnodeElectrodeId],
+      [made.cylBatteryId, 'cylindrical', made.cutBatchId, made.electrodeId, made.anodeElectrodeId]
     ]) {
       await client.post('/api/batteries/battery_electrode_sources', {
         battery_id: batteryId,
         cathode_tape_id: made.tapeId,
-        cathode_cut_batch_id: made.cutBatchId,
+        cathode_cut_batch_id: cutBatchId,
         anode_tape_id: made.tapeId,
-        anode_cut_batch_id: made.cutBatchId
+        anode_cut_batch_id: cutBatchId
       });
       await client.put(`/api/batteries/battery_electrodes/${batteryId}`, [
         {
-          electrode_id: made.electrodeId,
+          electrode_id: cathodeElectrodeId,
           role: 'cathode',
           position_index: 1
         },
         {
-          electrode_id: made.anodeElectrodeId,
+          electrode_id: anodeElectrodeId,
           role: 'anode',
           position_index: 2
         }
@@ -1514,8 +1560,11 @@ async function cleanupCreatedData(client, made) {
   const cleanup = [
     made.lifecycleAnodeElectrodeId && ['DELETE', `/api/electrodes/${made.lifecycleAnodeElectrodeId}`],
     made.lifecycleElectrodeId && ['DELETE', `/api/electrodes/${made.lifecycleElectrodeId}`],
+    made.prismAnodeElectrodeId && ['DELETE', `/api/electrodes/${made.prismAnodeElectrodeId}`],
+    made.prismCathodeElectrodeId && ['DELETE', `/api/electrodes/${made.prismCathodeElectrodeId}`],
     made.anodeElectrodeId && ['DELETE', `/api/electrodes/${made.anodeElectrodeId}`],
     made.electrodeId && ['DELETE', `/api/electrodes/${made.electrodeId}`],
+    made.prismCutBatchId && ['DELETE', `/api/electrodes/electrode-cut-batches/${made.prismCutBatchId}`],
     made.cutBatchId && ['DELETE', `/api/electrodes/electrode-cut-batches/${made.cutBatchId}`],
     made.tapeId && ['DELETE', `/api/tapes/${made.tapeId}`],
     made.batteryId && ['SQL_DELETE_BATTERY', made.batteryId],

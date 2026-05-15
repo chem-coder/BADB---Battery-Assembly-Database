@@ -77,7 +77,7 @@ const BATTERY_OWNED_DATA_CHECKS = [
   },
   {
     key: 'battery_pouch_config',
-    label: 'конфигурация пакетного аккумулятора',
+    label: 'конфигурация пакетного/призматического аккумулятора',
     query: 'SELECT battery_id AS id, pouch_case_size_code AS name FROM battery_pouch_config WHERE battery_id = $1'
   },
   {

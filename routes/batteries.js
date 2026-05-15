@@ -310,7 +310,7 @@ router.patch('/battery_coin_config/:battery_id', auth, async (req, res) => {
 });
 
 
-// Save pouch-cell configuration
+// Save pouch/prism-cell configuration
 router.post('/battery_pouch_config', auth, async (req, res) => {
 
   const batteryId = Number(req.body.battery_id);
@@ -328,13 +328,13 @@ router.post('/battery_pouch_config', auth, async (req, res) => {
       return res.status(err.statusCode).json({ error: err.message });
     }
     console.error(err);
-    res.status(500).json({ error: 'Ошибка сохранения конфигурации пакетного элемента' });
+    res.status(500).json({ error: 'Ошибка сохранения конфигурации пакетного/призматического элемента' });
 
   }
 
 });
 
-// Read pouch-cell configuration
+// Read pouch/prism-cell configuration
 router.get('/battery_pouch_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
@@ -349,13 +349,13 @@ router.get('/battery_pouch_config/:battery_id', auth, async (req, res) => {
   } catch (err) {
 
     console.error(err);
-    res.status(500).json({ error: 'Ошибка загрузки конфигурации пакетного элемента' });
+    res.status(500).json({ error: 'Ошибка загрузки конфигурации пакетного/призматического элемента' });
 
   }
 
 });
 
-// Update pouch-cell configuration
+// Update pouch/prism-cell configuration
 router.patch('/battery_pouch_config/:battery_id', auth, async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
@@ -373,7 +373,7 @@ router.patch('/battery_pouch_config/:battery_id', auth, async (req, res) => {
       return res.status(err.statusCode).json({ error: err.message });
     }
     console.error(err);
-    res.status(500).json({ error: 'Ошибка обновления конфигурации пакетного элемента' });
+    res.status(500).json({ error: 'Ошибка обновления конфигурации пакетного/призматического элемента' });
 
   }
 

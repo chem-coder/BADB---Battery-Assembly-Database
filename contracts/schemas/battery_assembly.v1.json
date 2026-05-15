@@ -63,7 +63,7 @@
         "form_factor": {
           "type": "string",
           "minLength": 1,
-          "description": "Battery form factor (e.g. 'coin', 'pouch', 'cylindrical')"
+          "description": "Battery form factor (e.g. 'coin', 'pouch', 'prism', 'cylindrical')"
         },
         "status": {
           "type": "string",

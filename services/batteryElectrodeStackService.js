@@ -90,10 +90,10 @@ function assertStackCountMatchesBattery(context, stack) {
     return;
   }
 
-  if (form_factor === 'pouch' || form_factor === 'cylindrical') {
+  if (form_factor === 'pouch' || form_factor === 'cylindrical' || form_factor === 'prism') {
     if (cathodes < 1 || anodes < 1 || !(anodes === cathodes || anodes === cathodes + 1)) {
       throw new BatteryElectrodeStackConflictError(
-        'Для пакетного или цилиндрического элемента количество анодов должно совпадать с количеством катодов или быть больше на один'
+        'Для пакетного, призматического или цилиндрического элемента количество анодов должно совпадать с количеством катодов или быть больше на один'
       );
     }
   }

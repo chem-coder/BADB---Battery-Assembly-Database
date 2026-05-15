@@ -499,7 +499,7 @@
       const shape =
         batchForm.shape ||
         (formFactor === 'coin' ? 'circle'
-        : formFactor === 'pouch' || formFactor === 'cylindrical' ? 'rectangle'
+        : ['pouch', 'cylindrical', 'prism'].includes(formFactor) ? 'rectangle'
         : null);
 
       document.getElementById('electrodes-target_form_factor').value = formFactor;
@@ -1637,6 +1637,7 @@
     const targetFormFactorRu = {
       coin: 'coin',
       pouch: 'pouch',
+      prism: 'Призматическая',
       cylindrical: 'cyl'
     };
 
@@ -1648,6 +1649,11 @@
         { value: 'other', label: 'Другое' }
       ],
       pouch: [
+        { value: '103x83', label: '103 x 83' },
+        { value: '86x56', label: '86 x 56' },
+        { value: 'other', label: 'Другое' }
+      ],
+      prism: [
         { value: '103x83', label: '103 x 83' },
         { value: '86x56', label: '86 x 56' },
         { value: 'other', label: 'Другое' }
@@ -2464,7 +2470,7 @@
       const formFactor = targetFormFactorSelect.value;
       const shape =
         formFactor === 'coin' ? 'circle'
-        : formFactor === 'pouch' || formFactor === 'cylindrical' ? 'rectangle'
+        : ['pouch', 'cylindrical', 'prism'].includes(formFactor) ? 'rectangle'
         : null;
 
       setSelectedShape(shape);

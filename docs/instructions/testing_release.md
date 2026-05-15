@@ -81,7 +81,7 @@ npm run smoke:vanilla
 This runs `scripts/smoke_vanilla_api.js`.
 
 A current successful full smoke run is expected to finish with zero failures;
-the last recorded release checkpoint on 2026-05-15 was 241 checks, 0 failures. If the check
+the last recorded release checkpoint on 2026-05-15 was 255 checks, 0 failures. If the check
 count changes because the smoke surface changes, update the release readiness
 record with the new count.
 
@@ -90,7 +90,7 @@ The smoke harness:
 - checks the vanilla API contract first;
 - restores a SQL dump into a throwaway database;
 - applies current post-dump migrations needed by the restored dump, including
-  `002`, `018`, `019`, `020`, and `d028` through `d035`;
+  `002`, `018`, `019`, `020`, and `d028` through `d036`;
 - starts the Express API against the throwaway database with `AUTH_BYPASS=true`;
 - exercises vanilla-facing GET and write paths;
 - checks selected dependency/conflict behavior;
@@ -132,10 +132,11 @@ this order:
 - `d033_add_coating_side2_gap_and_drying_speed.sql`
 - `d034_update_wet_mixing_methods.sql`
 - `d035_add_item_created_at_dates.sql`
+- `d036_add_prism_form_factor.sql`
 
 `d032_create_schema_migrations_table.sql` creates the authoritative
 `public.schema_migrations` ledger and backfills the current baseline. A current
-migrated database should report `dima = 21` and `dalia = 23` after `d035` from:
+migrated database should report `dima = 21` and `dalia = 24` after `d036` from:
 
 ```bash
 psql -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations GROUP BY migration_stream ORDER BY migration_stream;"
@@ -143,7 +144,7 @@ psql -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations
 
 That means smoke evidence covers the restored-copy schema baseline and the
 hardened battery stack trigger, including the service requirement that
-pouch/cylindrical stack inserts are safe even when the API payload arrives
+pouch/prism/cylindrical stack inserts are safe even when the API payload arrives
 cathode-first.
 
 Windows/lab pilot use still requires direct proof from the Windows/lab database

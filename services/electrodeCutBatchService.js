@@ -13,7 +13,7 @@ const {
   replaceElectrodeBatchProjects
 } = require('./electrodeBatchProjectService');
 
-const ALLOWED_TARGET_FORM_FACTORS = new Set(['coin', 'pouch', 'cylindrical']);
+const ALLOWED_TARGET_FORM_FACTORS = new Set(['coin', 'pouch', 'cylindrical', 'prism']);
 const ALLOWED_TARGET_CONFIG_CODES = new Set([
   '2016',
   '2025',
@@ -28,7 +28,8 @@ const ALLOWED_TARGET_CONFIG_CODES = new Set([
 const TARGET_CONFIG_CODES_BY_FORM_FACTOR = {
   coin: new Set(['2016', '2025', '2032', 'other']),
   pouch: new Set(['103x83', '86x56', 'other']),
-  cylindrical: new Set(['18650', '21700', 'other'])
+  cylindrical: new Set(['18650', '21700', 'other']),
+  prism: new Set(['103x83', '86x56', 'other'])
 };
 
 function statusError(message, statusCode) {
@@ -91,7 +92,7 @@ function normalizeCutBatchGeometry({
   const normalizedTargetConfigOther = target_config_other?.trim() || null;
   const normalizedShape =
     normalizedTargetFormFactor === 'coin' ? 'circle'
-    : normalizedTargetFormFactor === 'pouch' || normalizedTargetFormFactor === 'cylindrical' ? 'rectangle'
+    : ['pouch', 'cylindrical', 'prism'].includes(normalizedTargetFormFactor) ? 'rectangle'
     : (shape || null);
   const normalizedDiameter = diameter_mm != null && diameter_mm !== '' ? Number(diameter_mm) : null;
   const normalizedLength = length_mm != null && length_mm !== '' ? Number(length_mm) : null;
@@ -155,8 +156,8 @@ function normalizeCutBatchGeometry({
       return { error: 'Для прямоугольного электрода нельзя указывать диаметр' };
     }
 
-    if (!['pouch', 'cylindrical'].includes(normalizedTargetFormFactor)) {
-      return { error: 'Прямоугольный электрод может относиться только к pouch или cylindrical' };
+    if (!['pouch', 'cylindrical', 'prism'].includes(normalizedTargetFormFactor)) {
+      return { error: 'Прямоугольный электрод может относиться только к pouch, prism или cylindrical' };
     }
   }
 

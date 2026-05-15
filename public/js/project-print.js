@@ -92,9 +92,10 @@ function formatTapeAvailability(value) {
 
 function formatFormFactor(value) {
   const map = {
-    coin: 'coin',
-    pouch: 'pouch',
-    cylindrical: 'cylindrical'
+    coin: 'Монеточный',
+    pouch: 'Пакетный',
+    prism: 'Призматическая',
+    cylindrical: 'Цилиндрический'
   };
 
   return map[value] || value || '—';

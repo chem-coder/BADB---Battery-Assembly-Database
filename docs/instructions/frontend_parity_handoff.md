@@ -133,7 +133,7 @@ Expected Vue behavior:
   endpoints must be treated as pure reads for status; status promotion happens
   only through the explicit save/status workflow and the UI must re-render from
   the backend response;
-- stack saving must preserve the current trigger-safe pouch/cylindrical rules
+- stack saving must preserve the current trigger-safe pouch/prism/cylindrical rules
   from `docs/rules/electrode_stack_rules.md` and must not revive stale
   `/assembly` side-effect assumptions.
 

@@ -36,12 +36,13 @@ Battery compatibility uses cut batch attributes including:
 Current shape behavior:
 
 - coin batteries use circular cut batches;
-- pouch and cylindrical batteries use rectangular cut batches.
+- pouch, prism, and cylindrical batteries use rectangular cut batches.
 
 Current sidedness behavior:
 
 - coin-compatible cut batches must be one-sided;
-- pouch and cylindrical compatible cut batches may be one-sided or two-sided.
+- pouch, prism, and cylindrical compatible cut batches may be one-sided or
+  two-sided.
 
 ## Vanilla Electrode Batches Page
 
@@ -53,7 +54,7 @@ for the main all-batches list:
 - source tape;
 - electrode type (`cathode` / `anode`);
 - coating sidedness from the source tape;
-- target form factor (`coin`, `pouch`, `cylindrical`).
+- target form factor (`coin`, `pouch`, `prism`, `cylindrical`).
 
 With no filters selected, the page shows all electrode cut batches. Selecting a
 tape filters the main list to that tape's batches and reveals the add-batch

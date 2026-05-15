@@ -15,12 +15,12 @@ The flat `migrations_log.txt` files are human checkpoint notes only.
 
 Current migration file state as of 2026-05-15:
 
-- `migrations/` has 44 SQL files.
-- `migrations_ASCII/` has 44 SQL files.
+- `migrations/` has 45 SQL files.
+- `migrations_ASCII/` has 45 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d035_add_item_created_at_dates.sql`.
+- Dalia's `dNNN` stream exists through `d036_add_prism_form_factor.sql`.
 - Live local `badb_app_v1` has `schema_migrations` counts of `dima = 21`
-  and `dalia = 23` after `d035` is applied. Dima has 21 rows because the
+  and `dalia = 24` after `d036` is applied. Dima has 21 rows because the
   historical numeric stream includes two independent `008_*.sql` files.
 
 ## Source Folders
@@ -56,7 +56,7 @@ note gives a smaller explicit post-dump set:
 
 ```text
 001_... through 020_...
-d013_... through d035_add_item_created_at_dates.sql
+d013_... through d036_add_prism_form_factor.sql
 ```
 
 The current vanilla smoke restored-copy path applies only the migrations missing
@@ -75,6 +75,7 @@ d032_create_schema_migrations_table.sql
 d033_add_coating_side2_gap_and_drying_speed.sql
 d034_update_wet_mixing_methods.sql
 d035_add_item_created_at_dates.sql
+d036_add_prism_form_factor.sql
 ```
 
 Do not treat a local smoke pass as proof that the Windows/lab database has these
@@ -124,6 +125,7 @@ The vanilla smoke harness restores the old dump into a throwaway database and th
 - `migrations/d033_add_coating_side2_gap_and_drying_speed.sql`
 - `migrations/d034_update_wet_mixing_methods.sql`
 - `migrations/d035_add_item_created_at_dates.sql`
+- `migrations/d036_add_prism_form_factor.sql`
 
 This is the expected migration set for the current smoke harness. If a future
 branch adds a post-dump migration, update `scripts/smoke_vanilla_api.js` and
@@ -138,10 +140,10 @@ psql -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations
 psql -d badb_app_v1 -c "SELECT migration_name, applied_at, source FROM schema_migrations ORDER BY migration_name;"
 ```
 
-Expected after `d035`:
+Expected after `d036`:
 
 ```text
-dalia: 23 rows
+dalia: 24 rows
 dima: 21 rows
 ```
 
@@ -150,7 +152,10 @@ predate the ledger. New migrations should insert their own ledger row.
 
 ## Check d031 Battery Stack Trigger
 
-`d031_harden_battery_stack_validate_trigger.sql` hardens `validate_battery_stack()` so pouch and cylindrical stacks allow equal anode/cathode counts or one extra anode, never one extra cathode. It also handles updates.
+`d031_harden_battery_stack_validate_trigger.sql` hardens `validate_battery_stack()`;
+`d036_add_prism_form_factor.sql` extends the same rule to prism. Current
+pouch/prism/cylindrical stacks allow equal anode/cathode counts or one extra
+anode, never one extra cathode. The function also handles updates.
 
 Check the current database:
 
@@ -177,5 +182,5 @@ The lab database is not considered ready for pilot use until the ledger proves
 the current migration baseline and this check proves `d031` is present.
 
 As of 2026-05-15, the flat checkpoint logs note Dima's stream through `020`
-and Dalia's stream through `d035`; `public.schema_migrations` remains the
+and Dalia's stream through `d036`; `public.schema_migrations` remains the
 authoritative ledger.

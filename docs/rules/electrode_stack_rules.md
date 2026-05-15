@@ -35,7 +35,7 @@ Do not use old or invented columns such as `tapes.sidedness`,
 Current behavior:
 
 - coin compatible cut batches require `one_sided`;
-- pouch and cylindrical compatible cut batches may use `one_sided` or
+- pouch, prism, and cylindrical compatible cut batches may use `one_sided` or
   `two_sided`;
 - a full cathode/anode source pair cannot mix non-null sidedness values;
 - null sidedness is a legacy/data-quality gap, not a third valid state.
@@ -55,6 +55,7 @@ Current source-role rules:
 - coin half-cell with `half_cell_type = 'anode_vs_li'`: one anode source;
 - coin full-cell: one cathode source and one anode source;
 - pouch: one cathode source and one anode source;
+- prism: one cathode source and one anode source;
 - cylindrical: one cathode source and one anode source.
 
 Backend source validation currently enforces exactly one source row for coin
@@ -71,11 +72,11 @@ Current rules:
 
 - the cut batch must belong to the selected tape;
 - coin batteries use circular cut batches;
-- pouch and cylindrical batteries use rectangular cut batches;
+- pouch, prism, and cylindrical batteries use rectangular cut batches;
 - `electrode_cut_batches.target_form_factor` must match the battery
   `form_factor`;
 - coin batteries require coating sidedness `one_sided`;
-- pouch and cylindrical batteries do not require one-sided coating;
+- pouch, prism, and cylindrical batteries do not require one-sided coating;
 - a saved selected batch may remain visible even if it no longer matches the
   compatibility filter, so historical selections do not disappear.
 
@@ -103,15 +104,17 @@ Current count rules:
 - coin full-cell: exactly 1 cathode and 1 anode;
 - pouch: at least 1 cathode and 1 anode, with anodes equal to cathodes or one
   extra anode;
+- prism: at least 1 cathode and 1 anode, with anodes equal to cathodes or one
+  extra anode;
 - cylindrical: at least 1 cathode and 1 anode, with anodes equal to cathodes or
   one extra anode.
 
-For pouch and cylindrical stacks, one extra cathode is invalid.
+For pouch, prism, and cylindrical stacks, one extra cathode is invalid.
 
-In the vanilla UI for pouch/cylindrical stacks, the operator edits the cathode
-count and chooses an anode-count mode: equal to cathodes or `+1` anode. The UI
-then computes the anode count; the backend/DB trigger still enforce the count
-rules.
+In the vanilla UI for pouch/prism/cylindrical stacks, the operator edits the
+cathode count and chooses an anode-count mode: equal to cathodes or `+1` anode.
+The UI then computes the anode count; the backend/DB trigger still enforce the
+count rules.
 
 The N/P helper is advisory. It uses the computed anode count to divide the
 target total anode capacity into a per-anode target, then highlights a
@@ -150,7 +153,7 @@ to available.
 Migration `d031_harden_battery_stack_validate_trigger.sql` hardens the
 row-level database trigger `validate_battery_stack()`.
 
-For pouch and cylindrical stacks, the trigger permits only intermediate states
+For pouch, prism, and cylindrical stacks, the trigger permits only intermediate states
 where:
 
 - anodes equal cathodes; or
@@ -171,13 +174,14 @@ In plain terms, insert order should be `A1, C1, A2, C2, A3, C3`, not
 valid stack has one extra anode, the order should be `A1, C1, A2, C2, A3`.
 
 Current `saveBatteryElectrodeStack()` follows this rule through
-`orderStackRowsForInsert()`. A valid cathode-first pouch/cylindrical API payload
+`orderStackRowsForInsert()`. A valid cathode-first pouch/prism/cylindrical API payload
 is safe under `d031`, and the saved display order still follows
 `position_index`.
 
-Smoke setup applies the current post-dump migration set through `d035` after
+Smoke setup applies the current post-dump migration set through `d036` after
 restoring the vanilla dump, so vanilla smoke checks exercise the hardened
-trigger and the restored-copy migration ledger baseline.
+trigger, the restored-copy migration ledger baseline, and the prism form-factor
+constraints.
 
 ## UI State
 
@@ -187,7 +191,7 @@ ordinary page-level form fields.
 Rules:
 
 - coin target counts are fixed and read-only;
-- pouch and cylindrical cathode target counts are editable, while anode target
+- pouch, prism, and cylindrical cathode target counts are editable, while anode target
   counts are computed from the equal/`+1` anode mode;
 - invalid target counts disable stack selection;
 - once a role reaches its target count, remaining unselected checkboxes for
