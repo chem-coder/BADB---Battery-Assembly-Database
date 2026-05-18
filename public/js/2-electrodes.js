@@ -724,8 +724,8 @@
 
       const actualFractionSecondary =
         summary.actual_fraction_status === 'complete'
-          ? `Факт.: ${formatFractionPercent(summary.active_fraction_actual, 2)}`
-          : 'Факт.: недоступно';
+          ? `По факт. массе: ${formatFractionPercent(summary.active_fraction_actual, 2)}`
+          : 'По факт. массе: недоступно';
 
       root.innerHTML = `
         <div class="electrode-capacity-grid">
@@ -739,11 +739,11 @@
             label: 'Удельная ёмкость материала',
             title: 'Справочное значение из свойств материала.',
             primary: formatDerivedNumber(summary.specific_capacity_mAh_g, 2, ' мАч/г'),
-            secondary: 'Для теор. и факт. ветки используется одно и то же значение'
+            secondary: 'Для теор. расчёта и расчёта по факт. массе используется одно и то же значение'
           })}
           ${renderCapacitySummaryItem({
             label: 'Доля активного вещества',
-            title: 'Теоретическая — из состава рецепта. Фактическая — из сохранённых фактических масс твёрдых компонентов.',
+            title: 'Теоретическая — из состава рецепта. Вторая строка — расчёт по сохранённым фактическим массам твёрдых компонентов.',
             primary: `Теор.: ${formatFractionPercent(summary.active_fraction_theoretical, 2)}`,
             secondary: actualFractionSecondary
           })}
@@ -767,33 +767,33 @@
           })}
           ${renderCapacitySummaryItem({
             label: 'Средняя масса активного материала',
-            title: 'Теоретическая — по рецепту. Фактическая — по сохранённым фактическим массам твёрдой фазы.',
+            title: 'Теоретическая — по рецепту. Вторая строка — расчёт по сохранённым фактическим массам твёрдой фазы.',
             primary: `Теор.: ${formatDerivedNumber(summary.average_active_material_mass_theoretical_g, 4, ' г')}`,
-            secondary: `Факт.: ${formatDerivedNumber(summary.average_active_material_mass_actual_g, 4, ' г')}`
+            secondary: `По факт. массе: ${formatDerivedNumber(summary.average_active_material_mass_actual_g, 4, ' г')}`
           })}
           ${renderCapacitySummaryItem({
             label: 'Средняя ёмкость партии',
-            title: 'Среднее только по нескрапнутым электродам с валидной массой.',
+            title: 'Среднее только по нескрапнутым электродам с валидной массой. Это расчётная ёмкость, не измерение после циклирования.',
             primary: `Теор.: ${formatDerivedNumber(summary.average_capacity_theoretical_mAh, 3, ' мАч')}`,
-            secondary: `Факт.: ${formatDerivedNumber(summary.average_capacity_actual_mAh, 3, ' мАч')}`
+            secondary: `По факт. массе: ${formatDerivedNumber(summary.average_capacity_actual_mAh, 3, ' мАч')}`
           })}
           ${renderCapacitySummaryItem({
             label: 'Удельная ёмкость по площади',
             title: 'Средняя ёмкость партии, делённая на площадь электрода.',
             primary: `Теор.: ${formatDerivedNumber(summary.areal_capacity_theoretical_mAh_cm2, 3, ' мАч/см²')}`,
-            secondary: `Факт.: ${formatDerivedNumber(summary.areal_capacity_actual_mAh_cm2, 3, ' мАч/см²')}`
+            secondary: `По факт. массе: ${formatDerivedNumber(summary.areal_capacity_actual_mAh_cm2, 3, ' мАч/см²')}`
           })}
           ${renderCapacitySummaryItem({
             label: 'Ёмкость 1 стороны',
             title: 'Удельная ёмкость по площади, делённая на число сторон покрытия.',
             primary: `Теор.: ${formatDerivedNumber(summary.capacity_per_side_theoretical_mAh_cm2, 3, ' мАч/см²')}`,
-            secondary: `Факт.: ${formatDerivedNumber(summary.capacity_per_side_actual_mAh_cm2, 3, ' мАч/см²')}`
+            secondary: `По факт. массе: ${formatDerivedNumber(summary.capacity_per_side_actual_mAh_cm2, 3, ' мАч/см²')}`
           })}
           ${renderCapacitySummaryItem({
             label: 'В расчёте участвовало',
             title: 'Количество нескрапнутых электродов, попавших в средние значения.',
             primary: `${summary.included_electrode_count ?? 0} шт.`,
-            secondary: `Теор.: ${summary.included_capacity_theoretical_count ?? 0} | Факт.: ${summary.included_capacity_actual_count ?? 0}`
+            secondary: `Теор.: ${summary.included_capacity_theoretical_count ?? 0} | По факт. массе: ${summary.included_capacity_actual_count ?? 0}`
           })}
         </div>
       `;
@@ -805,11 +805,11 @@
       { key: 'number', label: '№' },
       { key: 'coating_mass', label: 'Масса покрытия' },
       { key: 'active_mass_theoretical', label: 'Активная масса (теор.)' },
-      { key: 'active_mass_actual', label: 'Активная масса (факт.)' },
+      { key: 'active_mass_actual', label: 'Активная масса (по факт. массе)' },
       { key: 'capacity_theoretical', label: 'Ёмкость (теор.)' },
-      { key: 'capacity_actual', label: 'Ёмкость (факт.)' },
+      { key: 'capacity_actual', label: 'Ёмкость (по факт. массе)' },
       { key: 'areal_capacity_theoretical', label: 'Ёмкость (теор.), мАч/см²' },
-      { key: 'areal_capacity_actual', label: 'Ёмкость (факт.), мАч/см²' },
+      { key: 'areal_capacity_actual', label: 'Ёмкость (по факт. массе), мАч/см²' },
       { key: 'capacity_per_side_actual', label: 'Ёмкость 1 стороны, мАч/см²' },
       { key: 'cup', label: 'Стаканчик №' },
       { key: 'comments', label: 'Комментарии' },

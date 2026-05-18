@@ -254,13 +254,13 @@ function renderCapacitySection(summary) {
       <p class="report_count_line">
         В расчёте: ${escapeHtml(summary.included_electrode_count ?? 0)} эл. ·
         ёмкость теор.: ${escapeHtml(summary.included_capacity_theoretical_count ?? 0)} ·
-        ёмкость факт.: ${escapeHtml(summary.included_capacity_actual_count ?? 0)}
+        ёмкость по факт. массе: ${escapeHtml(summary.included_capacity_actual_count ?? 0)}
       </p>
       ${renderFieldGrid([
         renderRow('Активный материал', summary.active_material_name || '—'),
         renderRow('Покрытие', summary.coating_sidedness ? formatTapeSidedness(summary.coating_sidedness) : '—'),
         renderRow('Удельная ёмкость', formatNumber(summary.specific_capacity_mAh_g, 2, 'мАч/г'), { numeric: true }),
-        renderRow('Доля АМ', `теор.: ${formatFraction(summary.active_fraction_theoretical, 2)} / факт.: ${actualFractionText}`),
+        renderRow('Доля АМ', `теор.: ${formatFraction(summary.active_fraction_theoretical, 2)} / по факт. массе: ${actualFractionText}`),
         renderRow('Средняя фольга', `${formatMass(summary.average_foil_mass_g, 4)} · ${summary.foil_measurement_count ?? 0} изм.`, { numeric: true }),
         renderRow(
           'Площадь',
@@ -273,7 +273,7 @@ function renderCapacitySection(summary) {
           <tr>
             <th>Показатель</th>
             <th>Теория</th>
-            <th>Факт</th>
+            <th>По факт. массе</th>
           </tr>
         </thead>
         <tbody>
@@ -330,9 +330,9 @@ function renderElectrodesSection(electrodes) {
               <th class="report_number">m, г</th>
               <th class="report_number">Покрытие, г</th>
               <th class="report_number">АМ теор., г</th>
-              <th class="report_number">АМ факт., г</th>
+              <th class="report_number">АМ по факт. массе, г</th>
               <th class="report_number">C теор., мАч</th>
-              <th class="report_number">C факт., мАч</th>
+              <th class="report_number">C по факт. массе, мАч</th>
               <th>Стаканчик</th>
               <th>Статус</th>
             </tr>
