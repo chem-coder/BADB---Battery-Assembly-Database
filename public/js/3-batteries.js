@@ -5686,6 +5686,30 @@ function renderAnodeElectrodeTable() {
   
 }
 
+function normalizeBatteryStackRole(role) {
+  const value = String(role || '').trim().toLowerCase();
+
+  if (value === 'cathode' || value === 'катод') return 'cathode';
+  if (value === 'anode' || value === 'анод') return 'anode';
+
+  return '';
+}
+
+function formatBatteryStackRoleLabel(role) {
+  const normalized = normalizeBatteryStackRole(role);
+
+  if (normalized === 'cathode') return 'Катод';
+  if (normalized === 'anode') return 'Анод';
+
+  return role || '';
+}
+
+function getBatteryStackSummaryRoleClass(role) {
+  return normalizeBatteryStackRole(role) === 'cathode'
+    ? 'battery-stack-summary-cathode'
+    : 'battery-stack-summary-anode';
+}
+
 
 function renderStackSummary() {
   
@@ -5711,15 +5735,15 @@ function renderStackSummary() {
     
     if (anodes[i]) {
       stack.push({
-        role:'Анод',
-        ...anodes[i]
+        ...anodes[i],
+        role: 'anode'
       });
     }
     
     if (cathodes[i]) {
       stack.push({
-        role:'Катод',
-        ...cathodes[i]
+        ...cathodes[i],
+        role: 'cathode'
       });
     }
     
@@ -5730,10 +5754,7 @@ function renderStackSummary() {
   stack.forEach((e,index)=>{
     
     const tr = document.createElement('tr');
-    const roleClass = e.role === 'Катод'
-      ? 'battery-stack-summary-cathode'
-      : 'battery-stack-summary-anode';
-    tr.classList.add(roleClass);
+    tr.classList.add(getBatteryStackSummaryRoleClass(e.role));
     
     const posCell = document.createElement('td');
     posCell.textContent = index+1;
@@ -5744,7 +5765,7 @@ function renderStackSummary() {
     tr.appendChild(idCell);
     
     const roleCell = document.createElement('td');
-    roleCell.textContent = e.role;
+    roleCell.textContent = formatBatteryStackRoleLabel(e.role);
     tr.appendChild(roleCell);
     
     const massCell = document.createElement('td');
