@@ -5230,59 +5230,61 @@ function renderBatteriesList() {
   filteredBatteries.forEach(b => {
     
     const li = document.createElement('li');
-    li.className = 'user-row';
+    li.className = 'user-row battery-list-row';
 
     const status = getBatteryStatusLabel(b.status);
     const createdDate = formatBatteryListDate(b.item_created_at, b.created_at);
     const updatedDate = formatBatteryListDate(b.updated_at, b.created_at);
     const sizeInfo = formatBatteryVisibleSizeInfo(b);
     const materialsInfo = formatBatteryActiveMaterials(b);
+    const projectLabel = getBatteryListProjectLabel(b);
+    const operatorLabel = b.created_by_name || b.created_by || '';
+    const titleText = materialsInfo || projectLabel;
 
     const info = document.createElement('button');
     info.type = 'button';
-    info.className = 'user-info record-open-button';
+    info.className = 'user-info record-open-button battery-list-open-button';
     info.title = 'Открыть аккумулятор';
     info.setAttribute('aria-label', `Открыть аккумулятор #${b.battery_id}`);
 
-    const title = document.createElement('strong');
-    title.textContent =
-      `#${b.battery_id} | ${getBatteryListProjectLabel(b)}`;
+    const titleLine = document.createElement('span');
+    titleLine.className = 'battery-list-title-line';
 
-    const statusSpan = document.createElement('small');
-    statusSpan.style.color = '#666';
-    statusSpan.textContent = ` — ${formatBatteryFormFactorLabel(b.form_factor)} — ${status}`;
+    const title = document.createElement('strong');
+    title.className = 'battery-list-title';
+    title.textContent = `#${b.battery_id} | ${titleText}`;
 
     const dateSpan = document.createElement('small');
-    dateSpan.style.color = '#666';
-    dateSpan.textContent = [createdDate, updatedDate].filter(Boolean).join(' | ');
-    dateSpan.textContent = dateSpan.textContent ? ` — ${dateSpan.textContent}` : '';
+    dateSpan.className = 'battery-list-secondary';
+    const dateParts = [
+      createdDate ? `создано ${createdDate}` : '',
+      updatedDate ? `изм. ${updatedDate}` : ''
+    ].filter(Boolean);
+    dateSpan.textContent = dateParts.length ? ` — ${dateParts.join(' | ')}` : '';
     dateSpan.title = [
       createdDate ? `Дата создания: ${createdDate}` : '',
       updatedDate ? `Изменено: ${updatedDate}` : ''
     ].filter(Boolean).join('; ');
 
-    const materialsSpan = document.createElement('small');
-    materialsSpan.style.color = '#666';
-    materialsSpan.textContent = materialsInfo ? ` — ${materialsInfo}` : '';
-
-    const sizeSpan = document.createElement('small');
-    sizeSpan.style.color = '#666';
-    sizeSpan.textContent = sizeInfo ? ` — ${sizeInfo}` : '';
-
     const creatorSpan = document.createElement('small');
-    creatorSpan.style.color = '#666';
-    creatorSpan.textContent = b.created_by_name
-      ? ` — ${b.created_by_name}`
-      : b.created_by
-        ? ` — ${b.created_by}`
-        : '';
+    creatorSpan.className = 'battery-list-secondary';
+    creatorSpan.textContent = operatorLabel ? ` — ${operatorLabel}` : '';
 
-    info.appendChild(title);
-    info.appendChild(statusSpan);
-    info.appendChild(dateSpan);
-    info.appendChild(materialsSpan);
-    info.appendChild(sizeSpan);
-    info.appendChild(creatorSpan);
+    titleLine.appendChild(title);
+    titleLine.appendChild(dateSpan);
+    titleLine.appendChild(creatorSpan);
+
+    const metaLine = document.createElement('span');
+    metaLine.className = 'battery-list-meta';
+    metaLine.textContent = [
+      formatBatteryFormFactorLabel(b.form_factor),
+      status,
+      sizeInfo,
+      materialsInfo ? projectLabel : ''
+    ].filter(Boolean).join(' — ');
+
+    info.appendChild(titleLine);
+    info.appendChild(metaLine);
 
     info.addEventListener('click', async () => {
       await openBatteryRecord(b);

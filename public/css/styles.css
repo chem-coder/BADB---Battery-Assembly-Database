@@ -1088,6 +1088,66 @@ body[data-page="BAL"] .battery-empty-row {
   padding: 0.6rem 0.35rem;
 }
 
+body[data-page="BAL"] .battery-list-row {
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+body[data-page="BAL"] .battery-list-open-button {
+  line-height: 1.32;
+}
+
+body[data-page="BAL"] .battery-list-title-line,
+body[data-page="BAL"] .battery-list-meta {
+  display: block;
+}
+
+body[data-page="BAL"] .battery-list-title {
+  font-size: 1.06rem;
+  font-weight: 700;
+}
+
+body[data-page="BAL"] .battery-list-secondary,
+body[data-page="BAL"] .battery-list-meta {
+  color: #667085;
+  font-size: 0.93rem;
+}
+
+body[data-page="BAL"] .battery-list-meta {
+  margin-top: 0.12rem;
+}
+
+body[data-page="electrodes"] .electrode-batch-list-row {
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+body[data-page="electrodes"] .electrode-batch-list-open-button {
+  line-height: 1.32;
+}
+
+body[data-page="electrodes"] .electrode-batch-list-title-line,
+body[data-page="electrodes"] .electrode-batch-list-meta {
+  display: block;
+}
+
+body[data-page="electrodes"] .electrode-batch-list-title {
+  font-size: 1.06rem;
+  font-weight: 700;
+}
+
+body[data-page="electrodes"] .electrode-batch-list-secondary,
+body[data-page="electrodes"] .electrode-batch-list-meta {
+  color: #667085;
+  font-size: 0.93rem;
+}
+
+body[data-page="electrodes"] .electrode-batch-list-meta {
+  margin-top: 0.12rem;
+}
+
 .user-info {
   flex: 1;
 }

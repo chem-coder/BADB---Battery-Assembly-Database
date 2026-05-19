@@ -791,7 +791,7 @@
             secondary: `По факт. массе: ${formatDerivedNumber(summary.capacity_per_side_actual_mAh_cm2, 3, ' мАч/см²')}`
           })}
           ${renderCapacitySummaryItem({
-            label: 'В расчёте участвовало',
+            label: 'В расчёте учтено',
             title: 'Количество электродов, вручную отмеченных "В расчёт". Статус доступен/использован/списан не меняет этот флаг автоматически.',
             primary: `${summary.included_electrode_count ?? 0} шт.`,
             secondary: `Теор.: ${summary.included_capacity_theoretical_count ?? 0} | По факт. массе: ${summary.included_capacity_actual_count ?? 0}`
@@ -1859,15 +1859,14 @@
 
       filteredBatches.forEach(batch => {
         const li = document.createElement('li');
-        li.className = 'user-row';
+        li.className = 'user-row electrode-batch-list-row';
 
         const info = document.createElement('button');
         info.type = 'button';
-        info.className = 'user-info record-open-button';
+        info.className = 'user-info record-open-button electrode-batch-list-open-button';
         info.title = 'Открыть партию';
         info.setAttribute('aria-label', `Открыть партию электродов ${batch.cut_batch_id}`);
 
-        const title = document.createElement('strong');
         const dateText = (batch.item_created_at || batch.created_at)
           ? new Date(batch.item_created_at || batch.created_at).toLocaleDateString('ru-RU')
           : '—';
@@ -1875,16 +1874,40 @@
         const targetText = formatCutBatchTarget(batch);
         const geometryText = formatCutBatchGeometry(batch);
         const sidednessText = formatElectrodesSidednessLabel(batch.tape_coating_sidedness);
+        const projectText = batch.project_names || batch.project_name || '';
+        const operatorText = batch.created_by_name || batch.created_by || '';
+        const roleText = roleLabel(batch.tape_role);
 
-        title.textContent =
-          `Партия ${batch.cut_batch_id} | ${batch.tape_name || '—'}${sidednessText ? ` | ${sidednessText}` : ''}${targetText ? ` | ${targetText}` : ''}${geometryText ? ` | ${geometryText}` : ''} | ${count} эл. | ${batchStatusLabel(batch)}`;
+        const titleLine = document.createElement('span');
+        titleLine.className = 'electrode-batch-list-title-line';
 
-        const meta = document.createElement('small');
-        meta.style.color = '#666';
-        meta.textContent =
-          ` — ${dateText} — ${roleLabel(batch.tape_role)}${batch.project_names || batch.project_name ? ` — ${batch.project_names || batch.project_name}` : ''} — ${batch.created_by_name || batch.created_by || '—'}`;
+        const title = document.createElement('strong');
+        title.className = 'electrode-batch-list-title';
+        title.textContent = `Партия ${batch.cut_batch_id} | ${batch.tape_name || '—'}`;
 
-        info.appendChild(title);
+        const titleMeta = document.createElement('small');
+        titleMeta.className = 'electrode-batch-list-secondary';
+        titleMeta.textContent = [
+          `${count} эл. | ${batchStatusLabel(batch)}`,
+          operatorText
+        ].filter(Boolean).join(' — ');
+        titleMeta.textContent = titleMeta.textContent ? ` — ${titleMeta.textContent}` : '';
+
+        const meta = document.createElement('span');
+        meta.className = 'electrode-batch-list-meta';
+        meta.textContent = [
+          sidednessText,
+          targetText,
+          geometryText,
+          dateText,
+          roleText,
+          projectText
+        ].filter(Boolean).join(' — ');
+
+        titleLine.appendChild(title);
+        titleLine.appendChild(titleMeta);
+
+        info.appendChild(titleLine);
         info.appendChild(meta);
 
         info.addEventListener('click', async () => {
