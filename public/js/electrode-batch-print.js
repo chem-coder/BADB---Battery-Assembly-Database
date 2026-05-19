@@ -215,7 +215,7 @@ function renderDryingSection(batch) {
     return `
       <section class="report_section">
         <h2>Сушка партии</h2>
-        <p class="muted">Сушка не сохранена.</p>
+        <p class="muted">${batch?.is_test_batch ? 'Тестовая партия: сушка не требуется.' : 'Сушка не сохранена.'}</p>
       </section>
     `;
   }
@@ -462,6 +462,7 @@ function renderReport(report) {
       ${renderFieldGrid([
         renderRow('Лента', sourceTapeLine || '—', { wide: true }),
         renderRow('Рецепт', batch.tape_recipe_name || '—'),
+        renderRow('Тип партии', batch.is_test_batch ? 'Тестовая, без сушки' : 'Рабочая'),
         renderRow('Назначение', formatTarget(batch)),
         renderRow('Геометрия', formatGeometry(batch)),
         renderRow('Покрытие', batch.tape_coating_sidedness ? formatTapeSidedness(batch.tape_coating_sidedness) : '—')

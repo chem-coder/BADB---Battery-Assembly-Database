@@ -13,10 +13,10 @@ This is the canonical local startup note for `BADB_main`.
 - PostgreSQL must be running.
 - The target database must exist and be migrated through the current required
   migrations: Dima's stream through `020_cycling_active_mass.sql` and Dalia's
-  stream through `d038_add_electrode_capacity_average_flag.sql`.
+  stream through `d039_add_electrode_test_batch_flag.sql`.
 - `public.schema_migrations` is the authoritative ledger for applied migration
-  state. Current local `badb_app_v1` reports `dima = 21` and `dalia = 26`
-  after `d038` is applied.
+  state. Current local `badb_app_v1` reports `dima = 21` and `dalia = 27`
+  after `d039` is applied.
   The flat `migrations_log.txt` files are checkpoint notes only.
 - For pilot use, the Windows/lab database must have the current ledger counts
   and `d031_harden_battery_stack_validate_trigger.sql` applied and verified.
@@ -153,7 +153,7 @@ npm run dev
 
 The old instruction to change the default DB user in `config/index.js` is superseded by environment overrides.
 
-Before Windows/lab pilot use, apply the current catch-up set through `d038` and
+Before Windows/lab pilot use, apply the current catch-up set through `d039` and
 verify both the migration ledger and the required `d031` trigger hardening on
 the lab database. Commands run from `BADB_main`, not the outer `RENERA`
 workspace.

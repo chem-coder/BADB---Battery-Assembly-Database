@@ -19,6 +19,7 @@
     const printElectrodeBatchBtn = document.getElementById('printElectrodeBatchBtn');
     const deleteElectrodeBatchBtn = document.getElementById('deleteElectrodeBatchBtn');
     const itemCreatedAtInput = document.getElementById('electrodes-item_created_at');
+    const isTestBatchInput = document.getElementById('electrodes-is_test_batch');
     const batchProjectMultiSelect = document.getElementById('electrode-batch-project-multiselect');
     const batchProjectMultiSelectTrigger = document.getElementById('electrode-batch-project-multiselect-trigger');
     const batchProjectMultiSelectOptions = document.getElementById('electrode-batch-project-multiselect-options');
@@ -38,6 +39,7 @@
     function getDefaultCutBatchFormState() {
       return {
         item_created_at: getTodayDateInputValue(),
+        is_test_batch: false,
         comments: null,
         target_form_factor: null,
         target_config_code: null,
@@ -435,6 +437,7 @@
     function syncCutBatchFormStateFromDom() {
       setCutBatchFormState({
         item_created_at: itemCreatedAtInput?.value || null,
+        is_test_batch: Boolean(isTestBatchInput?.checked),
         comments: document.getElementById('electrodes-comments').value || null,
         target_form_factor: document.getElementById('electrodes-target_form_factor').value || null,
         target_config_code: document.getElementById('electrodes-target_config_code').value || null,
@@ -608,6 +611,9 @@
       if (itemCreatedAtInput) {
         itemCreatedAtInput.max = getTodayDateInputValue();
         itemCreatedAtInput.value = state.form.batch.item_created_at || '';
+      }
+      if (isTestBatchInput) {
+        isTestBatchInput.checked = Boolean(state.form.batch.is_test_batch);
       }
       document.getElementById('electrodes-comments').value = state.form.batch.comments || '';
       renderBatchProjectMultiSelect();
@@ -1699,6 +1705,10 @@
     }
 
     function batchStatusLabel(batch) {
+      if (batch.is_test_batch) {
+        return '🧪 тестовая';
+      }
+
       if (batch.drying_start && !batch.drying_end) {
         return '🟠 сушится';
       }
@@ -1965,6 +1975,7 @@
       });
       setCutBatchFormState({
         item_created_at: formatDateInputValue(batch.item_created_at || batch.created_at),
+        is_test_batch: Boolean(batch.is_test_batch),
         comments: batch.comments ?? null,
         target_form_factor: batch.target_form_factor ?? null,
         target_config_code: batch.target_config_code ?? null,
@@ -1997,6 +2008,7 @@
         tape_id: tapeId,
         project_ids: normalizeProjectIds(batchForm.project_ids),
         item_created_at: batchForm.item_created_at || null,
+        is_test_batch: Boolean(batchForm.is_test_batch),
         comments: batchForm.comments || null,
         target_form_factor: targetFormFactor,
         target_config_code: targetConfigCode,
@@ -3225,6 +3237,7 @@
         setCurrentCutBatchId(batch.cut_batch_id);
         setCutBatchFormState({
           ...state.form.batch,
+          is_test_batch: Boolean(batch.is_test_batch),
           item_created_at: formatDateInputValue(batch.item_created_at || batch.created_at)
         });
         renderCutBatchForm();
@@ -3248,6 +3261,7 @@
         if (batch?.item_created_at || batch?.created_at) {
           setCutBatchFormState({
             ...state.form.batch,
+            is_test_batch: Boolean(batch.is_test_batch),
             item_created_at: formatDateInputValue(batch.item_created_at || batch.created_at)
           });
           renderCutBatchForm();

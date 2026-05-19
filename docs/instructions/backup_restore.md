@@ -162,16 +162,17 @@ psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d035_add_item_created_at_da
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d036_add_prism_form_factor.sql
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d037_add_viscosity_conditions.sql
 psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d038_add_electrode_capacity_average_flag.sql
+psql -d badb_app_v1 -v ON_ERROR_STOP=1 -f migrations/d039_add_electrode_test_batch_flag.sql
 ```
 
 On Windows/lab, use `migrations_ASCII/` for the same files if encoding is a
 risk. `d032_create_schema_migrations_table.sql` should be run before later
-ledger-aware migrations such as `d033`, `d034`, `d035`, `d036`, `d037`, and `d038`, because it verifies earlier migration
+ledger-aware migrations such as `d033`, `d034`, `d035`, `d036`, `d037`, `d038`, and `d039`, because it verifies earlier migration
 effects before creating the baseline ledger rows.
 
 After `d032`, `public.schema_migrations` is the authoritative migration ledger.
 The flat `migrations_log.txt` files are only human checkpoint notes. A current
-local `badb_app_v1` ledger reports `dima = 21` and `dalia = 26` after `d038`;
+local `badb_app_v1` ledger reports `dima = 21` and `dalia = 27` after `d039`;
 use the same stream-count query from `docs/instructions/apply_migrations.md`
 on the restored or Windows/lab target.
 

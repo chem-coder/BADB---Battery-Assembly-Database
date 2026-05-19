@@ -78,6 +78,10 @@ function normalizeOptionalItemCreatedAtDate(value) {
   return raw;
 }
 
+function normalizeBooleanFlag(value) {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
 function normalizeCutBatchGeometry({
   target_form_factor,
   target_config_code,
@@ -302,9 +306,10 @@ async function createElectrodeCutBatch(pool, payload, createdBy) {
         length_mm,
         width_mm,
         item_created_at,
+        is_test_batch,
         comments
       )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10::date, CURRENT_DATE),$11)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10::date, CURRENT_DATE),$11,$12)
       RETURNING *
       `,
       [
@@ -318,6 +323,7 @@ async function createElectrodeCutBatch(pool, payload, createdBy) {
         geometry.length_mm,
         geometry.width_mm,
         itemCreatedAtDate,
+        normalizeBooleanFlag(payload.is_test_batch),
         payload.comments || null
       ]
     );
@@ -426,6 +432,7 @@ async function updateElectrodeCutBatch(pool, cutBatchId, payload, userId) {
         length_mm,
         width_mm,
         item_created_at,
+        is_test_batch,
         created_at,
         comments
       FROM electrode_cut_batches
@@ -470,6 +477,9 @@ async function updateElectrodeCutBatch(pool, cutBatchId, payload, userId) {
       length_mm: geometry.length_mm,
       width_mm: geometry.width_mm,
       item_created_at: itemCreatedAtDate ?? current.item_created_at,
+      is_test_batch: payload.is_test_batch !== undefined
+        ? normalizeBooleanFlag(payload.is_test_batch)
+        : Boolean(current.is_test_batch),
       comments: payload.comments !== undefined ? (payload.comments || null) : current.comments,
       project_ids: projectIds
     };
@@ -486,10 +496,11 @@ async function updateElectrodeCutBatch(pool, cutBatchId, payload, userId) {
         length_mm = $6,
         width_mm = $7,
         item_created_at = $8,
-        comments = $9,
-        updated_by = $10,
+        is_test_batch = $9,
+        comments = $10,
+        updated_by = $11,
         updated_at = now()
-      WHERE cut_batch_id = $11
+      WHERE cut_batch_id = $12
       RETURNING *
       `,
       [
@@ -501,6 +512,7 @@ async function updateElectrodeCutBatch(pool, cutBatchId, payload, userId) {
         newVals.length_mm,
         newVals.width_mm,
         newVals.item_created_at,
+        newVals.is_test_batch,
         newVals.comments,
         userId,
         cutBatchId
@@ -611,6 +623,7 @@ async function getElectrodeCutBatchReport(pool, cutBatchId) {
       b.length_mm,
       b.width_mm,
       b.item_created_at,
+      b.is_test_batch,
       b.created_at,
       b.updated_at,
       b.created_by,

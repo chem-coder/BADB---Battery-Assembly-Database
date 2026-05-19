@@ -12,12 +12,12 @@ Run commands from `BADB_main`, not the outer `RENERA` workspace.
 
 ## Current Migration State
 
-- `migrations/` has 47 SQL files.
-- `migrations_ASCII/` has 47 SQL files.
+- `migrations/` has 48 SQL files.
+- `migrations_ASCII/` has 48 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d038_add_electrode_capacity_average_flag.sql`.
+- Dalia's `dNNN` stream exists through `d039_add_electrode_test_batch_flag.sql`.
 - Current local `badb_app_v1` has `public.schema_migrations` counts of
-  `dima = 21` and `dalia = 26` after `d038` is applied.
+  `dima = 21` and `dalia = 27` after `d039` is applied.
 
 `public.schema_migrations` is the authoritative applied-migration ledger. The
 flat `migrations_log.txt` files are human checkpoint notes only.
@@ -57,6 +57,7 @@ psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d035
 psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d036_add_prism_form_factor.sql
 psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d037_add_viscosity_conditions.sql
 psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d038_add_electrode_capacity_average_flag.sql
+psql -U $env:DB_USER -d $env:DB_NAME -v ON_ERROR_STOP=1 -f migrations_ASCII/d039_add_electrode_test_batch_flag.sql
 ```
 
 These are intended as a catch-up set. Most are guarded with `IF NOT EXISTS`,
@@ -66,7 +67,7 @@ fails.
 
 ## Verify The Ledger
 
-After `d032` through `d038` succeed:
+After `d032` through `d039` succeed:
 
 ```powershell
 psql -U $env:DB_USER -d $env:DB_NAME -c "SELECT migration_stream, count(*) FROM schema_migrations GROUP BY migration_stream ORDER BY migration_stream;"

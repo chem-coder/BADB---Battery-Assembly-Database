@@ -195,6 +195,13 @@ body[data-page] .field-hint {
   line-height: 1.3;
 }
 
+body[data-page] .inline-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: 0.6rem;
+}
+
 body[data-page] .multi-select {
   position: relative;
   display: inline-block;

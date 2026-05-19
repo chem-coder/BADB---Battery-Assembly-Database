@@ -133,7 +133,7 @@
       "path": "/api/electrodes/electrode-cut-batches",
       "methods": ["POST"],
       "auth": "auth",
-      "request": "cut batch form payload; created_by is server-derived",
+      "request": "cut batch form payload, including optional is_test_batch; created_by is server-derived",
       "response": "created cut batch JSON",
       "sources": ["public/js/2-electrodes.js"]
     },
@@ -141,7 +141,7 @@
       "path": "/api/electrodes/electrode-cut-batches/:param",
       "methods": ["GET", "PUT", "DELETE"],
       "auth": "auth",
-      "request": "GET/DELETE none; PUT cut batch update payload; updated_by is server-derived",
+      "request": "GET/DELETE none; PUT cut batch update payload, including optional is_test_batch; updated_by is server-derived",
       "response": "cut batch JSON or delete status",
       "sources": ["public/js/2-electrodes.js"]
     },

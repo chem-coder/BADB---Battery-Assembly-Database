@@ -69,6 +69,12 @@ batch form exposes date-only `item_created_at` as `Дата создания` fo
 physical cut batch; it defaults to today and accepts today or past dates only.
 `updated_at` remains automatic.
 
+The batch form also exposes `is_test_batch` as a test/no-drying flag. Use this
+for trial cut batches that are created to judge a tape and are not expected to
+go through electrode drying. Production batches still use drying records as the
+normal completion signal; test batches are shown as test batches instead of
+remaining indefinitely `в работе`.
+
 The old separate "batches for selected tape" display is not used as a second
 visible list. When a tape is selected, the main filtered list is the selected
 tape's batch list.

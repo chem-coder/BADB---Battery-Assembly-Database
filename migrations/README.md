@@ -5,12 +5,12 @@ Forward-only SQL migrations applied in alphabetical order to
 
 Current migration file state as of 2026-05-19:
 
-- `migrations/` has 47 SQL files.
-- `migrations_ASCII/` has 47 SQL files.
+- `migrations/` has 48 SQL files.
+- `migrations_ASCII/` has 48 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d038_add_electrode_capacity_average_flag.sql`.
+- Dalia's `dNNN` stream exists through `d039_add_electrode_test_batch_flag.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 26` after `d038` is applied.
+  counts of `dima = 21` and `dalia = 27` after `d039` is applied.
 
 ## How to apply
 
@@ -52,7 +52,7 @@ namespace so migrations never collide:
 | Namespace         | Who   | Pattern                                      |
 | ----------------- | ----- | -------------------------------------------- |
 | `NNN_*.sql`       | Dima  | Plain 3-digit counter (`001_*` … `020_*`)    |
-| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d038_*`)      |
+| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d039_*`)      |
 
 Alphabetical ordering of `ls migrations/` gives:
 
@@ -142,6 +142,9 @@ Full timeline is in the git log. High-level:
   `electrodes.include_in_capacity_average` flag. Existing scrapped electrodes
   start excluded from electrode batch averages; other existing electrodes and
   new electrodes start included.
+- `d039_add_electrode_test_batch_flag` — adds
+  `electrode_cut_batches.is_test_batch` so a test cut batch can be marked as
+  intentionally finished without electrode drying.
 
 ## Check migration ledger
 
@@ -160,7 +163,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 26
+dalia = 27
 dima = 21
 ```
 

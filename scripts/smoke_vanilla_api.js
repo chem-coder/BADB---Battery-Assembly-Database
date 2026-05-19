@@ -39,7 +39,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd035_add_item_created_at_dates.sql'),
   path.join(ROOT, 'migrations', 'd036_add_prism_form_factor.sql'),
   path.join(ROOT, 'migrations', 'd037_add_viscosity_conditions.sql'),
-  path.join(ROOT, 'migrations', 'd038_add_electrode_capacity_average_flag.sql')
+  path.join(ROOT, 'migrations', 'd038_add_electrode_capacity_average_flag.sql'),
+  path.join(ROOT, 'migrations', 'd039_add_electrode_test_batch_flag.sql')
 ];
 
 function parseArgs(argv) {
@@ -938,6 +939,7 @@ async function runWriteSmoke(client, seed, context) {
       target_form_factor: 'prism',
       target_config_code: '103x83',
       item_created_at: '2024-02-04',
+      is_test_batch: true,
       shape: 'rectangle',
       length_mm: 103,
       width_mm: 83,
@@ -945,6 +947,9 @@ async function runWriteSmoke(client, seed, context) {
     });
     made.prismCutBatchId = prismCutBatch.cut_batch_id;
     client.assertEqual(prismCutBatch.target_form_factor, 'prism', 'electrode cut batch create accepts prism target');
+    client.assertEqual(prismCutBatch.is_test_batch, true, 'electrode cut batch create stores test-batch flag');
+    const prismReport = await client.get(`/api/electrodes/electrode-cut-batches/${made.prismCutBatchId}/report`);
+    client.assertEqual(prismReport.batch?.is_test_batch, true, 'electrode cut batch report includes test-batch flag');
     const foil = await client.post(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/foil-masses`, {
       mass_g: 0.0123
     });

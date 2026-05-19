@@ -2815,8 +2815,8 @@ function buildMixtureComputationOrder(lines, expandedComponentsByLineId, targetD
 }
 
 function recalculatePlannedMasses() {
-  const mode = state.form.fields.calc_mode || 'from_active_mass';
-  const inputValue = Number(state.form.fields.target_mass_g);
+  const mode = document.getElementById('calc-mode')?.value || state.form.fields.calc_mode || 'from_active_mass';
+  const inputValue = Number(document.getElementById('target-mass-g')?.value ?? state.form.fields.target_mass_g);
   
   resetDerivedCalculationState();
   
@@ -4562,15 +4562,19 @@ const activeMassLabel = document.querySelector('label[for="target-mass-g"]');
 
 // Update label based on calculation mode
 calcModeSelect.addEventListener('change', () => {
+  setFormField('calc_mode', calcModeSelect.value || '');
   if (calcModeSelect.value === 'from_slurry_mass') {
     activeMassLabel.textContent = 'Общая масса суспензии, г';
   } else {
     activeMassLabel.textContent = 'Масса активного материала, г';
   }
+  recalculatePlannedMasses();
 });
 
-activeMassInput.addEventListener('input', recalculatePlannedMasses);
-calcModeSelect.addEventListener('change', recalculatePlannedMasses);
+activeMassInput.addEventListener('input', () => {
+  setFormField('target_mass_g', activeMassInput.value || '');
+  recalculatePlannedMasses();
+});
 
 addInput.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
