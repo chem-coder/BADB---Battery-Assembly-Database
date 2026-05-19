@@ -145,6 +145,10 @@ function formatElectrodeStatus(electrode) {
   return '—';
 }
 
+function formatCapacityAverageInclusion(electrode) {
+  return electrode.include_in_capacity_average ? 'Да' : 'Нет';
+}
+
 function renderRow(label, value, options = {}) {
   const fieldClass = options.wide ? ' report_field_wide' : '';
   const valueClass = [
@@ -252,10 +256,11 @@ function renderCapacitySection(summary) {
     <section class="report_section">
       <h2>Расчёт ёмкости</h2>
       <p class="report_count_line">
-        В расчёте: ${escapeHtml(summary.included_electrode_count ?? 0)} эл. ·
+        В расчёте: ${escapeHtml(summary.included_electrode_count ?? 0)} эл. с отметкой «В расчёт» ·
         ёмкость теор.: ${escapeHtml(summary.included_capacity_theoretical_count ?? 0)} ·
         ёмкость по факт. массе: ${escapeHtml(summary.included_capacity_actual_count ?? 0)}
       </p>
+      <p class="muted">Средние значения ниже рассчитаны только по электродам с отметкой «В расчёт».</p>
       ${renderFieldGrid([
         renderRow('Активный материал', summary.active_material_name || '—'),
         renderRow('Покрытие', summary.coating_sidedness ? formatTapeSidedness(summary.coating_sidedness) : '—'),
@@ -333,6 +338,7 @@ function renderElectrodesSection(electrodes) {
               <th class="report_number">АМ по факт. массе, г</th>
               <th class="report_number">C теор., мАч</th>
               <th class="report_number">C по факт. массе, мАч</th>
+              <th>В расчёт</th>
               <th>Стаканчик</th>
               <th>Статус</th>
             </tr>
@@ -348,6 +354,7 @@ function renderElectrodesSection(electrodes) {
                 <td class="report_number">${escapeHtml(formatMass(row.active_material_mass_actual_g))}</td>
                 <td class="report_number">${escapeHtml(formatCapacity(row.capacity_theoretical_mAh))}</td>
                 <td class="report_number">${escapeHtml(formatCapacity(row.capacity_actual_mAh))}</td>
+                <td>${escapeHtml(formatCapacityAverageInclusion(row))}</td>
                 <td>${escapeHtml(row.cup_number ?? '—')}</td>
                 <td>${escapeHtml(formatElectrodeStatus(row))}</td>
               </tr>

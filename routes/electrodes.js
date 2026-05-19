@@ -379,7 +379,7 @@ router.put('/:id/status', auth, async (req, res) => {
   }
 });
 
-// UPDATE electrode fields (mass, cup, comments)
+// UPDATE electrode fields (mass, cup, comments, capacity-average inclusion)
 router.put('/:id', auth, async (req, res) => {
 
   const electrodeId = Number(req.params.id);

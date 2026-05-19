@@ -102,6 +102,7 @@
     function getDefaultElectrodeTableColumnVisibility() {
       return {
         number: true,
+        include_capacity: true,
         coating_mass: false,
         active_mass_theoretical: false,
         active_mass_actual: false,
@@ -761,7 +762,7 @@
           })}
           ${renderCapacitySummaryItem({
             label: 'Средняя масса покрытия',
-            title: 'Средняя масса покрытия по нескрапнутым электродам.',
+            title: 'Средняя масса покрытия по электродам, отмеченным "В расчёт".',
             primary: formatDerivedNumber(summary.average_coating_mass_g, 4, ' г'),
             secondary: '—'
           })}
@@ -773,7 +774,7 @@
           })}
           ${renderCapacitySummaryItem({
             label: 'Средняя ёмкость партии',
-            title: 'Среднее только по нескрапнутым электродам с валидной массой. Это расчётная ёмкость, не измерение после циклирования.',
+            title: 'Среднее только по электродам, отмеченным "В расчёт", с валидной массой. Это расчётная ёмкость, не измерение после циклирования.',
             primary: `Теор.: ${formatDerivedNumber(summary.average_capacity_theoretical_mAh, 3, ' мАч')}`,
             secondary: `По факт. массе: ${formatDerivedNumber(summary.average_capacity_actual_mAh, 3, ' мАч')}`
           })}
@@ -791,7 +792,7 @@
           })}
           ${renderCapacitySummaryItem({
             label: 'В расчёте участвовало',
-            title: 'Количество нескрапнутых электродов, попавших в средние значения.',
+            title: 'Количество электродов, вручную отмеченных "В расчёт". Статус доступен/использован/списан не меняет этот флаг автоматически.',
             primary: `${summary.included_electrode_count ?? 0} шт.`,
             secondary: `Теор.: ${summary.included_capacity_theoretical_count ?? 0} | По факт. массе: ${summary.included_capacity_actual_count ?? 0}`
           })}
@@ -803,6 +804,7 @@
 
     const ELECTRODE_COLUMN_DEFS = [
       { key: 'number', label: '№' },
+      { key: 'include_capacity', label: 'В расчёт' },
       { key: 'coating_mass', label: 'Масса покрытия' },
       { key: 'active_mass_theoretical', label: 'Активная масса (теор.)' },
       { key: 'active_mass_actual', label: 'Активная масса (по факт. массе)' },
@@ -2048,6 +2050,30 @@
         });
         massCell.appendChild(massInput);
 
+        const includeCapacityCell = document.createElement('td');
+        includeCapacityCell.dataset.col = 'include_capacity';
+        includeCapacityCell.className = 'electrode-include-average-cell';
+        const includeCapacityInput = document.createElement('input');
+        includeCapacityInput.type = 'checkbox';
+        includeCapacityInput.className = 'electrode-include-average';
+        includeCapacityInput.checked = Boolean(e.include_in_capacity_average);
+        includeCapacityInput.title = 'Включать электрод в средние значения ёмкости партии';
+        includeCapacityInput.setAttribute('aria-label', `Включать электрод ${e.electrode_id} в расчёт средней ёмкости`);
+        includeCapacityInput.addEventListener('change', async () => {
+          const nextValue = includeCapacityInput.checked;
+          includeCapacityInput.disabled = true;
+          try {
+            await updateElectrode(e.electrode_id, {
+              include_in_capacity_average: nextValue
+            });
+            await loadElectrodes(state.selection.currentCutBatchId);
+          } catch (err) {
+            includeCapacityInput.checked = !nextValue;
+            includeCapacityInput.disabled = false;
+          }
+        });
+        includeCapacityCell.appendChild(includeCapacityInput);
+
         const coatingMassCell = document.createElement('td');
         coatingMassCell.dataset.col = 'coating_mass';
         coatingMassCell.textContent = formatDerivedNumber(e.coating_mass_g, 4);
@@ -2166,6 +2192,7 @@
         
         tr.appendChild(rowCell);
         tr.appendChild(massCell);
+        tr.appendChild(includeCapacityCell);
         tr.appendChild(coatingMassCell);
         tr.appendChild(activeMassTheoreticalCell);
         tr.appendChild(activeMassActualCell);
@@ -2746,6 +2773,18 @@
       coatingMassTd.dataset.col = 'coating_mass';
       coatingMassTd.textContent = '—';
 
+      const includeCapacityTd = document.createElement('td');
+      includeCapacityTd.dataset.col = 'include_capacity';
+      includeCapacityTd.className = 'electrode-include-average-cell';
+      const includeCapacityInput = document.createElement('input');
+      includeCapacityInput.type = 'checkbox';
+      includeCapacityInput.className = 'electrode-include-average';
+      includeCapacityInput.checked = true;
+      includeCapacityInput.disabled = true;
+      includeCapacityInput.title = 'Новый электрод будет включён в расчёт после сохранения';
+      includeCapacityInput.setAttribute('aria-label', 'Новый электрод будет включён в расчёт средней ёмкости');
+      includeCapacityTd.appendChild(includeCapacityInput);
+
       const activeMassTheoreticalTd = document.createElement('td');
       activeMassTheoreticalTd.dataset.col = 'active_mass_theoretical';
       activeMassTheoreticalTd.textContent = '—';
@@ -2822,6 +2861,7 @@
       
       tr.appendChild(numTd);
       tr.appendChild(massTd);
+      tr.appendChild(includeCapacityTd);
       tr.appendChild(coatingMassTd);
       tr.appendChild(activeMassTheoreticalTd);
       tr.appendChild(activeMassActualTd);

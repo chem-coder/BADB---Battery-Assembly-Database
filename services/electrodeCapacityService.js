@@ -53,6 +53,10 @@ function averageOfFinite(values) {
   return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
 }
 
+function isIncludedInCapacityAverage(row) {
+  return row?.include_in_capacity_average === true;
+}
+
 function getEffectiveActualMass(line) {
   if (!line) return null;
 
@@ -137,7 +141,7 @@ function computeElectrodeDerivedValues(electrode, capacityContext) {
 }
 
 function buildBatchCapacitySummary(electrodes, capacityContext) {
-  const usableElectrodes = (Array.isArray(electrodes) ? electrodes : []).filter((row) => Number(row.status_code) !== 3);
+  const usableElectrodes = (Array.isArray(electrodes) ? electrodes : []).filter(isIncludedInCapacityAverage);
 
   const averageCoatingMass = averageOfFinite(usableElectrodes.map((row) => toFiniteNumberOrNull(row.coating_mass_g)));
   const averageActiveMaterialMassTheoretical = averageOfFinite(usableElectrodes.map((row) => toFiniteNumberOrNull(row.active_material_mass_theoretical_g)));

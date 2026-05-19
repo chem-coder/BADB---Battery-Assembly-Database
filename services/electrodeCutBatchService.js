@@ -681,7 +681,8 @@ async function getElectrodeCutBatchReport(pool, cutBatchId) {
       comments,
       status_code,
       used_in_battery_id,
-      scrapped_reason
+      scrapped_reason,
+      include_in_capacity_average
     FROM electrodes
     WHERE cut_batch_id = $1
     ORDER BY number_in_batch ASC, electrode_id ASC

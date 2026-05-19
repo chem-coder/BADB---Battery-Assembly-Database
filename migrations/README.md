@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-05-15:
+Current migration file state as of 2026-05-19:
 
-- `migrations/` has 46 SQL files.
-- `migrations_ASCII/` has 46 SQL files.
+- `migrations/` has 47 SQL files.
+- `migrations_ASCII/` has 47 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d037_add_viscosity_conditions.sql`.
+- Dalia's `dNNN` stream exists through `d038_add_electrode_capacity_average_flag.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 25` after `d037` is applied.
+  counts of `dima = 21` and `dalia = 26` after `d038` is applied.
 
 ## How to apply
 
@@ -52,7 +52,7 @@ namespace so migrations never collide:
 | Namespace         | Who   | Pattern                                      |
 | ----------------- | ----- | -------------------------------------------- |
 | `NNN_*.sql`       | Dima  | Plain 3-digit counter (`001_*` … `020_*`)    |
-| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d037_*`)      |
+| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d038_*`)      |
 
 Alphabetical ordering of `ls migrations/` gives:
 
@@ -138,6 +138,10 @@ Full timeline is in the git log. High-level:
   until dedicated prism configuration fields are known.
 - `d037_add_viscosity_conditions` — adds optional viscosity measurement
   conditions to tape mixing, for example spindle/speed notes.
+- `d038_add_electrode_capacity_average_flag` — adds the manual
+  `electrodes.include_in_capacity_average` flag. Existing scrapped electrodes
+  start excluded from electrode batch averages; other existing electrodes and
+  new electrodes start included.
 
 ## Check migration ledger
 
@@ -156,7 +160,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 25
+dalia = 26
 dima = 21
 ```
 

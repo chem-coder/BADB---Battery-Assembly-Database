@@ -1,9 +1,9 @@
 # Capacity Calculations
 
 Created: 2026-05-06
-Edited: 2026-05-14
+Edited: 2026-05-19
 Status: current
-Verified against code: 2026-05-06
+Verified against code: 2026-05-19
 
 Source paths:
 
@@ -17,7 +17,7 @@ Source paths:
 - `public/js/3-batteries.js`
 - `public/js/electrode-batch-print.js`
 - `public/js/battery-print.js`
-- local `badb_app_v1` schema inspection on 2026-05-06
+- `migrations/d038_add_electrode_capacity_average_flag.sql`
 
 This document describes the current derived capacity and density behavior.
 Derived capacity values are computed on demand; they are not stored as capacity
@@ -229,12 +229,25 @@ capacity_per_side_actual_mAh_cm2 =
 The service returns `null` for derived values whose inputs are missing or not
 positive. The UI displays unavailable values as blank/dash rather than crashing.
 
-## Batch Summary
+## Electrode Batch Summary
 
-The electrode batch capacity summary is built from non-scrapped electrodes.
+The electrode batch capacity summary is built only from electrodes with:
 
+```text
+electrodes.include_in_capacity_average = true
+```
+
+This inclusion flag is a manual calculation choice and is separate from
+`electrodes.status_code`. Available, used, and scrapped remain lifecycle states.
 Scrapped electrodes may still display their own derived values if enough inputs
-exist, but they are excluded from batch averages.
+exist, and the user may include them in averages manually. Thin or otherwise
+nonrepresentative electrodes may be excluded from averages without being
+scrapped.
+
+Migration `d038_add_electrode_capacity_average_flag.sql` backfills existing data
+to preserve the previous status-based behavior at migration time: existing
+`status_code = 3` electrodes start excluded, while all other existing electrodes
+start included. New electrodes default to included.
 
 Current batch summary values include:
 
@@ -249,7 +262,7 @@ Current batch summary values include:
 - average capacity, theoretical and actual;
 - areal capacity, theoretical and actual;
 - per-side capacity, theoretical and actual;
-- included electrode count and valid-capacity counts.
+- included electrode count (`В расчёт`) and valid-capacity counts.
 
 The Electrodes page and electrode batch print report use this summary.
 

@@ -38,7 +38,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd034_update_wet_mixing_methods.sql'),
   path.join(ROOT, 'migrations', 'd035_add_item_created_at_dates.sql'),
   path.join(ROOT, 'migrations', 'd036_add_prism_form_factor.sql'),
-  path.join(ROOT, 'migrations', 'd037_add_viscosity_conditions.sql')
+  path.join(ROOT, 'migrations', 'd037_add_viscosity_conditions.sql'),
+  path.join(ROOT, 'migrations', 'd038_add_electrode_capacity_average_flag.sql')
 ];
 
 function parseArgs(argv) {
@@ -1011,6 +1012,22 @@ async function runWriteSmoke(client, seed, context) {
       used_in_battery_id: null,
       scrapped_reason: null
     });
+    const capacityBeforeIncludeToggle = await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}`);
+    const includedBeforeToggle = Number(capacityBeforeIncludeToggle.capacity_summary?.included_electrode_count);
+    const electrodesBeforeIncludeToggle = await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}/electrodes`);
+    const defaultIncludedElectrode = electrodesBeforeIncludeToggle
+      .find((electrode) => Number(electrode.electrode_id) === Number(made.electrodeId));
+    client.assertEqual(defaultIncludedElectrode?.include_in_capacity_average, true, 'new electrode defaults into capacity average');
+    const includeToggledElectrode = await client.put(`/api/electrodes/${made.electrodeId}`, {
+      include_in_capacity_average: false
+    });
+    client.assertEqual(includeToggledElectrode.include_in_capacity_average, false, 'electrode update saves capacity average inclusion flag');
+    const capacityAfterIncludeToggle = await client.get(`/api/electrodes/electrode-cut-batches/${made.cutBatchId}`);
+    client.assertEqual(
+      Number(capacityAfterIncludeToggle.capacity_summary?.included_electrode_count),
+      includedBeforeToggle - 1,
+      'electrode capacity summary count follows manual include flag'
+    );
 
     const battery = await client.post('/api/batteries', {
       project_id: projectId,

@@ -117,7 +117,7 @@
       "path": "/api/electrodes/:param",
       "methods": ["PUT", "DELETE"],
       "auth": "auth",
-      "request": "PUT updates electrode fields; DELETE has no body",
+      "request": "PUT updates electrode fields, including include_in_capacity_average; DELETE has no body",
       "response": "updated electrode JSON or delete status",
       "sources": ["public/js/2-electrodes.js"]
     },
@@ -166,7 +166,7 @@
       "methods": ["GET"],
       "auth": "auth",
       "request": "none",
-      "response": "electrodes in cut batch",
+      "response": "electrodes in cut batch, including include_in_capacity_average",
       "sources": ["public/js/2-electrodes.js", "public/js/3-batteries.js"]
     },
     {

@@ -11,6 +11,18 @@ function statusError(message, statusCode) {
   return err;
 }
 
+function normalizeOptionalBoolean(value, fieldName) {
+  if (value === undefined) return undefined;
+  if (value === true || value === false) return value;
+
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (value === 1) return true;
+  if (value === 0) return false;
+
+  throw statusError(`Invalid boolean value for ${fieldName}`, 400);
+}
+
 async function listElectrodesForCutBatch(pool, cutBatchId) {
   const [result, capacityContext] = await Promise.all([
     pool.query(
@@ -137,8 +149,13 @@ async function updateElectrodeStatus(pool, electrodeId, payload, userId) {
 }
 
 async function updateElectrode(pool, electrodeId, payload, userId) {
+  const includeInCapacityAverage = normalizeOptionalBoolean(
+    payload.include_in_capacity_average,
+    'include_in_capacity_average'
+  );
+
   const current = await pool.query(
-    'SELECT electrode_mass_g, cup_number, comments FROM electrodes WHERE electrode_id = $1',
+    'SELECT electrode_mass_g, cup_number, comments, include_in_capacity_average FROM electrodes WHERE electrode_id = $1',
     [electrodeId]
   );
 
@@ -152,14 +169,16 @@ async function updateElectrode(pool, electrodeId, payload, userId) {
     SET
       electrode_mass_g = COALESCE($1, electrode_mass_g),
       cup_number = COALESCE($2, cup_number),
-      comments = COALESCE($3, comments)
-    WHERE electrode_id = $4
+      comments = COALESCE($3, comments),
+      include_in_capacity_average = COALESCE($4, include_in_capacity_average)
+    WHERE electrode_id = $5
     RETURNING *
     `,
     [
       payload.electrode_mass_g ?? null,
       payload.cup_number ?? null,
       payload.comments ?? null,
+      includeInCapacityAverage ?? null,
       electrodeId
     ]
   );
@@ -177,6 +196,9 @@ async function updateElectrode(pool, electrodeId, payload, userId) {
   }
   if (payload.comments !== undefined) {
     newVals.comments = payload.comments;
+  }
+  if (payload.include_in_capacity_average !== undefined) {
+    newVals.include_in_capacity_average = includeInCapacityAverage;
   }
 
   await trackChanges(

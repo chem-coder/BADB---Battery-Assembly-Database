@@ -1,15 +1,16 @@
 # Electrodes
 
 Created: 2026-05-06
-Edited: 2026-05-15
+Edited: 2026-05-19
 Status: current
-Verified against code: 2026-05-15
+Verified against code: 2026-05-19
 
 Source paths:
 
 - `routes/electrodes.js`
 - `services/electrodeCutBatchService.js`
 - `services/electrodeCatalogService.js`
+- `services/electrodeCapacityService.js`
 - `services/batteryCompatibleCutBatchService.js`
 - `services/batteryElectrodeSourceService.js`
 - `services/batteryElectrodeStackService.js`
@@ -83,6 +84,7 @@ Important fields:
 - `cut_batch_id`;
 - `number_in_batch`;
 - `electrode_mass_g`;
+- `include_in_capacity_average`;
 - `status_code`;
 - `used_in_battery_id`;
 - `scrapped_reason`.
@@ -92,6 +94,22 @@ Current status values:
 - `1`: available;
 - `2`: used;
 - `3`: scrapped.
+
+Capacity-average inclusion is independent from lifecycle status. The boolean
+field `include_in_capacity_average` controls whether an individual electrode is
+included in electrode cut batch average-capacity calculations. Available, used,
+and scrapped remain lifecycle states only.
+
+The current migration backfills existing rows to preserve the old behavior:
+existing `status_code = 3` rows start with `include_in_capacity_average = false`,
+and all other existing electrodes start with `true`. New electrodes default to
+`true`. After that, operators may manually include a scrapped or damaged
+electrode in the average, or exclude a thin/nonrepresentative electrode without
+scrapping it.
+
+On the vanilla Electrode Batches page, the compact `В расчёт` checkbox is saved
+immediately per row. Scrapping and restoring an electrode do not automatically
+change this checkbox.
 
 ## Battery Source Links
 
