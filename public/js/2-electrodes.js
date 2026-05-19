@@ -1895,14 +1895,22 @@
 
         const meta = document.createElement('span');
         meta.className = 'electrode-batch-list-meta';
-        meta.textContent = [
+        [
           sidednessText,
           targetText,
           geometryText,
-          dateText,
+          dateText ? (() => {
+            const createdDateValue = document.createElement('span');
+            createdDateValue.className = 'list-created-date-value';
+            createdDateValue.textContent = dateText;
+            return createdDateValue;
+          })() : '',
           roleText,
           projectText
-        ].filter(Boolean).join(' — ');
+        ].filter(Boolean).forEach((part) => {
+          if (meta.childNodes.length) meta.append(' — ');
+          meta.appendChild(part instanceof Node ? part : document.createTextNode(part));
+        });
 
         titleLine.appendChild(title);
         titleLine.appendChild(titleMeta);

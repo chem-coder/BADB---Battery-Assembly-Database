@@ -3390,31 +3390,20 @@ function renderTapesList() {
   
   filteredTapes.forEach(t => {
     const li = document.createElement('li');
-    li.className = 'user-row';
+    li.className = 'user-row tape-list-row';
     
     const info = document.createElement('button');
     info.type = 'button';
-    info.className = 'user-info record-open-button';
+    info.className = 'user-info record-open-button tape-list-open-button';
     info.title = 'Открыть ленту';
     info.setAttribute('aria-label', `Открыть ленту #${t.tape_id}`);
 
     const coatingSidednessLabel = getTapeCoatingSidednessLabel(t.coating_sidedness);
-    
-    const nameSpan = document.createElement('strong');
-    nameSpan.textContent = coatingSidednessLabel
-      ? `#${t.tape_id} | ${t.name || '— без названия —'} — ${coatingSidednessLabel}`
-      : `#${t.tape_id} | ${t.name || '— без названия —'}`;
-
-    const statusSpan = document.createElement('small');
-    statusSpan.style.color = '#666';
-    statusSpan.textContent = ` — Статус: ${getTapeListStatusLabel(t)}`;
-    
-    const dateSpan = document.createElement('small');
     const createdDate = (t.item_created_at || t.created_at)
-      ? new Date(t.item_created_at || t.created_at).toLocaleDateString()
+      ? new Date(t.item_created_at || t.created_at).toLocaleDateString('ru-RU')
       : '';
     const updatedDate = t.updated_at
-      ? new Date(t.updated_at).toLocaleDateString()
+      ? new Date(t.updated_at).toLocaleDateString('ru-RU')
       : '';
     const dateLabels = [];
     const dateTitleLabels = [];
@@ -3426,31 +3415,51 @@ function renderTapesList() {
       dateLabels.push(updatedDate);
       dateTitleLabels.push(`Изменено: ${updatedDate}`);
     }
-    dateSpan.style.color = '#666';
+
+    const titleLine = document.createElement('span');
+    titleLine.className = 'tape-list-title-line';
+
+    const nameSpan = document.createElement('strong');
+    nameSpan.className = 'tape-list-title';
+    nameSpan.textContent = `#${t.tape_id} | ${t.name || '— без названия —'}`;
+
+    const dateSpan = document.createElement('small');
+    dateSpan.className = 'tape-list-secondary';
     dateSpan.title = dateTitleLabels.join('; ');
-    dateSpan.textContent = dateLabels.length
-      ? ` — ${dateLabels.join(' | ')}`
-      : '';
+    if (dateLabels.length) {
+      dateSpan.append(' — создано ');
+      const createdDateValue = document.createElement('span');
+      createdDateValue.className = 'list-created-date-value';
+      createdDateValue.textContent = dateLabels[0];
+      dateSpan.appendChild(createdDateValue);
+      if (dateLabels[1]) {
+        dateSpan.append(` | изм. ${dateLabels[1]}`);
+      }
+    }
 
     const creatorSpan = document.createElement('small');
-    creatorSpan.style.color = '#666';
+    creatorSpan.className = 'tape-list-secondary';
     creatorSpan.textContent = t.created_by_name
       ? ` — ${t.created_by_name}`
       : t.created_by
         ? ` — ${t.created_by}`
         : '';
 
-    const projectsSpan = document.createElement('small');
-    projectsSpan.style.color = '#666';
-    projectsSpan.textContent = t.project_names || t.project_name
-      ? ` — Проекты: ${t.project_names || t.project_name}`
-      : '';
+    titleLine.appendChild(nameSpan);
+    titleLine.appendChild(dateSpan);
+    titleLine.appendChild(creatorSpan);
+
+    const metaLine = document.createElement('span');
+    metaLine.className = 'tape-list-meta';
+    metaLine.textContent = [
+      formatTapeRoleLabel(t.role || t.tape_type),
+      coatingSidednessLabel,
+      getTapeListStatusLabel(t),
+      t.project_names || t.project_name || ''
+    ].filter(Boolean).join(' — ');
     
-    info.appendChild(nameSpan);
-    info.appendChild(statusSpan);
-    info.appendChild(dateSpan);
-    info.appendChild(creatorSpan);
-    info.appendChild(projectsSpan);
+    info.appendChild(titleLine);
+    info.appendChild(metaLine);
 
     info.addEventListener('click', async () => {
       try {

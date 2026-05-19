@@ -5124,7 +5124,7 @@ function formatBatteryListDate(value, fallbackValue = null) {
     return '';
   }
 
-  return date.toLocaleDateString();
+  return date.toLocaleDateString('ru-RU');
 }
 
 function getBatteryListProjectLabel(battery) {
@@ -5256,15 +5256,24 @@ function renderBatteriesList() {
 
     const dateSpan = document.createElement('small');
     dateSpan.className = 'battery-list-secondary';
-    const dateParts = [
-      createdDate ? `создано ${createdDate}` : '',
-      updatedDate ? `изм. ${updatedDate}` : ''
-    ].filter(Boolean);
-    dateSpan.textContent = dateParts.length ? ` — ${dateParts.join(' | ')}` : '';
     dateSpan.title = [
       createdDate ? `Дата создания: ${createdDate}` : '',
       updatedDate ? `Изменено: ${updatedDate}` : ''
     ].filter(Boolean).join('; ');
+    if (createdDate || updatedDate) {
+      dateSpan.append(' — ');
+    }
+    if (createdDate) {
+      dateSpan.append('создано ');
+      const createdDateValue = document.createElement('span');
+      createdDateValue.className = 'list-created-date-value';
+      createdDateValue.textContent = createdDate;
+      dateSpan.appendChild(createdDateValue);
+    }
+    if (updatedDate) {
+      if (createdDate) dateSpan.append(' | ');
+      dateSpan.append(`изм. ${updatedDate}`);
+    }
 
     const creatorSpan = document.createElement('small');
     creatorSpan.className = 'battery-list-secondary';

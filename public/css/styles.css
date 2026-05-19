@@ -1118,6 +1118,36 @@ body[data-page="BAL"] .battery-list-meta {
   margin-top: 0.12rem;
 }
 
+body[data-page="tapes"] .tape-list-row {
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+body[data-page="tapes"] .tape-list-open-button {
+  line-height: 1.32;
+}
+
+body[data-page="tapes"] .tape-list-title-line,
+body[data-page="tapes"] .tape-list-meta {
+  display: block;
+}
+
+body[data-page="tapes"] .tape-list-title {
+  font-size: 1.06rem;
+  font-weight: 700;
+}
+
+body[data-page="tapes"] .tape-list-secondary,
+body[data-page="tapes"] .tape-list-meta {
+  color: #667085;
+  font-size: 0.93rem;
+}
+
+body[data-page="tapes"] .tape-list-meta {
+  margin-top: 0.12rem;
+}
+
 body[data-page="electrodes"] .electrode-batch-list-row {
   align-items: center;
   gap: 0.75rem;
@@ -1146,6 +1176,11 @@ body[data-page="electrodes"] .electrode-batch-list-meta {
 
 body[data-page="electrodes"] .electrode-batch-list-meta {
   margin-top: 0.12rem;
+}
+
+body[data-page] .list-created-date-value {
+  color: #1f2933;
+  font-weight: 700;
 }
 
 .user-info {
