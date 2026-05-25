@@ -1012,6 +1012,10 @@ async function runWriteSmoke(client, seed, context) {
       cup_number: 2,
       comments: 'smoke electrode update'
     });
+    const clearedCommentElectrode = await client.put(`/api/electrodes/${made.electrodeId}`, {
+      comments: null
+    });
+    client.assertEqual(clearedCommentElectrode.comments, null, 'electrode update clears comments with null');
     await client.put(`/api/electrodes/${made.electrodeId}/status`, {
       status_code: 1,
       used_in_battery_id: null,

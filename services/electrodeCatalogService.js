@@ -149,10 +149,17 @@ async function updateElectrodeStatus(pool, electrodeId, payload, userId) {
 }
 
 async function updateElectrode(pool, electrodeId, payload, userId) {
+  const hasElectrodeMass = payload.electrode_mass_g !== undefined;
+  const hasCupNumber = payload.cup_number !== undefined;
+  const hasComments = payload.comments !== undefined;
+  const comments = hasComments && String(payload.comments ?? '').trim() === ''
+    ? null
+    : payload.comments;
   const includeInCapacityAverage = normalizeOptionalBoolean(
     payload.include_in_capacity_average,
     'include_in_capacity_average'
   );
+  const hasIncludeInCapacityAverage = payload.include_in_capacity_average !== undefined;
 
   const current = await pool.query(
     'SELECT electrode_mass_g, cup_number, comments, include_in_capacity_average FROM electrodes WHERE electrode_id = $1',
@@ -167,17 +174,33 @@ async function updateElectrode(pool, electrodeId, payload, userId) {
     `
     UPDATE electrodes
     SET
-      electrode_mass_g = COALESCE($1, electrode_mass_g),
-      cup_number = COALESCE($2, cup_number),
-      comments = COALESCE($3, comments),
-      include_in_capacity_average = COALESCE($4, include_in_capacity_average)
-    WHERE electrode_id = $5
+      electrode_mass_g = CASE
+        WHEN $1::boolean AND $2::numeric IS NOT NULL THEN $2::numeric
+        ELSE electrode_mass_g
+      END,
+      cup_number = CASE
+        WHEN $3::boolean THEN $4::integer
+        ELSE cup_number
+      END,
+      comments = CASE
+        WHEN $5::boolean THEN $6::text
+        ELSE comments
+      END,
+      include_in_capacity_average = CASE
+        WHEN $7::boolean THEN $8::boolean
+        ELSE include_in_capacity_average
+      END
+    WHERE electrode_id = $9
     RETURNING *
     `,
     [
+      hasElectrodeMass,
       payload.electrode_mass_g ?? null,
+      hasCupNumber,
       payload.cup_number ?? null,
-      payload.comments ?? null,
+      hasComments,
+      comments,
+      hasIncludeInCapacityAverage,
       includeInCapacityAverage ?? null,
       electrodeId
     ]
@@ -195,7 +218,7 @@ async function updateElectrode(pool, electrodeId, payload, userId) {
     newVals.cup_number = payload.cup_number;
   }
   if (payload.comments !== undefined) {
-    newVals.comments = payload.comments;
+    newVals.comments = comments;
   }
   if (payload.include_in_capacity_average !== undefined) {
     newVals.include_in_capacity_average = includeInCapacityAverage;

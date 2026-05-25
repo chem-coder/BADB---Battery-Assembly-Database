@@ -114,7 +114,7 @@
         areal_capacity_actual: false,
         capacity_per_side_actual: false,
         cup: false,
-        comments: false,
+        comments: true,
         status: true
       };
     }
