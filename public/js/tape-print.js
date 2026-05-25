@@ -441,6 +441,8 @@ function renderStepDetails(step) {
         step.gap_um != null ? `${step.gap_um} мкм` : '—'
       )}
       ${renderStepMetaRow('Зазор, сторона 2', step.gap_um_side2 != null ? `${step.gap_um_side2} мкм` : null, { hideIfEmpty: true })}
+      ${renderStepMetaRow('Толщина после нанесения, сторона 1', step.coated_thickness_um != null ? `${step.coated_thickness_um} мкм` : null, { hideIfEmpty: true })}
+      ${renderStepMetaRow('Толщина после нанесения, сторона 2', step.coating_sidedness === 'two_sided' && step.coated_thickness_um_side2 != null ? `${step.coated_thickness_um_side2} мкм` : null, { hideIfEmpty: true })}
       ${renderStepMetaRow('Комментарий к нанесению и сушке', step.method_comments, { hideIfEmpty: true })}
     `;
   }

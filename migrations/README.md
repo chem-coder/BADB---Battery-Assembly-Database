@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-05-19:
+Current migration file state as of 2026-05-25:
 
-- `migrations/` has 48 SQL files.
-- `migrations_ASCII/` has 48 SQL files.
+- `migrations/` has 49 SQL files.
+- `migrations_ASCII/` has 49 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d039_add_electrode_test_batch_flag.sql`.
+- Dalia's `dNNN` stream exists through `d040_add_coated_thickness_fields.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 27` after `d039` is applied.
+  counts of `dima = 21` and `dalia = 28` after `d040` is applied.
 
 ## How to apply
 
@@ -52,7 +52,7 @@ namespace so migrations never collide:
 | Namespace         | Who   | Pattern                                      |
 | ----------------- | ----- | -------------------------------------------- |
 | `NNN_*.sql`       | Dima  | Plain 3-digit counter (`001_*` … `020_*`)    |
-| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d039_*`)      |
+| `dNNN_*.sql`      | Dalia | Prefixed with `d` (`d013_*` … `d040_*`)      |
 
 Alphabetical ordering of `ls migrations/` gives:
 
@@ -145,6 +145,10 @@ Full timeline is in the git log. High-level:
 - `d039_add_electrode_test_batch_flag` — adds
   `electrode_cut_batches.is_test_batch` so a test cut batch can be marked as
   intentionally finished without electrode drying.
+- `d040_add_coated_thickness_fields` — adds
+  `coated_thickness_um` and `coated_thickness_um_side2` to
+  `tape_step_coating` for measured thickness after coating/drying and before
+  calendering, separate from coating gap/zazor values.
 
 ## Check migration ledger
 
@@ -163,7 +167,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 27
+dalia = 28
 dima = 21
 ```
 

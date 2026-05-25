@@ -403,6 +403,8 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
     coating_sidedness,
     gap_um,
     gap_um_side2,
+    coated_thickness_um,
+    coated_thickness_um_side2,
     coat_temp_c,
     coat_time_min,
     method_comments
@@ -415,7 +417,8 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
       `
       SELECT ps.performed_by, ps.started_at, ps.comments,
              sub.foil_id, sub.coating_id, sub.coating_sidedness, sub.gap_um,
-             sub.gap_um_side2, sub.coat_temp_c, sub.coat_time_min, sub.method_comments
+             sub.gap_um_side2, sub.coated_thickness_um, sub.coated_thickness_um_side2,
+             sub.coat_temp_c, sub.coat_time_min, sub.method_comments
       FROM tape_process_steps ps
       LEFT JOIN tape_step_coating sub ON sub.step_id = ps.step_id
       WHERE ps.tape_id = $1 AND ps.operation_type_id = $2
@@ -435,8 +438,8 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
     await client.query(
       `
       INSERT INTO tape_step_coating
-        (step_id, foil_id, coating_id, coating_sidedness, gap_um, gap_um_side2, coat_temp_c, coat_time_min, method_comments)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        (step_id, foil_id, coating_id, coating_sidedness, gap_um, gap_um_side2, coated_thickness_um, coated_thickness_um_side2, coat_temp_c, coat_time_min, method_comments)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       ON CONFLICT (step_id)
       DO UPDATE SET
         foil_id = EXCLUDED.foil_id,
@@ -444,6 +447,8 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
         coating_sidedness = EXCLUDED.coating_sidedness,
         gap_um = EXCLUDED.gap_um,
         gap_um_side2 = EXCLUDED.gap_um_side2,
+        coated_thickness_um = EXCLUDED.coated_thickness_um,
+        coated_thickness_um_side2 = EXCLUDED.coated_thickness_um_side2,
         coat_temp_c = EXCLUDED.coat_temp_c,
         coat_time_min = EXCLUDED.coat_time_min,
         method_comments = EXCLUDED.method_comments
@@ -455,6 +460,8 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
         valueOrNull(coating_sidedness),
         finiteNumberOrNull(gap_um),
         finiteNumberOrNull(gap_um_side2),
+        finiteNumberOrNull(coated_thickness_um),
+        finiteNumberOrNull(coated_thickness_um_side2),
         finiteNumberOrNull(coat_temp_c),
         finiteNumberOrNull(coat_time_min),
         valueOrNull(method_comments)
@@ -473,6 +480,8 @@ async function saveCoatingStep(pool, { tapeId, code, body, userId }) {
         coating_sidedness: valueOrNull(coating_sidedness),
         gap_um: finiteNumberOrNull(gap_um),
         gap_um_side2: finiteNumberOrNull(gap_um_side2),
+        coated_thickness_um: finiteNumberOrNull(coated_thickness_um),
+        coated_thickness_um_side2: finiteNumberOrNull(coated_thickness_um_side2),
         coat_temp_c: finiteNumberOrNull(coat_temp_c),
         coat_time_min: finiteNumberOrNull(coat_time_min),
         method_comments: valueOrNull(method_comments)

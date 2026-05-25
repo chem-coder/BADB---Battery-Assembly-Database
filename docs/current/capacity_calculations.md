@@ -1,9 +1,9 @@
 # Capacity Calculations
 
 Created: 2026-05-06
-Edited: 2026-05-19
+Edited: 2026-05-25
 Status: current
-Verified against code: 2026-05-19
+Verified against code: 2026-05-25
 
 Source paths:
 
@@ -169,6 +169,11 @@ Electrode capacity context is assembled from existing upstream records:
 - average foil mass: `AVG(foil_mass_measurements.mass_g)` for the cut batch;
 - electrode area: cut batch circle or rectangle geometry;
 - sidedness: `tape_step_coating.coating_sidedness`.
+
+Tape coated-thickness fields (`coated_thickness_um` and
+`coated_thickness_um_side2`) record measured thickness after coating/drying and
+before calendering. They do not currently feed capacity calculations, which
+derive coating mass from electrode mass minus average foil mass.
 
 Area conversion:
 

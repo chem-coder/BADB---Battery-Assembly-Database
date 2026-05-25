@@ -40,7 +40,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd036_add_prism_form_factor.sql'),
   path.join(ROOT, 'migrations', 'd037_add_viscosity_conditions.sql'),
   path.join(ROOT, 'migrations', 'd038_add_electrode_capacity_average_flag.sql'),
-  path.join(ROOT, 'migrations', 'd039_add_electrode_test_batch_flag.sql')
+  path.join(ROOT, 'migrations', 'd039_add_electrode_test_batch_flag.sql'),
+  path.join(ROOT, 'migrations', 'd040_add_coated_thickness_fields.sql')
 ];
 
 function parseArgs(argv) {
@@ -863,10 +864,23 @@ async function runWriteSmoke(client, seed, context) {
       coating_sidedness: 'two_sided',
       gap_um: 100,
       gap_um_side2: 105,
+      coated_thickness_um: 82,
+      coated_thickness_um_side2: 84,
       coat_temp_c: null,
       coat_time_min: 10,
       method_comments: 'smoke'
     });
+    const savedCoating = await client.get(`/api/tapes/${made.tapeId}/steps/by-code/coating`);
+    client.assertEqual(
+      savedCoating.coated_thickness_um,
+      82,
+      'tape coating stores side 1 measured coated thickness'
+    );
+    client.assertEqual(
+      savedCoating.coated_thickness_um_side2,
+      84,
+      'tape coating stores side 2 measured coated thickness'
+    );
     await client.post(`/api/tapes/${made.tapeId}/steps/by-code/drying_pressed_tape`, {
       performed_by: userId,
       started_at: now,

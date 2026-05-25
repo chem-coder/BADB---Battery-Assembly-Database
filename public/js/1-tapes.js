@@ -1130,6 +1130,8 @@ function getDefaultWorkflowState() {
       coating_sidedness: '',
       gap_um: '',
       gap_um_side2: '',
+      coated_thickness_um: '',
+      coated_thickness_um_side2: '',
       coat_temp_c: '',
       coat_time_min: '',
       method_comments: ''
@@ -1460,6 +1462,7 @@ function syncCoatingGapUi() {
   const isTwoSided = sidedness === 'two_sided';
   const label = document.getElementById('2-coating-gap-um-label');
   const side2Row = document.getElementById('2-coating-gap-side2-row');
+  const thicknessSide2Row = document.getElementById('2-coating-coated-thickness-side2-row');
 
   if (label) {
     label.textContent = isTwoSided
@@ -1468,6 +1471,9 @@ function syncCoatingGapUi() {
   }
   if (side2Row) {
     side2Row.hidden = !isTwoSided;
+  }
+  if (thicknessSide2Row) {
+    thicknessSide2Row.hidden = !isTwoSided;
   }
 }
 
@@ -1574,6 +1580,8 @@ function renderCoatingStep() {
   setElValue('2-coating-sidedness', step.coating_sidedness);
   setElValue('2-coating-gap-um', step.gap_um);
   setElValue('2-coating-gap-um-side2', step.gap_um_side2);
+  setElValue('2-coating-coated-thickness-um', step.coated_thickness_um);
+  setElValue('2-coating-coated-thickness-um-side2', step.coated_thickness_um_side2);
   setElValue('2-coating-time-min', step.coat_time_min);
   setElValue('2-coating-method-comments', step.method_comments);
   syncCoatingGapUi();
@@ -3697,6 +3705,8 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
       coating_sidedness: stepsByCode.coating.coating_sidedness ?? '',
       gap_um: stepsByCode.coating.gap_um ?? '',
       gap_um_side2: stepsByCode.coating.gap_um_side2 ?? '',
+      coated_thickness_um: stepsByCode.coating.coated_thickness_um ?? '',
+      coated_thickness_um_side2: stepsByCode.coating.coated_thickness_um_side2 ?? '',
       coat_temp_c: stepsByCode.coating.coat_temp_c ?? '',
       coat_time_min: stepsByCode.coating.coat_time_min ?? '',
       method_comments: stepsByCode.coating.method_comments ?? ''
@@ -4442,6 +4452,8 @@ function attachWorkflowStateSync() {
   bindValueField('2-coating-sidedness', 'coating', 'coating_sidedness');
   bindValueField('2-coating-gap-um', 'coating', 'gap_um');
   bindValueField('2-coating-gap-um-side2', 'coating', 'gap_um_side2');
+  bindValueField('2-coating-coated-thickness-um', 'coating', 'coated_thickness_um');
+  bindValueField('2-coating-coated-thickness-um-side2', 'coating', 'coated_thickness_um_side2');
   bindValueField('2-coating-time-min', 'coating', 'coat_time_min');
   bindValueField('2-coating-method-comments', 'coating', 'method_comments');
   bindValueField('2-coating-dry-temp', 'drying_tape', 'temperature_c');
@@ -5135,6 +5147,8 @@ document.getElementById('2-coating-save-btn').onclick = () => trackPendingSave(w
   const gapValue = step.gap_um;
   const gapSide2Value = step.gap_um_side2;
   const isTwoSided = step.coating_sidedness === 'two_sided';
+  const thicknessValue = String(step.coated_thickness_um ?? '').trim();
+  const thicknessSide2Value = String(step.coated_thickness_um_side2 ?? '').trim();
   
   if (!gapValue || !Number.isFinite(Number(gapValue)) || Number(gapValue) <= 0) {
     showInlineStatus('2-coating-save-btn', 'Укажите зазор, мкм', true);
@@ -5157,6 +5171,8 @@ document.getElementById('2-coating-save-btn').onclick = () => trackPendingSave(w
     coating_sidedness: step.coating_sidedness || null,
     gap_um: gapValue,
     gap_um_side2: isTwoSided ? gapSide2Value : null,
+    coated_thickness_um: thicknessValue || null,
+    coated_thickness_um_side2: isTwoSided ? (thicknessSide2Value || null) : null,
     coat_temp_c: null,
     coat_time_min: step.coat_time_min || null,
     method_comments: step.method_comments || null

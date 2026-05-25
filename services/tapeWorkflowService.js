@@ -477,7 +477,8 @@ async function fetchWorkflowStatusMap(queryable, tapeIds) {
       c.foil_id,
       c.coating_id,
       c.coating_sidedness,
-      c.gap_um
+      c.gap_um,
+      c.gap_um_side2
     FROM tape_process_steps s
     JOIN operation_types ot
       ON ot.operation_type_id = s.operation_type_id

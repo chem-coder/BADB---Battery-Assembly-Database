@@ -249,7 +249,7 @@ values. This makes valid cathode-first API payloads safe under the hardened
 trigger. The insert sequence is `A1, C1, A2, C2`, not `A1, A2, C1, C2`.
 
 The vanilla smoke harness applies the current post-dump migration set through
-`d039` after restoring the old dump, so smoke evidence covers the hardened
+`d040` after restoring the old dump, so smoke evidence covers the hardened
 trigger path, the restored-copy migration ledger baseline, physical
 `item_created_at` date columns, and the prism form-factor constraints.
 

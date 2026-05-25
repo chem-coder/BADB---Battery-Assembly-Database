@@ -1,9 +1,9 @@
 # Tapes
 
 Created: 2026-05-09
-Edited: 2026-05-15
+Edited: 2026-05-25
 Status: current
-Verified against code: 2026-05-15
+Verified against code: 2026-05-25
 
 Source paths:
 
@@ -79,7 +79,11 @@ Computed status order:
 The coating step is considered complete only when its header is saved and
 `foil_id`, `coating_id`, and the required gap fields are present. One-sided
 coating requires `gap_um`; two-sided coating requires both `gap_um` and
-`gap_um_side2`. The retired `coat_temp_c` column remains in the database for
+`gap_um_side2`. Measured thickness after coating/drying and before calendering
+is stored separately and does not replace gap/zazor: side 1 uses
+`coated_thickness_um`, and two-sided coating can also store side 2 in
+`coated_thickness_um_side2`. The retired
+`coat_temp_c` column remains in the database for
 compatibility, but the vanilla UI no longer shows or saves a coating-temperature
 field. The weighing step is complete only when required included-in-percent
 recipe lines have actual mass or volume values.
@@ -87,6 +91,8 @@ recipe lines have actual mass or volume values.
 Current coating/drying UI details:
 
 - two-sided coating shows separate side 1 and side 2 coating gaps;
+- thickness after coating/drying and before calendering has separate side 1
+  and, for two-sided coating only, side 2 fields;
 - inline drying saves drying temperature, atmosphere, duration, and
   `drying_speed_text`;
 - the visible coating comment is a shared coating/drying operator note stored in

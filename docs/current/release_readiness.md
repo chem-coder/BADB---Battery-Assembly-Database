@@ -1,7 +1,7 @@
 # BADB Release Readiness
 
 Created: 2026-05-06
-Edited: 2026-05-10
+Edited: 2026-05-25
 Status: current
 
 This file tracks only the current release-control state. Do not use it for future ideas, long worklogs, or archived rationale.
@@ -48,7 +48,7 @@ authoritative migration ledger.
 - Battery stack DB trigger hardening in `d031_harden_battery_stack_validate_trigger.sql`.
 - Trigger-safe pouch/prism/cyl stack insert order: `A1, C1, A2, C2`, preserving original `position_index`.
 - Migration ledger creation in `d032_create_schema_migrations_table.sql`;
-  current migration files exist through Dima `020` and Dalia `d039`, with 48
+  current migration files exist through Dima `020` and Dalia `d040`, with 49
   SQL files in both `migrations/` and `migrations_ASCII/`.
 - Tape coating/drying schema update in
   `d033_add_coating_side2_gap_and_drying_speed.sql`.
@@ -68,9 +68,12 @@ authoritative migration ledger.
 - Electrode test-batch/no-drying flag in
   `d039_add_electrode_test_batch_flag.sql`: trial cut batches can be marked as
   intentionally finished without electrode drying.
+- Coated-thickness fields in `d040_add_coated_thickness_fields.sql`: tape
+  coating stores measured side 1 and optional side 2 thickness after
+  coating/drying and before calendering, separately from gap/zazor values.
 - Vanilla smoke harness now applies the post-dump migrations needed for the
   current restored-copy schema, including `002`, `018`, `019`, `020`, and
-  `d028` through `d039`.
+  `d028` through `d040`.
 - Battery/electrode/materials/capacity/runbook docs were compressed into the canonical docs system.
 - Formal `Документация ЕСПД/` mirror was updated from the canonical docs.
 - Electrolytes reference page polish: row-open workflow, sticky record header,
@@ -86,17 +89,21 @@ authoritative migration ledger.
 
 ## Latest Verified Checkpoint
 
-Latest recorded release checkpoint: verified on 2026-05-19.
+Latest recorded release checkpoint: verified on 2026-05-25.
 
-- `node --check scripts/smoke_vanilla_api.js` passed.
-- The restored-copy smoke database applied migrations through `d039` and
-  recorded authoritative `schema_migrations` rows through `d039`.
-- `npm run smoke:vanilla` passed: 261 checks, 0 failures. The smoke harness
+- `node --check` passed for the changed vanilla/backend/smoke JavaScript files.
+- `git diff --check` passed.
+- `npm run contract:vanilla` passed.
+- UI source check confirmed the Tapes coated-thickness labels, final element
+  ids, and side 2 visibility hook.
+- The restored-copy smoke database applied migrations through `d040` and
+  recorded authoritative `schema_migrations` rows through `d040`.
+- `npm run smoke:vanilla` passed: 263 checks, 0 failures. The smoke harness
   restored the old dump and applied `002`, `018`, `019`, `020`, and `d028`
-  through `d039`.
+  through `d040`.
 
-Older smoke counts below are historical only and do not replace the 2026-05-19
-261-check checkpoint above.
+Older smoke counts below are historical only and do not replace the 2026-05-25
+263-check checkpoint above.
 
 ## Historical Checkpoints
 
@@ -162,10 +169,10 @@ npm run smoke:vanilla
 ## Must Verify Before Pilot
 
 - Full smoke test passes on a faithful restored copy of the pilot-target
-  database. Local restored-copy smoke passed on 2026-05-19; the smoke harness
+  database. Local restored-copy smoke passed on 2026-05-25; the smoke harness
   must not be pointed at the live Windows/lab database.
 - Windows/lab database proof: the Windows production/pilot DB has
-  `public.schema_migrations` counts of `dima = 21` and `dalia = 27`; then the
+  `public.schema_migrations` counts of `dima = 21` and `dalia = 28`; then the
   `d031` verification query from `docs/instructions/apply_migrations.md`
   returns the expected values.
 - Manual destructive battery flow spot-check: guided battery delete is manually
