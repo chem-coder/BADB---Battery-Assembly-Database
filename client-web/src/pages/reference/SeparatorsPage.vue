@@ -1,338 +1,578 @@
 <script setup>
 /**
- * SeparatorsPage — "Сепараторы" (справочник)
- * Uses CrudTable + SaveIndicator (from Design System).
- * Inline create/edit form in Dialog — CrudTable handles the list.
+ * SeparatorsPage — "Сепараторы" (separator reference).
+ *
+ * Migrated to row-open + foundation pattern per V2 parity. See:
+ *   - docs/current/separators.md
+ *   - docs/instructions/frontend_parity_handoff.md §"Electrolytes And Separators"
+ *   - public/js/separators.js (vanilla reference)
+ *
+ * Mirrors the Electrolytes pattern with:
+ *   - 12 separator fields (incl. structure_id FK to separator_structure);
+ *   - typed delete `DELETE SEPARATOR <id>` with delete-check;
+ *   - print URL using `sep_id` parameter (asymmetric to other surfaces);
+ *   - inline DB-backed files block.
+ *
+ * The inline files block is a near-duplicate of ElectrolytesPage.vue.
+ * Extraction into `RecordFiles.vue` is the next cleanup PR after this
+ * migration lands.
  */
-import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { useToast } from 'primevue/usetoast'
-import api from '@/services/api'
-import { toastApiError } from '@/utils/errorClassifier'
-import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
-import CrudTable from '@/components/CrudTable.vue'
-import EntityMeta from '@/components/EntityMeta.vue'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Textarea from 'primevue/textarea'
-import Select from 'primevue/select'
+import { ref, watch, onMounted } from 'vue';
+import api from '@/services/api';
+import { usePrintHandlers } from '@/composables/usePrintHandlers';
 
-const toast = useToast()
-const crudTable = ref(null)
+import RowOpenPage from '@/components/parity/RowOpenPage.vue';
+import OpenedRecordHeader from '@/components/parity/OpenedRecordHeader.vue';
+import EditableTitle from '@/components/parity/EditableTitle.vue';
+import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue';
+import { useRowOpenForm } from '@/composables/useRowOpenForm';
 
-// ── Data ───────────────────────────────────────────────────────────────
-const separators = ref([])
-const structures = ref([])
-const loading = ref(false)
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
+import Textarea from 'primevue/textarea';
+import Select from 'primevue/select';
+import DatePicker from 'primevue/datepicker';
 
-async function loadSeparators() {
-  loading.value = true
+// ── Constants ────────────────────────────────────────────────────────
+const STATUS_OPTIONS = [
+  { value: 'available', label: 'доступен' },
+  { value: 'used',      label: 'использован' },
+  { value: 'scrap',     label: 'брак' },
+];
+
+const AIR_PERM_UNITS = [
+  { value: '',          label: '— ед. изм. —' },
+  { value: 'Gurley_s',  label: 'Gurley, с' },
+  { value: 'cm3/cm2/s', label: 'см³/(см²·с)' },
+];
+
+// ── List + structures ────────────────────────────────────────────────
+const separators = ref([]);
+const structures = ref([]);
+const loading = ref(false);
+
+async function loadList() {
+  loading.value = true;
   try {
-    const { data } = await api.get('/api/separators')
-    separators.value = data
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось загрузить сепараторы')
+    const { data } = await api.get('/api/separators');
+    separators.value = data;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function loadStructures() {
-  try {
-    const { data } = await api.get('/api/structures')
-    structures.value = data
-  } catch {}
+  const { data } = await api.get('/api/structures');
+  structures.value = data || [];
 }
 
-onMounted(() => { loadSeparators(); loadStructures() })
+onMounted(() => {
+  loadList();
+  loadStructures();
+});
 
-// ── Column config ──────────────────────────────────────────────────────
+const structureOptions = ref([]);
+watch(structures, (list) => {
+  structureOptions.value = list.map((s) => ({ value: s.sep_str_id, label: s.name }));
+});
+
+// ── Form ─────────────────────────────────────────────────────────────
+function emptyForm() {
+  return {
+    name: '',
+    supplier: '',
+    brand: '',
+    batch: '',
+    structure_id: null,
+    air_perm: '',
+    air_perm_units: '',
+    thickness_um: '',
+    porosity: '',
+    comments: '',
+    status: 'available',
+    depleted_at: null,
+  };
+}
+
+function asNumberOrNull(v) {
+  if (v === '' || v == null) return null;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+}
+
+function asDateOrNull(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return v;
+}
+
+async function loadOne(id) {
+  const item = separators.value.find((s) => s.separator_id === id);
+  if (!item) throw new Error(`Сепаратор #${id} не найден`);
+  return {
+    item,
+    form: {
+      name: item.name || '',
+      supplier: item.supplier || '',
+      brand: item.brand || '',
+      batch: item.batch || '',
+      structure_id: item.structure_id ?? null,
+      air_perm: item.air_perm ?? '',
+      air_perm_units: item.air_perm_units || '',
+      thickness_um: item.thickness_um ?? '',
+      porosity: item.porosity ?? '',
+      comments: item.comments || '',
+      status: item.status || 'available',
+      depleted_at: item.depleted_at ? new Date(item.depleted_at) : null,
+    },
+  };
+}
+
+async function saveOne(form, mode, currentId) {
+  const payload = {
+    name: form.name.trim(),
+    supplier: form.supplier || null,
+    brand: form.brand || null,
+    batch: form.batch || null,
+    structure_id: form.structure_id,
+    air_perm: asNumberOrNull(form.air_perm),
+    air_perm_units: form.air_perm_units || null,
+    thickness_um: asNumberOrNull(form.thickness_um),
+    porosity: asNumberOrNull(form.porosity),
+    comments: form.comments || null,
+    status: form.status,
+    depleted_at: asDateOrNull(form.depleted_at),
+  };
+
+  let response;
+  if (mode === 'create') {
+    response = await api.post('/api/separators', payload);
+  } else {
+    response = await api.put(`/api/separators/${currentId}`, payload);
+  }
+  return response.data;
+}
+
+function validate(form) {
+  if (!form.name?.trim()) return 'Заполните название сепаратора';
+  if (!form.structure_id) return 'Выберите структуру сепаратора';
+  return true;
+}
+
+// ── Foundation hook ──────────────────────────────────────────────────
+const ctx = useRowOpenForm({
+  entityType: 'separators',
+  idField: 'separator_id',
+  emptyForm,
+  validate,
+  loadOne,
+  saveOne,
+  list: { ref: separators, load: loadList },
+  deletePhrase: (id) => `DELETE SEPARATOR ${id}`,
+  hasDeleteCheck: true,
+  deleteMessages: {
+    success: 'Сепаратор удалён',
+  },
+});
+
+// ── Files (inline, identical pattern to Electrolytes) ────────────────
+// Candidate for foundation extraction into RecordFiles.vue.
+const files = ref([]);
+const filesLoading = ref(false);
+const filesStatus = ref(null);
+let filesStatusTimer = null;
+const fileInputEl = ref(null);
+
+async function loadFiles(id) {
+  if (id == null) {
+    files.value = [];
+    return;
+  }
+  filesLoading.value = true;
+  try {
+    const { data } = await api.get(`/api/separators/${id}/files`);
+    files.value = data || [];
+  } catch (err) {
+    files.value = [];
+    setFilesStatus(err?.response?.data?.error || 'Ошибка загрузки файлов', 'error');
+  } finally {
+    filesLoading.value = false;
+  }
+}
+
+function setFilesStatus(message, tone = 'info') {
+  if (filesStatusTimer) clearTimeout(filesStatusTimer);
+  filesStatus.value = { message, tone };
+  filesStatusTimer = setTimeout(() => { filesStatus.value = null; }, 5000);
+}
+
+watch(
+  () => ctx.currentId.value,
+  (id) => loadFiles(id),
+  { immediate: true }
+);
+
+async function onFileSelected(event) {
+  const input = event.target;
+  if (!input.files || input.files.length === 0) return;
+  if (ctx.currentId.value == null) {
+    setFilesStatus('Сохраните запись перед загрузкой файлов', 'error');
+    input.value = '';
+    return;
+  }
+
+  const entries = [];
+  for (const file of Array.from(input.files)) {
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer).reduce((s, b) => s + String.fromCharCode(b), '')
+    );
+    entries.push({
+      file_name: file.name,
+      mime_type: file.type || 'application/octet-stream',
+      file_content_base64: base64,
+    });
+  }
+
+  try {
+    await api.post(`/api/separators/${ctx.currentId.value}/files`, { entries });
+    setFilesStatus('Файл загружен', 'ok');
+    await loadFiles(ctx.currentId.value);
+  } catch (err) {
+    setFilesStatus(err?.response?.data?.error || 'Ошибка загрузки файла', 'error');
+  } finally {
+    input.value = '';
+  }
+}
+
+async function onFileDelete(fileId) {
+  if (!window.confirm('Удалить файл?')) return;
+  try {
+    await api.delete(`/api/separators/files/${fileId}`);
+    setFilesStatus('Файл удалён', 'ok');
+    await loadFiles(ctx.currentId.value);
+  } catch (err) {
+    setFilesStatus(err?.response?.data?.error || 'Ошибка удаления файла', 'error');
+  }
+}
+
+function downloadUrl(file) {
+  return file.download_url || `/api/separators/files/${file.separator_file_id}/download`;
+}
+
+function formatFileSize(bytes) {
+  if (bytes == null) return '';
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} МБ`;
+}
+
+// ── Filters ──────────────────────────────────────────────────────────
+const filters = ref([
+  { field: 'text', type: 'text', placeholder: 'Название, поставщик, бренд...', label: 'Поиск' },
+  {
+    field: 'status',
+    type: 'select',
+    label: 'Статус',
+    emptyOption: 'Все статусы',
+    options: STATUS_OPTIONS,
+  },
+]);
+
+// Add structure filter once structures load.
+watch(structureOptions, (opts) => {
+  const f = {
+    field: 'structure_id',
+    type: 'select',
+    label: 'Структура',
+    emptyOption: 'Все структуры',
+    options: opts.map((o) => ({ value: String(o.value), label: o.label })),
+  };
+  const idx = filters.value.findIndex((x) => x.field === 'structure_id');
+  if (idx >= 0) filters.value.splice(idx, 1, f);
+  else filters.value.push(f);
+});
+
+function textHaystack(row) {
+  return [
+    row.name,
+    row.supplier,
+    row.brand,
+    row.batch,
+    row.structure_name,
+    row.comments,
+  ].filter(Boolean).join(' ');
+}
+
+// ── Columns ──────────────────────────────────────────────────────────
 const columns = [
-  { field: 'name',            header: 'Название',     minWidth: '120px' },
-  { field: 'supplier',        header: 'Поставщик',    minWidth: '90px',  width: '130px' },
-  { field: 'brand',           header: 'Марка',         minWidth: '70px',  width: '110px' },
-  { field: 'thickness_um',    header: 'Толщина, мкм',  minWidth: '80px',  width: '120px' },
-  { field: 'porosity',        header: 'Пористость, %', minWidth: '80px',  width: '120px' },
-  { field: 'status',          header: 'Статус',        minWidth: '80px',  width: '115px' },
-  { field: 'created_by_name', header: 'Оператор',      minWidth: '90px',  width: '130px' },
-]
+  { field: 'name', header: 'Название' },
+  { field: 'structure_name', header: 'Структура', width: '160px' },
+  { field: 'supplier', header: 'Поставщик', width: '140px' },
+  { field: 'brand', header: 'Бренд', width: '120px' },
+  { field: 'thickness_um', header: 'Толщина, мкм', width: '120px' },
+  { field: 'status', header: 'Статус', width: '120px' },
+];
 
-// ── Save indicator (delete flow) ──────────────────────────────────────
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
-
-function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
+function statusLabel(s) {
+  return STATUS_OPTIONS.find((o) => o.value === s)?.label || s || '—';
 }
 
-async function confirmSave() {
-  try {
-    for (const item of pendingDelete.value) {
-      await api.delete(`/api/separators/${item.sep_id}`)
-    }
-    pendingDelete.value = []
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
-    crudTable.value?.clearSelection()
-    await loadSeparators()
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось удалить')
-  }
+function formatMeta(item) {
+  if (!item) return '';
+  const parts = [`ID: ${item.separator_id}`];
+  if (item.structure_name) parts.push(`структура: ${item.structure_name}`);
+  if (item.status) parts.push(`статус: ${statusLabel(item.status)}`);
+  return parts.join(' · ');
 }
 
-function discardChanges() {
-  pendingDelete.value = []
-  saveState.value = 'idle'
-  crudTable.value?.clearSelection()
-}
-
-onUnmounted(() => clearTimeout(saveTimer))
-
-// ── Form (Dialog) ─────────────────────────────────────────────────────
-const formVisible = ref(false)
-const mode = ref(null)
-const currentId = ref(null)
-// Full row of the entity being edited — fed to EntityMeta for the
-// "Создано: ФИО, дата" + "Изменено: ФИО, дата" read-only audit trail.
-const currentItem = ref(null)
-
-// `created_by` is NOT part of the form — backend forces it from the
-// authenticated user (req.user.userId, see routes/separators.js). The
-// existing creator is shown read-only via EntityMeta when available.
-const form = ref({
-  name: '',
-  supplier: '',
-  brand: '',
-  batch: '',
-  structure_id: '',
-  air_perm: '',
-  air_perm_units: '',
-  thickness_um: '',
-  porosity: '',
-  comments: '',
-  status: 'available',
-  depleted_at: '',
-})
-
-function resetForm() {
-  form.value = {
-    name: '', supplier: '', brand: '', batch: '', structure_id: '',
-    air_perm: '', air_perm_units: '', thickness_um: '', porosity: '',
-    comments: '', status: 'available', depleted_at: '',
-  }
-  mode.value = null
-  currentId.value = null
-  currentItem.value = null
-  formVisible.value = false
-}
-
-function openCreate() {
-  resetForm()
-  mode.value = 'create'
-  formVisible.value = true
-}
-
-function openEdit(sep) {
-  mode.value = 'edit'
-  currentId.value = sep.sep_id
-  currentItem.value = sep
-  form.value = {
-    name: sep.name || '',
-    supplier: sep.supplier || '',
-    brand: sep.brand || '',
-    batch: sep.batch || '',
-    structure_id: sep.structure_id || '',
-    air_perm: sep.air_perm ?? '',
-    air_perm_units: sep.air_perm_units || '',
-    thickness_um: sep.thickness_um ?? '',
-    porosity: sep.porosity ?? '',
-    comments: sep.comments || '',
-    status: sep.status || 'available',
-    depleted_at: sep.depleted_at ? sep.depleted_at.slice(0, 10) : '',
-  }
-  formVisible.value = true
-}
-
-// Hide depleted_at when status is 'available'
-watch(() => form.value.status, (val) => {
-  if (val === 'available') form.value.depleted_at = ''
-})
-
-async function saveSeparator() {
-  if (!mode.value) return
-  if (!form.value.name?.trim()) {
-    toast.add({ severity: 'warn', summary: 'Заполните название', life: 3000 })
-    return
-  }
-
-  const payload = { ...form.value }
-
-  try {
-    if (mode.value === 'create') {
-      await api.post('/api/separators', payload)
-      toast.add({ severity: 'success', summary: 'Сепаратор создан', life: 3000 })
-    } else {
-      await api.put(`/api/separators/${currentId.value}`, payload)
-      toast.add({ severity: 'success', summary: 'Изменения сохранены', life: 3000 })
-    }
-    resetForm()
-    await loadSeparators()
-  } catch (err) {
-    toastApiError(toast, err, 'Ошибка сохранения')
-  }
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────
-function statusLabel(status) {
-  const map = { available: 'в наличии', used: 'израсходован', scrap: 'списан' }
-  return map[status] || status || '—'
-}
+// ── List-row actions ─────────────────────────────────────────────────
+const { onRowPrint, onHeaderPrint } = usePrintHandlers('separators', ctx);
 </script>
 
 <template>
-  <div class="separators-page">
+  <RowOpenPage
+    title="Сепараторы"
+    icon="pi pi-th-large"
+    add-placeholder="+ Добавить сепаратор"
+    :list="separators"
+    :columns="columns"
+    :filters="filters"
+    :row-actions="['print', 'duplicate']"
+    :current-id="ctx.currentId.value"
+    id-field="separator_id"
+    :loading="loading"
+    :text-haystack="textHaystack"
+    @create="(name) => ctx.openCreate(name)"
+    @row-click="ctx.openEdit"
+    @row-print="onRowPrint"
+    @row-duplicate="ctx.openDuplicate"
+  >
+    <template #col-name="{ data }">
+      <strong>{{ data.name }}</strong>
+    </template>
+    <template #col-structure_name="{ data }">
+      <span class="meta-text">{{ data.structure_name || '—' }}</span>
+    </template>
+    <template #col-supplier="{ data }">
+      <span class="meta-text">{{ data.supplier || '' }}</span>
+    </template>
+    <template #col-brand="{ data }">
+      <span class="meta-text">{{ data.brand || '' }}</span>
+    </template>
+    <template #col-thickness_um="{ data }">
+      <span class="meta-text">{{ data.thickness_um != null ? data.thickness_um : '' }}</span>
+    </template>
+    <template #col-status="{ data }">
+      <span :class="['status-pill', `status-pill--${data.status || 'unknown'}`]">
+        {{ statusLabel(data.status) }}
+      </span>
+    </template>
 
-    <PageHeader title="Сепараторы" icon="pi pi-minus">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
-        />
-      </template>
-    </PageHeader>
-
-    <CrudTable
-      ref="crudTable"
-      :columns="columns"
-      :data="separators"
-      :loading="loading"
-      id-field="sep_id"
-      table-name="Сепараторы"
-      show-add
-      row-clickable
-      @add="openCreate"
-      @delete="onDelete"
-      @row-click="(data) => openEdit(data)"
-    >
-      <!-- Custom cell: Название (bold) -->
-      <template #col-name="{ data }">
-        <strong>{{ data.name || '— без названия —' }}</strong>
-      </template>
-
-      <!-- Custom cell: Толщина -->
-      <template #col-thickness_um="{ data }">
-        {{ data.thickness_um != null ? data.thickness_um : '—' }}
-      </template>
-
-      <!-- Custom cell: Пористость -->
-      <template #col-porosity="{ data }">
-        {{ data.porosity != null ? data.porosity : '—' }}
-      </template>
-
-      <!-- Custom cell: Статус -->
-      <template #col-status="{ data }">
-        <span :class="['status-pill', `status-pill--${data.status || 'available'}`]">
-          {{ statusLabel(data.status) }}
-        </span>
-      </template>
-    </CrudTable>
-
-    <!-- ── Create / Edit Dialog ── -->
-    <Dialog
-      v-model:visible="formVisible"
-      :header="mode === 'create' ? 'Новый сепаратор' : 'Редактирование сепаратора'"
-      :style="{ width: '560px' }"
-      modal
-      @hide="resetForm"
-    >
-      <form class="form-grid" @submit.prevent="saveSeparator">
-        <label>Название</label>
-        <InputText v-model="form.name" placeholder="Название сепаратора" class="w-full" />
-
-        <label>Поставщик</label>
-        <InputText v-model="form.supplier" placeholder="Celgard" class="w-full" />
-
-        <label>Марка</label>
-        <InputText v-model="form.brand" placeholder="2320" class="w-full" />
-
-        <label>Партия</label>
-        <InputText v-model="form.batch" placeholder="A1" class="w-full" />
-
-        <label>Тип структуры</label>
-        <Select v-model="form.structure_id" :options="structures" optionLabel="name" optionValue="sep_str_id" placeholder="— выбрать —" class="w-full" />
-
-        <label>Воздушная проницаемость</label>
-        <InputText v-model="form.air_perm" placeholder="20" class="w-full" />
-
-        <label>Ед. измерения</label>
-        <InputText v-model="form.air_perm_units" placeholder="s/100 мл" class="w-full" />
-
-        <label>Толщина, мкм</label>
-        <InputText v-model="form.thickness_um" placeholder="20" class="w-full" />
-
-        <label>Пористость, %</label>
-        <InputText v-model="form.porosity" placeholder="40" class="w-full" />
-
-        <label>Статус</label>
-        <Select
-          v-model="form.status"
-          :options="[{ label: 'в наличии', value: 'available' }, { label: 'израсходован', value: 'used' }, { label: 'списан', value: 'scrap' }]"
-          optionLabel="label"
-          optionValue="value"
-          class="w-full"
-        />
-
-        <template v-if="form.status !== 'available'">
-          <label>Дата списания</label>
-          <InputText v-model="form.depleted_at" type="date" class="w-full" />
+    <template #opened-record>
+      <OpenedRecordHeader
+        :meta="formatMeta(ctx.currentItem.value)"
+        :dirty="ctx.isDirty.value"
+        :status="ctx.status.value"
+        :show-print="ctx.mode.value === 'edit'"
+        :show-delete="ctx.mode.value === 'edit'"
+        @save="ctx.save"
+        @print="onHeaderPrint"
+        @exit="ctx.exit"
+        @delete="ctx.deleteRecord"
+      >
+        <template #title>
+          <EditableTitle
+            v-model="ctx.form.value.name"
+            placeholder="Новый сепаратор"
+            class="separator-title"
+          />
         </template>
+      </OpenedRecordHeader>
 
-        <label>Комментарии</label>
-        <Textarea v-model="form.comments" rows="3" placeholder="Замечания, методики" class="w-full" />
-      </form>
+      <div class="separator-form">
+        <div class="form-grid">
+          <label for="sep-structure">Структура</label>
+          <Select
+            id="sep-structure"
+            v-model="ctx.form.value.structure_id"
+            :options="structureOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="— выбрать структуру —"
+            class="w-full"
+          />
 
-      <EntityMeta
-        v-if="mode === 'edit' && currentItem"
-        :createdByName="currentItem.created_by_name"
-        :createdAt="currentItem.created_at"
-        :updatedByName="currentItem.updated_by_name"
-        :updatedAt="currentItem.updated_at"
-      />
+          <label for="sep-supplier">Поставщик</label>
+          <InputText
+            id="sep-supplier"
+            v-model="ctx.form.value.supplier"
+            placeholder="Поставщик"
+            class="w-full"
+          />
 
-      <template #footer>
-        <Button label="Отмена" severity="secondary" outlined @click="resetForm" />
-        <Button :label="mode === 'create' ? 'Создать' : 'Сохранить'" @click="saveSeparator" />
-      </template>
-    </Dialog>
+          <label for="sep-brand">Бренд</label>
+          <InputText
+            id="sep-brand"
+            v-model="ctx.form.value.brand"
+            placeholder="Торговая марка"
+            class="w-full"
+          />
 
-  </div>
+          <label for="sep-batch">Партия</label>
+          <InputText
+            id="sep-batch"
+            v-model="ctx.form.value.batch"
+            placeholder="Номер партии"
+            class="w-full"
+          />
+
+          <label for="sep-thickness">Толщина, мкм</label>
+          <InputText
+            id="sep-thickness"
+            v-model="ctx.form.value.thickness_um"
+            type="number"
+            class="w-full"
+          />
+
+          <label for="sep-porosity">Пористость, %</label>
+          <InputText
+            id="sep-porosity"
+            v-model="ctx.form.value.porosity"
+            type="number"
+            class="w-full"
+          />
+
+          <label for="sep-perm">Воздухопроницаемость</label>
+          <div class="perm-row">
+            <InputText
+              id="sep-perm"
+              v-model="ctx.form.value.air_perm"
+              type="number"
+              class="w-full"
+            />
+            <Select
+              v-model="ctx.form.value.air_perm_units"
+              :options="AIR_PERM_UNITS"
+              option-label="label"
+              option-value="value"
+              placeholder="— ед. изм. —"
+            />
+          </div>
+
+          <label for="sep-status">Статус</label>
+          <Select
+            id="sep-status"
+            v-model="ctx.form.value.status"
+            :options="STATUS_OPTIONS"
+            option-label="label"
+            option-value="value"
+            class="w-full"
+          />
+
+          <label for="sep-depleted">Исчерпан</label>
+          <DatePicker
+            id="sep-depleted"
+            v-model="ctx.form.value.depleted_at"
+            date-format="dd.mm.yy"
+            placeholder="дд.мм.гггг"
+            class="w-full"
+            show-icon
+          />
+
+          <label for="sep-comments">Комментарии</label>
+          <Textarea
+            id="sep-comments"
+            v-model="ctx.form.value.comments"
+            rows="3"
+            placeholder="Особенности применения, источник, замечания"
+            class="w-full"
+          />
+        </div>
+
+        <!-- ── Files section (only for saved records) ── -->
+        <div v-if="ctx.mode.value === 'edit'" class="files-section">
+          <div class="section-header">
+            <span class="section-title">Файлы</span>
+            <span v-if="filesStatus" :class="['files-status', `files-status--${filesStatus.tone}`]">
+              {{ filesStatus.message }}
+            </span>
+          </div>
+
+          <div v-if="filesLoading" class="files-loading">Загрузка файлов...</div>
+          <ul v-else-if="files.length > 0" class="files-list">
+            <li v-for="f in files" :key="f.separator_file_id" class="file-row">
+              <a :href="downloadUrl(f)" target="_blank" rel="noopener" class="file-link">
+                {{ f.file_name }}
+              </a>
+              <span class="file-meta">
+                {{ f.mime_type || '' }}
+                <template v-if="f.file_size_bytes != null">
+                  · {{ formatFileSize(f.file_size_bytes) }}
+                </template>
+              </span>
+              <Button
+                icon="pi pi-trash"
+                severity="danger"
+                text
+                size="small"
+                title="Удалить файл"
+                @click="onFileDelete(f.separator_file_id)"
+              />
+            </li>
+          </ul>
+          <p v-else class="files-empty">Файлы не прикреплены.</p>
+
+          <div class="files-upload-row">
+            <input
+              ref="fileInputEl"
+              type="file"
+              multiple
+              class="hidden-input"
+              @change="onFileSelected"
+            />
+            <Button
+              icon="pi pi-upload"
+              label="Загрузить файлы"
+              severity="secondary"
+              outlined
+              size="small"
+              @click="fileInputEl?.click()"
+            />
+          </div>
+        </div>
+      </div>
+    </template>
+  </RowOpenPage>
+
+  <TypedDeleteConfirm
+    :visible="ctx.deleteModalVisible.value"
+    :phrase="ctx.deleteModalPhrase.value"
+    description="Удаление сепаратора необратимо."
+    @update:visible="(v) => { if (!v) ctx.cancelDelete() }"
+    @confirmed="ctx.confirmDelete"
+    @cancelled="ctx.cancelDelete"
+  />
 </template>
 
 <style scoped>
-.separators-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem;
+.separator-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #003274;
+}
+.separator-form {
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 16px;
 }
-.separators-page :deep(.page-header) {
-  margin-bottom: 3px !important;
-}
-
-/* ── Form styles ── */
 .form-grid {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: 180px 1fr;
   gap: 10px 16px;
   align-items: center;
+  max-width: 700px;
 }
 .form-grid label {
   font-size: 13px;
@@ -340,28 +580,58 @@ function statusLabel(status) {
   color: #003274;
 }
 .w-full { width: 100%; }
-/* ── Page-specific cell styles ── */
+.meta-text { color: #6B7280; font-size: 13px; }
+.perm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 8px;
+}
+
 .status-pill {
   display: inline-flex;
-  align-items: center;
   padding: 2px 10px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
 }
-.status-pill--available {
-  background: rgba(82, 201, 166, 0.14);
-  color: #1d7a5f;
-  border: 0.5px solid rgba(82, 201, 166, 0.35);
+.status-pill--available { background: rgba(82, 201, 166, 0.14); color: #1d7a5f; }
+.status-pill--used { background: rgba(0, 50, 116, 0.06); color: #003274; }
+.status-pill--scrap { background: rgba(176, 0, 32, 0.08); color: #b00020; }
+.status-pill--unknown { color: #6B7280; }
+
+.files-section {
+  border-top: 1px solid rgba(0, 50, 116, 0.1);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 700px;
 }
-.status-pill--used {
-  background: rgba(211, 167, 84, 0.12);
-  color: #8a6d2b;
-  border: 0.5px solid rgba(211, 167, 84, 0.3);
+.section-header { display: flex; justify-content: space-between; align-items: center; }
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(0, 50, 116, 0.5);
 }
-.status-pill--scrap {
-  background: rgba(176, 0, 32, 0.08);
-  color: #b00020;
-  border: 0.5px solid rgba(176, 0, 32, 0.15);
+.files-status { font-size: 12px; padding: 2px 8px; border-radius: 3px; }
+.files-status--ok { background: #f0fdf4; color: #166534; }
+.files-status--error { background: #fef2f2; color: #b91c1c; }
+.files-status--info { background: #eff6ff; color: #1e40af; }
+.files-loading, .files-empty { margin: 4px 0; font-size: 13px; color: #6B7280; }
+.files-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 3px;
 }
+.file-row:hover { background: rgba(0, 50, 116, 0.04); }
+.file-link { color: #003274; font-size: 13px; text-decoration: none; flex: 1; }
+.file-link:hover { text-decoration: underline; }
+.file-meta { font-size: 12px; color: #6B7280; }
+.hidden-input { display: none; }
+.files-upload-row { margin-top: 4px; }
 </style>
