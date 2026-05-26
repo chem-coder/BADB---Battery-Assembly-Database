@@ -1,425 +1,556 @@
 <script setup>
 /**
- * UsersPage — "Пользователи" (администрирование)
- * Uses CrudTable + SaveIndicator (from Design System).
- * Simple CRUD with Dialog for create/edit.
+ * UsersPage — "Пользователи" (administration).
+ *
+ * Migrated to row-open + foundation pattern per V2 parity. See:
+ *   - docs/current/users.md
+ *   - docs/instructions/frontend_parity_handoff.md §"Recipes And Users Page Pattern"
+ *   - public/js/users.js (vanilla reference)
+ *
+ * Surface notes (vanilla parity):
+ *   - admin can create users; non-admin cannot;
+ *   - admin can edit any user; others can edit only themselves;
+ *   - only admin can change another user's role;
+ *   - password reset uses `reset_password: true` toggle in payload;
+ *   - delete: admin can delete anyone, others can delete only self;
+ *     no delete-check route, no typed phrase; backend returns 409 with
+ *     dependency conflicts on blocked delete;
+ *   - no print, no duplicate, no files.
  */
-import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useToast } from 'primevue/usetoast'
-import api from '@/services/api'
-import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
-import CrudTable from '@/components/CrudTable.vue'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Select from 'primevue/select'
+import { ref, computed, onMounted } from 'vue';
+import api from '@/services/api';
+import { useAuth } from '@/composables/useAuth';
 
-const toast = useToast()
-const crudTable = ref(null)
+import RowOpenPage from '@/components/parity/RowOpenPage.vue';
+import OpenedRecordHeader from '@/components/parity/OpenedRecordHeader.vue';
+import EditableTitle from '@/components/parity/EditableTitle.vue';
+import { useRowOpenForm } from '@/composables/useRowOpenForm';
 
-// ── Data ───────────────────────────────────────────────────────────────
-const users = ref([])
-const departments = ref([])
-const loading = ref(false)
-const UNDECIDED_LABEL = 'Не определено'
-const roleOptions = [
-  { label: 'Сотрудник', value: 'employee' },
-  { label: 'Руководитель', value: 'lead' },
-  { label: 'Администратор', value: 'admin' },
-]
-const activeOptions = [
-  { label: 'активен', value: true },
-  { label: 'неактивен', value: false },
-]
-const departmentOptions = computed(() => [
-  { department_id: null, name: UNDECIDED_LABEL },
-  ...departments.value,
-])
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
+import Password from 'primevue/password';
+import Select from 'primevue/select';
 
-async function loadUsers() {
-  loading.value = true
+const { currentUser, isAdmin } = useAuth();
+
+// ── Constants ────────────────────────────────────────────────────────
+const ROLE_OPTIONS = [
+  { value: 'employee', label: 'Сотрудник' },
+  { value: 'lead',     label: 'Руководитель' },
+  { value: 'admin',    label: 'Администратор' },
+];
+
+const ACTIVE_OPTIONS = [
+  { value: true,  label: 'активен' },
+  { value: false, label: 'неактивен' },
+];
+
+const UNDECIDED_DEPARTMENT_LABEL = 'Не определено';
+
+// ── List + departments ──────────────────────────────────────────────
+const users = ref([]);
+const departments = ref([]);
+const loading = ref(false);
+
+async function loadList() {
+  loading.value = true;
   try {
-    const { data } = await api.get('/api/users')
-    users.value = data.sort((a, b) => a.name.localeCompare(b.name))
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось загрузить пользователей', life: 3000 })
+    const { data } = await api.get('/api/users');
+    users.value = data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function loadDepartments() {
-  try {
-    const { data } = await api.get('/api/departments')
-    departments.value = data
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось загрузить отделы', life: 3000 })
-  }
+  const { data } = await api.get('/api/departments');
+  departments.value = data;
 }
 
-onMounted(() => { loadUsers(); loadDepartments() })
+onMounted(() => {
+  loadList();
+  loadDepartments();
+});
 
-// ── Column config ──────────────────────────────────────────────────────
-const columns = [
-  { field: 'name',            header: 'Имя',        minWidth: '150px' },
-  { field: 'login',           header: 'Логин',      minWidth: '100px', width: '140px' },
-  { field: 'position',        header: 'Должность',  minWidth: '120px', width: '200px' },
-  { field: 'department_name', header: 'Отдел',       minWidth: '80px',  width: '120px' },
-  { field: 'role',            header: 'Роль',        minWidth: '70px',  width: '100px' },
-  { field: 'active',          header: 'Статус',      minWidth: '70px',  width: '100px' },
-  { field: 'last_login',      header: 'Последний вход', minWidth: '90px', width: '140px' },
-]
-
-// ── Save indicator (delete flow) ──────────────────────────────────────
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
-
-function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
-}
-
-async function confirmSave() {
-  try {
-    for (const item of pendingDelete.value) {
-      await api.delete(`/api/users/${item.user_id}`)
-    }
-    pendingDelete.value = []
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
-    crudTable.value?.clearSelection()
-    await loadUsers()
-  } catch {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: 'Не удалось удалить', life: 3000 })
-  }
-}
-
-function discardChanges() {
-  pendingDelete.value = []
-  saveState.value = 'idle'
-  crudTable.value?.clearSelection()
-}
-
-onUnmounted(() => clearTimeout(saveTimer))
-
-// ── Form (Dialog) ─────────────────────────────────────────────────────
-const formVisible = ref(false)
-const mode = ref(null)
-const currentId = ref(null)
-const passwordResetVisible = ref(false)
-
-const form = ref({
-  name: '',
-  login: '',
-  password: '',
-  confirmPassword: '',
-  active: true,
-  role: '',
-  position: '',
-  department_id: '',
-})
-
-function resetForm() {
-  form.value = {
+// ── Form ─────────────────────────────────────────────────────────────
+// Password fields and reset_password flag are not part of dirty
+// tracking — they are managed separately so toggling the reset UI
+// does not flag the form as dirty until the user types something.
+function emptyForm() {
+  return {
     name: '',
     login: '',
-    password: '',
-    confirmPassword: '',
-    active: true,
     role: '',
     position: '',
-    department_id: '',
-  }
-  mode.value = null
-  currentId.value = null
-  passwordResetVisible.value = false
-  formVisible.value = false
-}
-
-function openCreate() {
-  resetForm()
-  mode.value = 'create'
-  formVisible.value = true
-}
-
-function openEdit(user) {
-  mode.value = 'edit'
-  currentId.value = user.user_id
-  form.value = {
-    name: user.name || '',
-    login: user.login || '',
+    department_id: null,
+    active: true,
+    // Password reset state, only sent to server when explicitly toggled
+    reset_password: false,
     password: '',
-    confirmPassword: '',
-    active: user.active,
-    role: user.role || '',
-    position: user.position || '',
-    department_id: user.department_id ?? null,
-  }
-  formVisible.value = true
+    confirm_password: '',
+  };
 }
 
-function openPasswordReset() {
-  passwordResetVisible.value = true
+async function loadOne(id) {
+  // GET /api/users/:id is not a standard route — the list endpoint returns
+  // everything we need. Look up in the in-memory list.
+  const user = users.value.find((u) => u.user_id === id);
+  if (!user) throw new Error(`Пользователь #${id} не найден`);
+  return {
+    item: user,
+    form: {
+      name: user.name || '',
+      login: user.login || '',
+      role: user.role || '',
+      position: user.position || '',
+      department_id: user.department_id ?? null,
+      active: user.active !== false,
+      reset_password: false,
+      password: '',
+      confirm_password: '',
+    },
+  };
 }
 
-function cancelPasswordReset() {
-  passwordResetVisible.value = false
-  form.value.password = ''
-  form.value.confirmPassword = ''
+async function saveOne(form, mode, currentId) {
+  const payload = {
+    name: form.name.trim(),
+    login: form.login.trim(),
+    role: form.role,
+    position: form.position.trim(),
+    department_id: form.department_id,
+    active: form.active,
+  };
+
+  // Password is sent on create OR when explicit reset is toggled on edit.
+  if (mode === 'create' || form.reset_password) {
+    payload.password = form.password;
+  }
+  if (mode === 'edit' && form.reset_password) {
+    payload.reset_password = true;
+  }
+
+  let response;
+  if (mode === 'create') {
+    response = await api.post('/api/users', payload);
+  } else {
+    response = await api.put(`/api/users/${currentId}`, payload);
+  }
+  return response.data;
 }
 
-async function saveUser() {
-  if (!mode.value) return
-  const name = form.value.name?.trim()
-  if (!name) {
-    toast.add({ severity: 'warn', summary: 'Заполните имя', life: 3000 })
-    return
+function validate(form) {
+  if (!form.name?.trim()) return 'Заполните имя';
+  if (!form.login?.trim()) return 'Заполните логин';
+  if (!form.role) return 'Выберите роль';
+  if (!form.position?.trim()) return 'Заполните должность';
+  if (form.department_id === '' || form.department_id === undefined) {
+    return 'Выберите отдел (можно "Не определено")';
   }
 
-  if (!form.value.login?.trim()) {
-    toast.add({ severity: 'warn', summary: 'Заполните логин', life: 3000 })
-    return
+  // Mode-dependent password validation runs against the in-progress form;
+  // we don't have direct access to mode here. The composable's mode value
+  // is closure-captured below via outer ref.
+  if (mode.value === 'create') {
+    if (!form.password) return 'Заполните пароль';
+    if (form.password.length < 6) return 'Пароль должен быть не короче 6 символов';
   }
-  if (mode.value === 'create' && !form.value.password) {
-    toast.add({ severity: 'warn', summary: 'Заполните пароль', life: 3000 })
-    return
-  }
-  if ((mode.value === 'create' || passwordResetVisible.value) && form.value.password.length < 6) {
-    toast.add({ severity: 'warn', summary: 'Пароль должен быть не короче 6 символов', life: 3000 })
-    return
-  }
-  if (mode.value === 'edit' && passwordResetVisible.value && form.value.password !== form.value.confirmPassword) {
-    toast.add({ severity: 'warn', summary: 'Пароли не совпадают', life: 3000 })
-    return
-  }
-  if (!form.value.role) {
-    toast.add({ severity: 'warn', summary: 'Выберите роль', life: 3000 })
-    return
-  }
-  if (!form.value.position?.trim()) {
-    toast.add({ severity: 'warn', summary: 'Заполните должность', life: 3000 })
-    return
-  }
-  if (form.value.department_id === '') {
-    toast.add({ severity: 'warn', summary: 'Выберите отдел', life: 3000 })
-    return
-  }
-
-  try {
-    const payload = {
-      name,
-      login: form.value.login.trim(),
-      active: form.value.active,
-      role: form.value.role,
-      position: form.value.position.trim(),
-      department_id: form.value.department_id,
+  if (mode.value === 'edit' && form.reset_password) {
+    if (!form.password || form.password.length < 6) {
+      return 'Пароль должен быть не короче 6 символов';
     }
-
-    if (mode.value === 'create' || passwordResetVisible.value) {
-      payload.password = form.value.password
+    if (form.password !== form.confirm_password) {
+      return 'Пароли не совпадают';
     }
-
-    if (mode.value === 'edit' && passwordResetVisible.value) {
-      payload.reset_password = true
-    }
-
-    if (mode.value === 'create') {
-      await api.post('/api/users', payload)
-      toast.add({ severity: 'success', summary: 'Пользователь создан', life: 3000 })
-    } else {
-      await api.put(`/api/users/${currentId.value}`, payload)
-      toast.add({ severity: 'success', summary: 'Изменения сохранены', life: 3000 })
-    }
-    resetForm()
-    await loadUsers()
-  } catch (err) {
-    toast.add({ severity: 'error', summary: 'Ошибка', detail: err.response?.data?.error || 'Ошибка сохранения', life: 3000 })
   }
+  return true;
+}
+
+// ── Foundation hook ──────────────────────────────────────────────────
+const ctx = useRowOpenForm({
+  entityType: 'users',
+  idField: 'user_id',
+  emptyForm,
+  validate,
+  loadOne,
+  saveOne,
+  list: { ref: users, load: loadList },
+  hasDeleteCheck: false,
+  // No typed delete phrase per vanilla.
+  deletePhrase: null,
+  deleteMessages: {
+    success: 'Пользователь удалён',
+    plainConfirm: 'Удалить пользователя? Действие необратимо.',
+  },
+});
+
+const mode = ctx.mode;
+
+// ── Permission gating ────────────────────────────────────────────────
+const canCreate = computed(() => isAdmin.value);
+
+function isSelfRecord() {
+  return ctx.currentItem.value?.user_id === currentUser.value?.userId;
+}
+
+const canEditCurrent = computed(() => {
+  if (mode.value === 'create') return isAdmin.value;
+  if (mode.value === 'edit') {
+    if (isAdmin.value) return true;
+    return isSelfRecord();
+  }
+  return false;
+});
+
+const canChangeRole = computed(() => {
+  // Only admin can change role of anyone (including self).
+  return isAdmin.value;
+});
+
+const canDeleteCurrent = computed(() => {
+  if (mode.value !== 'edit') return false;
+  if (isAdmin.value) return true;
+  return isSelfRecord();
+});
+
+// ── Filters ──────────────────────────────────────────────────────────
+const UNDECIDED_DEPARTMENT_FILTER = '__no_dept__';
+
+const departmentFilterOptions = computed(() => [
+  { value: UNDECIDED_DEPARTMENT_FILTER, label: UNDECIDED_DEPARTMENT_LABEL },
+  ...departments.value.map((d) => ({ value: String(d.department_id), label: d.name })),
+]);
+
+const filters = computed(() => [
+  { field: 'text', type: 'text', placeholder: 'Имя, логин, должность...', label: 'Поиск' },
+  {
+    field: 'role',
+    type: 'select',
+    label: 'Роль',
+    emptyOption: 'Все роли',
+    options: ROLE_OPTIONS,
+  },
+  {
+    field: 'department_id',
+    type: 'select',
+    label: 'Отдел',
+    emptyOption: 'Все отделы',
+    options: departmentFilterOptions.value,
+  },
+  {
+    field: 'active',
+    type: 'select',
+    label: 'Статус',
+    emptyOption: 'Все',
+    options: [
+      { value: 'true', label: 'Активные' },
+      { value: 'false', label: 'Неактивные' },
+    ],
+  },
+]);
+
+// Custom filter logic (department null + boolean cast for active).
+const filterState = ref({});
+function onFiltersChanged({ state }) {
+  filterState.value = state;
+}
+
+const filteredUsers = computed(() => {
+  const s = filterState.value;
+  if (!s || Object.values(s).every((v) => !v)) return users.value;
+
+  return users.value.filter((u) => {
+    if (s.role && u.role !== s.role) return false;
+    if (s.department_id) {
+      if (s.department_id === UNDECIDED_DEPARTMENT_FILTER) {
+        if (u.department_id != null) return false;
+      } else if (String(u.department_id) !== s.department_id) {
+        return false;
+      }
+    }
+    if (s.active === 'true' && u.active !== true) return false;
+    if (s.active === 'false' && u.active === true) return false;
+    if (s.text) {
+      const needle = String(s.text).toLowerCase();
+      const haystack = [u.name, u.login, u.position, u.department_name, u.role]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(needle)) return false;
+    }
+    return true;
+  });
+});
+
+// ── Department options (for form Select) ─────────────────────────────
+const departmentSelectOptions = computed(() => [
+  { value: null, label: '— ' + UNDECIDED_DEPARTMENT_LABEL + ' —' },
+  ...departments.value.map((d) => ({ value: d.department_id, label: d.name })),
+]);
+
+// ── Columns ──────────────────────────────────────────────────────────
+const columns = [
+  { field: 'name', header: 'Имя' },
+  { field: 'login', header: 'Логин', width: '140px' },
+  { field: 'position', header: 'Должность', width: '200px' },
+  { field: 'department_name', header: 'Отдел', width: '160px' },
+  { field: 'role', header: 'Роль', width: '110px' },
+  { field: 'active', header: 'Статус', width: '110px' },
+  { field: 'last_login', header: 'Последний вход', width: '160px' },
+];
+
+function roleLabel(role) {
+  return ROLE_OPTIONS.find((o) => o.value === role)?.label || role;
+}
+
+function formatMeta(item) {
+  if (!item) return '';
+  const parts = [`ID: ${item.user_id}`];
+  if (item.last_login) {
+    parts.push(`последний вход: ${new Date(item.last_login).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}`);
+  }
+  return parts.join(' · ');
+}
+
+// ── Password reset toggle ────────────────────────────────────────────
+function togglePasswordReset() {
+  if (ctx.form.value.reset_password) {
+    ctx.form.value.reset_password = false;
+    ctx.form.value.password = '';
+    ctx.form.value.confirm_password = '';
+  } else {
+    ctx.form.value.reset_password = true;
+  }
+}
+
+function setPositionUndecided() {
+  ctx.form.value.position = UNDECIDED_DEPARTMENT_LABEL;
 }
 </script>
 
 <template>
-  <div class="users-page">
+  <RowOpenPage
+    title="Пользователи"
+    icon="pi pi-users"
+    :add-placeholder="canCreate ? '+ Добавить пользователя' : ''"
+    :list="filteredUsers"
+    :columns="columns"
+    :filters="filters"
+    :current-id="ctx.currentId.value"
+    id-field="user_id"
+    :loading="loading"
+    @create="(name) => ctx.openCreate(name)"
+    @row-click="ctx.openEdit"
+    @filters-changed="onFiltersChanged"
+  >
+    <template #col-name="{ data }">
+      <strong>{{ data.name }}</strong>
+    </template>
+    <template #col-login="{ data }">
+      <span class="meta-text">{{ data.login || '—' }}</span>
+    </template>
+    <template #col-position="{ data }">
+      <span class="meta-text">{{ data.position || '—' }}</span>
+    </template>
+    <template #col-department_name="{ data }">
+      {{ data.department_name || '—' }}
+    </template>
+    <template #col-role="{ data }">
+      <span :class="['role-badge', `role-badge--${data.role || 'unknown'}`]">
+        {{ data.role === 'admin' ? 'Админ' : data.role === 'lead' ? 'Лид' : 'Сотр.' }}
+      </span>
+    </template>
+    <template #col-active="{ data }">
+      <span :class="['status-pill', data.active ? 'status-pill--active' : 'status-pill--inactive']">
+        {{ data.active ? 'активен' : 'неактивен' }}
+      </span>
+    </template>
+    <template #col-last_login="{ data }">
+      <span class="meta-text">
+        {{ data.last_login ? new Date(data.last_login).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' }) : '—' }}
+      </span>
+    </template>
 
-    <PageHeader title="Пользователи" icon="pi pi-users">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
-        />
-      </template>
-    </PageHeader>
+    <template #opened-record>
+      <OpenedRecordHeader
+        :meta="formatMeta(ctx.currentItem.value)"
+        :dirty="ctx.isDirty.value"
+        :status="ctx.status.value"
+        :show-delete="canDeleteCurrent"
+        :save-disabled="!canEditCurrent"
+        @save="ctx.save"
+        @exit="ctx.exit"
+        @delete="ctx.deleteRecord"
+      >
+        <template #title>
+          <EditableTitle
+            v-model="ctx.form.value.name"
+            placeholder="Новый пользователь"
+            :disabled="!canEditCurrent"
+            class="user-title"
+          />
+        </template>
+      </OpenedRecordHeader>
 
-    <CrudTable
-      ref="crudTable"
-      :columns="columns"
-      :data="users"
-      :loading="loading"
-      id-field="user_id"
-      table-name="Пользователи"
-      show-add
-      row-clickable
-      @add="openCreate"
-      @delete="onDelete"
-      @row-click="(data) => openEdit(data)"
-    >
-      <template #col-name="{ data }">
-        <strong>{{ data.name }}</strong>
-      </template>
-      <template #col-login="{ data }">
-        <span class="login-text">{{ data.login || '—' }}</span>
-      </template>
-      <template #col-position="{ data }">
-        <span class="position-text">{{ data.position || '—' }}</span>
-      </template>
-      <template #col-department_name="{ data }">
-        {{ data.department_name || '—' }}
-      </template>
-      <template #col-role="{ data }">
-        <span :class="['role-badge', data.role === 'admin' ? 'role-badge--admin' : data.role === 'lead' ? 'role-badge--lead' : 'role-badge--employee']">
-          {{ data.role === 'admin' ? 'Админ' : data.role === 'lead' ? 'Лид' : 'Сотр.' }}
-        </span>
-      </template>
-      <template #col-active="{ data }">
-        <span :class="['status-pill', data.active ? 'status-pill--active' : 'status-pill--inactive']">
-          {{ data.active ? 'активен' : 'неактивен' }}
-        </span>
-      </template>
-      <template #col-last_login="{ data }">
-        <span class="last-login">{{ data.last_login ? new Date(data.last_login).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' }) : '—' }}</span>
-      </template>
-    </CrudTable>
+      <div class="user-form">
+        <div v-if="!canEditCurrent" class="readonly-notice">
+          Просмотр без редактирования: доступ к изменению ограничен.
+        </div>
 
-    <!-- ── Create / Edit Dialog ── -->
-    <Dialog
-      v-model:visible="formVisible"
-      :header="mode === 'create' ? 'Новый пользователь' : 'Редактирование пользователя'"
-      :style="{ width: '420px' }"
-      modal
-      @hide="resetForm"
-    >
-      <form class="form-grid" @submit.prevent="saveUser">
-        <label>Имя</label>
-        <InputText v-model="form.name" placeholder="Имя пользователя" class="w-full" />
+        <div class="form-grid">
+          <label for="user-login">Логин</label>
+          <InputText
+            id="user-login"
+            v-model="ctx.form.value.login"
+            placeholder="Логин"
+            class="w-full"
+            :disabled="!canEditCurrent"
+            autocomplete="off"
+          />
 
-        <label>Логин</label>
-        <InputText v-model="form.login" placeholder="Логин" class="w-full" />
+          <label for="user-role">Роль</label>
+          <Select
+            id="user-role"
+            v-model="ctx.form.value.role"
+            :options="ROLE_OPTIONS"
+            option-label="label"
+            option-value="value"
+            placeholder="Выберите роль"
+            class="w-full"
+            :disabled="!canEditCurrent || !canChangeRole"
+          />
 
-        <label v-if="mode === 'edit' && !passwordResetVisible"></label>
-        <Button
-          v-if="mode === 'edit' && !passwordResetVisible"
-          type="button"
-          label="Сбросить пароль"
-          severity="secondary"
-          outlined
-          @click="openPasswordReset"
-        />
+          <label for="user-position">Должность</label>
+          <div class="position-row">
+            <InputText
+              id="user-position"
+              v-model="ctx.form.value.position"
+              placeholder="Должность"
+              class="w-full"
+              :disabled="!canEditCurrent"
+            />
+            <Button
+              type="button"
+              :label="UNDECIDED_DEPARTMENT_LABEL"
+              severity="secondary"
+              text
+              :disabled="!canEditCurrent"
+              @click="setPositionUndecided"
+            />
+          </div>
 
-        <label v-if="mode === 'create' || passwordResetVisible">{{ mode === 'create' ? 'Пароль' : 'Новый пароль' }}</label>
-        <InputText
-          v-if="mode === 'create' || passwordResetVisible"
-          v-model="form.password"
-          type="password"
-          :placeholder="mode === 'create' ? 'Временный пароль' : 'Минимум 6 символов'"
-          autocomplete="new-password"
-          class="w-full"
-        />
+          <label for="user-department">Отдел</label>
+          <Select
+            id="user-department"
+            v-model="ctx.form.value.department_id"
+            :options="departmentSelectOptions"
+            option-label="label"
+            option-value="value"
+            placeholder="Выберите отдел"
+            class="w-full"
+            :disabled="!canEditCurrent"
+          />
 
-        <label v-if="mode === 'edit' && passwordResetVisible">Подтвердите пароль</label>
-        <InputText
-          v-if="mode === 'edit' && passwordResetVisible"
-          v-model="form.confirmPassword"
-          type="password"
-          placeholder="Повторите новый пароль"
-          autocomplete="new-password"
-          class="w-full"
-        />
-
-        <label v-if="mode === 'edit' && passwordResetVisible"></label>
-        <Button
-          v-if="mode === 'edit' && passwordResetVisible"
-          type="button"
-          label="Отмена сброса пароля"
-          severity="secondary"
-          text
-          @click="cancelPasswordReset"
-        />
-
-        <label>Роль</label>
-        <Select
-          v-model="form.role"
-          :options="roleOptions"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="Выберите роль"
-          class="w-full"
-        />
-
-        <label>Должность</label>
-        <div class="position-entry">
-          <InputText v-model="form.position" placeholder="Должность" class="w-full" />
-          <Button
-            type="button"
-            label="Не определено"
-            severity="secondary"
-            text
-            @click="form.position = UNDECIDED_LABEL"
+          <label for="user-active">Статус</label>
+          <Select
+            id="user-active"
+            v-model="ctx.form.value.active"
+            :options="ACTIVE_OPTIONS"
+            option-label="label"
+            option-value="value"
+            class="w-full"
+            :disabled="!canEditCurrent"
           />
         </div>
 
-        <label>Отдел</label>
-        <Select
-          v-model="form.department_id"
-          :options="departmentOptions"
-          optionLabel="name"
-          optionValue="department_id"
-          placeholder="Выберите отдел"
-          class="w-full"
-        />
+        <!-- Password block: visible at create, OR when reset toggle is on for edit -->
+        <div v-if="mode === 'create'" class="form-grid">
+          <label for="user-password">Пароль</label>
+          <Password
+            id="user-password"
+            v-model="ctx.form.value.password"
+            :feedback="false"
+            toggle-mask
+            placeholder="Временный пароль (минимум 6 символов)"
+            class="w-full"
+            input-class="w-full"
+            :disabled="!canEditCurrent"
+          />
+        </div>
 
-        <label>Статус</label>
-        <Select
-          v-model="form.active"
-          :options="activeOptions"
-          optionLabel="label"
-          optionValue="value"
-          class="w-full"
-        />
-      </form>
+        <div v-else-if="mode === 'edit' && canEditCurrent" class="password-edit-block">
+          <div v-if="!ctx.form.value.reset_password" class="password-toggle-row">
+            <Button
+              type="button"
+              label="Сбросить пароль"
+              severity="secondary"
+              outlined
+              @click="togglePasswordReset"
+            />
+          </div>
 
-      <template #footer>
-        <Button label="Отмена" severity="secondary" outlined @click="resetForm" />
-        <Button :label="mode === 'create' ? 'Создать' : 'Сохранить'" @click="saveUser" />
-      </template>
-    </Dialog>
+          <div v-else class="password-reset-fields">
+            <div class="form-grid">
+              <label for="user-new-password">Новый пароль</label>
+              <Password
+                id="user-new-password"
+                v-model="ctx.form.value.password"
+                :feedback="false"
+                toggle-mask
+                placeholder="Минимум 6 символов"
+                class="w-full"
+                input-class="w-full"
+              />
 
-  </div>
+              <label for="user-confirm-password">Подтверждение</label>
+              <Password
+                id="user-confirm-password"
+                v-model="ctx.form.value.confirm_password"
+                :feedback="false"
+                toggle-mask
+                placeholder="Повторите новый пароль"
+                class="w-full"
+                input-class="w-full"
+              />
+            </div>
+            <Button
+              type="button"
+              label="Отмена сброса"
+              severity="secondary"
+              text
+              @click="togglePasswordReset"
+            />
+          </div>
+        </div>
+      </div>
+    </template>
+  </RowOpenPage>
 </template>
 
 <style scoped>
-.users-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem;
+.user-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #003274;
+}
+.user-form {
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 16px;
 }
-.users-page :deep(.page-header) {
-  margin-bottom: 3px !important;
+.readonly-notice {
+  font-size: 13px;
+  color: #6B7280;
+  background: #F3F4F6;
+  padding: 8px 12px;
+  border-left: 3px solid #D1D5DB;
+  border-radius: 3px;
 }
-
-/* ── Form styles ── */
 .form-grid {
   display: grid;
-  grid-template-columns: 80px 1fr;
+  grid-template-columns: 140px 1fr;
   gap: 10px 16px;
   align-items: center;
+  max-width: 600px;
 }
 .form-grid label {
   font-size: 13px;
@@ -427,13 +558,40 @@ async function saveUser() {
   color: #003274;
 }
 .w-full { width: 100%; }
-.position-entry {
+.position-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
 }
-/* ── Page-specific cell styles ── */
+.password-edit-block {
+  border-top: 1px solid rgba(0, 50, 116, 0.1);
+  padding-top: 12px;
+}
+.password-toggle-row {
+  display: flex;
+  justify-content: flex-start;
+}
+.password-reset-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.meta-text {
+  color: #6B7280;
+  font-size: 13px;
+}
+.role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.role-badge--admin { background: rgba(176, 0, 32, 0.1); color: #b00020; }
+.role-badge--lead { background: rgba(211, 167, 84, 0.15); color: #9a7030; }
+.role-badge--employee { background: rgba(0, 50, 116, 0.08); color: #003274; }
+.role-badge--unknown { color: #6B7280; }
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -452,17 +610,4 @@ async function saveUser() {
   color: #b00020;
   border: 0.5px solid rgba(176, 0, 32, 0.15);
 }
-.position-text,
-.login-text { color: #6B7280; font-size: 13px; }
-.role-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-}
-.role-badge--admin { background: rgba(176, 0, 32, 0.1); color: #b00020; }
-.role-badge--lead { background: rgba(211, 167, 84, 0.15); color: #9a7030; }
-.role-badge--employee { background: rgba(0, 50, 116, 0.08); color: #003274; }
-.last-login { color: #6B7280; font-size: 12px; }
 </style>
