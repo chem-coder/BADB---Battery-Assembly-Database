@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { TOKEN_KEY } from '@/constants/auth'
 import api from '@/services/api'
 import Password from 'primevue/password'
 import Button from 'primevue/button'
@@ -114,7 +115,7 @@ async function onSubmit() {
     // Server issues fresh token after password change (old tokens revoked)
     if (data.token) {
       authStore.token = data.token
-      localStorage.setItem('badb_auth_token', data.token)
+      sessionStorage.setItem(TOKEN_KEY, data.token)
     }
     currentPassword.value = ''
     newPassword.value = ''

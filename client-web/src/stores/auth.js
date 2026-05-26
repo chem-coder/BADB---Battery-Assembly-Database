@@ -1,14 +1,55 @@
 import { defineStore } from 'pinia'
 import api from '@/services/api'
+import { TOKEN_KEY } from '@/constants/auth'
 
-const STORAGE_KEY = 'badb_auth_token'
+/**
+ * One-time migration helper.
+ *
+ * Until May 2026, Vue's auth token lived in localStorage. Vanilla v1 then
+ * moved to sessionStorage as a session-only token policy. Vue is now
+ * aligned with vanilla.
+ *
+ * On the first session after this change ships, an existing user has a
+ * token in localStorage but nothing in sessionStorage — without this
+ * migration they would be redirected to /login. We copy the legacy token
+ * across once and remove the localStorage copy.
+ *
+ * The helper is idempotent and safe to call on every store init.
+ */
+function migrateLegacyTokenIfNeeded() {
+  let legacy = null
+  try { legacy = localStorage.getItem(TOKEN_KEY) } catch { return }
+  if (!legacy) return
+
+  let existing = null
+  try { existing = sessionStorage.getItem(TOKEN_KEY) } catch {}
+  if (!existing) {
+    try { sessionStorage.setItem(TOKEN_KEY, legacy) } catch {}
+  }
+  try { localStorage.removeItem(TOKEN_KEY) } catch {}
+}
+
+function readToken() {
+  try { return sessionStorage.getItem(TOKEN_KEY) || null } catch { return null }
+}
+
+function writeToken(token) {
+  try { sessionStorage.setItem(TOKEN_KEY, token) } catch {}
+}
+
+function clearToken() {
+  try { sessionStorage.removeItem(TOKEN_KEY) } catch {}
+}
 
 export const useAuthStore = defineStore('auth', {
-  state: () => ({
-    token: localStorage.getItem(STORAGE_KEY) || null,
-    user: null,
-    projects: [],
-  }),
+  state: () => {
+    migrateLegacyTokenIfNeeded()
+    return {
+      token: readToken(),
+      user: null,
+      projects: [],
+    }
+  },
 
   getters: {
     isAuthenticated: (state) => !!state.token,
@@ -23,7 +64,7 @@ export const useAuthStore = defineStore('auth', {
       this.token = data.token
       this.user = data.user
       this.projects = data.projects || []
-      localStorage.setItem(STORAGE_KEY, data.token)
+      writeToken(data.token)
     },
 
     async fetchMe() {
@@ -45,7 +86,7 @@ export const useAuthStore = defineStore('auth', {
       this.token = null
       this.user = null
       this.projects = []
-      localStorage.removeItem(STORAGE_KEY)
+      clearToken()
     },
 
     // Dev bypass: set fake token, then load real user from API
