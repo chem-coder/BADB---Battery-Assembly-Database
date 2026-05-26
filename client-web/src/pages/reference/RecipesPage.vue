@@ -1,427 +1,453 @@
 <script setup>
 /**
- * RecipesPage — "Рецептуры" (справочник)
- * Uses CrudTable + SaveIndicator (from Design System).
- * Create/edit form in Dialog with nested recipe lines table.
+ * RecipesPage — "Рецепты" (recipe reference).
+ *
+ * Vue V2 implementation matching vanilla v1 behavior. See:
+ *   - docs/current/recipes.md
+ *   - docs/instructions/frontend_parity_handoff.md §"Destructive And Safety Flows"
+ *   - docs/instructions/vanilla_ui_patterns.md
+ *   - public/js/recipes.js (vanilla reference)
+ *
+ * The page uses the parity foundation (RowOpenPage, OpenedRecordHeader,
+ * useRowOpenForm, TypedDeleteConfirm) so behavior — delete-check, typed
+ * confirmation, dirty tracking, unsaved guards, row-open pattern — is
+ * shared with other parity surfaces and not reimplemented here.
+ *
+ * Surface-specific logic in this file:
+ *   - composition lines (cathode_active/anode_active/binder/additive/solvent);
+ *   - role auto-set from active-material line choice;
+ *   - sum-to-100 validation over included non-solvent lines;
+ *   - material filtering by line recipe_role.
  */
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useToast } from 'primevue/usetoast'
-import api from '@/services/api'
-import { toastApiError } from '@/utils/errorClassifier'
-import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
-import CrudTable from '@/components/CrudTable.vue'
-import EntityMeta from '@/components/EntityMeta.vue'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Textarea from 'primevue/textarea'
-import Select from 'primevue/select'
+import { ref, watch, onMounted, onUnmounted } from 'vue';
+import api from '@/services/api';
+import { usePrintHandlers } from '@/composables/usePrintHandlers';
 
-const toast = useToast()
-const crudTable = ref(null)
+import RowOpenPage from '@/components/parity/RowOpenPage.vue';
+import OpenedRecordHeader from '@/components/parity/OpenedRecordHeader.vue';
+import EditableTitle from '@/components/parity/EditableTitle.vue';
+import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue';
+import { useRowOpenForm } from '@/composables/useRowOpenForm';
 
-// ── Data ───────────────────────────────────────────────────────────────
-const recipes = ref([])
-const loading = ref(false)
-let cachedMaterials = null
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
+import Textarea from 'primevue/textarea';
+import Select from 'primevue/select';
 
-async function loadRecipes() {
-  loading.value = true
+// ── Constants ────────────────────────────────────────────────────────
+const LINE_ROLES = [
+  { value: 'cathode_active', label: 'катодный АМ' },
+  { value: 'anode_active',   label: 'анодный АМ' },
+  { value: 'binder',         label: 'связующее' },
+  { value: 'additive',       label: 'добавка' },
+  { value: 'solvent',        label: 'растворитель' },
+];
+
+const RECIPE_ROLES = [
+  { value: 'cathode', label: 'катод' },
+  { value: 'anode',   label: 'анод' },
+];
+
+// Maps line.recipe_role -> material.role for material-options filtering.
+const ROLE_TO_MATERIAL = {
+  cathode_active: 'cathode_active',
+  anode_active:   'anode_active',
+  binder:         'binder',
+  additive:       'conductive_additive',
+  solvent:        'solvent',
+};
+
+// ── List state ───────────────────────────────────────────────────────
+const recipes = ref([]);
+const loading = ref(false);
+
+async function loadList() {
+  loading.value = true;
   try {
-    const { data } = await api.get('/api/recipes')
-    recipes.value = data
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось загрузить рецептуры')
+    const { data } = await api.get('/api/recipes');
+    recipes.value = data;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
+// ── Material cache (invalidated on save + window focus) ──────────────
+let cachedMaterials = null;
 async function fetchMaterials() {
-  if (cachedMaterials) return cachedMaterials
-  const { data } = await api.get('/api/materials')
-  cachedMaterials = data
-  return cachedMaterials
+  if (cachedMaterials) return cachedMaterials;
+  const { data } = await api.get('/api/materials');
+  cachedMaterials = data;
+  return cachedMaterials;
 }
+function invalidateMaterials() { cachedMaterials = null; }
 
-async function fetchRecipeLines(recipeId) {
-  const { data } = await api.get(`/api/recipes/${recipeId}/lines`)
-  return data
-}
+onMounted(() => {
+  loadList();
+  window.addEventListener('focus', invalidateMaterials);
+});
+onUnmounted(() => window.removeEventListener('focus', invalidateMaterials));
 
-onMounted(() => { loadRecipes() })
-
-// Invalidate material cache on window refocus
-function onWindowFocus() { cachedMaterials = null }
-onMounted(() => window.addEventListener('focus', onWindowFocus))
-onUnmounted(() => window.removeEventListener('focus', onWindowFocus))
-
-// ── Column config ──────────────────────────────────────────────────────
-const columns = [
-  { field: 'name',                 header: 'Название',       minWidth: '150px' },
-  { field: 'role',                 header: 'Электрод',       minWidth: '80px',  width: '110px' },
-  { field: 'active_percent',       header: '% АМ',           minWidth: '60px',  width: '80px' },
-  { field: 'active_material_name', header: 'Активный материал', minWidth: '120px', width: '180px' },
-  { field: 'variant_label',        header: 'Версия',         minWidth: '100px', width: '180px' },
-  { field: 'created_by_name',      header: 'Оператор',       minWidth: '90px',  width: '130px' },
-]
-
-// ── Save indicator (delete flow) ──────────────────────────────────────
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
-
-function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
-}
-
-async function confirmSave() {
-  try {
-    for (const item of pendingDelete.value) {
-      await api.delete(`/api/recipes/${item.tape_recipe_id}`)
-    }
-    pendingDelete.value = []
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
-    crudTable.value?.clearSelection()
-    await loadRecipes()
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось удалить')
-  }
-}
-
-function discardChanges() {
-  pendingDelete.value = []
-  saveState.value = 'idle'
-  crudTable.value?.clearSelection()
-}
-
-onUnmounted(() => clearTimeout(saveTimer))
-
-// ── Recipe lines ──────────────────────────────────────────────────────
-let lineCounter = 0
-const recipeLines = ref([])
-
-function makeEmptyLine() {
+// ── Form factory and snapshots ──────────────────────────────────────
+let lineKeyCounter = 0;
+function makeEmptyLine(overrides = {}) {
   return {
-    _key: lineCounter++,
+    _key: lineKeyCounter++,
     recipe_role: '',
-    material_id: '',
+    material_id: null,
+    include_in_pct: true,
     slurry_percent: '',
     line_notes: '',
-    filteredMaterials: [],
-  }
+    ...overrides,
+  };
 }
 
-function addLine() {
-  recipeLines.value.push(makeEmptyLine())
+function emptyForm() {
+  return {
+    name: '',
+    variant_label: '',
+    role: '',
+    notes: '',
+    lines: [makeEmptyLine()],
+  };
 }
 
-function removeLine(index) {
-  recipeLines.value.splice(index, 1)
-}
-
-function filterMaterialsByRole(materials, recipeRole) {
-  if (!recipeRole || recipeRole === 'other') return materials
-  const roleMap = {
-    cathode_active: 'cathode_active',
-    anode_active: 'anode_active',
-    binder: 'binder',
-    additive: 'conductive_additive',
-    solvent: 'solvent',
-  }
-  const materialRole = roleMap[recipeRole]
-  if (!materialRole) return materials
-  return materials.filter(m => m.role === materialRole)
-}
-
-async function updateLineFiltering(line) {
-  const materials = await fetchMaterials()
-  line.filteredMaterials = filterMaterialsByRole(materials, line.recipe_role)
-  if (line.recipe_role === 'cathode_active') form.value.role = 'cathode'
-  if (line.recipe_role === 'anode_active') form.value.role = 'anode'
-}
-
-async function loadLinesIntoForm(lines) {
-  const materials = await fetchMaterials()
-  recipeLines.value = lines.map(l => ({
-    _key: lineCounter++,
+// ── Load / save handlers wired into useRowOpenForm ─────────────────
+async function loadOne(id) {
+  const [headerRes, linesRes] = await Promise.all([
+    api.get(`/api/recipes/${id}`),
+    api.get(`/api/recipes/${id}/lines`),
+  ]);
+  const recipe = headerRes.data;
+  const lines = (linesRes.data || []).map((l) => ({
+    _key: lineKeyCounter++,
     recipe_role: l.recipe_role || '',
-    material_id: l.material_id || '',
+    material_id: l.material_id ?? null,
+    include_in_pct: l.include_in_pct !== false,
     slurry_percent: l.slurry_percent ?? '',
     line_notes: l.line_notes || '',
-    filteredMaterials: filterMaterialsByRole(materials, l.recipe_role),
-  }))
-}
+  }));
 
-// ── Form (Dialog) ─────────────────────────────────────────────────────
-const formVisible = ref(false)
-const mode = ref(null)
-const currentId = ref(null)
-// Full row of the entity being edited — fed to EntityMeta for the
-// "Создано: ФИО, дата" + "Изменено: ФИО, дата" read-only audit trail.
-const currentItem = ref(null)
-
-// `created_by` is NOT part of the form — backend forces it from the
-// authenticated user (req.user.userId, see routes/recipes.js). The
-// existing creator is shown read-only via EntityMeta when available.
-const form = ref({
-  name: '',
-  variant_label: '',
-  role: '',
-  notes: '',
-})
-
-function resetForm() {
-  form.value = { name: '', variant_label: '', role: '', notes: '' }
-  mode.value = null
-  currentId.value = null
-  currentItem.value = null
-  recipeLines.value = []
-  formVisible.value = false
-}
-
-function openCreate() {
-  resetForm()
-  mode.value = 'create'
-  cachedMaterials = null
-  recipeLines.value = [makeEmptyLine()]
-  formVisible.value = true
-}
-
-async function openEdit(recipe) {
-  mode.value = 'edit'
-  currentId.value = recipe.tape_recipe_id
-  currentItem.value = recipe
-  form.value = {
+  const form = {
     name: recipe.name || '',
     variant_label: recipe.variant_label || '',
     role: recipe.role || '',
     notes: recipe.notes || '',
-  }
-  formVisible.value = true
-  cachedMaterials = null
-
-  const lines = await fetchRecipeLines(recipe.tape_recipe_id)
-  await loadLinesIntoForm(lines)
+    lines: lines.length > 0 ? lines : [makeEmptyLine()],
+  };
+  return { item: recipe, form };
 }
 
-async function openDuplicate(recipe) {
-  mode.value = 'create'
-  currentId.value = null
-  form.value = {
-    name: recipe.name + ' (копия)',
-    variant_label: recipe.variant_label || '',
-    role: recipe.role || '',
-    notes: recipe.notes || '',
-  }
-  formVisible.value = true
-  cachedMaterials = null
-
-  const lines = await fetchRecipeLines(recipe.tape_recipe_id)
-  await loadLinesIntoForm(lines)
-}
-
-// ── Validation & Save ─────────────────────────────────────────────────
-function validate() {
-  if (!form.value.name?.trim()) {
-    toast.add({ severity: 'warn', summary: 'Заполните название рецепта', life: 3000 })
-    return false
-  }
-  if (!form.value.role) {
-    toast.add({ severity: 'warn', summary: 'Выберите роль электрода', life: 3000 })
-    return false
-  }
-  if (recipeLines.value.length === 0) {
-    toast.add({ severity: 'warn', summary: 'Добавьте хотя бы один компонент', life: 3000 })
-    return false
-  }
-  for (const line of recipeLines.value) {
-    if (!line.material_id) {
-      toast.add({ severity: 'warn', summary: 'Выберите материал для каждого компонента', life: 3000 })
-      return false
-    }
-    if (line.recipe_role !== 'solvent') {
-      const pct = Number(line.slurry_percent)
-      if (line.slurry_percent === '' || isNaN(pct) || pct < 0 || pct > 100) {
-        toast.add({ severity: 'warn', summary: 'Укажите корректный % (0-100) для каждого компонента', life: 3000 })
-        return false
-      }
-    }
-  }
-  const variant = (form.value.variant_label || '').trim()
-  const exists = recipes.value.some(r => {
-    if (mode.value === 'edit' && r.tape_recipe_id === currentId.value) return false
-    return r.name === form.value.name.trim() && (r.variant_label || '') === variant
-  })
-  if (exists) {
-    toast.add({ severity: 'warn', summary: 'Рецепт с таким названием и версией уже существует', life: 3000 })
-    return false
-  }
-  return true
-}
-
-async function saveRecipe() {
-  if (!mode.value) return
-  if (!validate()) return
-
-  const lines = recipeLines.value.map(l => ({
+async function saveOne(form, mode, currentId) {
+  // Solvent lines are excluded from the dry-solids sum and have
+  // include_in_pct=false by default.
+  const lines = form.lines.map((l) => ({
     material_id: Number(l.material_id),
     recipe_role: l.recipe_role,
-    slurry_percent: l.slurry_percent === '' ? null : Number(l.slurry_percent),
+    include_in_pct: l.recipe_role === 'solvent' ? false : Boolean(l.include_in_pct),
+    slurry_percent: l.slurry_percent === '' || l.slurry_percent == null
+      ? null
+      : Number(l.slurry_percent),
     line_notes: l.line_notes || null,
-  }))
+  }));
 
-  // created_by intentionally NOT in the payload — backend forces it
-  // from the authenticated user (routes/recipes.js POST).
   const payload = {
-    name: form.value.name.trim(),
-    role: form.value.role,
-    variant_label: form.value.variant_label || null,
-    notes: form.value.notes || null,
+    name: form.name.trim(),
+    role: form.role,
+    variant_label: form.variant_label || null,
+    notes: form.notes || null,
     lines,
+  };
+
+  let response;
+  if (mode === 'create') {
+    response = await api.post('/api/recipes', payload);
+  } else {
+    response = await api.put(`/api/recipes/${currentId}`, payload);
+  }
+  invalidateMaterials();
+  return response.data;
+}
+
+// ── Validation ───────────────────────────────────────────────────────
+function validate(form) {
+  if (!form.name?.trim()) return 'Заполните название рецепта';
+  if (!form.role) return 'Не определена роль электрода (выберите активный материал)';
+  if (!Array.isArray(form.lines) || form.lines.length === 0) {
+    return 'Добавьте хотя бы один компонент';
+  }
+  for (const line of form.lines) {
+    if (!line.recipe_role) return 'Укажите функциональную роль для каждого компонента';
+    if (line.material_id == null) return 'Выберите материал для каждого компонента';
   }
 
-  try {
-    if (mode.value === 'create') {
-      await api.post('/api/recipes', payload)
-      toast.add({ severity: 'success', summary: 'Рецепт сохранён', life: 3000 })
-    } else {
-      await api.put(`/api/recipes/${currentId.value}`, payload)
-      toast.add({ severity: 'success', summary: 'Изменения сохранены', life: 3000 })
+  // Sum-to-100 check for included non-solvent lines.
+  let sum = 0;
+  for (const line of form.lines) {
+    if (line.recipe_role === 'solvent') continue;
+    if (!line.include_in_pct) continue;
+    const pct = Number(line.slurry_percent);
+    if (line.slurry_percent === '' || line.slurry_percent == null || Number.isNaN(pct)) {
+      return 'Укажите % для каждого включённого компонента';
     }
-    resetForm()
-    await loadRecipes()
-  } catch (err) {
-    toastApiError(toast, err, 'Ошибка сохранения')
+    if (pct < 0 || pct > 100) {
+      return `% должен быть от 0 до 100`;
+    }
+    sum += pct;
   }
+  if (Math.abs(sum - 100) > 0.01) {
+    return `Сумма % включённых компонентов должна быть 100 (сейчас ${sum.toFixed(2)})`;
+  }
+
+  return true;
+}
+
+// ── Foundation hook ──────────────────────────────────────────────────
+const ctx = useRowOpenForm({
+  entityType: 'recipes',
+  idField: 'tape_recipe_id',
+  emptyForm,
+  validate,
+  loadOne,
+  saveOne,
+  list: { ref: recipes, load: loadList },
+  deletePhrase: (id) => `DELETE RECIPE ${id}`,
+  hasDeleteCheck: true,
+  deleteMessages: {
+    success: 'Рецепт удалён',
+  },
+});
+
+// ── Composition line management (surface-specific) ───────────────────
+const filteredMaterialsCache = ref({}); // keyed by line._key
+
+async function refreshLineMaterials(line) {
+  const materials = await fetchMaterials();
+  const targetRole = ROLE_TO_MATERIAL[line.recipe_role];
+  filteredMaterialsCache.value[line._key] = targetRole
+    ? materials.filter((m) => m.role === targetRole)
+    : [];
+}
+
+async function onLineRoleChange(line) {
+  // Auto-set recipe.role from active-material line choice (vanilla v1
+  // behaviour: recipe-role select is disabled and derived).
+  if (line.recipe_role === 'cathode_active') ctx.form.value.role = 'cathode';
+  else if (line.recipe_role === 'anode_active') ctx.form.value.role = 'anode';
+
+  // Material was previously selected for a different role — clear it.
+  line.material_id = null;
+
+  // Solvent lines do not contribute to the dry-solids sum.
+  if (line.recipe_role === 'solvent') line.include_in_pct = false;
+
+  await refreshLineMaterials(line);
+}
+
+function addLine() {
+  ctx.form.value.lines.push(makeEmptyLine());
+}
+
+function removeLine(idx) {
+  ctx.form.value.lines.splice(idx, 1);
+  if (ctx.form.value.lines.length === 0) ctx.form.value.lines.push(makeEmptyLine());
+}
+
+// Pre-populate material options for already-loaded lines (e.g. on openEdit).
+async function refreshAllLineMaterials() {
+  if (!ctx.form.value.lines) return;
+  await Promise.all(ctx.form.value.lines.map((l) => refreshLineMaterials(l)));
+}
+
+// Re-run material filtering whenever the form changes (openCreate / openEdit
+// / openDuplicate all reset the form ref). Cheap operation due to caching.
+watch(
+  () => ctx.form.value.lines,
+  () => refreshAllLineMaterials(),
+  { immediate: true }
+);
+
+// ── List columns and filter config ───────────────────────────────────
+const columns = [
+  { field: 'name', header: 'Название' },
+  { field: 'role', header: 'Электрод', width: '110px' },
+  { field: 'active_percent', header: '% АМ', width: '80px' },
+  { field: 'active_material_name', header: 'Активный материал', width: '200px' },
+  { field: 'variant_label', header: 'Версия', width: '120px' },
+  { field: 'created_by_name', header: 'Оператор', width: '140px' },
+];
+
+const filters = [
+  { field: 'text', type: 'text', placeholder: 'Название, заметки, материалы...', label: 'Поиск' },
+  {
+    field: 'role',
+    type: 'select',
+    label: 'Роль',
+    emptyOption: 'Все роли',
+    options: RECIPE_ROLES,
+  },
+];
+
+function textHaystack(row) {
+  return [
+    row.name,
+    row.variant_label,
+    row.notes,
+    row.active_material_name,
+    row.created_by_name,
+    row.updated_by_name,
+  ].filter(Boolean).join(' ');
+}
+
+// ── Meta formatting for sticky header ────────────────────────────────
+function formatMeta(item) {
+  if (!item) return 'Новый рецепт';
+  const parts = [];
+  if (item.created_by_name) parts.push(`Создал: ${item.created_by_name}`);
+  if (item.created_at) parts.push(new Date(item.created_at).toLocaleDateString('ru-RU'));
+  if (item.updated_by_name) {
+    parts.push(`· Изменил: ${item.updated_by_name}`);
+    if (item.updated_at) parts.push(new Date(item.updated_at).toLocaleDateString('ru-RU'));
+  }
+  return parts.join(' ');
 }
 
 function roleLabel(role) {
-  return role === 'cathode' ? 'катод' : role === 'anode' ? 'анод' : role || '—'
+  return role === 'cathode' ? 'катод' : role === 'anode' ? 'анод' : role || '—';
 }
+
+// ── List-row actions ─────────────────────────────────────────────────
+const { onRowPrint, onHeaderPrint } = usePrintHandlers('recipes', ctx);
 </script>
 
 <template>
-  <div class="recipes-page">
+  <RowOpenPage
+    title="Рецепты"
+    icon="pi pi-file-edit"
+    add-placeholder="+ Добавить рецепт"
+    :list="recipes"
+    :columns="columns"
+    :filters="filters"
+    :row-actions="['print', 'duplicate']"
+    :current-id="ctx.currentId.value"
+    id-field="tape_recipe_id"
+    :loading="loading"
+    :text-haystack="textHaystack"
+    @create="(name) => ctx.openCreate(name)"
+    @row-click="ctx.openEdit"
+    @row-print="onRowPrint"
+    @row-duplicate="ctx.openDuplicate"
+  >
+    <template #col-name="{ data }">
+      <strong>{{ data.name }}</strong>
+    </template>
+    <template #col-role="{ data }">
+      <span :class="['role-badge', `role-badge--${data.role || 'none'}`]">{{ roleLabel(data.role) }}</span>
+    </template>
+    <template #col-active_percent="{ data }">
+      {{ data.active_percent != null ? `${data.active_percent}%` : '' }}
+    </template>
+    <template #col-active_material_name="{ data }">
+      <span class="meta-text">{{ data.active_material_name || '' }}</span>
+    </template>
+    <template #col-variant_label="{ data }">
+      <span class="meta-text">{{ data.variant_label || '' }}</span>
+    </template>
 
-    <PageHeader title="Рецептуры" icon="pi pi-file-edit">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
-        />
-      </template>
-    </PageHeader>
+    <template #opened-record>
+      <OpenedRecordHeader
+        :meta="formatMeta(ctx.currentItem.value)"
+        :dirty="ctx.isDirty.value"
+        :status="ctx.status.value"
+        :show-print="ctx.mode.value === 'edit'"
+        :show-delete="ctx.mode.value === 'edit'"
+        @save="ctx.save"
+        @print="onHeaderPrint"
+        @exit="ctx.exit"
+        @delete="ctx.deleteRecord"
+      >
+        <template #title>
+          <EditableTitle
+            v-model="ctx.form.value.name"
+            placeholder="Новый рецепт"
+            class="recipe-title"
+          />
+        </template>
+      </OpenedRecordHeader>
 
-    <CrudTable
-      ref="crudTable"
-      :columns="columns"
-      :data="recipes"
-      :loading="loading"
-      id-field="tape_recipe_id"
-      table-name="Рецептуры"
-      show-add
-      row-clickable
-      @add="openCreate"
-      @delete="onDelete"
-      @row-click="(data) => openEdit(data)"
-    >
-      <template #col-name="{ data }">
-        <strong>{{ data.name }}</strong>
-      </template>
-      <template #col-role="{ data }">
-        <span :class="['role-badge', data.role === 'cathode' ? 'role-badge--cathode' : 'role-badge--anode']">
-          {{ roleLabel(data.role) }}
-        </span>
-      </template>
-      <template #col-active_percent="{ data }">
-        {{ data.active_percent != null ? data.active_percent + '%' : '' }}
-      </template>
-      <template #col-active_material_name="{ data }">
-        <span class="meta-text">{{ data.active_material_name || '' }}</span>
-      </template>
-      <template #col-variant_label="{ data }">
-        <span class="meta-text">{{ data.variant_label || '' }}</span>
-      </template>
-    </CrudTable>
-
-    <!-- ── Create / Edit Dialog ── -->
-    <Dialog
-      v-model:visible="formVisible"
-      :header="mode === 'create' ? 'Новый рецепт' : 'Редактирование рецепта'"
-      :style="{ width: '700px' }"
-      modal
-    >
-      <div class="form-section">
+      <div class="recipe-form">
         <div class="form-grid">
-          <label>Название</label>
-          <InputText v-model="form.name" placeholder="Название рецепта" class="w-full" />
-
-          <label>Версия</label>
-          <InputText v-model="form.variant_label" placeholder="A / B / low binder / v2" class="w-full" />
+          <label>Вариант / версия</label>
+          <InputText v-model="ctx.form.value.variant_label" placeholder="A / B / low binder / v2" class="w-full" />
 
           <label>Электрод</label>
           <Select
-            v-model="form.role"
-            :options="[{ label: 'катод', value: 'cathode' }, { label: 'анод', value: 'anode' }]"
-            optionLabel="label"
-            optionValue="value"
-            placeholder="-- выбрать --"
+            v-model="ctx.form.value.role"
+            :options="RECIPE_ROLES"
+            option-label="label"
+            option-value="value"
+            placeholder="— определяется по активному материалу —"
             class="w-full"
+            disabled
           />
 
           <label>Комментарии</label>
-          <Textarea v-model="form.notes" rows="2" placeholder="Кратко: что это за рецепт" class="w-full" />
+          <Textarea v-model="ctx.form.value.notes" rows="2" placeholder="Кратко: что это за рецепт" class="w-full" />
         </div>
-      </div>
 
-      <!-- Recipe lines -->
-      <div class="form-section">
         <div class="section-header">
           <span class="section-title">Состав рецепта</span>
           <Button label="+ Компонент" severity="secondary" outlined size="small" @click="addLine" />
         </div>
 
-        <div class="lines-table-wrap">
+        <div class="lines-wrap">
           <table class="lines-table">
             <thead>
               <tr>
                 <th>Функциональная роль</th>
                 <th>Материал</th>
+                <th>В сумму %</th>
                 <th>% в пасте</th>
                 <th>Заметки</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(line, idx) in recipeLines" :key="line._key">
+              <tr v-for="(line, idx) in ctx.form.value.lines" :key="line._key">
                 <td>
                   <Select
                     v-model="line.recipe_role"
-                    :options="[{ label: 'катодный АМ', value: 'cathode_active' }, { label: 'анодный АМ', value: 'anode_active' }, { label: 'связующее', value: 'binder' }, { label: 'добавка', value: 'additive' }, { label: 'растворитель', value: 'solvent' }]"
-                    optionLabel="label"
-                    optionValue="value"
-                    placeholder="-- роль --"
-                    @change="updateLineFiltering(line)"
+                    :options="LINE_ROLES"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="— роль —"
+                    @change="onLineRoleChange(line)"
                   />
                 </td>
                 <td>
                   <Select
                     v-model="line.material_id"
-                    :options="line.filteredMaterials"
-                    optionLabel="name"
-                    optionValue="material_id"
-                    placeholder="-- материал --"
+                    :options="filteredMaterialsCache[line._key] || []"
+                    option-label="name"
+                    option-value="material_id"
+                    placeholder="— материал —"
+                    :disabled="!line.recipe_role"
+                  />
+                </td>
+                <td class="col-include">
+                  <input
+                    type="checkbox"
+                    :checked="line.include_in_pct"
+                    :disabled="line.recipe_role === 'solvent'"
+                    :title="line.recipe_role === 'solvent' ? 'Растворитель не входит в сумму' : 'Учитывать в сумме 100%'"
+                    @change="(e) => { line.include_in_pct = e.target.checked }"
                   />
                 </td>
                 <td>
-                  <InputText v-model="line.slurry_percent" style="width: 80px" />
+                  <InputText
+                    v-model="line.slurry_percent"
+                    style="width: 80px"
+                    :disabled="!line.include_in_pct && line.recipe_role !== 'solvent'"
+                  />
                 </td>
                 <td>
                   <InputText v-model="line.line_notes" placeholder="Комментарий" />
@@ -430,62 +456,39 @@ function roleLabel(role) {
                   <Button icon="pi pi-trash" severity="danger" text @click="removeLine(idx)" />
                 </td>
               </tr>
-              <tr v-if="recipeLines.length === 0">
-                <td colspan="5" class="empty-lines">Нет компонентов</td>
-              </tr>
             </tbody>
           </table>
         </div>
       </div>
+    </template>
+  </RowOpenPage>
 
-      <EntityMeta
-        v-if="mode === 'edit' && currentItem"
-        :createdByName="currentItem.created_by_name"
-        :createdAt="currentItem.created_at"
-        :updatedByName="currentItem.updated_by_name"
-        :updatedAt="currentItem.updated_at"
-      />
-
-      <template #footer>
-        <div class="dialog-footer">
-          <div>
-            <Button
-              v-if="mode === 'edit'"
-              label="Дублировать"
-              severity="secondary"
-              outlined
-              @click="() => { const r = recipes.find(r => r.tape_recipe_id === currentId); if (r) openDuplicate(r) }"
-            />
-          </div>
-          <div class="dialog-footer-right">
-            <Button label="Отмена" severity="secondary" outlined @click="resetForm" />
-            <Button :label="mode === 'create' ? 'Создать' : 'Сохранить'" @click="saveRecipe" />
-          </div>
-        </div>
-      </template>
-    </Dialog>
-
-  </div>
+  <TypedDeleteConfirm
+    :visible="ctx.deleteModalVisible.value"
+    :phrase="ctx.deleteModalPhrase.value"
+    description="Удаление рецепта необратимо."
+    @update:visible="(v) => { if (!v) ctx.cancelDelete() }"
+    @confirmed="ctx.confirmDelete"
+    @cancelled="ctx.cancelDelete"
+  />
 </template>
 
 <style scoped>
-.recipes-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem;
+.recipe-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #003274;
+}
+
+.recipe-form {
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-}
-.recipes-page :deep(.page-header) { margin-bottom: 3px !important; }
-
-/* ── Form styles ── */
-.form-section {
-  margin-bottom: 1.25rem;
+  gap: 16px;
 }
 .form-grid {
   display: grid;
-  grid-template-columns: 100px 1fr;
+  grid-template-columns: 120px 1fr;
   gap: 10px 16px;
   align-items: center;
 }
@@ -496,12 +499,10 @@ function roleLabel(role) {
 }
 .w-full { width: 100%; }
 
-/* ── Section header ── */
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
 }
 .section-title {
   font-size: 12px;
@@ -511,45 +512,41 @@ function roleLabel(role) {
   color: rgba(0, 50, 116, 0.5);
 }
 
-/* ── Lines table ── */
-.lines-table-wrap {
+.lines-wrap {
   overflow-x: auto;
 }
 .lines-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 600px;
+  min-width: 700px;
 }
 .lines-table th {
   text-align: left;
   font-size: 12px;
   font-weight: 600;
   color: #4B5563;
-  padding: 0.35rem 0.4rem;
+  padding: 6px 8px;
   border-bottom: 1px solid #D1D7DE;
 }
 .lines-table td {
-  padding: 0.3rem 0.4rem;
+  padding: 4px 8px;
   vertical-align: middle;
 }
+.lines-table th:nth-child(1), .lines-table td:nth-child(1) { width: 160px; }
+.lines-table th:nth-child(2), .lines-table td:nth-child(2) { width: 220px; }
+.lines-table th:nth-child(3), .lines-table td:nth-child(3) { width: 70px; text-align: center; }
+.lines-table th:nth-child(4), .lines-table td:nth-child(4) { width: 90px; }
+.lines-table th:nth-child(6), .lines-table td:nth-child(6) { width: 40px; }
+
+.col-include {
+  text-align: center;
+}
+
 .lines-table :deep(.p-select),
 .lines-table :deep(.p-inputtext) {
   width: 100%;
 }
-.lines-table th:nth-child(1), .lines-table td:nth-child(1) { width: 160px; }
-.lines-table th:nth-child(2), .lines-table td:nth-child(2) { width: 200px; }
-.lines-table th:nth-child(3), .lines-table td:nth-child(3) { width: 80px; }
-.lines-table th:nth-child(5), .lines-table td:nth-child(5) { width: 40px; }
 
-.empty-lines {
-  text-align: center;
-  color: #6B7280;
-  font-size: 13px;
-  padding: 1rem 0;
-}
-
-
-/* ── Role badges ── */
 .role-badge {
   display: inline-block;
   padding: 2px 8px;
@@ -559,18 +556,7 @@ function roleLabel(role) {
 }
 .role-badge--cathode { background: rgba(0, 50, 116, 0.08); color: #003274; }
 .role-badge--anode { background: rgba(211, 167, 84, 0.15); color: #9a7030; }
+.role-badge--none { color: #6B7280; }
 
 .meta-text { color: #6B7280; font-size: 13px; }
-
-/* ── Dialog footer ── */
-.dialog-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-.dialog-footer-right {
-  display: flex;
-  gap: 0.5rem;
-}
 </style>
