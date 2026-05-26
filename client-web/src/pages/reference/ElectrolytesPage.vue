@@ -7,20 +7,11 @@
  *   - docs/instructions/frontend_parity_handoff.md §"Electrolytes And Separators"
  *   - public/js/electrolytes.js (vanilla reference)
  *
- * Surface notes (vanilla parity):
- *   - row-open opened-record form with sticky header (save/print/exit/delete);
- *   - typed delete confirmation `DELETE ELECTROLYTE <id>`;
- *   - GET /api/electrolytes/:id/delete-check before typed confirm;
- *   - print URL: /workflow/electrolyte-print.html?electrolyte_id=<id>;
- *   - list-level duplicate (client-side starter copy);
- *   - DB-backed file attachments: list/upload/download/delete.
- *
- * The file attachments block is inlined here for now. If Separators
- * needs the same pattern (it does, per vanilla), the section will be
- * extracted into a foundation component `RecordFiles.vue` in a
- * follow-up cleanup PR.
+ * Files block is delegated to the shared <RecordFiles> foundation
+ * component (added 2026-05-14 as the third per-surface migration
+ * exposed the duplication with Separators).
  */
-import { ref, watch, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import api from '@/services/api';
 import { usePrintHandlers } from '@/composables/usePrintHandlers';
 
@@ -28,9 +19,9 @@ import RowOpenPage from '@/components/parity/RowOpenPage.vue';
 import OpenedRecordHeader from '@/components/parity/OpenedRecordHeader.vue';
 import EditableTitle from '@/components/parity/EditableTitle.vue';
 import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue';
+import RecordFiles from '@/components/parity/RecordFiles.vue';
 import { useRowOpenForm } from '@/composables/useRowOpenForm';
 
-import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import Select from 'primevue/select';
@@ -138,98 +129,6 @@ const ctx = useRowOpenForm({
     success: 'Электролит удалён',
   },
 });
-
-// ── Files (inline, candidate for foundation extraction) ──────────────
-const files = ref([]);
-const filesLoading = ref(false);
-const filesStatus = ref(null);
-let filesStatusTimer = null;
-const fileInputEl = ref(null);
-
-async function loadFiles(id) {
-  if (id == null) {
-    files.value = [];
-    return;
-  }
-  filesLoading.value = true;
-  try {
-    const { data } = await api.get(`/api/electrolytes/${id}/files`);
-    files.value = data || [];
-  } catch (err) {
-    files.value = [];
-    setFilesStatus(err?.response?.data?.error || 'Ошибка загрузки файлов', 'error');
-  } finally {
-    filesLoading.value = false;
-  }
-}
-
-function setFilesStatus(message, tone = 'info') {
-  if (filesStatusTimer) clearTimeout(filesStatusTimer);
-  filesStatus.value = { message, tone };
-  filesStatusTimer = setTimeout(() => { filesStatus.value = null; }, 5000);
-}
-
-// Reload files whenever currentId changes to a saved record.
-watch(
-  () => ctx.currentId.value,
-  (id) => loadFiles(id),
-  { immediate: true }
-);
-
-async function onFileSelected(event) {
-  const input = event.target;
-  if (!input.files || input.files.length === 0) return;
-  if (ctx.currentId.value == null) {
-    setFilesStatus('Сохраните запись перед загрузкой файлов', 'error');
-    input.value = '';
-    return;
-  }
-
-  const entries = [];
-  for (const file of Array.from(input.files)) {
-    const arrayBuffer = await file.arrayBuffer();
-    const base64 = btoa(
-      new Uint8Array(arrayBuffer).reduce((s, b) => s + String.fromCharCode(b), '')
-    );
-    entries.push({
-      file_name: file.name,
-      mime_type: file.type || 'application/octet-stream',
-      file_content_base64: base64,
-    });
-  }
-
-  try {
-    await api.post(`/api/electrolytes/${ctx.currentId.value}/files`, { entries });
-    setFilesStatus('Файл загружен', 'ok');
-    await loadFiles(ctx.currentId.value);
-  } catch (err) {
-    setFilesStatus(err?.response?.data?.error || 'Ошибка загрузки файла', 'error');
-  } finally {
-    input.value = '';
-  }
-}
-
-async function onFileDelete(fileId) {
-  if (!window.confirm('Удалить файл?')) return;
-  try {
-    await api.delete(`/api/electrolytes/files/${fileId}`);
-    setFilesStatus('Файл удалён', 'ok');
-    await loadFiles(ctx.currentId.value);
-  } catch (err) {
-    setFilesStatus(err?.response?.data?.error || 'Ошибка удаления файла', 'error');
-  }
-}
-
-function downloadUrl(file) {
-  return file.download_url || `/api/electrolytes/files/${file.electrolyte_file_id}/download`;
-}
-
-function formatFileSize(bytes) {
-  if (bytes == null) return '';
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} МБ`;
-}
 
 // ── Filters ──────────────────────────────────────────────────────────
 const filters = [
@@ -415,56 +314,12 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('electrolytes', ctx);
         </div>
 
         <!-- ── Files section (only for saved records) ── -->
-        <div v-if="ctx.mode.value === 'edit'" class="files-section">
-          <div class="section-header">
-            <span class="section-title">Файлы</span>
-            <span v-if="filesStatus" :class="['files-status', `files-status--${filesStatus.tone}`]">
-              {{ filesStatus.message }}
-            </span>
-          </div>
-
-          <div v-if="filesLoading" class="files-loading">Загрузка файлов...</div>
-          <ul v-else-if="files.length > 0" class="files-list">
-            <li v-for="f in files" :key="f.electrolyte_file_id" class="file-row">
-              <a :href="downloadUrl(f)" target="_blank" rel="noopener" class="file-link">
-                {{ f.file_name }}
-              </a>
-              <span class="file-meta">
-                {{ f.mime_type || '' }}
-                <template v-if="f.file_size_bytes != null">
-                  · {{ formatFileSize(f.file_size_bytes) }}
-                </template>
-              </span>
-              <Button
-                icon="pi pi-trash"
-                severity="danger"
-                text
-                size="small"
-                title="Удалить файл"
-                @click="onFileDelete(f.electrolyte_file_id)"
-              />
-            </li>
-          </ul>
-          <p v-else class="files-empty">Файлы не прикреплены.</p>
-
-          <div class="files-upload-row">
-            <input
-              ref="fileInputEl"
-              type="file"
-              multiple
-              class="hidden-input"
-              @change="onFileSelected"
-            />
-            <Button
-              icon="pi pi-upload"
-              label="Загрузить файлы"
-              severity="secondary"
-              outlined
-              size="small"
-              @click="fileInputEl?.click()"
-            />
-          </div>
-        </div>
+        <RecordFiles
+          v-if="ctx.mode.value === 'edit'"
+          entity-type="electrolytes"
+          :record-id="ctx.currentId.value"
+          file-id-field="electrolyte_file_id"
+        />
       </div>
     </template>
   </RowOpenPage>
@@ -517,72 +372,5 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('electrolytes', ctx);
 .status-pill--inactive { background: rgba(176, 0, 32, 0.08); color: #b00020; }
 .status-pill--archived { background: rgba(0, 50, 116, 0.06); color: #003274; }
 .status-pill--unknown { color: #6B7280; }
-
-.files-section {
-  border-top: 1px solid rgba(0, 50, 116, 0.1);
-  padding-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 700px;
-}
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.section-title {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(0, 50, 116, 0.5);
-}
-.files-status {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 3px;
-}
-.files-status--ok { background: #f0fdf4; color: #166534; }
-.files-status--error { background: #fef2f2; color: #b91c1c; }
-.files-status--info { background: #eff6ff; color: #1e40af; }
-.files-loading,
-.files-empty {
-  margin: 4px 0;
-  font-size: 13px;
-  color: #6B7280;
-}
-.files-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.file-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
-  border-radius: 3px;
-}
-.file-row:hover {
-  background: rgba(0, 50, 116, 0.04);
-}
-.file-link {
-  color: #003274;
-  font-size: 13px;
-  text-decoration: none;
-  flex: 1;
-}
-.file-link:hover {
-  text-decoration: underline;
-}
-.file-meta {
-  font-size: 12px;
-  color: #6B7280;
-}
-.hidden-input { display: none; }
-.files-upload-row { margin-top: 4px; }
+/* Files block styling lives in components/parity/RecordFiles.vue */
 </style>
