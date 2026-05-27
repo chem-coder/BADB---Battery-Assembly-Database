@@ -335,6 +335,7 @@ function setPositionUndecided() {
     :columns="columns"
     :filters="filters"
     :current-id="ctx.currentId.value"
+    :mode="ctx.mode.value"
     id-field="user_id"
     :loading="loading"
     @create="(name) => ctx.openCreate(name)"
