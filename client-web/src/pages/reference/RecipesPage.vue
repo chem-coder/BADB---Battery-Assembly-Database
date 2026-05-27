@@ -329,6 +329,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('recipes', ctx);
     :filters="filters"
     :row-actions="['print', 'duplicate']"
     :current-id="ctx.currentId.value"
+    :mode="ctx.mode.value"
     id-field="tape_recipe_id"
     :loading="loading"
     :text-haystack="textHaystack"
