@@ -40,6 +40,10 @@ const props = defineProps({
   filters: { type: Array, default: () => [] },
   rowActions: { type: Array, default: () => [] },
   currentId: { type: [Number, String, null], default: null },
+  // 'create' | 'edit' | null. Surfaces should pass `ctx.mode.value` from
+  // useRowOpenForm so the opened-record slot also renders in create mode
+  // (where currentId is intentionally null until the record is saved).
+  mode: { type: String, default: null },
   idField: { type: String, required: true },
   loading: { type: Boolean, default: false },
   emptyMessage: { type: String, default: 'Список пуст' },
@@ -141,8 +145,9 @@ function getCellValue(row, column) {
       @create="onCreate"
     />
 
-    <!-- opened-record area: hidden when no record is open -->
-    <div v-if="currentId != null" class="opened-record-area">
+    <!-- opened-record area: visible in edit mode (currentId set) and
+         create mode (mode='create' even though currentId is null). -->
+    <div v-if="currentId != null || mode === 'create'" class="opened-record-area">
       <slot name="opened-record" :current-id="currentId" />
     </div>
 
