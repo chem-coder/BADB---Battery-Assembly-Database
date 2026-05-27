@@ -303,6 +303,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
     :filters="filters"
     :row-actions="['print', 'duplicate']"
     :current-id="ctx.currentId.value"
+    :mode="ctx.mode.value"
     id-field="project_id"
     :loading="loading"
     @create="(name) => ctx.openCreate(name)"
