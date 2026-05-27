@@ -89,8 +89,12 @@ export function useRowOpenForm(options) {
   try {
     unsavedGuardApi = useUnsavedGuard({ isDirty: dirty.isDirty });
   } catch {
+    // Fallback for environments without router context (e.g. isolated tests).
+    // Mirrors the async signature so callers can await it uniformly.
     unsavedGuardApi = {
-      confirmExit: () => !dirty.isDirty.value || window.confirm('Есть несохранённые изменения. Выйти без сохранения?'),
+      confirmExit: async () =>
+        !dirty.isDirty.value ||
+        window.confirm('Есть несохранённые изменения. Выйти без сохранения?'),
     };
   }
 
@@ -120,8 +124,8 @@ export function useRowOpenForm(options) {
     dirty.snapshot();
   }
 
-  function openCreate(prefilledName = '') {
-    if (!unsavedGuardApi.confirmExit()) return;
+  async function openCreate(prefilledName = '') {
+    if (!(await unsavedGuardApi.confirmExit())) return;
     clearStatus();
     currentId.value = null;
     mode.value = 'create';
@@ -134,7 +138,7 @@ export function useRowOpenForm(options) {
 
   let openToken = 0;
   async function openEdit(item) {
-    if (!unsavedGuardApi.confirmExit()) return;
+    if (!(await unsavedGuardApi.confirmExit())) return;
     clearStatus();
     const myToken = (openToken = nextToken());
 
@@ -159,7 +163,7 @@ export function useRowOpenForm(options) {
   }
 
   async function openDuplicate(item) {
-    if (!unsavedGuardApi.confirmExit()) return;
+    if (!(await unsavedGuardApi.confirmExit())) return;
     clearStatus();
     const id = item?.[idField];
     if (id == null) throw new Error(`useRowOpenForm.openDuplicate: missing ${idField}`);
@@ -215,8 +219,8 @@ export function useRowOpenForm(options) {
   }
 
   // ── Exit ────────────────────────────────────────────────────────────
-  function exit() {
-    if (!unsavedGuardApi.confirmExit()) return;
+  async function exit() {
+    if (!(await unsavedGuardApi.confirmExit())) return;
     resetState();
     clearStatus();
   }
