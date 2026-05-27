@@ -201,6 +201,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('electrolytes', ctx);
     :filters="filters"
     :row-actions="['print', 'duplicate']"
     :current-id="ctx.currentId.value"
+    :mode="ctx.mode.value"
     id-field="electrolyte_id"
     :loading="loading"
     :text-haystack="textHaystack"
