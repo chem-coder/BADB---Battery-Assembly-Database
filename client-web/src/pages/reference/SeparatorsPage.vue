@@ -10,7 +10,7 @@
  * Mirrors the Electrolytes pattern with:
  *   - 12 separator fields (incl. structure_id FK to separator_structure);
  *   - typed delete `DELETE SEPARATOR <id>` with delete-check;
- *   - print URL using `sep_id` parameter (asymmetric to other surfaces);
+ *   - uses `sep_id` (legacy DB column) instead of canonical `separator_id`;
  *   - files block delegated to <RecordFiles>.
  */
 import { ref, watch, onMounted } from 'vue';
@@ -103,7 +103,7 @@ function asDateOrNull(v) {
 }
 
 async function loadOne(id) {
-  const item = separators.value.find((s) => s.separator_id === id);
+  const item = separators.value.find((s) => s.sep_id === id);
   if (!item) throw new Error(`Сепаратор #${id} не найден`);
   return {
     item,
@@ -158,7 +158,7 @@ function validate(form) {
 // ── Foundation hook ──────────────────────────────────────────────────
 const ctx = useRowOpenForm({
   entityType: 'separators',
-  idField: 'separator_id',
+  idField: 'sep_id',
   emptyForm,
   validate,
   loadOne,
@@ -224,7 +224,7 @@ function statusLabel(s) {
 
 function formatMeta(item) {
   if (!item) return '';
-  const parts = [`ID: ${item.separator_id}`];
+  const parts = [`ID: ${item.sep_id}`];
   if (item.structure_name) parts.push(`структура: ${item.structure_name}`);
   if (item.status) parts.push(`статус: ${statusLabel(item.status)}`);
   return parts.join(' · ');
@@ -245,7 +245,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('separators', ctx);
     :row-actions="['print', 'duplicate']"
     :current-id="ctx.currentId.value"
     :mode="ctx.mode.value"
-    id-field="separator_id"
+    id-field="sep_id"
     :loading="loading"
     :text-haystack="textHaystack"
     @create="(name) => ctx.openCreate(name)"
