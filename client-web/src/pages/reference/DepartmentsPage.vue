@@ -244,6 +244,7 @@ function onCreate(name) {
     :columns="columns"
     :filters="filters"
     :current-id="ctx.currentId.value"
+    :mode="ctx.mode.value"
     id-field="department_id"
     :loading="loading"
     :text-haystack="textHaystack"
