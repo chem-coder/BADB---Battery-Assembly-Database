@@ -28,14 +28,21 @@
  *     the built-in confirm dialog.
  */
 
-import { watch, onBeforeUnmount } from 'vue';
+import { watch, onBeforeUnmount, getCurrentInstance } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
+import { askToContinue } from '@/services/unsavedConfirm';
 
 const DEFAULT_MESSAGE = 'Есть несохранённые изменения. Выйти без сохранения?';
 
 export function useUnsavedGuard({ isDirty, message = DEFAULT_MESSAGE } = {}) {
   if (!isDirty) {
     throw new Error('useUnsavedGuard: { isDirty } ref is required');
+  }
+  // Must run inside a setup() so lifecycle hooks can register. Explicit
+  // check lets the caller's try/catch fall back to a sync confirm path
+  // in non-component contexts (isolated unit tests).
+  if (!getCurrentInstance()) {
+    throw new Error('useUnsavedGuard: must be called from setup()');
   }
 
   function beforeUnloadHandler(event) {
@@ -47,6 +54,8 @@ export function useUnsavedGuard({ isDirty, message = DEFAULT_MESSAGE } = {}) {
 
   // Attach/detach beforeunload listener tied to isDirty state, so we don't
   // hold a global listener when the form is clean.
+  // The browser-rendered confirm here is the only confirm flow we cannot
+  // replace with a Vue dialog — beforeunload must be synchronous.
   const stopWatcher = watch(
     isDirty,
     (dirty) => {
@@ -64,24 +73,24 @@ export function useUnsavedGuard({ isDirty, message = DEFAULT_MESSAGE } = {}) {
     stopWatcher();
   });
 
-  // Vue Router guard. Returns false to cancel navigation if user does
-  // not confirm. Caller does not need to wire this — registration is
-  // automatic on composable use.
-  onBeforeRouteLeave(() => {
+  // Vue Router guard. Async — returns the user's choice from the Vue
+  // dialog. Vue Router 4 supports promise-returning navigation guards.
+  onBeforeRouteLeave(async () => {
     if (!isDirty.value) return true;
-    return window.confirm(message);
+    return await askToContinue(message);
   });
 
   /**
-   * Synchronous exit-confirmation gate. Returns true if it is safe to
-   * proceed with the exit (either no dirty state, or the user confirmed).
+   * Async exit-confirmation gate. Resolves to true if it is safe to
+   * proceed with the exit (either no dirty state, or the user confirmed
+   * in the Vue dialog).
    *
    * Used by in-page "Выйти" buttons, record switches, and any other
    * imperative path that the router/beforeunload do not cover.
    */
-  function confirmExit() {
+  async function confirmExit() {
     if (!isDirty.value) return true;
-    return window.confirm(message);
+    return await askToContinue(message);
   }
 
   return { confirmExit };
