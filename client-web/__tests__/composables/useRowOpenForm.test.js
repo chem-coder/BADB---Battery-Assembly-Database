@@ -102,25 +102,25 @@ describe('useRowOpenForm — initial state', () => {
 });
 
 describe('useRowOpenForm — openCreate', () => {
-  it('sets mode=create and resets form', () => {
+  it('sets mode=create and resets form', async () => {
     const ctx = useRowOpenForm(buildOptions());
     ctx.form.value.name = 'leftover';
-    ctx.openCreate();
+    await ctx.openCreate();
     expect(ctx.mode.value).toBe('create');
     expect(ctx.currentId.value).toBe(null);
     expect(ctx.form.value.name).toBe('');
   });
 
-  it('prefills name if provided and form has `name` key', () => {
+  it('prefills name if provided and form has `name` key', async () => {
     const ctx = useRowOpenForm(buildOptions());
-    ctx.openCreate('seeded');
+    await ctx.openCreate('seeded');
     expect(ctx.mode.value).toBe('create');
     expect(ctx.form.value.name).toBe('seeded');
   });
 
   it('isDirty is false right after openCreate', async () => {
     const ctx = useRowOpenForm(buildOptions());
-    ctx.openCreate('seeded');
+    await ctx.openCreate('seeded');
     await nextTick();
     expect(ctx.isDirty.value).toBe(false);
   });
@@ -175,7 +175,7 @@ describe('useRowOpenForm — save', () => {
   it('blocks save if validate fails', async () => {
     const options = buildOptions({ validate: () => 'Заполните название' });
     const ctx = useRowOpenForm(options);
-    ctx.openCreate();
+    await ctx.openCreate();
     await ctx.save();
     expect(options.saveOne).not.toHaveBeenCalled();
     expect(ctx.status.value).toMatchObject({ message: 'Заполните название', tone: 'error' });
@@ -184,7 +184,7 @@ describe('useRowOpenForm — save', () => {
   it('calls saveOne in create mode and flips to edit mode', async () => {
     const options = buildOptions();
     const ctx = useRowOpenForm(options);
-    ctx.openCreate('new');
+    await ctx.openCreate('new');
     await ctx.save();
     expect(options.saveOne).toHaveBeenCalledWith(expect.objectContaining({ name: 'new' }), 'create', null);
     expect(ctx.mode.value).toBe('edit');
@@ -203,7 +203,7 @@ describe('useRowOpenForm — save', () => {
   it('reloads list after save', async () => {
     const options = buildOptions();
     const ctx = useRowOpenForm(options);
-    ctx.openCreate();
+    await ctx.openCreate();
     await ctx.save();
     expect(options.list.load).toHaveBeenCalled();
   });
@@ -211,7 +211,7 @@ describe('useRowOpenForm — save', () => {
   it('keeps record open after save (mode=edit, currentId set)', async () => {
     const options = buildOptions();
     const ctx = useRowOpenForm(options);
-    ctx.openCreate();
+    await ctx.openCreate();
     await ctx.save();
     expect(ctx.mode.value).toBe('edit');
     expect(ctx.currentId.value).not.toBe(null);
@@ -221,7 +221,7 @@ describe('useRowOpenForm — save', () => {
     const options = buildOptions();
     options.saveOne = vi.fn().mockRejectedValue({ response: { data: { error: 'Conflict' } } });
     const ctx = useRowOpenForm(options);
-    ctx.openCreate();
+    await ctx.openCreate();
     await ctx.save();
     expect(ctx.status.value).toMatchObject({ message: 'Conflict', tone: 'error' });
   });
@@ -238,7 +238,7 @@ describe('useRowOpenForm — exit', () => {
   it('resets state to initial', async () => {
     const ctx = useRowOpenForm(buildOptions());
     await ctx.openEdit({ id: 1, name: 'one' });
-    ctx.exit();
+    await ctx.exit();
     expect(ctx.currentId.value).toBe(null);
     expect(ctx.mode.value).toBe(null);
   });
@@ -248,7 +248,7 @@ describe('useRowOpenForm — exit', () => {
     await ctx.openEdit({ id: 1, name: 'one' });
     ctx.form.value.name = 'edited';
     window.confirm.mockReturnValue(false);
-    ctx.exit();
+    await ctx.exit();
     expect(ctx.currentId.value).toBe(1); // not reset
   });
 });
