@@ -30,6 +30,7 @@ import Step from 'primevue/step'
 import StepPanels from 'primevue/steppanels'
 import StepPanel from 'primevue/steppanel'
 import PageHeader from '@/components/PageHeader.vue'
+import ElectrodeBulkPasteDialog from '@/components/ElectrodeBulkPasteDialog.vue'
 import {
   TARGET_FORM_FACTOR_OPTIONS,
   TARGET_CONFIG_CODE_OPTIONS_BY_FORM_FACTOR,
@@ -265,6 +266,29 @@ function appendElectrodeRow() {
     comments: '',
     status_code: null,
   })
+}
+
+// Bulk-paste dialog state. Rows from the dialog are appended as _new=true;
+// existing saveBatch() loop persists them on the next save.
+const bulkPasteVisible = ref(false)
+
+function onBulkPasteApplied(rows) {
+  // Drop the trailing empty row that appendElectrodeRow() seeds when the
+  // table is otherwise empty — the paste replaces it conceptually.
+  const last = electrodes.value[electrodes.value.length - 1]
+  if (last && last._new && !last.electrode_mass_g && last.cup_number === '' && !last.comments) {
+    electrodes.value.pop()
+  }
+  for (const r of rows) {
+    electrodes.value.push({
+      _new: true,
+      electrode_mass_g: r.mass_g,
+      cup_number: r.cup_number ?? '',
+      comments: r.comments || '',
+      status_code: null,
+    })
+  }
+  markChanged()
 }
 
 function removeNewElectrodeRow(index) {
@@ -776,7 +800,10 @@ onMounted(async () => {
                   </tbody>
                 </table>
               </div>
-              <Button icon="pi pi-plus" severity="secondary" text size="small" label="Добавить" @click="appendElectrodeRow" />
+              <div class="electrode-actions">
+                <Button icon="pi pi-plus" severity="secondary" text size="small" label="Добавить" @click="appendElectrodeRow" />
+                <Button icon="pi pi-clone" severity="secondary" text size="small" label="Вставить из буфера" @click="bulkPasteVisible = true" />
+              </div>
             </Panel>
 
             <div class="form-actions">
@@ -949,11 +976,23 @@ onMounted(async () => {
         </StepPanel>
       </StepPanels>
     </Stepper>
+
+    <ElectrodeBulkPasteDialog
+      :visible="bulkPasteVisible"
+      @update:visible="(v) => (bulkPasteVisible = v)"
+      @applied="onBulkPasteApplied"
+    />
   </div>
 </template>
 
 <style scoped>
 .electrode-form-page { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+
+.electrode-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
 
 /* Stepper */
 .electrode-stepper { margin-bottom: 1.5rem; }
