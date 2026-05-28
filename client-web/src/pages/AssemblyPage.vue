@@ -14,6 +14,8 @@ import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 import TapeConstructor from '@/components/TapeConstructor.vue'
 import BatteryElectrochemEditor from '@/components/BatteryElectrochemEditor.vue'
+import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
+import { todayIsoMsk } from '@/utils/dateFormat'
 import CapacityHint from '@/components/CapacityHint.vue'
 import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
 import Checkbox from 'primevue/checkbox'
@@ -80,7 +82,7 @@ const statusLabels = { draft: 'Черновик', assembled: 'Собран', tes
 const columns = [
   // Header rendered via `#header-_constructor` slot (master pill with
   // live count). The string here is the accessibility fallback only.
-  { field: '_constructor', header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false },
+  { field: '_constructor', header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false, required: true },
   // Synthetic column: "🖨️ Print" opens Dalia's print-friendly report page
   // (/workflow/battery-print.html?battery_id=X) in a modal Dialog. Header
   // rendered via `#header-_print` slot (PrimeIcon, centered) — matches the
@@ -93,6 +95,12 @@ const columns = [
   { field: 'battery_id', header: 'Аккум.', minWidth: '70px', width: '85px' },
   { field: 'project_name', header: 'Проект', minWidth: '120px' },
   { field: 'form_factor', header: 'Форм-фактор', minWidth: '90px', width: '110px' },
+  // audit #15 — backend returns the joined active-material strings; show
+  // them as compact columns so the user can scan electrochemistry at a
+  // glance without opening the constructor.
+  { field: 'cathode_active_materials', header: 'Катод AM', minWidth: '100px', width: '130px', sortable: true },
+  { field: 'anode_active_materials',   header: 'Анод AM',  minWidth: '100px', width: '130px', sortable: true },
+  { field: 'cathode_batch_shape',      header: 'Форма катода', minWidth: '90px', width: '110px', sortable: true },
   { field: 'status_display', header: 'Статус', minWidth: '80px', width: '100px' },
   { field: 'created_by_name', header: 'Оператор', minWidth: '100px' },
   { field: 'created_at', header: 'Создан', minWidth: '80px', width: '110px' },
@@ -120,18 +128,75 @@ async function loadBatteries() {
   }
 }
 
-async function createBattery() {
+// Previously this POSTed { project_id: 1, form_factor: 'coin' }
+// blindly — project_id=1 might not exist for every user, and the
+// hard-coded form factor pre-committed the user to coin cells before
+// they even saw the form. Open a brand-toned create dialog instead so
+// both required fields come from an explicit user choice.
+const createDialogVisible = ref(false)
+
+// Schema for the shared EntityCreateDialog. Project list comes from
+// refData.projects which is filled by loadRefData on mount.
+const batteryCreateFields = computed(() => [
+  {
+    key: 'project_ids',
+    label: 'Проекты',
+    type: 'multiselect',
+    required: true,
+    options: refData.projects.map(p => ({ value: p.project_id, label: p.name })),
+    placeholder: 'Выберите один или несколько',
+  },
+  {
+    key: 'form_factor',
+    label: 'Форм-фактор',
+    type: 'select',
+    required: true,
+    defaultValue: 'coin',
+    options: [
+      { value: 'coin', label: 'Монеточный' },
+      { value: 'pouch', label: 'Пакетный' },
+      { value: 'cylindrical', label: 'Цилиндрический' },
+    ],
+  },
+  // Business date (vue-vs-backend-audit-2026-05.md #4). Backend column
+  // `item_created_at` (d035) — defaults to today, operator can backdate.
+  {
+    key: 'item_created_at',
+    label: 'Дата создания партии',
+    type: 'date',
+    required: false,
+    defaultValue: todayIsoMsk(),
+  },
+  // audit #13 — battery_notes was only collected later in the general-info
+  // edit. Vanilla collects it up-front; the create dialog now mirrors that.
+  {
+    key: 'battery_notes',
+    label: 'Заметки',
+    type: 'text',
+    required: false,
+    placeholder: 'Краткое описание / цель сборки',
+  },
+])
+
+function createBattery() {
+  createDialogVisible.value = true
+}
+
+async function onCreateDialogSubmit(payload) {
   try {
-    const { data } = await api.post('/api/batteries', {
-      project_id: 1,
-      created_by: String(authStore.user?.userId || ''),
-      form_factor: 'coin',
-    })
+    const { data } = await api.post('/api/batteries', payload)
     await loadBatteries()
     constructorIds.value = [data.battery_id]
-    toast.add({ severity: 'success', summary: 'Создан', detail: `Аккумулятор #${data.battery_id}`, life: 2000 })
+    createDialogVisible.value = false
+    toast.add({
+      severity: 'success',
+      summary: 'Аккумулятор создан',
+      detail: `#${data.battery_id}`,
+      life: 3000,
+    })
   } catch (err) {
     toastApiError(toast, err, 'Не удалось создать аккумулятор')
+    // Leave the dialog open for retry.
   }
 }
 
@@ -401,6 +466,7 @@ onUnmounted(() => clearTimeout(saveTimer))
       :loading="loading"
       id-field="battery_id"
       table-name="Аккумуляторы"
+      table-key="assembly"
       show-add
       row-clickable
       @add="createBattery"
@@ -609,6 +675,16 @@ onUnmounted(() => clearTimeout(saveTimer))
       v-model:visible="printDialog.visible"
       :url="printDialog.url"
       :title="printDialog.title"
+    />
+
+    <EntityCreateDialog
+      v-model:visible="createDialogVisible"
+      eyebrow="Аккумуляторы · Создание"
+      title="Новый аккумулятор"
+      description="Выберите проект и форм-фактор. Аккумулятор откроется в конструкторе для редактирования."
+      :fields="batteryCreateFields"
+      submit-label="Создать"
+      @create="onCreateDialogSubmit"
     />
   </div>
 </template>
