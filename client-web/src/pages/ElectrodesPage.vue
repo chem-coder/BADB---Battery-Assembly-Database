@@ -11,13 +11,15 @@ import api from '@/services/api'
 import { fmtCapacity } from '@/utils/formatCapacity'
 import { toastApiError } from '@/utils/errorClassifier'
 import { useBackendCache } from '@/composables/useBackendCache'
-import Select from 'primevue/select'
 import PageHeader from '@/components/PageHeader.vue'
 import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 import TapeConstructor from '@/components/TapeConstructor.vue'
+import ElectrodeBatchPanel from '@/components/ElectrodeBatchPanel.vue'
 import CapacityHint from '@/components/CapacityHint.vue'
 import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
+import BatchCreateDialog from '@/components/BatchCreateDialog.vue'
+import { useAuthStore } from '@/stores/auth'
 import Checkbox from 'primevue/checkbox'
 import { ELECTRODE_STAGES } from '@/config/electrodeStages'
 import { useElectrodeState } from '@/composables/useElectrodeState'
@@ -29,13 +31,10 @@ const crudTable = ref(null)
 
 // ── Reference data ──
 const allBatches = ref([])
-const projects = ref([])
 const loading = ref(false)
 
-// ── Filters (optional, not blocking) ──
-const selectedRole = ref(null)
-const selectedProjectId = ref(null)
-const selectedTapeId = ref(null)
+// (top filter-bar removed — column-header overlay filters in CrudTable
+// are the single filter source per the design code)
 
 // ── Columns ──
 // Header naming convention: avoid duplicating CrudTable's frozen row-
@@ -46,7 +45,7 @@ const selectedTapeId = ref(null)
 const columns = [
   // Header rendered via `#header-_constructor` slot (master pill with
   // live count). The string here is the accessibility fallback only.
-  { field: '_constructor', header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false },
+  { field: '_constructor', header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false, required: true },
   // Synthetic column: "🖨️ Print" opens Dalia's print-friendly HTML
   // (/workflow/electrode-batch-print.html) in a new tab. Matches the
   // vanilla-JS flow she added in d1382cb but triggered from the Vue
@@ -61,6 +60,10 @@ const columns = [
   // (header 'Тип'). The Vue field key still reads `role_display` because
   // the underlying DB column is `tape_role` (Dalia's schema, untouched).
   { field: 'role_display', header: 'Тип', minWidth: '70px', width: '95px' },
+  // Test-batch marker — backend column `is_test_batch` (d039). Rendered
+  // via `#col-is_test_batch` slot as a small "Тест." badge so users can
+  // spot test runs at a glance.
+  { field: 'is_test_batch', header: 'Тест.', minWidth: '50px', width: '60px', sortable: true },
   { field: 'shape_display', header: 'Форма', minWidth: '80px', width: '120px' },
   { field: 'electrode_count', header: 'Эл-дов', minWidth: '65px', width: '75px' },
   // Capacity columns — values sourced from /api/electrodes/electrode-cut-batches/:id/report
@@ -82,32 +85,10 @@ const columns = [
   { field: 'created_by_name', header: 'Оператор', minWidth: '100px' },
 ]
 
-// ── Computed: unique tapes for filter dropdown ──
-const tapeOptions = computed(() => {
-  const map = new Map()
-  for (const b of allBatches.value) {
-    if (!map.has(b.tape_id)) {
-      map.set(b.tape_id, { id: b.tape_id, name: `#${b.tape_id} — ${b.tape_name || '?'}`, role: b.tape_role })
-    }
-  }
-  let opts = [...map.values()]
-  if (selectedRole.value) opts = opts.filter(t => t.role === selectedRole.value)
-  if (selectedProjectId.value) opts = opts.filter(t => {
-    const batch = allBatches.value.find(b => b.tape_id === t.id)
-    return batch && String(batch.project_id) === String(selectedProjectId.value)
-  })
-  return opts
-})
-
-// ── Computed: filtered + enriched data ──
+// ── Computed: enriched data (filtering lives in CrudTable's column
+// headers — click a header to open the Excel-style filter overlay).
 const tableData = computed(() => {
-  let items = allBatches.value
-
-  if (selectedRole.value) items = items.filter(b => b.tape_role === selectedRole.value)
-  if (selectedProjectId.value) items = items.filter(b => String(b.project_id) === String(selectedProjectId.value))
-  if (selectedTapeId.value) items = items.filter(b => String(b.tape_id) === String(selectedTapeId.value))
-
-  return items.map(b => {
+  return allBatches.value.map(b => {
     // Pull capacity from the shared useBackendCache. Reading
     // `reports.cache.value` inside this computed registers the ref as
     // a dependency — the computed re-runs whenever any /report fetch
@@ -157,11 +138,6 @@ function formatShapeDisplay(b) {
   return b.shape === 'circle' ? 'Круг' : b.shape === 'rectangle' ? 'Прямоуг.' : '—'
 }
 
-const roleOptions = [
-  { label: 'Катоды', value: 'cathode' },
-  { label: 'Аноды', value: 'anode' },
-]
-
 // ── API ──
 async function loadAllBatches() {
   loading.value = true
@@ -201,13 +177,6 @@ function loadAllCapacities() {
   }
 }
 
-async function loadProjects() {
-  try {
-    const { data } = await api.get('/api/projects?project_id=0')
-    projects.value = data
-  } catch {}
-}
-
 // `batchStatus` removed — replaced by the `progress` numeric column
 // + the 3-segment progress-bar slot in the template. The textual
 // status was redundant with this visual encoding (see TapesPage's
@@ -218,24 +187,101 @@ function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString('ru-RU')
 }
 
-function onRoleChange() {
-  selectedTapeId.value = null
+// ── Create-batch flow ────────────────────────────────────────────────
+// Replaces the dedicated /electrodes/new route with one inline modal:
+// the dialog gathers all Step-1 fields (tape, cutting params, comments)
+// and POSTs in one shot. The new batch lands in the list immediately;
+// further editing (electrode masses, drying) is done by clicking the row.
+const authStore = useAuthStore()
+const allTapes = ref([])
+const allUsers = ref([])
+const allProjects = ref([])
+const createDialogVisible = ref(false)
+const createDialogRef = ref(null)
+
+async function loadAllTapes() {
+  try {
+    const { data } = await api.get('/api/tapes')
+    allTapes.value = Array.isArray(data) ? data : []
+  } catch (err) {
+    console.warn('Не удалось загрузить ленты для диалога создания', err)
+  }
 }
 
-function onProjectChange() {
-  selectedTapeId.value = null
+async function loadAllUsers() {
+  try {
+    const { data } = await api.get('/api/users')
+    allUsers.value = Array.isArray(data) ? data : []
+  } catch (err) {
+    console.warn('Не удалось загрузить пользователей для селектора Оператор', err)
+  }
+}
+
+async function loadAllProjects() {
+  try {
+    const { data } = await api.get('/api/projects')
+    allProjects.value = Array.isArray(data) ? data : []
+  } catch (err) {
+    console.warn('Не удалось загрузить проекты для диалога создания', err)
+  }
 }
 
 function createBatch() {
-  if (selectedTapeId.value) {
-    router.push(`/electrodes/new?tape=${selectedTapeId.value}`)
-  } else {
-    toast.add({ severity: 'warn', summary: 'Выберите ленту', detail: 'Для создания партии нужно выбрать ленту', life: 3000 })
+  if (allTapes.value.length === 0) loadAllTapes()
+  if (allUsers.value.length === 0) loadAllUsers()
+  if (allProjects.value.length === 0) loadAllProjects()
+  createDialogVisible.value = true
+}
+
+// Inline "+ Создать проект" handler — emitted by BatchCreateDialog with
+// { payload, resolve, reject }. We POST, prepend the created project so
+// the Select picks it up, and resolve with the new record so the dialog
+// can auto-select it.
+async function onCreateProjectFromDialog({ payload, resolve, reject }) {
+  try {
+    const { data } = await api.post('/api/projects', payload)
+    // /api/projects POST currently returns { project_id } only — reload
+    // the full list so name/description/lead_name show up correctly in
+    // the description card.
+    await loadAllProjects()
+    const fresh = allProjects.value.find(p => p.project_id === data.project_id) || data
+    toast.add({ severity: 'success', summary: 'Проект создан', detail: fresh.name || `#${data.project_id}`, life: 2500 })
+    resolve(fresh)
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось создать проект')
+    reject(err)
+  }
+}
+
+async function onCreateDialogSubmit(payload) {
+  try {
+    const body = {
+      ...payload,
+      created_by: Number(authStore.user?.userId),
+    }
+    const { data } = await api.post('/api/electrodes/electrode-cut-batches', body)
+    createDialogVisible.value = false
+    await loadAllBatches()
+    constructorIds.value = [data.cut_batch_id]
+    toast.add({
+      severity: 'success',
+      summary: 'Партия создана',
+      detail: `#${data.cut_batch_id}`,
+      life: 3000,
+    })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось создать партию')
+    createDialogRef.value?.resetSubmitting?.()
   }
 }
 
 // ── Constructor (same pattern as TapesPage) ──
 const constructorIds = ref([])
+// Active batch tracking — same pattern as TapesPage `activeTapeId`. The
+// inline ElectrodeBatchPanel below the constructor scopes its mass /
+// foil / capacity sections to whichever batch column the user clicked
+// last in the constructor.
+const activeBatchId = ref(null)
 
 function toggleConstructor(batchId) {
   const idx = constructorIds.value.indexOf(batchId)
@@ -328,7 +374,7 @@ function discardChanges() {
 
 // ── Deep link: /electrodes/:id ──
 onMounted(async () => {
-  await Promise.allSettled([loadAllBatches(), loadProjects()])
+  await loadAllBatches()
 
   const batchId = Number(route.params.id)
   if (batchId && Number.isInteger(batchId)) {
@@ -351,50 +397,8 @@ onUnmounted(() => clearTimeout(saveTimer))
       </template>
     </PageHeader>
 
-    <!-- Optional filters -->
-    <div class="filter-bar">
-      <div class="filter-group">
-        <label>Тип</label>
-        <Select
-          v-model="selectedRole"
-          :options="roleOptions"
-          optionLabel="label"
-          optionValue="value"
-          placeholder="Все"
-          showClear
-          size="small"
-          class="filter-select"
-          @change="onRoleChange"
-        />
-      </div>
-      <div class="filter-group">
-        <label>Проект</label>
-        <Select
-          v-model="selectedProjectId"
-          :options="projects"
-          optionLabel="name"
-          optionValue="project_id"
-          placeholder="Все"
-          showClear
-          size="small"
-          class="filter-select filter-project"
-          @change="onProjectChange"
-        />
-      </div>
-      <div class="filter-group">
-        <label>Лента</label>
-        <Select
-          v-model="selectedTapeId"
-          :options="tapeOptions"
-          optionLabel="name"
-          optionValue="id"
-          placeholder="Все"
-          showClear
-          size="small"
-          class="filter-select filter-tape"
-        />
-      </div>
-    </div>
+    <!-- Filters live in column headers — click «Тип» / «Проект» / «Лента»
+         in the table below to open the Excel-style filter overlay. -->
 
     <!-- Batch table — always visible -->
     <CrudTable
@@ -404,6 +408,7 @@ onUnmounted(() => clearTimeout(saveTimer))
       :loading="loading"
       id-field="cut_batch_id"
       table-name="Партии нарезки"
+      table-key="electrodes"
       show-add
       row-clickable
       @add="createBatch"
@@ -457,6 +462,10 @@ onUnmounted(() => clearTimeout(saveTimer))
         <span :class="['role-badge', data.tape_role === 'cathode' ? 'role-badge--cathode' : 'role-badge--anode']">
           {{ data.role_display }}
         </span>
+      </template>
+      <template #col-is_test_batch="{ data }">
+        <span v-if="data.is_test_batch" class="badge badge-2" title="Тестовая партия — не учитывается в средних">Тест.</span>
+        <span v-else class="ep-cell-empty">—</span>
       </template>
       <template #col-created_at="{ data }">{{ formatDate(data.created_at) }}</template>
       <template #col-electrode_count="{ data }">{{ Number(data.electrode_count) || 0 }}</template>
@@ -514,6 +523,16 @@ onUnmounted(() => clearTimeout(saveTimer))
       entityType="electrode_cut_batch"
       title="КОНСТРУКТОР ЭЛЕКТРОДОВ"
       emptyHint="Отметьте партии в таблице для работы в конструкторе"
+      @update:active-tape-id="activeBatchId = $event"
+    />
+
+    <!-- Per-batch detail panel — replaces the legacy ElectrodeFormPage.
+         Mass list + foil masses + capacity summary scoped to the batch
+         the user is currently editing in the constructor. See
+         components/ElectrodeBatchPanel.vue header for the rationale. -->
+    <ElectrodeBatchPanel
+      :batch-id="activeBatchId"
+      :constructor-count="constructorIds.length"
     />
 
     <!-- In-app print preview — replaces window.open(_blank); see
@@ -522,6 +541,18 @@ onUnmounted(() => clearTimeout(saveTimer))
       v-model:visible="printDialog.visible"
       :url="printDialog.url"
       :title="printDialog.title"
+    />
+
+    <BatchCreateDialog
+      ref="createDialogRef"
+      v-model:visible="createDialogVisible"
+      :tapes="allTapes"
+      :users="allUsers"
+      :projects="allProjects"
+      :current-user-id="authStore.user?.userId"
+      :current-user-name="authStore.user?.name || ''"
+      @create="onCreateDialogSubmit"
+      @create-project="onCreateProjectFromDialog"
     />
   </div>
 </template>
@@ -536,29 +567,6 @@ onUnmounted(() => clearTimeout(saveTimer))
   gap: 1.25rem;
 }
 .electrodes-page :deep(.page-header) { margin-bottom: 3px !important; }
-
-/* ── Filter bar ── */
-.filter-bar {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  align-items: flex-end;
-}
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.filter-group label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(0, 50, 116, 0.5);
-}
-.filter-select { min-width: 150px; }
-.filter-project { min-width: 200px; }
-.filter-tape { min-width: 250px; }
 
 /* ── Table cells ── */
 .batch-id { color: #003274; font-weight: 600; }

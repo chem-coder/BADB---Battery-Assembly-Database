@@ -39,6 +39,17 @@ function buildSectionRoutes(sections, baseCrumbs = []) {
           },
         },
       )
+    } else {
+      // Constructor-only entity (formPage: null) — still expose a
+      // /path/:id deep-link, but routed to the listPage which reads
+      // route.params.id on mount and adds the row to the constructor.
+      // Without this, legacy URLs like /electrodes/42 would 404 after
+      // the form page was removed.
+      routes.push({
+        path: s.path.slice(1) + '/:id',
+        component: s.listPage,
+        meta: { title: s.label, crumbs: baseCrumbs },
+      })
     }
     return routes
   })
