@@ -21,8 +21,17 @@ export function useElectrodeState({ batchId }) {
   })
 
   // ── Reactive state ──
+  // `project_ids` mirrors the M:N table `electrode_cut_batch_projects`
+  // (migration d029). Backend accepts `project_ids: [...]` on POST/PUT
+  // — see services/electrodeBatchProjectService.js.
   const general = reactive({
     name: '',
+    project_ids: [],
+    // Business date — column `item_created_at` (d035).
+    item_created_at: '',
+    // Test-batch flag — column `is_test_batch` (d039). Excludes the
+    // batch from capacity averages; renders a marker in the list.
+    is_test_batch: false,
     target_form_factor: '',
     target_config_code: '',
     target_config_other: '',
@@ -67,9 +76,12 @@ export function useElectrodeState({ batchId }) {
   function _applySnapshot(snap) {
     const s = JSON.parse(snap)
     _skipHistory = true
-    Object.assign(general, s.general)
-    Object.assign(steps.drying, s.steps.drying)
-    _skipHistory = false
+    try {
+      Object.assign(general, s.general)
+      Object.assign(steps.drying, s.steps.drying)
+    } finally {
+      _skipHistory = false
+    }
   }
 
   function pushHistory() {
@@ -87,10 +99,22 @@ export function useElectrodeState({ batchId }) {
     _historyTimer = setTimeout(() => { _historyTimer = null }, 400)
   }
 
+  // Reset debounce so the very next edit takes a fresh "before"
+  // snapshot — without this, an edit within 400ms of an undo would be
+  // folded into the previous burst and leave the just-restored state
+  // unreachable on the undo stack.
+  function _resetHistoryDebounce() {
+    if (_historyTimer) {
+      clearTimeout(_historyTimer)
+      _historyTimer = null
+    }
+  }
+
   function undo() {
     if (!undoStack.value.length) return
     redoStack.value.push(_takeSnapshot())
     _applySnapshot(undoStack.value.pop())
+    _resetHistoryDebounce()
     setDirty('cutting'); setDirty('drying')
     _scheduleAutoSave('cutting'); _scheduleAutoSave('drying')
   }
@@ -99,6 +123,7 @@ export function useElectrodeState({ batchId }) {
     if (!redoStack.value.length) return
     undoStack.value.push(_takeSnapshot())
     _applySnapshot(redoStack.value.pop())
+    _resetHistoryDebounce()
     setDirty('cutting'); setDirty('drying')
     _scheduleAutoSave('cutting'); _scheduleAutoSave('drying')
   }
@@ -168,7 +193,15 @@ export function useElectrodeState({ batchId }) {
     saving.value = true
     try {
       if (code === 'cutting') {
+        const pids = Array.isArray(general.project_ids)
+          ? general.project_ids.map(Number).filter(Number.isFinite)
+          : []
         await api.put(`/api/electrodes/electrode-cut-batches/${currentBatchId.value}`, {
+          // M:N — backend writes electrode_cut_batch_projects (d029).
+          project_ids: pids,
+          project_id: pids[0] || null, // legacy echo for old code paths
+          item_created_at: general.item_created_at || null,
+          is_test_batch: !!general.is_test_batch,
           target_form_factor: general.target_form_factor || null,
           target_config_code: general.target_config_code || null,
           target_config_other: general.target_config_code === 'other'
@@ -204,6 +237,24 @@ export function useElectrodeState({ batchId }) {
     try {
       const { data: batch } = await api.get(`/api/electrodes/electrode-cut-batches/${currentBatchId.value}`)
       general.name = `#${batch.cut_batch_id}`
+      // Restore M:N project assignment. Backend GET returns `project_ids`
+      // (preferred) and a legacy `project_id` for downward compat.
+      if (Array.isArray(batch.project_ids) && batch.project_ids.length > 0) {
+        general.project_ids = batch.project_ids.map(Number).filter(Number.isFinite)
+      } else if (batch.project_id) {
+        general.project_ids = [Number(batch.project_id)]
+      } else {
+        general.project_ids = []
+      }
+      // Truncate DATE column to YYYY-MM-DD for the picker.
+      if (batch.item_created_at) {
+        const s = String(batch.item_created_at);
+        const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+        general.item_created_at = m ? m[1] : s;
+      } else {
+        general.item_created_at = ''
+      }
+      general.is_test_batch = !!batch.is_test_batch
       general.target_form_factor = batch.target_form_factor || ''
       general.target_config_code = batch.target_config_code || ''
       general.target_config_other = batch.target_config_other || ''
