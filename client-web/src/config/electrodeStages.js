@@ -65,6 +65,9 @@ export const ELECTRODE_STAGES = [
     icon: 'pi pi-stop-circle',
     hasApiStep: false, // saved via /api/electrodes/electrode-cut-batches/:id
     fields: [
+      { key: 'project_ids', label: 'Проекты', type: 'multiselect', ref: 'projects' },
+      { key: 'item_created_at', label: 'Дата создания партии', type: 'date' },
+      { key: 'is_test_batch', label: 'Тестовая партия', type: 'boolean' },
       { key: 'target_form_factor', label: 'Семейство', type: 'select', options: TARGET_FORM_FACTOR_OPTIONS },
       { key: 'target_config_code', label: 'Конфигурация', type: 'select',
         dependsOn: 'target_form_factor',
@@ -89,10 +92,10 @@ export const ELECTRODE_STAGES = [
     hasApiStep: true, // saved via /api/electrodes/electrode-cut-batches/:id/drying
     fields: [
       { key: 'temperature_c', label: 'Температура, °C', type: 'number' },
-      { key: 'start_time', label: 'Начало', type: 'text' },
-      { key: 'end_time', label: 'Конец', type: 'text' },
-      { key: 'other_parameters', label: 'Параметры', type: 'textarea' },
-      { key: 'comments', label: 'Комментарии', type: 'textarea' },
+      { key: 'start_time',    label: 'Начало',           type: 'datetime-iso' },
+      { key: 'end_time',      label: 'Конец',            type: 'datetime-iso' },
+      { key: 'other_parameters', label: 'Параметры',    type: 'textarea' },
+      { key: 'comments',      label: 'Комментарии',     type: 'textarea' },
     ],
   },
 ]
