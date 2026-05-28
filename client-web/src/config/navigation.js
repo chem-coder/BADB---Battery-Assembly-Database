@@ -39,8 +39,13 @@ export const workflowSections = [
     nameFormat: (row) => `#${row.cut_batch_id} ${row.tape_name || ''}`.trim(),
     icon: 'pi pi-clone',
     listPage: () => import('@/pages/ElectrodesPage.vue'),
-    formPage: () => import('@/pages/ElectrodeFormPage.vue'),
-    formTitles: { new: 'Новая партия', edit: 'Партия' },
+    // formPage removed 2026-05 — constructor is now inline on
+    // ElectrodesPage, with per-batch detail (mass list / foil masses /
+    // capacity summary) rendered by ElectrodeBatchPanel below the
+    // constructor. Legacy /electrodes/:id URLs are still routed to
+    // ElectrodesPage which reads route.params.id on mount.
+    formPage: null,
+    formTitles: null,
   },
   {
     key: 'assembly',
