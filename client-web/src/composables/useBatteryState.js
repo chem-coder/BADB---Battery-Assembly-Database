@@ -31,10 +31,16 @@ export function useBatteryState({ batteryId }) {
   })
 
   // ── Reactive state per stage ──
+  // `project_ids` is the source of truth for the M:N table `battery_projects`
+  // (migration d030). Backend accepts `project_ids: [...]` on POST/PUT —
+  // see services/batteryProjectService.js.
   const general = reactive({
     name: '',
     form_factor: '',
-    project_id: '',
+    project_ids: [],
+    // Business date — column `item_created_at` (d035), distinct from
+    // audit `created_at`.
+    item_created_at: '',
     battery_notes: '',
   })
 
@@ -114,11 +120,14 @@ export function useBatteryState({ batteryId }) {
   function _applySnapshot(snap) {
     const s = JSON.parse(snap)
     _skipHistory = true
-    Object.assign(general, s.general)
-    for (const key of Object.keys(steps)) {
-      if (s.steps[key]) Object.assign(steps[key], s.steps[key])
+    try {
+      Object.assign(general, s.general)
+      for (const key of Object.keys(steps)) {
+        if (s.steps[key]) Object.assign(steps[key], s.steps[key])
+      }
+    } finally {
+      _skipHistory = false
     }
-    _skipHistory = false
   }
 
   function pushHistory() {
@@ -136,10 +145,22 @@ export function useBatteryState({ batteryId }) {
     _historyTimer = setTimeout(() => { _historyTimer = null }, 400)
   }
 
+  // Reset debounce so the next edit takes a fresh snapshot — without
+  // this, an edit within 400ms of an undo would be folded into the
+  // previous burst and the just-restored state would be unreachable
+  // via undo.
+  function _resetHistoryDebounce() {
+    if (_historyTimer) {
+      clearTimeout(_historyTimer)
+      _historyTimer = null
+    }
+  }
+
   function undo() {
     if (!undoStack.value.length) return
     redoStack.value.push(_takeSnapshot())
     _applySnapshot(undoStack.value.pop())
+    _resetHistoryDebounce()
     for (const k of Object.keys(dirtySteps)) {
       setDirty(k)
       _scheduleAutoSave(k)
@@ -150,6 +171,7 @@ export function useBatteryState({ batteryId }) {
     if (!redoStack.value.length) return
     undoStack.value.push(_takeSnapshot())
     _applySnapshot(redoStack.value.pop())
+    _resetHistoryDebounce()
     for (const k of Object.keys(dirtySteps)) {
       setDirty(k)
       _scheduleAutoSave(k)
@@ -251,9 +273,15 @@ export function useBatteryState({ batteryId }) {
       const id = currentBatchId.value
 
       if (code === 'general') {
+        const pids = Array.isArray(general.project_ids)
+          ? general.project_ids.map(Number).filter(Number.isFinite)
+          : []
         await api.patch(`/api/batteries/${id}`, {
-          project_id: general.project_id || undefined,
+          // M:N — backend writes battery_projects (d030).
+          project_ids: pids,
+          project_id: pids[0] || undefined, // legacy echo
           form_factor: general.form_factor || undefined,
+          item_created_at: general.item_created_at || null,
           battery_notes: general.battery_notes || null,
         })
       } else if (code === 'config') {
@@ -360,7 +388,23 @@ export function useBatteryState({ batteryId }) {
 
       general.name = `Акк. #${b.battery_id}`
       general.form_factor = b.form_factor || ''
-      general.project_id = b.project_id ?? ''
+      // Restore M:N project assignment. Backend GET returns `project_ids`
+      // (preferred) and a legacy `project_id` echo for downward compat.
+      if (Array.isArray(b.project_ids) && b.project_ids.length > 0) {
+        general.project_ids = b.project_ids.map(Number).filter(Number.isFinite)
+      } else if (b.project_id) {
+        general.project_ids = [Number(b.project_id)]
+      } else {
+        general.project_ids = []
+      }
+      // Truncate DATE column to YYYY-MM-DD for the picker.
+      if (b.item_created_at) {
+        const s = String(b.item_created_at);
+        const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+        general.item_created_at = m ? m[1] : s;
+      } else {
+        general.item_created_at = ''
+      }
       general.battery_notes = b.notes || ''
 
       // Entity metadata
