@@ -42,10 +42,14 @@ const props = defineProps({
 
 const emit = defineEmits(['save', 'print', 'exit', 'delete']);
 
-function statusClass(tone) {
-  if (tone === 'ok') return 'status-ok';
-  if (tone === 'error') return 'status-error';
-  return 'status-info';
+// Map tone → DS badge palette + icon (DesignSystemPage Section 6).
+const STATUS_BADGES = {
+  ok:    { cls: 'badge badge-3', icon: 'pi-check-circle' },
+  error: { cls: 'badge badge-8', icon: 'pi-times-circle' },
+  info:  { cls: 'badge badge-5', icon: 'pi-info-circle' },
+};
+function statusBadge(tone) {
+  return STATUS_BADGES[tone] || STATUS_BADGES.info;
 }
 </script>
 
@@ -56,7 +60,9 @@ function statusClass(tone) {
         <slot name="title">
           <span class="header-title">{{ title || titlePlaceholder }}</span>
         </slot>
-        <span v-if="dirty" class="dirty-flag">Не сохранено</span>
+        <span v-if="dirty" class="badge badge-1 dirty-flag">
+          <i class="pi pi-circle-fill" /> Не сохранено
+        </span>
       </div>
       <div v-if="meta" class="header-meta">{{ meta }}</div>
     </div>
@@ -101,14 +107,17 @@ function statusClass(tone) {
         {{ deleteLabel }}
       </button>
 
-      <span
-        v-if="status"
-        class="header-status"
-        :class="statusClass(status.tone)"
-        aria-live="polite"
-      >
-        {{ status.message }}
-      </span>
+      <Transition name="status-fade">
+        <span
+          v-if="status"
+          class="header-status"
+          :class="statusBadge(status.tone).cls"
+          aria-live="polite"
+        >
+          <i class="pi" :class="statusBadge(status.tone).icon" />
+          {{ status.message }}
+        </span>
+      </Transition>
     </div>
 
     <slot />
@@ -148,13 +157,16 @@ function statusClass(tone) {
   font-weight: 600;
   color: #003274;
 }
+/* Dirty flag — uses DS .badge-1 (терракот) + tiny dot icon */
 .dirty-flag {
   font-size: 11px;
-  color: #b45309;
-  background: #fef3c7;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-weight: 500;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dirty-flag .pi-circle-fill {
+  font-size: 6px;
 }
 .header-meta {
   font-size: 12px;
@@ -203,22 +215,26 @@ function statusClass(tone) {
 .btn-danger:hover {
   background: #fef2f2;
 }
+/* Inline status uses DS .badge palette + icon, fades in/out */
 .header-status {
   font-size: 12px;
-  padding: 3px 8px;
-  border-radius: 3px;
-  margin-left: 8px;
+  font-weight: 600;
+  margin-left: var(--space-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
-.status-ok {
-  color: #166534;
-  background: #f0fdf4;
+.header-status .pi {
+  font-size: 11px;
 }
-.status-error {
-  color: #b91c1c;
-  background: #fef2f2;
+
+.status-fade-enter-active,
+.status-fade-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
 }
-.status-info {
-  color: #1e40af;
-  background: #eff6ff;
+.status-fade-enter-from,
+.status-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
 }
 </style>

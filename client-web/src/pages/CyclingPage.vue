@@ -907,6 +907,7 @@ const batteryOptions = computed(() =>
       :data="sessions"
       id-field="session_id"
       table-name="Сессии циклирования"
+      table-key="cycling"
       @row-click="toggleSession"
       @delete="deleteSession"
       @header-click="onTableHeaderClick"

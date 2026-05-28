@@ -58,6 +58,7 @@ onMounted(loadEntries)
       :loading="loading"
       id-field="id"
       table-name="Журнал входов"
+      table-key="audit"
     >
       <template #col-created_at="{ data }">{{ formatDate(data.created_at) }}</template>
       <template #col-user_name="{ data }">

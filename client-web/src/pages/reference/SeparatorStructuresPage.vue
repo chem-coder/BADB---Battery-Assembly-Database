@@ -159,6 +159,7 @@ async function saveStructure() {
       :loading="loading"
       id-field="sep_str_id"
       table-name="Структуры"
+      table-key="ref-separator-structures"
       show-add
       row-clickable
       @add="openCreate"

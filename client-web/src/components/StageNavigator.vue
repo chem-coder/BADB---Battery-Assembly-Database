@@ -46,17 +46,38 @@ function stageNumber(code) {
 }
 
 // ── Timeline data ──
-// Returns { date, time } for full precision positioning
+// Returns { date, time } or { full } for full precision positioning.
+// Handles both state shapes the navigator is used with:
+//   - tape state: steps[code] = { date, time }
+//   - electrode state: steps[code] = { start_time, end_time } (ISO)
 function getStageDateTime(code) {
   const ts = activeTapeState.value
   if (!ts) return null
+
+  // Tape "general info" — use the tape's createdAt. Excluded from the
+  // shared range below (META_STAGE_CODES), so it doesn't pull other
+  // step markers to the left edge.
   if (code === 'general_info') {
-    // createdAt is a full ISO timestamp
     return ts.general?.createdAt ? { full: ts.general.createdAt } : null
   }
+
+  // Electrode "cutting" stage stores its fields on `general`, not in
+  // `steps`. The closest meaningful timestamp is the batch's created_at,
+  // which the navigator can use as the cutting marker.
+  if (code === 'cutting' && !ts.steps?.cutting) {
+    const ca = ts.meta?.created_at
+    return ca ? { full: ca } : null
+  }
+
   const step = ts.steps?.[code]
-  if (!step?.date) return null
-  return { date: step.date, time: step.time || '00:00:00' }
+  if (!step) return null
+  // Tape pattern: split date + time fields.
+  if (step.date) return { date: step.date, time: step.time || '00:00:00' }
+  // Electrode pattern: ISO timestamps. Prefer the start_time when both
+  // start_time and end_time are present; fall back to end_time.
+  if (step.start_time) return { full: step.start_time }
+  if (step.end_time) return { full: step.end_time }
+  return null
 }
 
 // For display — just the date part (дд.мм)
@@ -74,6 +95,18 @@ function parseDateTimeFull(dt) {
   return new Date(dt.date + 'T' + dt.time)
 }
 
+// Stage codes that represent metadata (creation time, general info) rather
+// than a workflow event. Their timestamps should NOT define the timeline
+// range — including tape.created_at (which is "today" for a freshly
+// opened tape) was making real process-step dates cluster at the far
+// left of the bar whenever the tape was created recently but the steps
+// were back-dated.
+//
+// Only 'general_info' is metadata here. Electrode 'cutting' is an actual
+// workflow step with its own start/end timestamps, so it must remain
+// part of the timeline.
+const META_STAGE_CODES = new Set(['general_info'])
+
 // Collect all dates across stages → min/max for shared time axis (full precision)
 const timeRange = computed(() => {
   const ts = activeTapeState.value
@@ -81,6 +114,7 @@ const timeRange = computed(() => {
 
   const dates = []
   for (const stage of props.stages) {
+    if (META_STAGE_CODES.has(stage.code)) continue
     const dt = getStageDateTime(stage.code)
     if (dt) {
       const d = parseDateTimeFull(dt)
@@ -99,7 +133,10 @@ const timeRange = computed(() => {
 })
 
 // Position of a stage's date on the shared timeline (0–100%), precision to seconds
+// Meta stages (general_info / cutting) intentionally have no marker — they
+// represent metadata, not a workflow event on the timeline.
 function barPosition(code) {
+  if (META_STAGE_CODES.has(code)) return null
   const tr = timeRange.value
   if (!tr) return null
   const dt = getStageDateTime(code)
