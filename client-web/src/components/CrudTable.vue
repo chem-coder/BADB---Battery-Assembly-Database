@@ -40,6 +40,8 @@ import Checkbox from 'primevue/checkbox'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Paginator from 'primevue/paginator'
+import { useAuthStore } from '@/stores/auth'
+import { useUserPref } from '@/composables/useUserPref'
 
 const props = defineProps({
   columns:      { type: Array, required: true },
@@ -49,38 +51,105 @@ const props = defineProps({
   loading:      { type: Boolean, default: false },
   showAdd:      { type: Boolean, default: false },
   rowClickable: { type: Boolean, default: false },
-  showRename:   { type: Boolean, default: true },
-  exportEnd:    { type: Boolean, default: false },
   exportBadge:  { type: Number, default: 0 },  // extra selected count shown on export menu items
+  // Stable identifier for this table — used as the namespace for
+  // per-user column-visibility persistence in localStorage. If empty,
+  // toggling still works but nothing is persisted.
+  tableKey:     { type: String, default: '' },
 })
 
 const emit = defineEmits(['delete', 'add', 'row-click', 'export', 'header-click'])
 
 // ── Toolbar state ──────────────────────────────────────────────────────
 const localTableName = ref(props.tableName)
-const isEditingTableName = ref(false)
-const visibleRows = ref(10)
 
-function startEditTableName() {
-  isEditingTableName.value = true
-  nextTick(() => {
-    const input = tableCardRef.value?.querySelector('.ct-table-name-input')
-    if (input) { input.focus(); input.select() }
-  })
-}
-function finishEditTableName() {
-  isEditingTableName.value = false
-  if (!localTableName.value.trim()) localTableName.value = props.tableName
-}
-function clampVisibleRows() {
-  let v = visibleRows.value
-  if (!v || v < 5) v = 5
-  if (v > 100) v = 100
-  visibleRows.value = Math.round(v / 5) * 5 || 5
+// "Строк в окне" — fixed Select with 5 / 25 / Все (all). `-1` is the
+// sentinel for "all rows visible, no pagination". Per-user, namespaced
+// by tableKey so each list remembers its own choice. Default = 5.
+const VISIBLE_ROWS_OPTIONS = [
+  { value: 5,  label: '5' },
+  { value: 25, label: '25' },
+  { value: -1, label: 'Все' },
+]
+const visibleRows = useUserPref(
+  `crud:visible-rows:${props.tableKey || 'default'}`,
+  5,
+)
+
+// `effectiveVisibleRows` returns the actual number of rows to display.
+// When `visibleRows === -1` ("Все"), it falls back to the filtered
+// row count so pagination math sees a single page covering everything.
+const effectiveVisibleRows = computed(() => {
+  if (visibleRows.value === -1) return Math.max(filteredData.value.length, 1)
+  return visibleRows.value
+})
+
+// ── Column visibility (per-user, persisted to localStorage) ────────────
+// Persistence key is namespaced by tableKey prop + current user id so
+// each user's per-table layout is remembered across sessions. Columns
+// marked { required: true } cannot be hidden (e.g. constructor checkbox,
+// row-id, frozen primary identifier).
+const authStore = useAuthStore()
+
+function storageKey() {
+  if (!props.tableKey) return ''
+  const uid = authStore.user?.userId || 'guest'
+  return `badb:cols-hidden:${props.tableKey}:${uid}`
 }
 
-// Total column count = № + user columns
-const columnCount = computed(() => 1 + props.columns.length)
+function loadHidden() {
+  const key = storageKey()
+  if (!key) return new Set()
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw)
+    return new Set(Array.isArray(arr) ? arr : [])
+  } catch {
+    return new Set()
+  }
+}
+
+const hiddenColumns = ref(loadHidden())
+
+watch(hiddenColumns, (next) => {
+  const key = storageKey()
+  if (!key) return
+  try {
+    localStorage.setItem(key, JSON.stringify([...next]))
+  } catch {
+    // localStorage quota exceeded / disabled — silent, the UI still works
+    // this session, it just won't survive a reload.
+  }
+}, { deep: true })
+
+// Whenever auth changes (login as someone else) — reload the saved set.
+watch(() => authStore.user?.userId, () => {
+  hiddenColumns.value = loadHidden()
+})
+
+const visibleColumns = computed(() =>
+  props.columns.filter(c => !hiddenColumns.value.has(c.field))
+)
+
+function toggleColumn(field, required) {
+  if (required) return
+  const next = new Set(hiddenColumns.value)
+  if (next.has(field)) next.delete(field)
+  else next.add(field)
+  hiddenColumns.value = next
+}
+
+function resetColumns() {
+  hiddenColumns.value = new Set()
+}
+
+const columnsMenuVisible = ref(false)
+const columnsBtnRef = ref(null)
+function toggleColumnsMenu() { columnsMenuVisible.value = !columnsMenuVisible.value }
+
+// Total column count = № + visible user columns
+const columnCount = computed(() => 1 + visibleColumns.value.length)
 
 // Table viewport — always max 10 visible rows, scroll if more
 const TABLE_MAX_VIEW = 10
@@ -246,10 +315,15 @@ const filteredData = computed(() => {
 
 const tableFirst = ref(0)
 const paginatedData = computed(() => {
+  // "Все" (visibleRows = -1): return everything, ignore pagination.
+  if (visibleRows.value === -1) return filteredData.value
   const start = tableFirst.value
   return filteredData.value.slice(start, start + visibleRows.value)
 })
-const showPaginator = computed(() => filteredData.value.length > visibleRows.value)
+const showPaginator = computed(() => {
+  if (visibleRows.value === -1) return false
+  return filteredData.value.length > visibleRows.value
+})
 
 watch([() => filteredData.value.length, visibleRows], () => {
   tableFirst.value = 0
@@ -277,15 +351,16 @@ function downloadBlob(blob, filename) {
 function getExportData() {
   return filteredData.value.map((r, i) => {
     const row = { '№': i + 1 }
-    props.columns.forEach(c => { row[c.header] = r[c.field] ?? '' })
+    visibleColumns.value.forEach(c => { row[c.header] = r[c.field] ?? '' })
     return row
   })
 }
 
 function exportCSV() {
-  const headers = ['№', ...props.columns.map(c => c.header)]
+  const cols = visibleColumns.value
+  const headers = ['№', ...cols.map(c => c.header)]
   const rows = filteredData.value.map((r, i) =>
-    [i + 1, ...props.columns.map(c => String(r[c.field] ?? '').replace(/;/g, ','))].join(';')
+    [i + 1, ...cols.map(c => String(r[c.field] ?? '').replace(/;/g, ','))].join(';')
   )
   const csv = '\uFEFF' + headers.join(';') + '\n' + rows.join('\n')
   downloadBlob(
@@ -298,7 +373,7 @@ function exportCSV() {
 function exportJSON() {
   const data = filteredData.value.map(r => {
     const row = {}
-    props.columns.forEach(c => { row[c.field] = r[c.field] ?? null })
+    visibleColumns.value.forEach(c => { row[c.field] = r[c.field] ?? null })
     return row
   })
   const json = JSON.stringify(data, null, 2)
@@ -311,11 +386,12 @@ function exportJSON() {
 
 function exportExcel() {
   // HTML-table format — Excel opens natively without any library
+  const cols = visibleColumns.value
   const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const headers = ['№', ...props.columns.map(c => c.header)]
+  const headers = ['№', ...cols.map(c => c.header)]
   const headerRow = headers.map(h => `<th>${esc(h)}</th>`).join('')
   const bodyRows = filteredData.value.map((r, i) => {
-    const cells = [i + 1, ...props.columns.map(c => r[c.field] ?? '')]
+    const cells = [i + 1, ...cols.map(c => r[c.field] ?? '')]
     return '<tr>' + cells.map(c => `<td>${esc(c)}</td>`).join('') + '</tr>'
   }).join('\n')
 
@@ -371,6 +447,10 @@ function onDocClick(e) {
   if (exportBtnRef.value && !exportBtnRef.value.contains(e.target)) {
     exportMenuVisible.value = false
   }
+  // Close columns menu on outside click
+  if (columnsBtnRef.value && !columnsBtnRef.value.contains(e.target)) {
+    columnsMenuVisible.value = false
+  }
 }
 
 let _dblClickHandler = null
@@ -402,42 +482,56 @@ defineExpose({ clearSelection, selectedRows, filteredData })
 <template>
   <div ref="tableCardRef" class="glass-card ct-table-card">
 
-    <!-- Toolbar — sticky with blur (pixel-exact from DS) -->
+    <!-- Toolbar — sticky with blur. Layout:
+         [name] [Строк в окне: 5|25|Все] [row/col counts] [Колонки] [Выгрузить]
+         ──────── ct-spacer ────────
+         [toolbar-end slot] [Добавить]
+         Add button sticks to the FAR RIGHT of the toolbar via the
+         ct-spacer flex push. -->
     <div class="ct-toolbar">
-      <template v-if="isEditingTableName">
-        <input v-model="localTableName" class="ct-table-name-input"
-          @blur="finishEditTableName" @keyup.enter="finishEditTableName" />
-      </template>
-      <template v-else>
-        <span class="ct-table-name">{{ localTableName }}</span>
-      </template>
-      <Button v-if="showRename" icon="pi pi-pencil" text size="small" severity="secondary"
-        v-tooltip.bottom="'Переименовать'" @click="startEditTableName" class="ct-toolbar-btn" />
-      <div v-if="!exportEnd" class="ct-export-wrap" ref="exportBtnRef">
-        <Button icon="pi pi-download" text size="small" severity="secondary"
-          v-tooltip.bottom="'Выгрузить'" @click.stop="toggleExportMenu" class="ct-toolbar-btn" />
-        <div v-if="exportMenuVisible" class="ct-export-menu" @click.stop>
-          <button class="ct-export-item" @click="exportExcel">
-            <i class="pi pi-file-excel"></i> Excel (.xls)
-          </button>
-          <button class="ct-export-item" @click="exportCSV">
-            <i class="pi pi-file"></i> CSV
-          </button>
-          <button class="ct-export-item" @click="exportJSON">
-            <i class="pi pi-code"></i> JSON
-          </button>
-        </div>
-      </div>
+      <span class="ct-table-name">{{ localTableName }}</span>
       <span class="ct-sep"></span>
-      <span class="ct-meta">Строк в окне (5–100)</span>
-      <input type="number" v-model.number="visibleRows" min="5" max="100" step="5"
-        class="ct-rows-input"
-        @keyup.enter="$event.target.blur()"
-        @blur="clampVisibleRows" />
+      <span class="ct-meta">Строк в окне</span>
+      <select v-model.number="visibleRows" class="ct-rows-select">
+        <option v-for="opt in VISIBLE_ROWS_OPTIONS" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
       <span class="ct-sep"></span>
       <span class="ct-meta">{{ filteredData.length }} строк × {{ columnCount }} столбцов</span>
-      <slot name="toolbar-end"></slot>
-      <div v-if="exportEnd" class="ct-export-wrap" ref="exportBtnRef">
+
+      <!-- Column visibility — per-user, persisted to localStorage -->
+      <div class="ct-export-wrap" ref="columnsBtnRef">
+        <Button icon="pi pi-sliders-v" text size="small" severity="secondary"
+          v-tooltip.bottom="'Колонки'" @click.stop="toggleColumnsMenu" class="ct-toolbar-btn" />
+        <div v-if="columnsMenuVisible" class="ct-columns-menu" @click.stop>
+          <div class="ct-columns-menu-head">
+            <span>Видимые колонки</span>
+            <button
+              v-if="hiddenColumns.size > 0"
+              type="button"
+              class="ct-columns-reset"
+              @click="resetColumns"
+            >сбросить</button>
+          </div>
+          <label
+            v-for="c in columns"
+            :key="c.field"
+            class="ct-columns-item"
+            :class="{ 'ct-columns-item--locked': c.required }"
+          >
+            <Checkbox
+              :model-value="!hiddenColumns.has(c.field)"
+              :binary="true"
+              :disabled="c.required"
+              @update:model-value="toggleColumn(c.field, c.required)"
+            />
+            <span>{{ c.header || c.field }}</span>
+            <i v-if="c.required" class="pi pi-lock" v-tooltip.right="'Обязательная колонка'" />
+          </label>
+        </div>
+      </div>
+      <div class="ct-export-wrap" ref="exportBtnRef">
         <Button icon="pi pi-download" text size="small" severity="secondary"
           v-tooltip.bottom="'Выгрузить'" @click.stop="toggleExportMenu" class="ct-toolbar-btn" />
         <div v-if="exportMenuVisible" class="ct-export-menu" @click.stop>
@@ -452,7 +546,8 @@ defineExpose({ clearSelection, selectedRows, filteredData })
           </button>
         </div>
       </div>
-      <span v-if="showAdd" class="ct-spacer"></span>
+      <span class="ct-spacer" />
+      <slot name="toolbar-end" />
       <Button v-if="showAdd" label="Добавить" icon="pi pi-plus" size="small" @click="emit('add')" />
     </div>
 
@@ -484,7 +579,7 @@ defineExpose({ clearSelection, selectedRows, filteredData })
 
       <!-- Dynamic columns -->
       <Column
-        v-for="col in columns"
+        v-for="col in visibleColumns"
         :key="col.field"
         :field="col.field"
         :sortable="col.sortable !== false"
@@ -521,7 +616,7 @@ defineExpose({ clearSelection, selectedRows, filteredData })
     <!-- Paginator -->
     <Paginator v-if="showPaginator"
       :first="tableFirst"
-      :rows="visibleRows"
+      :rows="effectiveVisibleRows"
       :totalRecords="filteredData.length"
       @page="onPageChange"
       :template="'FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink'"
@@ -646,26 +741,43 @@ defineExpose({ clearSelection, selectedRows, filteredData })
   color: #6B7280;
   white-space: nowrap;
 }
-.ct-rows-input {
-  width: 48px;
-  text-align: center;
+/* "Строк в окне" — native <select> styled to match the toolbar meta
+   (12px / #6B7280 / brand-blue 1px tinted border). Native HTML keeps
+   the markup minimal: no PrimeVue PT overrides fighting global Aura
+   !important rules, no extra import, and the native chevron renders
+   exactly once per browser. DS prescribes AutoComplete for general
+   selects, but for a tiny 3-option toolbar picker the native element
+   is the correct minimalist fit. */
+.ct-rows-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 64px;
+  height: 24px;
+  padding: 2px 18px 2px 6px;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 400;
   color: #6B7280;
+  background: transparent;
   border: 1px solid rgba(0, 50, 116, 0.15);
   border-radius: 4px;
-  padding: 2px 4px;
-  background: transparent;
   outline: none;
-  -moz-appearance: textfield;
+  cursor: pointer;
+  /* Brand-blue chevron rendered via inline SVG so the colour matches
+     other toolbar icons without depending on a system font. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23003274' stroke-opacity='0.50' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 8px 5px;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.ct-rows-input::-webkit-inner-spin-button,
-.ct-rows-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+.ct-rows-select:hover:not(:focus) {
+  border-color: rgba(0, 50, 116, 0.30);
 }
-.ct-rows-input:focus {
-  border-color: rgba(0, 50, 116, 0.35);
+.ct-rows-select:focus {
+  border-color: rgba(0, 50, 116, 0.45);
+  box-shadow: 0 0 0 2px rgba(0, 50, 116, 0.10);
 }
 .ct-spacer {
   flex: 1;
@@ -714,6 +826,76 @@ defineExpose({ clearSelection, selectedRows, filteredData })
   color: rgba(0, 50, 116, 0.5);
 }
 
+/* ── Columns visibility menu ── */
+.ct-columns-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  background: white;
+  border: 1px solid rgba(0, 50, 116, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 50, 116, 0.14);
+  padding: 8px;
+  min-width: 240px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.ct-columns-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(0, 50, 116, 0.50);
+  border-bottom: 1px solid rgba(0, 50, 116, 0.06);
+  margin-bottom: 4px;
+}
+.ct-columns-reset {
+  font-size: 11px;
+  font-weight: 600;
+  color: #025EA1;
+  background: transparent;
+  border: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ct-columns-reset:hover {
+  background: rgba(2, 94, 161, 0.08);
+}
+.ct-columns-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #003274;
+}
+.ct-columns-item:hover {
+  background: rgba(0, 50, 116, 0.04);
+}
+.ct-columns-item--locked {
+  cursor: not-allowed;
+  color: #9CA3AF;
+}
+.ct-columns-item--locked:hover {
+  background: transparent;
+}
+.ct-columns-item .pi-lock {
+  margin-left: auto;
+  font-size: 10px;
+  color: rgba(0, 50, 116, 0.35);
+}
+
 /* ── DataTable — transparent base ── */
 .ct-table-card :deep(.p-datatable-table-container),
 .ct-table-card :deep(.p-datatable) {
@@ -721,7 +903,19 @@ defineExpose({ clearSelection, selectedRows, filteredData })
 }
 .ct-table-card :deep(.p-datatable-table-container) {
   overflow-x: auto;
-  padding-bottom: 2px;
+  /* Padding-bottom + border on the wrapper used to render a thin secondary
+     line below the last row, giving a "double frame" with the outer
+     .glass-card border. Drop the padding and any inner bottom borders so
+     only the card's own edge is visible. */
+  padding-bottom: 0;
+  border: none;
+}
+/* Kill bottom-frame artefacts from DataTable's scroll container, table
+   element and last row so the table sits flush against the card edge. */
+.ct-table-card :deep(.p-datatable-table),
+.ct-table-card :deep(.p-datatable-tbody),
+.ct-table-card :deep(.p-datatable-tbody > tr:last-child > td) {
+  border-bottom: 0 !important;
 }
 
 /* Gap between toolbar and thead */

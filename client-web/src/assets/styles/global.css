@@ -138,17 +138,34 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   color: var(--p-surface-900) !important;
 }
 
+/* Panel header — subtle brand tint + Rosatom title (DS Section 5/eyebrow
+   pattern). Solid primary-coloured fill is too heavy for a form section
+   header and was previously rendering bright emerald until the
+   TvelAura preset took over. */
 .p-panel .p-panel-header {
-  background: var(--p-primary-color) !important;
-  color: #ffffff !important;
+  background: rgba(0, 50, 116, 0.04) !important;
+  color: #003274 !important;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.10);
   border-radius: var(--p-content-border-radius) var(--p-content-border-radius) 0 0;
+  font-family: 'Rosatom', system-ui, sans-serif;
+  font-size: 13px;
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .p-panel .p-panel-content {
-  border: 1px solid var(--p-surface-200);
+  border: 1px solid rgba(0, 50, 116, 0.12);
   border-top: none;
   border-radius: 0 0 var(--p-border-radius) var(--p-border-radius);
+  background: white;
+}
+
+/* Hide PrimeVue Stepper v4's auto-rendered .p-step-number — it shows the
+   step `value` prop ("cutting"/"weighing"/...) as visible text right next
+   to our custom slot content. Pages that need their own numbered indicator
+   should render it inside the slot. */
+.p-step-number {
+  display: none !important;
 }
 
 /* ── Typography override — force all PrimeVue components to inherit Rosatom ── */
@@ -787,3 +804,52 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
     padding: 0.75rem !important;
   }
 }
+
+/* ── Toast brand theming ─────────────────────────────────────────────
+   Overrides PrimeVue Aura defaults so toasts match the DS .badge palette
+   and the .glass-card visual language (border + soft shadow + Rosatom title).
+   See DesignSystemPage.vue Section 6 for the palette.
+*/
+.badb-toast {
+  font-family: 'Rosatom', system-ui, sans-serif;
+}
+.badb-toast .p-toast-message {
+  border: 1px solid rgba(0, 50, 116, 0.12);
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: white;
+  box-shadow:
+    0 4px 11px rgba(0, 50, 116, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(12px) saturate(1.4);
+}
+.badb-toast .p-toast-message-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.badb-toast .p-toast-summary {
+  font-family: 'Rosatom', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #003274;
+}
+.badb-toast .p-toast-detail {
+  font-size: 13px;
+  font-weight: 400;
+  color: #333333;
+  line-height: 1.5;
+}
+
+/* Severity colours — match .badge-N palette (Section 6) */
+.badb-toast .p-toast-message-success { border-left-color: #649263; }   /* badge-3 хвойный */
+.badb-toast .p-toast-message-success .p-toast-message-icon { color: #649263; }
+
+.badb-toast .p-toast-message-error   { border-left-color: #E74C3C; }   /* badge-8 red */
+.badb-toast .p-toast-message-error   .p-toast-message-icon { color: #E74C3C; }
+
+.badb-toast .p-toast-message-warn    { border-left-color: #D3A754; }   /* badge-2 охра */
+.badb-toast .p-toast-message-warn    .p-toast-message-icon { color: #D3A754; }
+
+.badb-toast .p-toast-message-info    { border-left-color: #025EA1; }   /* badge-5 синий */
+.badb-toast .p-toast-message-info    .p-toast-message-icon { color: #025EA1; }
