@@ -43,6 +43,7 @@ import { useRowOpenForm } from '@/composables/useRowOpenForm';
 import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import Select from 'primevue/select';
+import DateInputISO from '@/components/parity/DateInputISO.vue';
 
 // ── Constants ────────────────────────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -387,18 +388,16 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
           />
 
           <label for="proj-start">Дата начала</label>
-          <InputText
+          <DateInputISO
             id="proj-start"
             v-model="ctx.form.value.start_date"
-            type="date"
             class="w-full"
           />
 
           <label for="proj-due">Дата окончания</label>
-          <InputText
+          <DateInputISO
             id="proj-due"
             v-model="ctx.form.value.due_date"
-            type="date"
             class="w-full"
           />
 

@@ -29,3 +29,15 @@ sql_backups/
 sql_backups/local_only/
 sql_backups/*_full*.sql
 sql_backups/*dump*.sql
+
+# Python cache (one-off scripts/)
+scripts/__pycache__/
+**/__pycache__/
+
+# Runtime upload directory — user-generated data, not source
+uploads/
+
+# macOS / Finder duplicates ("filename (2).ext") — accidental copies
+* (2)
+* (2).*
+* (2) *
