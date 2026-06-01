@@ -239,6 +239,19 @@ router.delete('/:id', auth, async (req, res) => {
         params: [id]
       },
       {
+        key: 'project_participants',
+        label: 'проекты, где пользователь указан участником',
+        query: `
+          SELECT p.project_id AS id, p.name
+          FROM project_participants pp
+          JOIN projects p ON p.project_id = pp.project_id
+          WHERE pp.user_id = $1
+          ORDER BY p.project_id
+          LIMIT 25
+        `,
+        params: [id]
+      },
+      {
         key: 'tapes',
         label: 'ленты, созданные или обновлённые пользователем',
         query: `

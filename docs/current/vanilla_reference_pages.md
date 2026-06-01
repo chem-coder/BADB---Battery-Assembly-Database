@@ -76,7 +76,7 @@ print icon is `🖨️`; the current common duplicate icon is `📑`.
 | Page | Row Opens | Sticky Header | Filters | Print | Duplicate | Delete | Delete Check | Files |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Tapes | yes | yes | text, status, project, role, sidedness | yes | list client starter | opened record, admin/lead, typed phrase | yes | no |
-| Projects | yes | yes | text, status, access, department, lead | yes | list client starter | opened record, backend dependency errors | no standalone route | no |
+| Projects | yes | yes | text, status, access, lead | yes | list client starter | opened record, backend dependency errors | no standalone route | no |
 | Recipes | yes | yes | text, role | yes | list client copy; backend route also exists | opened record, typed phrase | yes | no |
 | Users | yes | yes | text, role, department, active | no | no | opened record when allowed | no standalone route | no |
 | Departments | yes | yes | text, head | no | no | no | no | no |

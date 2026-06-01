@@ -8,12 +8,12 @@ const { auth, requireRole } = require('../middleware/auth');
 
 // ─────────────────────────────────────────────────────────────────────
 // GET /api/access/matrix — snapshot of all access data for the matrix view
-// Returns raw data (users, projects, grants) so the client can compute
+// Returns raw data (users, projects, grants, participants) so the client can compute
 // effective access per cell without extra round-trips.
 // ─────────────────────────────────────────────────────────────────────
 router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
   try {
-    const [users, projects, userGrants, deptGrants, departments] = await Promise.all([
+    const [users, projects, userGrants, deptGrants, participants, departments] = await Promise.all([
       pool.query(`
         SELECT u.user_id, u.name, u.login, u.role, u.position,
                u.department_id, d.name AS department_name, u.active
@@ -45,6 +45,11 @@ router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
         FROM project_department_access pda
       `),
       pool.query(`
+        SELECT pp.user_id, pp.project_id, pp.participant_id,
+               pp.role_in_team, pp.display_order, pp.created_at
+        FROM project_participants pp
+      `),
+      pool.query(`
         SELECT d.department_id, d.name, d.head_user_id,
                u.name AS head_name
         FROM departments d
@@ -58,6 +63,7 @@ router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
       projects: projects.rows,
       user_grants: userGrants.rows,
       dept_grants: deptGrants.rows,
+      participants: participants.rows,
       departments: departments.rows,
     });
   } catch (err) {
@@ -69,11 +75,11 @@ router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 // GET /api/access/graph — nodes + edges for Cytoscape graph view
 // Nodes: users, departments, projects
-// Edges: all access relationships (explicit grants + implicit from confidentiality)
+// Edges: current access relationships plus legacy department grants for cleanup.
 // ─────────────────────────────────────────────────────────────────────
 router.get('/graph', auth, requireRole('admin', 'lead'), async (req, res) => {
   try {
-    const [users, projects, userGrants, deptGrants, departments] = await Promise.all([
+    const [users, projects, userGrants, deptGrants, participants, departments] = await Promise.all([
       pool.query(`SELECT user_id, name, department_id, active FROM users WHERE active = true`),
       pool.query(`SELECT project_id, name, confidentiality_level, department_id, created_by FROM projects`),
       pool.query(`
@@ -85,6 +91,10 @@ router.get('/graph', auth, requireRole('admin', 'lead'), async (req, res) => {
         SELECT department_id, project_id, access_level,
                (expires_at IS NOT NULL AND expires_at <= now()) AS is_expired
         FROM project_department_access
+      `),
+      pool.query(`
+        SELECT user_id, project_id
+        FROM project_participants
       `),
       pool.query(`SELECT department_id, name, head_user_id FROM departments`),
     ]);
@@ -133,18 +143,8 @@ router.get('/graph', auth, requireRole('admin', 'lead'), async (req, res) => {
         },
       });
 
-      // Implicit access edges
-      if (p.confidentiality_level === 'public') {
-        // Public projects: edge from a virtual "all" node (skip to keep graph clean)
-        // Alternatively mark the project node as public via data
-      } else if (p.confidentiality_level === 'department' && p.department_id) {
-        edges.push({
-          source: `dept-${p.department_id}`,
-          target: `project-${p.project_id}`,
-          type: 'implicit_dept',
-          access_level: 'view',
-        });
-      }
+      // Open/public projects are visible to everyone by default. We do not add a
+      // virtual "all users" edge here because it overwhelms the access graph.
     }
 
     // Explicit user grants
@@ -158,14 +158,26 @@ router.get('/graph', auth, requireRole('admin', 'lead'), async (req, res) => {
       });
     }
 
-    // Explicit department grants
+    // Project participant view access
+    for (const p of participants.rows) {
+      edges.push({
+        source: `user-${p.user_id}`,
+        target: `project-${p.project_id}`,
+        type: 'project_participant',
+        access_level: 'view',
+      });
+    }
+
+    // Legacy explicit department grants. These rows can exist in old data, but
+    // they no longer determine current project visibility.
     for (const g of deptGrants.rows) {
       if (g.is_expired) continue;
       edges.push({
         source: `dept-${g.department_id}`,
         target: `project-${g.project_id}`,
-        type: 'grant_dept',
+        type: 'grant_dept_legacy',
         access_level: g.access_level,
+        legacy: true,
       });
     }
 
@@ -266,27 +278,22 @@ router.get('/my', auth, async (req, res) => {
         p.project_id, p.name, p.confidentiality_level,
         p.department_id AS project_dept,
         d.name AS project_dept_name,
-        p.created_at, p.status,
-        CASE
-          WHEN p.confidentiality_level = 'public' THEN 'public'
-          WHEN p.confidentiality_level = 'department' AND p.department_id = $2 THEN 'own_department'
-          WHEN EXISTS (
-            SELECT 1 FROM user_project_access upa
+	        p.created_at, p.status,
+	        CASE
+	          WHEN p.lead_id = $1 THEN 'project_lead'
+	          WHEN p.created_by = $1 THEN 'project_owner'
+	          WHEN p.confidentiality_level = 'public' THEN 'public'
+	          WHEN EXISTS (
+	            SELECT 1 FROM user_project_access upa
             WHERE upa.project_id = p.project_id AND upa.user_id = $1
               AND (upa.expires_at IS NULL OR upa.expires_at > now())
           ) THEN 'direct_grant'
           WHEN EXISTS (
-            SELECT 1 FROM project_department_access pda
-            WHERE pda.project_id = p.project_id AND pda.department_id = $2
-              AND (pda.expires_at IS NULL OR pda.expires_at > now())
-          ) THEN 'department_grant'
-          WHEN EXISTS (
-            SELECT 1 FROM users creator
-            JOIN departments dd ON dd.department_id = creator.department_id
-            WHERE creator.user_id = p.created_by AND dd.head_user_id = $1
-          ) THEN 'dept_head'
-          ELSE 'none'
-        END AS access_source,
+	            SELECT 1 FROM project_participants pp
+	            WHERE pp.project_id = p.project_id AND pp.user_id = $1
+	          ) THEN 'project_participant'
+	          ELSE 'none'
+	        END AS access_source,
         (
           SELECT access_level FROM user_project_access
           WHERE project_id = p.project_id AND user_id = $1
@@ -299,37 +306,32 @@ router.get('/my', auth, async (req, res) => {
         ) AS direct_expires_at
       FROM projects p
       LEFT JOIN departments d ON d.department_id = p.department_id
-      WHERE (
-        p.confidentiality_level = 'public'
-        OR (p.confidentiality_level = 'department' AND p.department_id = $2)
-        OR EXISTS (
+	      WHERE (
+	        p.confidentiality_level = 'public'
+	        OR p.lead_id = $1
+	        OR p.created_by = $1
+	        OR EXISTS (
           SELECT 1 FROM user_project_access upa
           WHERE upa.project_id = p.project_id AND upa.user_id = $1
             AND (upa.expires_at IS NULL OR upa.expires_at > now())
         )
-        OR ($2::integer IS NOT NULL AND EXISTS (
-          SELECT 1 FROM project_department_access pda
-          WHERE pda.project_id = p.project_id AND pda.department_id = $2
-            AND (pda.expires_at IS NULL OR pda.expires_at > now())
-        ))
-        OR EXISTS (
-          SELECT 1 FROM users creator
-          JOIN departments dd ON dd.department_id = creator.department_id
-          WHERE creator.user_id = p.created_by AND dd.head_user_id = $1
-        )
-        OR $3::boolean = true  -- director sees all
-      )
-      ORDER BY p.project_id, p.name
-    `, [userId, me.department_id, isDirector]);
+	        OR EXISTS (
+	          SELECT 1 FROM project_participants pp
+	          WHERE pp.project_id = p.project_id AND pp.user_id = $1
+	        )
+	        OR $2::boolean = true  -- director sees all
+	      )
+	      ORDER BY p.project_id, p.name
+	    `, [userId, isDirector]);
 
     // Group by access source
     const grouped = {
-      public: [],
-      own_department: [],
-      direct_grant: [],
-      department_grant: [],
-      dept_head: [],
-      none: [],
+	      public: [],
+	      project_lead: [],
+	      project_owner: [],
+	      direct_grant: [],
+	      project_participant: [],
+	      none: [],
     };
     for (const row of result.rows) {
       const src = row.access_source || 'none';

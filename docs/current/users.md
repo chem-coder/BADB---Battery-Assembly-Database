@@ -1,9 +1,9 @@
 # Users
 
 Created: 2026-05-09
-Edited: 2026-05-09
+Edited: 2026-06-01
 Status: current
-Verified against code: 2026-05-09
+Verified against code: 2026-06-01
 
 Source paths:
 
@@ -116,6 +116,7 @@ still referenced.
 Current dependency checks include:
 
 - projects where the user is lead, creator, or updater;
+- projects where the user is listed as a project participant;
 - tapes created or updated by the user;
 - batteries created or updated by the user;
 - recipes created or updated by the user;

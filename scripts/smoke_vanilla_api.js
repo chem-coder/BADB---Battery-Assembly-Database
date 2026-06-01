@@ -41,7 +41,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd037_add_viscosity_conditions.sql'),
   path.join(ROOT, 'migrations', 'd038_add_electrode_capacity_average_flag.sql'),
   path.join(ROOT, 'migrations', 'd039_add_electrode_test_batch_flag.sql'),
-  path.join(ROOT, 'migrations', 'd040_add_coated_thickness_fields.sql')
+  path.join(ROOT, 'migrations', 'd040_add_coated_thickness_fields.sql'),
+  path.join(ROOT, 'migrations', 'd041_project_participants.sql')
 ];
 
 function parseArgs(argv) {
@@ -540,6 +541,50 @@ async function runWriteSmoke(client, seed, context) {
       description: 'smoke update',
       confidentiality_level: 'public'
     });
+    const participant = await client.post(`/api/projects/${made.projectId}/participants`, {
+      user_id: made.userId,
+      role_in_team: 'Smoke analyst'
+    });
+    made.projectParticipantId = participant.participant_id;
+    client.assertEqual(participant.role_in_team, 'Smoke analyst', 'project participant role is saved');
+    await client.put(`/api/projects/${made.projectId}/participants/${made.projectParticipantId}`, {
+      role_in_team: 'Smoke lead analyst'
+    });
+    const participantRows = await client.get(`/api/projects/${made.projectId}/participants`);
+    client.assertEqual(
+      participantRows.some(row => row.participant_id === made.projectParticipantId && row.role_in_team === 'Smoke lead analyst'),
+      true,
+      'project participant role is updated'
+    );
+    const participantAccessRows = await client.get(`/api/projects/${made.projectId}/access`);
+    client.assertEqual(
+      participantAccessRows.some(row => row.grantee_type === 'participant' && row.grantee_id === made.userId),
+      true,
+      'project participant appears as a project access source'
+    );
+    client.assertEqual(
+      participantAccessRows.some(row => (
+        row.grantee_type === 'user' &&
+        row.grantee_id === made.userId &&
+        row.access_level === 'view'
+      )),
+      true,
+      'project participant receives direct view access'
+    );
+    await client.post(`/api/projects/${made.projectId}/access`, {
+      user_id: made.userId,
+      access_level: 'edit'
+    });
+    const editAccessRows = await client.get(`/api/projects/${made.projectId}/access`);
+    client.assertEqual(
+      editAccessRows.some(row => (
+        row.grantee_type === 'user' &&
+        row.grantee_id === made.userId &&
+        row.access_level === 'edit'
+      )),
+      true,
+      'project participant access can be changed to edit'
+    );
 
     made.structureId = (await client.post('/api/structures', {
       name: `Codex Smoke Structure ${suffix}`,

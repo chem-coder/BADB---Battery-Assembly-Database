@@ -142,19 +142,19 @@ in URLs and without returning to persistent `localStorage`.
 For project access/confidentiality UI, do not use `Видимость` as the visible
 field/filter label and do not use `публичный` as the visible value.
 
-The database/API value names may remain `public`, `department`, and
-`confidential`. These are internal values, not Russian UI labels.
+The database/API value names may remain `public` and `confidential`. Legacy
+`department` data is treated as secret. These are internal values, not Russian
+UI labels.
 
 Use this visible vocabulary:
 
 - field/filter label: `Доступ`
-- all-filter option: `Все уровни доступа`
-- `public`: `для всех`
-- `department`: `для отдела`
-- `confidential`: `выборочный доступ`
+- all-filter option: `Все типы доступа`
+- `public`: `открытый`
+- `confidential`: `секретный`
 
-For list metadata, prefer phrases such as `доступ: для всех`,
-`доступ: для отдела`, or `доступ: выборочный доступ`.
+For list metadata, prefer phrases such as `доступ: открытый` or
+`доступ: секретный`.
 
 ## Filter Layout
 

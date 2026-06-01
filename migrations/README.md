@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-05-25:
+Current migration file state as of 2026-06-01:
 
-- `migrations/` has 49 SQL files.
-- `migrations_ASCII/` has 49 SQL files.
+- `migrations/` has 50 SQL files.
+- `migrations_ASCII/` has 50 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d040_add_coated_thickness_fields.sql`.
+- Dalia's `dNNN` stream exists through `d041_project_participants.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 28` after `d040` is applied.
+  counts of `dima = 21` and `dalia = 29` after `d041` is applied.
 
 ## How to apply
 
@@ -149,6 +149,10 @@ Full timeline is in the git log. High-level:
   `coated_thickness_um` and `coated_thickness_um_side2` to
   `tape_step_coating` for measured thickness after coating/drying and before
   calendering, separate from coating gap/zazor values.
+- `d041_project_participants` — adds `project_participants` so project team
+  membership, visible order, and functional roles are stored separately from
+  project access grants. The current API ensures participants have at least
+  direct `view` access while preserving stronger `edit`/`admin` grants.
 
 ## Check migration ledger
 
@@ -167,7 +171,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 28
+dalia = 29
 dima = 21
 ```
 

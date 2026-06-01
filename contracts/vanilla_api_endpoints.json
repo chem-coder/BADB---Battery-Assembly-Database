@@ -374,15 +374,31 @@
       "methods": ["GET"],
       "auth": "auth plus project view policy",
       "request": "none",
-      "response": "project print/report payload with project fields, access grants, effective users, downstream counts, and connected record lists",
+      "response": "project print/report payload with project fields, participants, access grants, effective users, downstream counts, and connected record lists",
       "sources": ["public/js/project-print.js"]
+    },
+    {
+      "path": "/api/projects/:param/participants",
+      "methods": ["GET", "POST"],
+      "auth": "GET auth plus project view policy; POST auth plus project modify policy",
+      "request": "GET none; POST participant user_id, role_in_team, optional display_order/notes",
+      "response": "project participant list or created participant JSON",
+      "sources": ["public/js/projects.js"]
+    },
+    {
+      "path": "/api/projects/:param/participants/:param",
+      "methods": ["PUT", "DELETE"],
+      "auth": "auth plus project modify policy",
+      "request": "PUT participant role/display_order/notes payload; DELETE none",
+      "response": "updated participant JSON or delete status",
+      "sources": ["public/js/projects.js"]
     },
     {
       "path": "/api/projects/:param/access",
       "methods": ["GET", "POST"],
       "auth": "GET auth plus project view policy; POST auth plus project modify policy",
-      "request": "GET none; POST department access payload",
-      "response": "project access list or grant status",
+      "request": "GET none; POST user grant payload with view/edit/admin access_level from UI; legacy department grant payloads still accepted by API",
+      "response": "project access list including user grants, participant access sources, and legacy grants, or grant status",
       "sources": ["public/js/projects.js"]
     },
     {

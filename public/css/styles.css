@@ -159,6 +159,10 @@ body[data-page] .form-grid.cols-3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+body[data-page] .form-grid.cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 body[data-page] .form-field {
   display: flex;
   flex-direction: column;
@@ -1412,6 +1416,25 @@ body[data-page] .badb-lock-banner.visible {
 
 .project-user-access-add {
   margin-top: 0.9rem;
+}
+
+.project-participant-add {
+  margin-bottom: 0.6rem;
+}
+
+.project-participants-table th:first-child,
+.project-participants-table td:first-child {
+  width: 3.5rem;
+}
+
+.project-participant-role-input {
+  width: min(100%, 38rem);
+}
+
+.project-participant-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
 .access-expired {
