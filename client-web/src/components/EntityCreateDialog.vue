@@ -9,6 +9,13 @@
  *   { key, label, type, required?, options?, placeholder?, defaultValue? }
  *   type ∈ 'text' | 'select' | 'multiselect' | 'date'
  *
+ * Duplicate / prefill: pass `:initial-values="{ key: value, ... }"` to
+ * seed the form with copied data (e.g. «Дублировать ленту» copies the
+ * source project_ids + recipe). When present, initialValues override
+ * each field's defaultValue on open. Omit a key → that field falls back
+ * to its schema default (so the new record gets a fresh date / blank
+ * name etc.). initialValues is read once per open, same as defaults.
+ *
  * `multiselect` binds to an array of option values; required validation
  * checks `value.length > 0`. Used for the multi-project pickers that
  * mirror the M:N backend tables (tape_projects / electrode_cut_batch_projects /
@@ -50,6 +57,12 @@ const props = defineProps({
   submitIcon: { type: String, default: 'pi pi-plus' },
   /** Width of the dialog body. */
   width: { type: String, default: '480px' },
+  /**
+   * Optional seed values for duplicate / prefill flows. Keys matching a
+   * field's `key` override that field's defaultValue when the dialog
+   * opens. null → pure create with schema defaults.
+   */
+  initialValues: { type: Object, default: null },
 });
 
 const emit = defineEmits(['update:visible', 'create']);
@@ -58,9 +71,15 @@ const values = ref({});
 const submitting = ref(false);
 
 function resetValues() {
+  const seed = props.initialValues || null;
   const next = {};
   for (const f of props.fields) {
-    if (f.defaultValue !== undefined) {
+    // Seed (duplicate/prefill) wins over the schema default when it
+    // carries a value for this key. A multiselect seed is cloned so the
+    // dialog can't mutate the source array.
+    if (seed && Object.prototype.hasOwnProperty.call(seed, f.key) && seed[f.key] !== undefined) {
+      next[f.key] = Array.isArray(seed[f.key]) ? [...seed[f.key]] : seed[f.key];
+    } else if (f.defaultValue !== undefined) {
       next[f.key] = f.defaultValue;
     } else if (f.type === 'multiselect') {
       next[f.key] = [];

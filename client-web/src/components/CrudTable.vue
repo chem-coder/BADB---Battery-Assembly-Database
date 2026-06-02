@@ -52,13 +52,18 @@ const props = defineProps({
   showAdd:      { type: Boolean, default: false },
   rowClickable: { type: Boolean, default: false },
   exportBadge:  { type: Number, default: 0 },  // extra selected count shown on export menu items
+  // When true, the right-click context menu shows a «Дублировать» item
+  // for single-row selections. Parent handles @duplicate(item) by
+  // opening its create dialog prefilled with a copy. Mirrors the export
+  // flow (right-click → action) rather than a dedicated table column.
+  showDuplicate: { type: Boolean, default: false },
   // Stable identifier for this table — used as the namespace for
   // per-user column-visibility persistence in localStorage. If empty,
   // toggling still works but nothing is persisted.
   tableKey:     { type: String, default: '' },
 })
 
-const emit = defineEmits(['delete', 'add', 'row-click', 'export', 'header-click'])
+const emit = defineEmits(['delete', 'add', 'row-click', 'export', 'header-click', 'duplicate'])
 
 // ── Toolbar state ──────────────────────────────────────────────────────
 const localTableName = ref(props.tableName)
@@ -219,6 +224,17 @@ const exportCount = computed(() => props.exportBadge || selectedRows.value.size)
 function emitExport(format) {
   const items = props.data.filter(r => selectedRows.value.has(getRowId(r)))
   emit('export', { format, items })
+  ctxMenuVisible.value = false
+}
+
+// Duplicate the single selected row. Only offered when exactly one row
+// is selected (duplicating a multi-selection has no clear meaning — the
+// create dialog seeds from one source record).
+function emitDuplicate() {
+  if (selectedRows.value.size !== 1) return
+  const id = [...selectedRows.value][0]
+  const item = props.data.find(r => getRowId(r) === id)
+  if (item) emit('duplicate', item)
   ctxMenuVisible.value = false
 }
 
@@ -667,6 +683,15 @@ defineExpose({ clearSelection, selectedRows, filteredData })
       <button class="ct-ctx-menu-item" @click="emitExport('json')">
         <i class="pi pi-code"></i>
         Экспорт JSON{{ exportCount > 1 ? ` (${exportCount})` : '' }}
+      </button>
+      <div v-if="showDuplicate && selectedRows.size === 1" class="ct-ctx-menu-separator"></div>
+      <button
+        v-if="showDuplicate && selectedRows.size === 1"
+        class="ct-ctx-menu-item"
+        @click="emitDuplicate"
+      >
+        <i class="pi pi-copy"></i>
+        Дублировать
       </button>
       <div class="ct-ctx-menu-separator"></div>
       <button class="ct-ctx-menu-item ct-ctx-menu-danger" @click="deleteSelectedRows">

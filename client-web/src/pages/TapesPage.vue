@@ -163,8 +163,53 @@ const tapeCreateFields = computed(() => [
   },
 ])
 
+// Seed values for the create dialog. null → blank create (schema
+// defaults). Set by duplicateTape() to prefill a copy. Cleared on a
+// plain «+ Добавить».
+const createInitialValues = ref(null)
+
+// Dialog chrome changes between create and duplicate so the user knows
+// they're making a copy, not editing the original.
+const isDuplicating = computed(() => createInitialValues.value !== null)
+const dialogEyebrow = computed(() => isDuplicating.value ? 'Ленты · Дублирование' : 'Ленты · Создание')
+const dialogTitle = computed(() => isDuplicating.value ? 'Копия ленты' : 'Новая лента')
+const dialogDescription = computed(() => isDuplicating.value
+  ? 'Проект и рецепт скопированы из исходной ленты. Дата — сегодняшняя, параметры процесса заполняются заново в конструкторе.'
+  : 'Заполните название, проект и рецепт. Лента откроется в конструкторе для редактирования.')
+const dialogSubmitLabel = computed(() => isDuplicating.value ? 'Создать копию' : 'Создать ленту')
+
 function createNewTape() {
+  createInitialValues.value = null
   createDialogVisible.value = true
+}
+
+// «Дублировать» — open the create dialog pre-filled with a copy of the
+// source tape's reusable fields. We copy the RECIPE-level identity
+// (projects + recipe) but NOT the per-batch facts: name gets a «(копия)»
+// suffix, the business date resets to today, and all process-stage
+// timestamps / actual weighings / dry-box state start empty (they're
+// not part of the create dialog and belong to the new physical batch).
+// Operator/creator come from the JWT on POST, so they're never copied.
+async function duplicateTape(row) {
+  const id = row?.tape_id
+  if (id == null) return
+  try {
+    // Fetch the full record — the list row doesn't carry project_ids[]
+    // or the recipe FK reliably, but GET /api/tapes/:id does.
+    const { data: t } = await api.get(`/api/tapes/${id}`)
+    const projectIds = Array.isArray(t.project_ids)
+      ? t.project_ids.filter((v) => v != null)
+      : (t.project_id != null ? [t.project_id] : [])
+    createInitialValues.value = {
+      name: `${t.name || 'Лента'} (копия)`,
+      project_ids: projectIds,
+      tape_recipe_id: t.tape_recipe_id || null,
+      // item_created_at intentionally omitted → schema default (today).
+    }
+    createDialogVisible.value = true
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить ленту для копирования')
+  }
 }
 
 async function onCreateDialogSubmit(payload) {
@@ -343,10 +388,12 @@ function formatDate(dt) {
       table-key="tapes"
       :export-badge="exportBadge"
       show-add
+      show-duplicate
       row-clickable
       @add="createNewTape"
       @delete="onDelete"
       @export="onExportTapes"
+      @duplicate="duplicateTape"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
       @row-click="(data) => toggleConstructor(data.tape_id)"
     >
@@ -468,11 +515,12 @@ function formatDate(dt) {
 
     <EntityCreateDialog
       v-model:visible="createDialogVisible"
-      eyebrow="Ленты · Создание"
-      title="Новая лента"
-      description="Заполните название, проект и рецепт. Лента откроется в конструкторе для редактирования."
+      :eyebrow="dialogEyebrow"
+      :title="dialogTitle"
+      :description="dialogDescription"
       :fields="tapeCreateFields"
-      submit-label="Создать ленту"
+      :initial-values="createInitialValues"
+      :submit-label="dialogSubmitLabel"
       @create="onCreateDialogSubmit"
     />
 
@@ -492,6 +540,7 @@ function formatDate(dt) {
 .tapes-page :deep(.page-header) {
   margin-bottom: 3px !important;
 }
+
 
 /* ── Page-specific cell styles only ── */
 .type-badge {
