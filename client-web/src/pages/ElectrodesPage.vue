@@ -46,12 +46,8 @@ const columns = [
   // Header rendered via `#header-_constructor` slot (master pill with
   // live count). The string here is the accessibility fallback only.
   { field: '_constructor', header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false, required: true },
-  // Synthetic column: "🖨️ Print" opens Dalia's print-friendly HTML
-  // (/workflow/electrode-batch-print.html) in a new tab. Matches the
-  // vanilla-JS flow she added in d1382cb but triggered from the Vue
-  // electrodes table so users don't have to leave the SPA.
-  // Header rendered via `#header-_print` slot (PrimeIcon, centered).
-  { field: '_print', header: 'Печать', minWidth: '42px', width: '42px', sortable: false, filterable: false },
+  // Печать moved out of a dedicated column into the right-click context
+  // menu (Dima 2026-06-02) — see openBatchPrint + CrudTable @print.
   { field: 'cut_batch_id', header: 'Партия', minWidth: '70px', width: '85px' },
   { field: 'tape_name', header: 'Лента', minWidth: '120px' },
   { field: 'project_name', header: 'Проект', minWidth: '100px' },
@@ -452,10 +448,12 @@ onUnmounted(() => clearTimeout(saveTimer))
       table-key="electrodes"
       show-add
       show-duplicate
+      show-print
       row-clickable
       @add="createBatch"
       @delete="onDelete"
       @duplicate="duplicateBatch"
+      @print="(item) => openBatchPrint(item.cut_batch_id)"
       @row-click="(data) => toggleConstructor(data.cut_batch_id)"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
     >
@@ -480,22 +478,6 @@ onUnmounted(() => clearTimeout(saveTimer))
             :binary="true"
             v-tooltip.right="'Добавить/убрать из конструктора'"
           />
-        </div>
-      </template>
-      <template #header-_print>
-        <span class="ct-print-header" title="Печать отчёта">
-          <i class="pi pi-print"></i>
-        </span>
-      </template>
-      <template #col-_print="{ data }">
-        <div class="ct-print-cell">
-          <button
-            class="print-btn"
-            title="Печать отчёта по партии"
-            @click.stop="openBatchPrint(data.cut_batch_id)"
-          >
-            <i class="pi pi-print"></i>
-          </button>
         </div>
       </template>
       <template #col-cut_batch_id="{ data }">
@@ -614,27 +596,6 @@ onUnmounted(() => clearTimeout(saveTimer))
 
 /* ── Table cells ── */
 .batch-id { color: #003274; font-weight: 600; }
-
-/* Print button in its own narrow column — same visual language as the
-   constructor checkbox (small, borderless, hover fills with brand color). */
-.print-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: rgba(0, 50, 116, 0.55);
-  cursor: pointer;
-  border-radius: 5px;
-  transition: all 0.15s;
-}
-.print-btn:hover {
-  background: rgba(0, 50, 116, 0.08);
-  color: #003274;
-}
-.print-btn i { font-size: 13px; }
 
 /* Capacity cells — monospace so three decimals align vertically down
    the column, matching Dalia's print-report typography. */

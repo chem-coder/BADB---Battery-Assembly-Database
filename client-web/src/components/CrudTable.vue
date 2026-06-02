@@ -57,13 +57,17 @@ const props = defineProps({
   // opening its create dialog prefilled with a copy. Mirrors the export
   // flow (right-click → action) rather than a dedicated table column.
   showDuplicate: { type: Boolean, default: false },
+  // When true, the context menu shows a «Печать» item for single-row
+  // selections. Parent handles @print(item). Replaces the dedicated
+  // print column that ElectrodesPage / AssemblyPage used to render.
+  showPrint:    { type: Boolean, default: false },
   // Stable identifier for this table — used as the namespace for
   // per-user column-visibility persistence in localStorage. If empty,
   // toggling still works but nothing is persisted.
   tableKey:     { type: String, default: '' },
 })
 
-const emit = defineEmits(['delete', 'add', 'row-click', 'export', 'header-click', 'duplicate'])
+const emit = defineEmits(['delete', 'add', 'row-click', 'export', 'header-click', 'duplicate', 'print'])
 
 // ── Toolbar state ──────────────────────────────────────────────────────
 const localTableName = ref(props.tableName)
@@ -208,6 +212,7 @@ function onRowContextMenu(event, data, index) {
     lastClickedIdx = absIndex
   }
   ctxMenuPos.value = { x: event.clientX, y: event.clientY }
+  exportSubmenuOpen.value = false
   ctxMenuVisible.value = true
 }
 
@@ -237,6 +242,21 @@ function emitDuplicate() {
   if (item) emit('duplicate', item)
   ctxMenuVisible.value = false
 }
+
+// Print the single selected row (e.g. batch report). Single-row only —
+// printing is a per-record report, not a batch operation.
+function emitPrint() {
+  if (selectedRows.value.size !== 1) return
+  const id = [...selectedRows.value][0]
+  const item = props.data.find(r => getRowId(r) === id)
+  if (item) emit('print', item)
+  ctxMenuVisible.value = false
+}
+
+// «Скачать» submenu — the three export formats collapse under one menu
+// item that expands on click (Dima 2026-06-02 wanted a single download
+// entry with a 3-format dropdown instead of three flat items).
+const exportSubmenuOpen = ref(false)
 
 // Expose clearSelection for parent use after successful delete
 function clearSelection() {
@@ -668,23 +688,13 @@ defineExpose({ clearSelection, selectedRows, filteredData })
     </div>
   </Teleport>
 
-  <!-- Context menu (glass-card, only "Удалить") -->
+  <!-- Context menu. Order (Dima 2026-06-02): Дублировать → Печать →
+       Скачать (collapsible 3-format submenu) → Удалить. Дублировать and
+       Печать are single-row only; Скачать and Удалить always show. -->
   <Teleport to="body">
     <div v-if="ctxMenuVisible" class="ct-ctx-menu"
       :style="{ left: ctxMenuPos.x + 'px', top: ctxMenuPos.y + 'px' }" @click.stop>
-      <button class="ct-ctx-menu-item" @click="emitExport('excel')">
-        <i class="pi pi-file-excel"></i>
-        Экспорт Excel{{ exportCount > 1 ? ` (${exportCount})` : '' }}
-      </button>
-      <button class="ct-ctx-menu-item" @click="emitExport('csv')">
-        <i class="pi pi-file"></i>
-        Экспорт CSV{{ exportCount > 1 ? ` (${exportCount})` : '' }}
-      </button>
-      <button class="ct-ctx-menu-item" @click="emitExport('json')">
-        <i class="pi pi-code"></i>
-        Экспорт JSON{{ exportCount > 1 ? ` (${exportCount})` : '' }}
-      </button>
-      <div v-if="showDuplicate && selectedRows.size === 1" class="ct-ctx-menu-separator"></div>
+      <!-- Дублировать -->
       <button
         v-if="showDuplicate && selectedRows.size === 1"
         class="ct-ctx-menu-item"
@@ -693,6 +703,39 @@ defineExpose({ clearSelection, selectedRows, filteredData })
         <i class="pi pi-copy"></i>
         Дублировать
       </button>
+      <!-- Печать -->
+      <button
+        v-if="showPrint && selectedRows.size === 1"
+        class="ct-ctx-menu-item"
+        @click="emitPrint"
+      >
+        <i class="pi pi-print"></i>
+        Печать
+      </button>
+      <!-- Скачать — single entry that expands into the 3 export formats -->
+      <button
+        class="ct-ctx-menu-item ct-ctx-menu-parent"
+        :class="{ 'is-open': exportSubmenuOpen }"
+        @click.stop="exportSubmenuOpen = !exportSubmenuOpen"
+      >
+        <i class="pi pi-download"></i>
+        Скачать{{ exportCount > 1 ? ` (${exportCount})` : '' }}
+        <i class="pi pi-chevron-down ct-ctx-chevron"></i>
+      </button>
+      <div v-if="exportSubmenuOpen" class="ct-ctx-submenu">
+        <button class="ct-ctx-menu-item ct-ctx-submenu-item" @click="emitExport('excel')">
+          <i class="pi pi-file-excel"></i>
+          Excel
+        </button>
+        <button class="ct-ctx-menu-item ct-ctx-submenu-item" @click="emitExport('csv')">
+          <i class="pi pi-file"></i>
+          CSV
+        </button>
+        <button class="ct-ctx-menu-item ct-ctx-submenu-item" @click="emitExport('json')">
+          <i class="pi pi-code"></i>
+          JSON
+        </button>
+      </div>
       <div class="ct-ctx-menu-separator"></div>
       <button class="ct-ctx-menu-item ct-ctx-menu-danger" @click="deleteSelectedRows">
         <i class="pi pi-trash"></i>
@@ -1170,5 +1213,32 @@ defineExpose({ clearSelection, selectedRows, filteredData })
 }
 .ct-ctx-menu-danger:hover {
   background: rgba(231, 76, 60, 0.08);
+}
+
+/* «Скачать» parent row + its expandable 3-format submenu. The chevron
+   pushes to the right and flips when open; submenu items are indented
+   so they read as children of «Скачать». */
+.ct-ctx-menu-parent .ct-ctx-chevron {
+  margin-left: auto;
+  font-size: 10px !important;
+  width: auto !important;
+  color: rgba(0, 50, 116, 0.45);
+  transition: transform 0.15s;
+}
+.ct-ctx-menu-parent.is-open .ct-ctx-chevron {
+  transform: rotate(180deg);
+}
+.ct-ctx-submenu {
+  display: flex;
+  flex-direction: column;
+  margin: 2px 0 2px 12px;
+  padding-left: 8px;
+  border-left: 1.5px solid rgba(0, 50, 116, 0.08);
+}
+.ct-ctx-submenu-item {
+  font-size: 12.5px;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+  color: rgba(0, 50, 116, 0.85);
 }
 </style>
