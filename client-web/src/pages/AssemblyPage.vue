@@ -83,11 +83,8 @@ const columns = [
   // Header rendered via `#header-_constructor` slot (master pill with
   // live count). The string here is the accessibility fallback only.
   { field: '_constructor', header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false, required: true },
-  // Synthetic column: "🖨️ Print" opens Dalia's print-friendly report page
-  // (/workflow/battery-print.html?battery_id=X) in a modal Dialog. Header
-  // rendered via `#header-_print` slot (PrimeIcon, centered) — matches the
-  // same pattern used in ElectrodesPage for the electrode-batch print.
-  { field: '_print', header: 'Печать', minWidth: '42px', width: '42px', sortable: false, filterable: false },
+  // Печать moved out of a dedicated column into the right-click context
+  // menu (Dima 2026-06-02) — see openBatteryPrint + CrudTable @print.
   // 'Аккум.' not '№' — CrudTable already shows a frozen row-number
   // column with header '№' on the left, two columns named the same
   // would read as duplicate. Cell renders as '#42' so the header
@@ -503,10 +500,12 @@ onUnmounted(() => clearTimeout(saveTimer))
       table-key="assembly"
       show-add
       show-duplicate
+      show-print
       row-clickable
       @add="createBattery"
       @delete="onDelete"
       @duplicate="duplicateBattery"
+      @print="(item) => openBatteryPrint(item.battery_id)"
       @row-click="(data) => toggleConstructor(data.battery_id)"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
     >
@@ -531,22 +530,6 @@ onUnmounted(() => clearTimeout(saveTimer))
             :binary="true"
             v-tooltip.right="'Добавить/убрать из конструктора'"
           />
-        </div>
-      </template>
-      <template #header-_print>
-        <span class="ct-print-header" title="Печать отчёта">
-          <i class="pi pi-print"></i>
-        </span>
-      </template>
-      <template #col-_print="{ data }">
-        <div class="ct-print-cell">
-          <button
-            class="print-btn"
-            title="Печать отчёта по аккумулятору"
-            @click.stop="openBatteryPrint(data.battery_id)"
-          >
-            <i class="pi pi-print"></i>
-          </button>
         </div>
       </template>
       <template #col-battery_id="{ data }">
@@ -771,26 +754,6 @@ onUnmounted(() => clearTimeout(saveTimer))
 .status-badge--failed { background: rgba(231, 76, 60, 0.12); color: #c0392b; }
 .text-muted { color: rgba(0, 50, 116, 0.28); font-size: 13px; }
 .notes-text { font-size: 13px; color: rgba(0, 50, 116, 0.7); }
-
-/* Print button (same visual language as ElectrodesPage equivalent) */
-.print-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: rgba(0, 50, 116, 0.55);
-  cursor: pointer;
-  border-radius: 5px;
-  transition: all 0.15s;
-}
-.print-btn:hover {
-  background: rgba(0, 50, 116, 0.08);
-  color: #003274;
-}
-.print-btn i { font-size: 13px; }
 
 /* Capacity summary panel — one card per battery currently in the
    constructor. Sits between the table and the TapeConstructor. */
