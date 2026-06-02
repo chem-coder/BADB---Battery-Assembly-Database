@@ -31,6 +31,11 @@ const containerRef = ref(null)
 const minimapRef = ref(null)
 let cy = null
 let _minimapTimer = null
+// Set of node ids that are unconnected (not reachable from the main
+// project→tape→electrode→battery chain). Computed in getLayoutConfig,
+// consumed after layout to tag them `.orphan` for distinct styling.
+let cyOrphanIds = new Set()
+let orphanZoneY = null
 
 // ── State ──
 const spacing = ref(80)
@@ -108,15 +113,34 @@ const DETAIL_LABELS = {
 
 // ── Layout ──
 // Strict type-per-layer: each row = one entity type, equal vertical spacing
-const LAYER_ORDER = ['project', 'material', 'recipe', 'tape', 'electrode_batch', 'separator', 'electrolyte', 'battery']
+// All node types, in production-flow order. NOTE: sep_structure was
+// previously missing here even though it has a color/shape/label — those
+// nodes fell through to the layout fallback and stacked on one point
+// (the visible «overlap» bug). Keep this in sync with NODE_COLORS.
+const LAYER_ORDER = ['project', 'material', 'recipe', 'tape', 'electrode_batch', 'separator', 'sep_structure', 'electrolyte', 'battery']
 
 function getLayoutConfig() {
   if (!cy) return { name: 'preset' }
 
   const gap = spacing.value          // vertical gap between layers
-  const nodeGap = 55                 // horizontal gap between nodes in same layer
-  const orphanGap = 40               // horizontal gap for orphans
+  // Horizontal gap must clear the node label, which is capped at
+  // text-max-width 85px (see node style). At the old 55px nodes packed
+  // tighter than their labels, so long names (projects, tapes, recipes)
+  // overlapped into an unreadable smear. 100px clears the 85px label
+  // plus a small margin.
+  const nodeGap = 100
+  const orphanGap = 100              // orphans use the same readable gap
   const padding = 60
+  // Available width of the graph canvas — used to wrap long type-rows
+  // onto sub-rows instead of letting them run off-screen / force fit to
+  // zoom everything tiny. Falls back to a sane default before mount.
+  const canvasW = (cy.width && cy.width()) || containerRef.value?.clientWidth || 1100
+  // How many nodes fit on one readable sub-row. Min 4 so a stray wide
+  // viewport doesn't make 1-per-row; the row is centered regardless.
+  const maxPerRow = Math.max(4, Math.floor((canvasW - 2 * padding) / nodeGap))
+  // Sub-rows within one type sit closer together than whole-type gaps,
+  // so a wrapped type still reads as one band.
+  const subRowGap = Math.round(gap * 0.62)
 
   // Find nodes reachable from production flow (project→tape→electrode→battery chain)
   // A node is "main" if it's reachable from any tape or project via BFS
@@ -163,53 +187,86 @@ function getLayoutConfig() {
   const positions = {}
   let currentY = padding
 
-  // Find max connected width to know where orphans start
-  let maxConnectedWidth = 0
-  for (const type of LAYER_ORDER) {
-    const w = layers[type].length * nodeGap
-    if (w > maxConnectedWidth) maxConnectedWidth = w
-  }
-  const orphanStartX = padding + maxConnectedWidth + 100
+  // Width of the centering band = widest sub-row we'll draw (capped at
+  // maxPerRow). Connected rows and the orphan column both center within
+  // this band so the whole graph stays balanced left-to-right.
+  const widestRowCount = Math.min(
+    maxPerRow,
+    Math.max(1, ...LAYER_ORDER.map(t => layers[t].length))
+  )
+  const bandWidth = (widestRowCount - 1) * nodeGap
+  const centerX = padding + bandWidth / 2
 
-  // Find max orphan count per layer for consistent right-side width
-  let maxOrphanCount = 0
-  for (const type of LAYER_ORDER) {
-    if (orphans[type].length > maxOrphanCount) maxOrphanCount = orphans[type].length
+  // Lay a list of nodes as centered, wrapped sub-rows starting at
+  // `startY`. Returns the Y just past the last sub-row used. Each
+  // sub-row holds up to maxPerRow nodes; the last (possibly short) row
+  // is centered too, so wrapped types read as a tidy block.
+  function placeWrapped(nodeList, startY, gapX) {
+    if (nodeList.length === 0) return startY
+    const rows = Math.ceil(nodeList.length / maxPerRow)
+    let y = startY
+    for (let r = 0; r < rows; r++) {
+      const slice = nodeList.slice(r * maxPerRow, (r + 1) * maxPerRow)
+      const rowW = (slice.length - 1) * gapX
+      const startX = centerX - rowW / 2
+      slice.forEach((node, i) => {
+        positions[node.id()] = { x: startX + i * gapX, y }
+      })
+      if (r < rows - 1) y += subRowGap
+    }
+    return y
   }
 
+  // ── Connected (main-chain) nodes: type-per-layer, top zone ──
   for (const type of LAYER_ORDER) {
     const connected = layers[type]
-    const orph = orphans[type]
-    if (connected.length === 0 && orph.length === 0) continue
+    if (connected.length === 0) continue
+    currentY = placeWrapped(connected, currentY, nodeGap) + gap
+  }
 
-    // Connected nodes: centered horizontally
-    if (connected.length > 0) {
-      const totalW = (connected.length - 1) * nodeGap
-      const startX = padding + (maxConnectedWidth - totalW) / 2
-      connected.forEach((node, i) => {
-        positions[node.id()] = { x: startX + i * nodeGap, y: currentY }
-      })
-    }
-
-    // Orphans: same Y row, strictly horizontal, right side
-    if (orph.length > 0) {
-      orph.forEach((node, i) => {
-        positions[node.id()] = {
-          x: orphanStartX + i * orphanGap,
-          y: currentY,
-        }
-      })
-    }
-
-    currentY += gap
+  // ── Unconnected (orphan) nodes: ONE separate zone at the bottom ──
+  // Previously each type's orphans were tucked under its connected row,
+  // which interleaved them with the next layer and produced overlaps.
+  // Now ALL orphans (every type) collect into a single zone below the
+  // main graph, grouped by type, wrapped, and tagged `.orphan` so the
+  // style layer can visually set them apart. cyOrphanIds is read by
+  // initCytoscape to add the class.
+  cyOrphanIds = new Set()
+  const allOrphans = []
+  for (const type of LAYER_ORDER) {
+    for (const n of orphans[type]) { allOrphans.push(n); cyOrphanIds.add(n.id()) }
+  }
+  orphanZoneY = null
+  if (allOrphans.length > 0) {
+    // Visual gap between the main graph and the orphan zone.
+    orphanZoneY = currentY + gap
+    currentY = placeWrapped(allOrphans, orphanZoneY, orphanGap) + gap
   }
 
   return {
     name: 'preset',
-    positions: (node) => positions[node.id()] || { x: orphanStartX, y: currentY },
+    // Fallback keeps a missing node on-canvas near the top rather than
+    // stacking every orphan at one off-screen point.
+    positions: (node) => positions[node.id()] || { x: centerX, y: padding },
+    fit: true,
+    padding: 40,
     animate: true,
     animationDuration: 400,
   }
+}
+
+// Tag unconnected nodes with `.orphan` (styled with a dashed amber ring)
+// so the user can tell at a glance which entities aren't wired into the
+// production chain. Runs after every layout since cyOrphanIds is rebuilt
+// there. Wrapped in cy.batch for a single style pass.
+function applyOrphanClass() {
+  if (!cy) return
+  cy.batch(() => {
+    cy.nodes().forEach(n => {
+      if (cyOrphanIds.has(n.id())) n.addClass('orphan')
+      else n.removeClass('orphan')
+    })
+  })
 }
 
 // ── Init ──
@@ -297,6 +354,11 @@ function initCytoscape() {
       { selector: 'node.path-node', style: { 'border-width': 4, 'border-color': '#E67E22', 'overlay-color': '#E67E22', 'overlay-padding': 6, 'overlay-opacity': 0.1, 'z-index': 20 } },
       { selector: 'edge.path-edge', style: { 'width': 3, 'line-color': '#E67E22', 'target-arrow-color': '#E67E22', 'opacity': 1, 'z-index': 20 } },
       { selector: 'node.selected-node', style: { 'border-width': 3, 'border-color': '#52C9A6', 'overlay-color': '#52C9A6', 'overlay-padding': 5, 'overlay-opacity': 0.08 } },
+      // Unconnected (orphan) nodes — visually set apart: dashed amber
+      // ring + slightly muted so the eye reads them as "not wired into
+      // the production chain" without hiding them.
+      { selector: 'node.orphan', style: { 'border-width': 2, 'border-color': '#E0A23A', 'border-style': 'dashed', 'opacity': 0.78 } },
+      { selector: 'node.orphan[label]', style: { 'color': '#9A7320' } },
     ],
     layout: { name: 'grid' },
     minZoom: 0.15,
@@ -304,8 +366,9 @@ function initCytoscape() {
     wheelSensitivity: 0.25,
   })
 
-  // Apply layout
+  // Apply layout (getLayoutConfig fills cyOrphanIds), then tag orphans.
   cy.layout(getLayoutConfig()).run()
+  applyOrphanClass()
 
   // ── Hover → highlight neighborhood ──
   cy.on('mouseover', 'node', (evt) => {
@@ -554,7 +617,7 @@ function toggleType(type) {
 
 // ── Layout helpers ──
 function relayout() {
-  if (cy) cy.layout(getLayoutConfig()).run()
+  if (cy) { cy.layout(getLayoutConfig()).run(); applyOrphanClass() }
 }
 
 function fitGraph() {
