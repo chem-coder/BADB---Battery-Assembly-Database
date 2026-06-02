@@ -387,6 +387,11 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
               <i class="pi pi-plus" /> Создать проект
             </button>
           </div>
+          <!-- See StageCompareEditor's «multiselect» branch — same shared
+               pattern. NO display="chip" (chips stretch the field and clip
+               labels at fixed width), max-selected-labels=1 (1 → name,
+               2+ → «Выбрано: N»), show-clear for a small × matching
+               regular Select fields. -->
           <MultiSelect
             id="bcd-prj"
             v-model="projectIds"
@@ -395,9 +400,9 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
             option-value="value"
             placeholder="— выбрать один или несколько проектов —"
             filter
-            :max-selected-labels="3"
+            :max-selected-labels="1"
             selected-items-label="Выбрано: {0}"
-            display="chip"
+            show-clear
             class="bcd-input"
           />
           <!-- Project description card — appears once a project is picked -->

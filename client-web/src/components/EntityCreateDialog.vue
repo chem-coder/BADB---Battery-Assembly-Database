@@ -156,6 +156,10 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
           :autofocus="idx === 0"
           class="ec-input"
         />
+        <!-- See StageCompareEditor's «multiselect» branch — same shared
+             pattern. NO display="chip", max-selected-labels=1 (1 → name,
+             2+ → «Выбрано: N»), show-clear for a small × matching the
+             regular Select fields visually. -->
         <MultiSelect
           v-else-if="f.type === 'multiselect'"
           :id="`ec-${f.key}`"
@@ -165,9 +169,9 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
           option-value="value"
           :placeholder="f.placeholder || '— выбрать —'"
           :filter="(f.options || []).length > 6"
-          :max-selected-labels="3"
+          :max-selected-labels="1"
           selected-items-label="Выбрано: {0}"
-          display="chip"
+          show-clear
           class="ec-input"
         />
         <DateInputISO

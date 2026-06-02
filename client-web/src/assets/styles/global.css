@@ -300,28 +300,51 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   font-size: 14px;
 }
 
-/* MultiSelect — match Select structure exactly */
+/* MultiSelect — match AutoComplete (.p-autocomplete) structure exactly.
+   The trick: AutoComplete's <input> takes the full 32px height and is
+   the bordered surface. PrimeVue 4 MS instead renders an inner
+   `.p-multiselect-label-container` which by default is only as tall
+   as the inner text — making the input look shorter than the dropdown
+   button (Dima 2026-05-28). Fix: border + background + radius live on
+   the ROOT (matching AC's input), and the label-container is forced
+   to stretch the full 32px so visually it IS the input. */
 .p-multiselect {
   max-width: 100%;
   background: transparent !important;
-  box-shadow: none !important;
   border: none !important;
+  box-shadow: none !important;
   transition: box-shadow 0.2s ease;
 }
+/* Match AC's <input> exactly: same border, bg, radius, height. The
+   label-container acts as the visual «input» of MultiSelect — without
+   an explicit height it collapsed to text height (25.5px) and looked
+   shorter than the dropdown button next to it (Dima 2026-05-28). */
 .p-multiselect .p-multiselect-label-container {
   background: rgb(255, 255, 255);
   border: 1px solid rgb(203, 213, 225);
-  border-right: 1px solid rgb(203, 213, 225);
+  border-right: none;
   border-radius: 6px 0 0 6px;
   box-shadow: rgba(18, 18, 23, 0.05) 0px 1px 2px 0px;
   transition: border-color 0.2s ease;
+  height: 32px !important;
+  min-height: 32px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
 }
-/* MultiSelect hover — green border on label, green shadow on wrapper */
+/* Hover green-mint, identical to AC. */
 .p-multiselect:not(.p-disabled):hover {
   box-shadow: 2px 3px 8px rgba(82, 201, 166, 0.18) !important;
 }
 .p-multiselect:not(.p-disabled):hover .p-multiselect-label-container {
   border-color: rgba(82, 201, 166, 0.45) !important;
+}
+/* MultiSelect hover — same green border + shadow as the AC field. */
+.p-multiselect:not(.p-disabled):hover {
+  border-color: rgba(82, 201, 166, 0.45) !important;
+  box-shadow: 2px 3px 8px rgba(82, 201, 166, 0.18) !important;
 }
 .p-multiselect .p-multiselect-label {
   white-space: nowrap;
@@ -343,26 +366,35 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   font-size: 13px !important;
 }
 
-/* Dropdown arrow trigger — solid grey background, identical for all */
+/* Dropdown arrow trigger — solid grey background, identical for all.
+   This is the «Тип / Рецепт / Расчёт по» canonical look — do NOT
+   change to transparent. The shared rule keeps Select / MultiSelect /
+   AutoComplete visually identical, and the MS-specific rule below
+   only normalises padding + width (PrimeVue 4 ships MS with
+   `padding: 1px 6px` and a wider default width that made its arrow
+   box look subtly different from AC's). */
 .p-select-dropdown,
 .p-multiselect-dropdown,
 .p-autocomplete-dropdown {
   background: #E9EDF3 !important;
-  border-left: 1px solid var(--p-surface-200) !important;
+  border-top: 1px solid rgb(203, 213, 225) !important;
+  border-right: 1px solid rgb(203, 213, 225) !important;
+  border-bottom: 1px solid rgb(203, 213, 225) !important;
+  border-left: 1px solid rgb(226, 232, 240) !important;
   border-radius: 0 var(--p-content-border-radius, 6px) var(--p-content-border-radius, 6px) 0 !important;
   color: #6B7280 !important;
+  /* 26px is the canonical «Тип / Рецепт / Расчёт по» AutoComplete
+     dropdown width — Dima 2026-05-28 reverted from a 32px experiment.
+     Width is set on the shared rule so MS matches AC exactly; the date
+     pickers and DateTimeWithNow buttons keep their own 32px elsewhere. */
+  width: 26px !important;
+  min-width: 26px !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
   transition: background 0.15s;
 }
-/* MultiSelect dropdown arrow — match Select's dropdown button exactly */
 .p-multiselect-dropdown {
   align-self: stretch !important;
-  padding: 1px 6px !important;
-  width: 40px !important;
-  box-sizing: border-box !important;
-  border: 1px solid rgb(203, 213, 225) !important;
-  border-left: 1px solid rgb(226, 232, 240) !important;
-  border-radius: 0 6px 6px 0 !important;
-  background: #E9EDF3 !important;
 }
 .p-select-dropdown:hover,
 .p-multiselect-dropdown:hover,
@@ -380,6 +412,74 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
   color: #333;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   UNIFIED CLEAR-ICON STYLE — single source of truth.
+
+   Canonical visual = the custom `.ce-select-clear` <button> next to
+   AutoComplete (used for Тип / Рецепт / Расчёт по in the constructor):
+   16×16, grey #b0b5be, round, hover → #666 + light grey bg.
+
+   All PrimeVue-rendered clear-icons (Select, MultiSelect,
+   AutoComplete native, DatePicker, Listbox) are normalised to look
+   pixel-identical to that custom button. Adding a new field with a
+   clear button — use these classes, do NOT roll a separate style.
+   ═══════════════════════════════════════════════════════════════════ */
+.p-select-clear-icon,
+.p-multiselect-clear-icon,
+.p-autocomplete-clear-icon,
+.p-datepicker-clear-icon,
+.p-listbox-clear-icon {
+  /* The SVG glyph itself is 10×10 — matches the 10px font-size of the
+     `.pi pi-times` font icon used inside `.ce-select-clear` (AutoComplete
+     custom button). Padding 3px brings the total hit-area + hover circle
+     to 16×16 identical to the AC button's box. Without the
+     content-box + padding trick, setting width: 16 would scale the SVG
+     and make the × visibly thicker than the AC font icon. */
+  font-size: 10px !important;
+  width: 10px !important;
+  height: 10px !important;
+  padding: 3px !important;
+  box-sizing: content-box !important;
+  color: #b0b5be !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 50% !important;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.p-select-clear-icon:hover,
+.p-multiselect-clear-icon:hover,
+.p-autocomplete-clear-icon:hover,
+.p-datepicker-clear-icon:hover,
+.p-listbox-clear-icon:hover {
+  color: #666 !important;
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* MultiSelect clear-icon — absolute-positioned over the label so it
+   visually lives INSIDE the input area like AutoComplete's clear.
+   right: 30px matches `.ce-select-clear` in StageCompareEditor. */
+.p-multiselect {
+  position: relative;
+}
+.p-multiselect .p-multiselect-clear-icon {
+  position: absolute !important;
+  right: 30px !important;
+  top: 50% !important;
+  transform: translateY(-50%);
+  margin: 0 !important;
+  z-index: 2;
+}
+
+/* MultiSelect label vertical-centering. By default label-container is
+   block (32px tall) and the inner label DIV is 25.5px stuck to the top,
+   which made the text read «above the middle» of the field. Flex with
+   align-items center centres it identically to AutoComplete's <input>. */
+.p-multiselect .p-multiselect-label-container {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
 /* Selected item highlight in dropdown list */
 .p-select-option-selected,
 .p-multiselect-option-selected,

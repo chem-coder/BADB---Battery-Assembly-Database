@@ -74,7 +74,7 @@
         class="dtwn-input dtwn-input--time"
         :value="time"
         :disabled="disabled"
-        step="60"
+        step="1"
         @input="onTimeInput"
       />
       <button
@@ -167,10 +167,10 @@ function onSetNow() {
 }
 
 /**
- * Return current Moscow local time as { date: 'YYYY-MM-DD', time: 'HH:MM' }.
- * Uses Intl with the IANA Europe/Moscow zone so the rendered values match
- * what `formatDateTimeMsk` would show, regardless of the browser's local
- * timezone. en-CA locale gives ISO date components (YYYY-MM-DD).
+ * Return current Moscow local time as { date: 'YYYY-MM-DD', time: 'HH:MM:SS' }.
+ * Seconds included (Dima 2026-05-28) — paired with the `<input type=time>
+ * step="1"` above so the «Сейчас» button preserves the same precision the
+ * user can pick by hand. Uses Intl with the IANA Europe/Moscow zone.
  */
 function nowInMsk(date = new Date()) {
   const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -180,6 +180,7 @@ function nowInMsk(date = new Date()) {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hour12: false,
   });
   const parts = Object.fromEntries(
@@ -189,7 +190,7 @@ function nowInMsk(date = new Date()) {
   const hour = parts.hour === '24' ? '00' : parts.hour;
   return {
     date: `${parts.year}-${parts.month}-${parts.day}`,
-    time: `${hour}:${parts.minute}`,
+    time: `${hour}:${parts.minute}:${parts.second}`,
   };
 }
 
@@ -227,14 +228,13 @@ defineExpose({ _nowInMsk: nowInMsk, _isoToDate: isoToDate, _dateToIso: dateToIso
   margin-bottom: 0;
 }
 
-/* Time row = `[time input]  [⚡ button]` — two standalone boxes with a
-   4px gap, mirroring PrimeVue DatePicker's `[input]  [📅]` layout above
-   so the stacked rows look visually consistent. Both boxes share the
-   same border, radius, and gap. */
+/* Time row = `[time input | ⚡ button]` — one cohesive rounded box,
+   same layout as the DatePicker row above and the Select / MultiSelect
+   fields elsewhere on the page. No gap between input and trigger. */
 .dtwn-time-row {
   display: flex;
   align-items: stretch;
-  gap: 4px;
+  gap: 0;
   width: 100%;
   min-width: 0;
 }
@@ -258,7 +258,7 @@ defineExpose({ _nowInMsk: nowInMsk, _isoToDate: isoToDate, _dateToIso: dateToIso
 .dtwn-input {
   height: 32px;
   padding: 4px 8px;
-  border: 1.5px solid rgba(0, 50, 116, 0.12);
+  border: 1px solid rgb(203, 213, 225);
   border-radius: 6px;
   font-size: 12.5px;
   font-family: inherit;
@@ -271,8 +271,11 @@ defineExpose({ _nowInMsk: nowInMsk, _isoToDate: isoToDate, _dateToIso: dateToIso
 .dtwn-input--time {
   flex: 1;
   width: 100%;
-  /* Standalone box — full border + full radius. Matches the DatePicker
-     input above pixel-for-pixel. */
+  /* Pair with the ⚡ button on the right — input gets left half of the
+     rounded box (right border removed, right radius zeroed); button
+     gets the right half. */
+  border-right: none;
+  border-radius: 6px 0 0 6px;
 }
 
 /* Hide the native time picker's built-in clock indicator — it duplicates
@@ -298,19 +301,16 @@ defineExpose({ _nowInMsk: nowInMsk, _isoToDate: isoToDate, _dateToIso: dateToIso
   cursor: not-allowed;
 }
 
-/* DatePicker — flex layout `[input (flex 1)] gap=4 [dropdown 32px]` so
-   the wrapper, input, and trigger button align EXACTLY with the time
-   row below (same widths, same gap, same border style).
-
-   NOTE: PrimeVue renders `<DatePicker class="dtwn-date">` as a
-   `<span class="p-datepicker ... dtwn-date">` — the .dtwn-date class
-   lands on the SAME element as .p-datepicker, NOT on a descendant.
-   So we style .dtwn-date directly (no :deep) with !important to beat
-   the global 40px-height rule. */
+/* DatePicker / time — same «one cohesive rounded box» layout as
+   Select / MultiSelect / AutoComplete: input rounded LEFT, trigger
+   button rounded RIGHT with grey background, no gap between them.
+   Previously the two halves were separate rounded boxes with a 4px
+   gap, which made the field read as «two widgets» instead of one
+   (Dima 2026-05-28). */
 .dtwn-date {
   display: flex !important;
   align-items: stretch !important;
-  gap: 4px !important;
+  gap: 0 !important;
   width: 100%;
   min-width: 0;
 }
@@ -322,8 +322,9 @@ defineExpose({ _nowInMsk: nowInMsk, _isoToDate: isoToDate, _dateToIso: dateToIso
   min-height: 32px !important;
   padding: 4px 8px !important;
   font-size: 12.5px !important;
-  border: 1.5px solid rgba(0, 50, 116, 0.12) !important;
-  border-radius: 6px !important;
+  border: 1px solid rgb(203, 213, 225) !important;
+  border-right: none !important;
+  border-radius: 6px 0 0 6px !important;
   background: white !important;
   color: #1a2a3a !important;
 }
@@ -333,46 +334,55 @@ defineExpose({ _nowInMsk: nowInMsk, _isoToDate: isoToDate, _dateToIso: dateToIso
   box-shadow: 0 0 0 2.5px rgba(0, 50, 116, 0.12) !important;
 }
 .dtwn-date :deep(.p-datepicker-dropdown) {
-  flex: 0 0 32px;
-  width: 32px !important;
+  flex: 0 0 26px;
+  width: 26px !important;
+  min-width: 26px !important;
   height: 32px !important;
   padding: 0 !important;
-  border: 1.5px solid rgba(0, 50, 116, 0.12) !important;
-  border-radius: 6px !important;
-  background: white !important;
-  color: rgba(0, 50, 116, 0.55) !important;
+  border-top: 1px solid rgb(203, 213, 225) !important;
+  border-right: 1px solid rgb(203, 213, 225) !important;
+  border-bottom: 1px solid rgb(203, 213, 225) !important;
+  border-left: 1px solid rgb(226, 232, 240) !important;
+  border-radius: 0 6px 6px 0 !important;
+  background: #E9EDF3 !important;
+  color: #6B7280 !important;
 }
 .dtwn-date :deep(.p-datepicker-dropdown:hover) {
-  background: rgba(0, 50, 116, 0.06) !important;
-  border-color: rgba(0, 50, 116, 0.30) !important;
-  color: #003274 !important;
+  background: rgba(0, 0, 0, 0.08) !important;
 }
 .dtwn-date :deep(.p-datepicker-dropdown-icon) {
   font-size: 12px;
 }
 
+/* Same shape as DatePicker trigger above — used by the time input row
+   («Сейчас» button) so date+time rows align pixel-identical. The
+   parent .dtwn-row is the flex container; the input inside it gets
+   the left half of the rounded box (handled by the .dtwn-row :deep
+   rule above .dtwn-date), and .dtwn-now is the right half. */
 .dtwn-now {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   height: 32px;
   padding: 0 9px;
-  /* Standalone box — same border, radius, and 32px width as DatePicker's
-     calendar trigger button. */
-  border: 1.5px solid rgba(0, 50, 116, 0.12);
-  border-radius: 6px;
-  background: white;
-  color: #003274;
+  border-top: 1px solid rgb(203, 213, 225);
+  border-right: 1px solid rgb(203, 213, 225);
+  border-bottom: 1px solid rgb(203, 213, 225);
+  border-left: 1px solid rgb(226, 232, 240);
+  border-radius: 0 6px 6px 0;
+  background: #E9EDF3;
+  color: #6B7280;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: background 0.15s;
   flex-shrink: 0;
 }
 .dtwn-now--compact {
-  width: 32px;
+  width: 26px;
+  min-width: 26px;
   padding: 0;
-  justify-content: center;
 }
 .dtwn-now i {
   font-size: 12px;
