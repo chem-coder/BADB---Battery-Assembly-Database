@@ -178,8 +178,42 @@ const batteryCreateFields = computed(() => [
   },
 ])
 
+// Seed values for the create dialog (duplicate flow). null → blank.
+const createInitialValues = ref(null)
+const isDuplicating = computed(() => createInitialValues.value !== null)
+const dialogEyebrow = computed(() => isDuplicating.value ? 'Аккумуляторы · Дублирование' : 'Аккумуляторы · Создание')
+const dialogTitle = computed(() => isDuplicating.value ? 'Копия аккумулятора' : 'Новый аккумулятор')
+const dialogDescription = computed(() => isDuplicating.value
+  ? 'Проект и форм-фактор скопированы из исходной сборки. Дата — сегодняшняя, состав электродов набирается заново в конструкторе.'
+  : 'Выберите проект и форм-фактор. Аккумулятор откроется в конструкторе для редактирования.')
+const dialogSubmitLabel = computed(() => isDuplicating.value ? 'Создать копию' : 'Создать')
+
 function createBattery() {
+  createInitialValues.value = null
   createDialogVisible.value = true
+}
+
+// «Дублировать» — copy the reusable setup (projects + form factor) of a
+// battery into a fresh create dialog. The electrode stack, assembly
+// timestamps, electrochem data and per-build notes are NOT copied — the
+// copy is a new physical cell sharing only its project + form factor.
+async function duplicateBattery(row) {
+  const id = row?.battery_id
+  if (id == null) return
+  try {
+    const { data: b } = await api.get(`/api/batteries/${id}`)
+    const projectIds = Array.isArray(b.project_ids)
+      ? b.project_ids.filter((v) => v != null)
+      : (b.project_id != null ? [b.project_id] : [])
+    createInitialValues.value = {
+      project_ids: projectIds,
+      form_factor: b.form_factor || 'coin',
+      // item_created_at omitted → today; battery_notes omitted → blank.
+    }
+    createDialogVisible.value = true
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить аккумулятор для копирования')
+  }
 }
 
 async function onCreateDialogSubmit(payload) {
@@ -468,9 +502,11 @@ onUnmounted(() => clearTimeout(saveTimer))
       table-name="Аккумуляторы"
       table-key="assembly"
       show-add
+      show-duplicate
       row-clickable
       @add="createBattery"
       @delete="onDelete"
+      @duplicate="duplicateBattery"
       @row-click="(data) => toggleConstructor(data.battery_id)"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
     >
@@ -679,11 +715,12 @@ onUnmounted(() => clearTimeout(saveTimer))
 
     <EntityCreateDialog
       v-model:visible="createDialogVisible"
-      eyebrow="Аккумуляторы · Создание"
-      title="Новый аккумулятор"
-      description="Выберите проект и форм-фактор. Аккумулятор откроется в конструкторе для редактирования."
+      :eyebrow="dialogEyebrow"
+      :title="dialogTitle"
+      :description="dialogDescription"
       :fields="batteryCreateFields"
-      submit-label="Создать"
+      :initial-values="createInitialValues"
+      :submit-label="dialogSubmitLabel"
       @create="onCreateDialogSubmit"
     />
   </div>
