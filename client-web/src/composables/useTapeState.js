@@ -12,6 +12,7 @@
  */
 import { ref, reactive, computed, watch } from 'vue'
 import api from '@/services/api'
+import { isoDateToMskInput } from '@/utils/dateFormat'
 
 // ── helpers ──
 function parseDt(isoStr) {
@@ -627,15 +628,11 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       } else {
         general.projectIds = []
       }
-      // Backend returns DATE columns as YYYY-MM-DD string (or full ISO
-      // when typed TIMESTAMPTZ). Truncate to date portion for the picker.
-      if (t.item_created_at) {
-        const s = String(t.item_created_at);
-        const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-        general.itemCreatedAt = m ? m[1] : s;
-      } else {
-        general.itemCreatedAt = ''
-      }
+      // Backend returns the DATE column as an ISO timestamp at MSK
+      // midnight (e.g. "2026-05-11T21:00:00.000Z" for 2026-05-12).
+      // isoDateToMskInput recovers the Moscow calendar day so the picker
+      // shows the date the operator actually entered. See its header.
+      general.itemCreatedAt = isoDateToMskInput(t.item_created_at)
       general.tapeNotes = t.notes || ''
       general.tapeType = t.role || ''
       general.calcMode = t.calc_mode || ''

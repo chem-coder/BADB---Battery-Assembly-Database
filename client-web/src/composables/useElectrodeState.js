@@ -5,6 +5,7 @@
 import { ref, reactive, computed } from 'vue'
 import api from '@/services/api'
 import { shapeForFormFactor, isConfigCodeValidFor } from '@/config/electrodeStages'
+import { isoDateToMskInput } from '@/utils/dateFormat'
 
 export function useElectrodeState({ batchId }) {
   const currentBatchId = ref(batchId)
@@ -246,14 +247,10 @@ export function useElectrodeState({ batchId }) {
       } else {
         general.project_ids = []
       }
-      // Truncate DATE column to YYYY-MM-DD for the picker.
-      if (batch.item_created_at) {
-        const s = String(batch.item_created_at);
-        const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-        general.item_created_at = m ? m[1] : s;
-      } else {
-        general.item_created_at = ''
-      }
+      // DATE column comes back as an ISO instant at MSK midnight —
+      // recover the Moscow calendar day so the picker shows the entered
+      // date, not the UTC-shifted previous day. See isoDateToMskInput.
+      general.item_created_at = isoDateToMskInput(batch.item_created_at)
       general.is_test_batch = !!batch.is_test_batch
       general.target_form_factor = batch.target_form_factor || ''
       general.target_config_code = batch.target_config_code || ''

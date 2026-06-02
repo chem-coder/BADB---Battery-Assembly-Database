@@ -4,6 +4,7 @@
  */
 import { ref, reactive, computed } from 'vue'
 import api from '@/services/api'
+import { isoDateToMskInput } from '@/utils/dateFormat'
 
 // Coerce an input value to a finite number or null. Preserves zero —
 // critical for physical measurements where 0 is a legitimate reading
@@ -397,14 +398,10 @@ export function useBatteryState({ batteryId }) {
       } else {
         general.project_ids = []
       }
-      // Truncate DATE column to YYYY-MM-DD for the picker.
-      if (b.item_created_at) {
-        const s = String(b.item_created_at);
-        const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-        general.item_created_at = m ? m[1] : s;
-      } else {
-        general.item_created_at = ''
-      }
+      // DATE column comes back as an ISO instant at MSK midnight —
+      // recover the Moscow calendar day so the picker shows the entered
+      // date, not the UTC-shifted previous day. See isoDateToMskInput.
+      general.item_created_at = isoDateToMskInput(b.item_created_at)
       general.battery_notes = b.notes || ''
 
       // Entity metadata
