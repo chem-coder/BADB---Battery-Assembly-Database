@@ -10,7 +10,7 @@
  */
 import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 import AutoComplete from 'primevue/autocomplete'
-import MultiSelect from 'primevue/multiselect'
+import DSMultiSelect from '@/components/ds/DSMultiSelect.vue'
 import Checkbox from 'primevue/checkbox'
 import EntityMeta from '@/components/EntityMeta.vue'
 import DateTimeWithNow from '@/components/parity/DateTimeWithNow.vue'
@@ -638,26 +638,14 @@ function onColDragEnd(e) {
               ><i class="pi pi-times"></i></button>
             </div>
             <div v-else-if="field.type === 'multiselect'" class="ce-multiselect-wrap">
-              <!-- IMPORTANT: keep these props in sync with the audit-recommended
-                   MultiSelect pattern (see Dima 2026-05-28 feedback):
-                   - NO display="chip" — chips stretch the column and only the
-                     first selection is readable at fixed width.
-                   - max-selected-labels="1" — 1 selected → name (truncated by
-                     CSS below), 2+ → "Выбрано: N" via selected-items-label.
-                   - show-clear — small × in the style of regular Select,
-                     matches Тип / Рецепт fields visually.
-                   Any future schema-driven editor change MUST preserve these. -->
-              <MultiSelect
+              <!-- DSMultiSelect owns the project's MultiSelect behaviour
+                   (no chip, «Выбрано: N» counter, show-clear, auto-filter).
+                   Defaults live in components/ds/DSMultiSelect.vue — no need
+                   to re-declare them here. -->
+              <DSMultiSelect
                 :model-value="Array.isArray(getValue(tid, field.key)) ? getValue(tid, field.key) : []"
                 :options="getRefOptions(field, tid)"
-                option-label="label"
-                option-value="value"
-                :filter="(getRefOptions(field, tid) || []).length > 6"
-                :max-selected-labels="1"
-                selected-items-label="Выбрано: {0}"
-                show-clear
                 placeholder="—"
-                :scroll-height="'200px'"
                 @update:model-value="setValue(tid, field.key, $event)"
               />
             </div>

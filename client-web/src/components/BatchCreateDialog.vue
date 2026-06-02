@@ -18,7 +18,7 @@ import { ref, computed, watch } from 'vue';
 import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
-import MultiSelect from 'primevue/multiselect';
+import DSMultiSelect from '@/components/ds/DSMultiSelect.vue';
 import InputText from 'primevue/inputtext';
 import InputNumber from 'primevue/inputnumber';
 import Textarea from 'primevue/textarea';
@@ -406,22 +406,13 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
               <i class="pi pi-plus" /> Создать проект
             </button>
           </div>
-          <!-- See StageCompareEditor's «multiselect» branch — same shared
-               pattern. NO display="chip" (chips stretch the field and clip
-               labels at fixed width), max-selected-labels=1 (1 → name,
-               2+ → «Выбрано: N»), show-clear for a small × matching
-               regular Select fields. -->
-          <MultiSelect
+          <!-- DSMultiSelect encapsulates the project's MultiSelect defaults
+               (no chip, counter label, show-clear, auto-filter). -->
+          <DSMultiSelect
             id="bcd-prj"
             v-model="projectIds"
             :options="projectOptions"
-            option-label="label"
-            option-value="value"
             placeholder="— выбрать один или несколько проектов —"
-            filter
-            :max-selected-labels="1"
-            selected-items-label="Выбрано: {0}"
-            show-clear
             class="bcd-input"
           />
           <!-- Project description card — appears once a project is picked -->
