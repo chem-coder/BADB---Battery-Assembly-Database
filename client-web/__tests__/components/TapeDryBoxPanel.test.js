@@ -78,7 +78,9 @@ describe('TapeDryBoxPanel.vue', () => {
       await flushPromises();
       expect(w.text()).toContain('В шкафу');
       const labels = w.findAll('.btn-stub').map((b) => b.attributes('data-label'));
-      expect(labels).toContain('Сохранить параметры');
+      // No more «Сохранить параметры» — param fields autosave on blur
+      // (Dima 2026-05-28). Only state-transition buttons remain.
+      expect(labels).not.toContain('Сохранить параметры');
       expect(labels).toContain('Извлечь');
       expect(labels).toContain('Списать');
     });

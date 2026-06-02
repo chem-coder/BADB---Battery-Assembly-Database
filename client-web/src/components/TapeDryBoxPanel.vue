@@ -200,7 +200,11 @@ async function depleteNow() {
         </div>
       </div>
 
-      <!-- Parameters editor — visible whenever the panel can write any state -->
+      <!-- Parameters editor — auto-saves on blur (Dima 2026-05-28).
+           Each input PUTs its value when focus leaves; no «Save» button
+           because the rest of the SPA (constructor stages, EBP rows)
+           uses the same blur-autosave pattern and a manual save here
+           was inconsistent. -->
       <div v-if="status !== 'depleted'" class="tdb-form">
         <div class="tdb-row">
           <label class="tdb-label">Температура, °C</label>
@@ -209,6 +213,7 @@ async function depleteNow() {
             :max-fraction-digits="2"
             class="tdb-input"
             :disabled="saving"
+            @blur="saveParams"
           />
         </div>
         <div class="tdb-row">
@@ -217,6 +222,7 @@ async function depleteNow() {
             v-model="form.atmosphere"
             class="tdb-input"
             :disabled="saving"
+            @blur="saveParams"
           />
         </div>
         <div class="tdb-row">
@@ -226,6 +232,7 @@ async function depleteNow() {
             class="tdb-input"
             :disabled="saving"
             rows="2"
+            @blur="saveParams"
           />
         </div>
         <div class="tdb-row">
@@ -235,11 +242,15 @@ async function depleteNow() {
             class="tdb-input"
             :disabled="saving"
             rows="2"
+            @blur="saveParams"
           />
         </div>
       </div>
 
-      <!-- Actions — only the buttons valid for the current status are enabled -->
+      <!-- Actions — only the buttons valid for the current status are enabled.
+           No «Сохранить параметры» — parameter fields above autosave on blur.
+           These remaining buttons trigger STATE TRANSITIONS that capture a
+           timestamp (place/remove/return/deplete), so they stay explicit. -->
       <div class="tdb-actions">
         <Button
           v-if="canPlace"
@@ -247,15 +258,6 @@ async function depleteNow() {
           icon="pi pi-box"
           :loading="saving"
           @click="placeNow"
-        />
-        <Button
-          v-if="status === 'in_dry_box' || status === 'out_of_dry_box'"
-          label="Сохранить параметры"
-          icon="pi pi-save"
-          severity="secondary"
-          outlined
-          :loading="saving"
-          @click="saveParams"
         />
         <Button
           v-if="canRemove"
