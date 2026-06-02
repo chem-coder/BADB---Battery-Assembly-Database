@@ -21,7 +21,9 @@ function safeDate(input) {
 }
 
 /**
- * "17.05.2026, 14:32" — full date + 24h time in MSK.
+ * "17.05.2026, 14:32:08" — full date + 24h time with seconds in MSK.
+ * Seconds are included by default (Dima 2026-05-28) — lab workflow
+ * needs sub-minute precision for sequential measurements.
  */
 export function formatDateTimeMsk(input) {
   const d = safeDate(input);
@@ -33,6 +35,7 @@ export function formatDateTimeMsk(input) {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
   });
 }
 
@@ -51,7 +54,7 @@ export function formatDateMsk(input) {
 }
 
 /**
- * "14:32" — 24h time only in MSK.
+ * "14:32:08" — 24h time with seconds in MSK.
  */
 export function formatTimeMsk(input) {
   const d = safeDate(input);
@@ -60,6 +63,7 @@ export function formatTimeMsk(input) {
     timeZone: MSK,
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
   });
 }
 
