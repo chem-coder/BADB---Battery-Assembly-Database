@@ -68,9 +68,20 @@ const props = defineProps({
   currentUserId: { type: [Number, String, null], default: null },
   currentUserName: { type: String, default: '' },
   defaultTapeId: { type: [Number, String, null], default: null },
+  /**
+   * Seed values for the «Дублировать» flow. When non-null, the cutting
+   * setup (tape, projects, form factor, config, shape, dimensions) is
+   * prefilled from a source batch. Per-batch facts (operator, business
+   * date, test flag, comments) always start fresh. null → blank create.
+   * Shape: { tapeId, projectIds[], formFactor, configCode, configOther,
+   *          diameterMm, lengthMm, widthMm }
+   */
+  initialValues: { type: Object, default: null },
 });
 
 const emit = defineEmits(['update:visible', 'create', 'create-project']);
+
+const isDuplicating = computed(() => props.initialValues != null);
 
 // Multi-project per M:N table `electrode_cut_batch_projects` (d029).
 // Backend accepts `project_ids: [...]` on POST (services/electrodeBatchProjectService.js).
@@ -103,21 +114,28 @@ const newProjectDescription = ref('');
 const creatingProject = ref(false);
 
 function reset() {
-  projectIds.value = [];
+  const seed = props.initialValues || null;
+  // Cutting setup — copied from the source batch when duplicating.
+  projectIds.value = seed?.projectIds ? [...seed.projectIds].map(Number) : [];
+  tapeId.value = seed?.tapeId != null
+    ? Number(seed.tapeId)
+    : (props.defaultTapeId ? Number(props.defaultTapeId) : null);
+  formFactor.value = seed?.formFactor || '';
+  configCode.value = seed?.configCode || '';
+  configOther.value = seed?.configOther || '';
+  // shape is normally derived from formFactor by the watcher, but seed it
+  // so the dimension fields render correctly before the watcher fires.
+  shape.value = seed?.shape || '';
+  diameterMm.value = seed?.diameterMm ?? null;
+  lengthMm.value = seed?.lengthMm ?? null;
+  widthMm.value = seed?.widthMm ?? null;
+  // Per-batch facts — ALWAYS fresh, never copied from the source.
   itemCreatedAt.value = todayIsoMsk();
   isTestBatch.value = false;
-  tapeId.value = props.defaultTapeId ? Number(props.defaultTapeId) : null;
   // Operator defaults to current user — usually they are the same person,
   // but the picker lets a data-entry assistant log a batch on behalf of
   // the operator who actually did the work.
   operatorId.value = props.currentUserId ? Number(props.currentUserId) : null;
-  formFactor.value = '';
-  configCode.value = '';
-  configOther.value = '';
-  shape.value = '';
-  diameterMm.value = null;
-  lengthMm.value = null;
-  widthMm.value = null;
   comments.value = '';
   submitting.value = false;
   newProjectVisible.value = false;
@@ -317,11 +335,12 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
     @update:visible="(v) => emit('update:visible', v)"
   >
     <div class="bcd-card">
-      <div class="bcd-eyebrow">Электроды · Создание</div>
-      <h3 class="bcd-title">Новая партия электродов</h3>
+      <div class="bcd-eyebrow">{{ isDuplicating ? 'Электроды · Дублирование' : 'Электроды · Создание' }}</div>
+      <h3 class="bcd-title">{{ isDuplicating ? 'Копия партии электродов' : 'Новая партия электродов' }}</h3>
       <p class="bcd-hint">
-        Заполните параметры нарезки. После создания партии можно перейти
-        к взвешиванию электродов и сушке.
+        {{ isDuplicating
+          ? 'Лента, проект и параметры нарезки скопированы из исходной партии. Дата — сегодняшняя, масса электродов и сушка заполняются заново.'
+          : 'Заполните параметры нарезки. После создания партии можно перейти к взвешиванию электродов и сушке.' }}
       </p>
 
       <!-- Section: source -->
@@ -576,7 +595,7 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
     <template #footer>
       <Button label="Отмена" severity="secondary" outlined :disabled="submitting" @click="onCancel" />
       <Button
-        label="Создать партию"
+        :label="isDuplicating ? 'Создать копию' : 'Создать партию'"
         icon="pi pi-plus"
         :disabled="!canSubmit"
         :loading="submitting"

@@ -226,11 +226,52 @@ async function loadAllProjects() {
   }
 }
 
-function createBatch() {
+// Seed values for the create dialog (duplicate flow). null → blank.
+const createInitialValues = ref(null)
+
+// Make sure the dialog's reference dropdowns (tapes / users / projects)
+// are loaded before we open it — shared by create + duplicate.
+function ensureDialogRefs() {
   if (allTapes.value.length === 0) loadAllTapes()
   if (allUsers.value.length === 0) loadAllUsers()
   if (allProjects.value.length === 0) loadAllProjects()
+}
+
+function createBatch() {
+  createInitialValues.value = null
+  ensureDialogRefs()
   createDialogVisible.value = true
+}
+
+// «Дублировать» — copy the cutting setup (tape + projects + form factor /
+// config / shape / dimensions) of a batch into a fresh create dialog.
+// The electrodes (masses), foil masses, drying timestamps, business date,
+// test flag and comments are NOT copied — the copy is a new physical
+// cutting run that reuses the same target geometry.
+async function duplicateBatch(row) {
+  const id = row?.cut_batch_id
+  if (id == null) return
+  ensureDialogRefs()
+  try {
+    const { data: b } = await api.get(`/api/electrodes/electrode-cut-batches/${id}`)
+    const projectIds = Array.isArray(b.project_ids)
+      ? b.project_ids.filter((v) => v != null)
+      : (b.project_id != null ? [b.project_id] : [])
+    createInitialValues.value = {
+      tapeId: b.tape_id ?? null,
+      projectIds,
+      formFactor: b.target_form_factor || '',
+      configCode: b.target_config_code || '',
+      configOther: b.target_config_other || '',
+      shape: b.shape || '',
+      diameterMm: b.diameter_mm ?? null,
+      lengthMm: b.length_mm ?? null,
+      widthMm: b.width_mm ?? null,
+    }
+    createDialogVisible.value = true
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить партию для копирования')
+  }
 }
 
 // Inline "+ Создать проект" handler — emitted by BatchCreateDialog with
@@ -410,9 +451,11 @@ onUnmounted(() => clearTimeout(saveTimer))
       table-name="Партии нарезки"
       table-key="electrodes"
       show-add
+      show-duplicate
       row-clickable
       @add="createBatch"
       @delete="onDelete"
+      @duplicate="duplicateBatch"
       @row-click="(data) => toggleConstructor(data.cut_batch_id)"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
     >
@@ -551,6 +594,7 @@ onUnmounted(() => clearTimeout(saveTimer))
       :projects="allProjects"
       :current-user-id="authStore.user?.userId"
       :current-user-name="authStore.user?.name || ''"
+      :initial-values="createInitialValues"
       @create="onCreateDialogSubmit"
       @create-project="onCreateProjectFromDialog"
     />
