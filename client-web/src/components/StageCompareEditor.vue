@@ -638,15 +638,24 @@ function onColDragEnd(e) {
               ><i class="pi pi-times"></i></button>
             </div>
             <div v-else-if="field.type === 'multiselect'" class="ce-multiselect-wrap">
+              <!-- IMPORTANT: keep these props in sync with the audit-recommended
+                   MultiSelect pattern (see Dima 2026-05-28 feedback):
+                   - NO display="chip" — chips stretch the column and only the
+                     first selection is readable at fixed width.
+                   - max-selected-labels="1" — 1 selected → name (truncated by
+                     CSS below), 2+ → "Выбрано: N" via selected-items-label.
+                   - show-clear — small × in the style of regular Select,
+                     matches Тип / Рецепт fields visually.
+                   Any future schema-driven editor change MUST preserve these. -->
               <MultiSelect
                 :model-value="Array.isArray(getValue(tid, field.key)) ? getValue(tid, field.key) : []"
                 :options="getRefOptions(field, tid)"
                 option-label="label"
                 option-value="value"
                 :filter="(getRefOptions(field, tid) || []).length > 6"
-                :max-selected-labels="2"
+                :max-selected-labels="1"
                 selected-items-label="Выбрано: {0}"
-                display="chip"
+                show-clear
                 placeholder="—"
                 :scroll-height="'200px'"
                 @update:model-value="setValue(tid, field.key, $event)"
@@ -773,6 +782,13 @@ function onColDragEnd(e) {
   border-right: 1px solid rgba(0, 50, 116, 0.06);
 }
 
+/* Tape columns — ALL variants (default / active / source) use the same
+   hard width. Previously active had only `width: 190px` while source
+   had `width: 211px`; with table-layout: fixed but width: auto on the
+   parent table, long content (like project name «Импортозамещение
+   сепараторов») was still able to stretch active wider than source.
+   Locking width + min-width + max-width to a single value forces the
+   browser to lay them out identically regardless of content. */
 .ce-th-tape {
   padding: 7px 10px;
   text-align: left;
@@ -786,33 +802,36 @@ function onColDragEnd(e) {
   cursor: grab;
   user-select: none;
   white-space: nowrap;
-  width: 190px;
-  min-width: 140px;
-  /* Cap the column at 280px even when the constructor renders a single
-     tape (HTML table `width: auto` would otherwise let content like
-     MultiSelect chips stretch the column indefinitely — caught with the
-     Проекты MultiSelect when 2+ chips were selected). */
-  max-width: 280px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
   transition: background 0.2s, box-shadow 0.2s;
   position: relative;
 }
 
-/* Apply the same cap to data cells under each tape column. Combined
-   with `overflow: hidden` on .cell-wrap below, this forces wide content
-   (MultiSelect chips, long select labels) to truncate inside the cell
-   instead of pushing the column wider. */
+/* Data cells under each tape column share the same hard width so the
+   column lays out identically across rows. Combined with overflow:
+   hidden on .cell-wrap below, this forces wide content (MultiSelect
+   selected-label, long select labels) to truncate INSIDE the cell. */
 .ce-td:not(.ce-td-label) {
-  max-width: 280px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
 }
 .cell-wrap {
   overflow: hidden;
+  min-width: 0;
 }
 .ce-th-tape:active { cursor: grabbing; }
 .ce-th-tape:last-child { border-right: none; }
 
-/* Source columns wider to fit copy-btn < */
+/* Source columns — same width as active. Earlier they were 211px to
+   fit the copy-< button, but the button sits inside the cell anyway
+   and 220px gives uniform layout. */
 .ce-th-tape--source {
-  width: 211px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
 }
 
 /* Active tape header */
@@ -1167,8 +1186,12 @@ function onColDragEnd(e) {
   height: auto !important;
   font-size: 12.5px !important;
 }
+/* Label padding: left 8px (normal), right 30px to reserve room for the
+   absolute-positioned clear-icon defined in global.css. Without the
+   right-side reserve, long names like «Импортозамещение сепараторов»
+   render ellipsis that overlaps the × icon visually. */
 .ce-multiselect-wrap :deep(.p-multiselect-label) {
-  padding: 4px 8px !important;
+  padding: 4px 30px 4px 8px !important;
   font-size: 12.5px !important;
   line-height: 1.4 !important;
 }
@@ -1203,14 +1226,20 @@ function onColDragEnd(e) {
   display: block;
 }
 /* Constrain the label container so chips can't push out the dropdown
-   arrow — keeps field width fixed regardless of selection count. */
+   arrow — keeps field width fixed regardless of selection count.
+   Both modes covered:
+   - non-chip (current default after Dima 2026-05-28 feedback): one
+     selected → name with ellipsis; 2+ → "Выбрано: N" counter via
+     :max-selected-labels="1" + selected-items-label.
+   - chip mode (rare, legacy): chips share-and-truncate via
+     .p-multiselect-chip-item flex rules above. */
 .ce-multiselect-wrap :deep(.p-multiselect-label) {
-  display: flex;
-  gap: 4px;
-  align-items: center;
+  display: block;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   min-width: 0;
-  flex-wrap: nowrap;
+  max-width: 100%;
 }
 .ce-multiselect-wrap :deep(.p-multiselect-dropdown) {
   width: 26px !important;

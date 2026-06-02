@@ -125,7 +125,7 @@ describe('DateTimeWithNow.vue', () => {
       expect(setNowEvents).toHaveLength(1);
 
       const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-      const timePattern = /^\d{2}:\d{2}$/;
+      const timePattern = /^\d{2}:\d{2}:\d{2}$/;
       expect(dateEvents[0][0]).toMatch(datePattern);
       expect(timeEvents[0][0]).toMatch(timePattern);
 
@@ -150,31 +150,31 @@ describe('DateTimeWithNow.vue', () => {
   });
 
   describe('MSK formatter (nowInMsk)', () => {
-    it('returns ISO YYYY-MM-DD + HH:MM for a known UTC instant', () => {
+    it('returns ISO YYYY-MM-DD + HH:MM:SS for a known UTC instant', () => {
       const wrapper = makeWrapper();
-      // 2026-05-27T10:15:00Z → 13:15 in Moscow (UTC+3).
-      const utc = new Date(Date.UTC(2026, 4, 27, 10, 15, 0));
+      // 2026-05-27T10:15:42Z → 13:15:42 in Moscow (UTC+3).
+      const utc = new Date(Date.UTC(2026, 4, 27, 10, 15, 42));
       const result = wrapper.vm._nowInMsk(utc);
       expect(result.date).toBe('2026-05-27');
-      expect(result.time).toBe('13:15');
+      expect(result.time).toBe('13:15:42');
     });
 
-    it('returns 2-digit padded month/day/hour/minute for early-year date', () => {
+    it('returns 2-digit padded month/day/hour/minute/second for early-year date', () => {
       const wrapper = makeWrapper();
-      // 2026-01-03T06:05:00Z → 09:05 in Moscow (UTC+3).
-      const utc = new Date(Date.UTC(2026, 0, 3, 6, 5, 0));
+      // 2026-01-03T06:05:07Z → 09:05:07 in Moscow (UTC+3).
+      const utc = new Date(Date.UTC(2026, 0, 3, 6, 5, 7));
       const result = wrapper.vm._nowInMsk(utc);
       expect(result.date).toBe('2026-01-03');
-      expect(result.time).toBe('09:05');
+      expect(result.time).toBe('09:05:07');
     });
 
     it('rolls date forward when UTC time is late but MSK has passed midnight', () => {
       const wrapper = makeWrapper();
-      // 2026-05-27T22:30:00Z → 01:30 on 2026-05-28 in Moscow (UTC+3).
-      const utc = new Date(Date.UTC(2026, 4, 27, 22, 30, 0));
+      // 2026-05-27T22:30:15Z → 01:30:15 on 2026-05-28 in Moscow (UTC+3).
+      const utc = new Date(Date.UTC(2026, 4, 27, 22, 30, 15));
       const result = wrapper.vm._nowInMsk(utc);
       expect(result.date).toBe('2026-05-28');
-      expect(result.time).toBe('01:30');
+      expect(result.time).toBe('01:30:15');
     });
   });
 
