@@ -92,6 +92,29 @@ function logout() {
   router.push('/login')
   emit('navigate')
 }
+
+// Hard refresh — everything a regular Cmd+Shift+R doesn't cover.
+// Wipes Cache API (PWA / service-worker caches), unregisters service
+// workers, then reloads the page with a cache-busting timestamp.
+// Use after a CSS / JS / config update when stale assets are suspected.
+async function hardRefresh() {
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys()
+      await Promise.all(keys.map((k) => caches.delete(k)))
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(regs.map((r) => r.unregister()))
+    }
+  } catch (err) {
+    // Non-fatal — proceed to reload regardless.
+    console.warn('hardRefresh cleanup failed:', err)
+  }
+  const url = new URL(window.location.href)
+  url.searchParams.set('_t', String(Date.now()))
+  window.location.replace(url.toString())
+}
 </script>
 
 <template>
@@ -167,6 +190,14 @@ function logout() {
         <i class="pi pi-user"></i>
         <span class="sidebar-item-label">Профиль</span>
       </RouterLink>
+      <button
+        class="sidebar-item sidebar-refresh"
+        @click="hardRefresh"
+        title="Полное обновление с очисткой кэша браузера"
+      >
+        <i class="pi pi-refresh"></i>
+        <span class="sidebar-item-label">Обновить</span>
+      </button>
       <button class="sidebar-item sidebar-logout" @click="logout">
         <i class="pi pi-sign-out"></i>
         <span class="sidebar-item-label">Выйти</span>
@@ -435,6 +466,13 @@ function logout() {
 
 .sidebar-logout { color: rgba(255, 255, 255, 0.6); }
 .sidebar-logout:hover { color: #ff6b6b; background: rgba(231, 76, 60, 0.12); }
+
+/* Hard-refresh action — same muted resting state as logout but hover
+   uses brand-friendly mint-green to distinguish it from the destructive
+   logout action sitting right below it. */
+.sidebar-refresh { color: rgba(255, 255, 255, 0.6); }
+.sidebar-refresh:hover { color: #52C9A6; background: rgba(82, 201, 166, 0.12); }
+.sidebar-refresh:active i { transform: rotate(360deg); transition: transform 0.5s; }
 
 /* ── Mobile ──
    Drawer transform / position-fixed / overlay logic lives in
