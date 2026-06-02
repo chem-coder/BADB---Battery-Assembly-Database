@@ -54,11 +54,17 @@ function getStageDateTime(code) {
   const ts = activeTapeState.value
   if (!ts) return null
 
-  // Tape "general info" — use the tape's createdAt. Excluded from the
-  // shared range below (META_STAGE_CODES), so it doesn't pull other
-  // step markers to the left edge.
+  // Tape "general info" — use the operator-set business date
+  // (item_created_at) rather than the audit-only created_at. The
+  // audit timestamp is whenever the row was inserted, which doesn't
+  // reflect when the batch actually started. Item_created_at, set by
+  // the operator in the «Дата создания партии» field, is the
+  // workflow-meaningful anchor.
   if (code === 'general_info') {
-    return ts.general?.createdAt ? { full: ts.general.createdAt } : null
+    const date = ts.general?.itemCreatedAt
+    if (!date) return null
+    const time = ts.general?.itemCreatedTime || '00:00:00'
+    return { date, time }
   }
 
   // Electrode "cutting" stage stores its fields on `general`, not in
@@ -95,17 +101,14 @@ function parseDateTimeFull(dt) {
   return new Date(dt.date + 'T' + dt.time)
 }
 
-// Stage codes that represent metadata (creation time, general info) rather
-// than a workflow event. Their timestamps should NOT define the timeline
-// range — including tape.created_at (which is "today" for a freshly
-// opened tape) was making real process-step dates cluster at the far
-// left of the bar whenever the tape was created recently but the steps
-// were back-dated.
-//
-// Only 'general_info' is metadata here. Electrode 'cutting' is an actual
-// workflow step with its own start/end timestamps, so it must remain
-// part of the timeline.
-const META_STAGE_CODES = new Set(['general_info'])
+// Stage codes that represent pure metadata (no workflow timestamp at all)
+// and should be skipped when computing the timeline range / marker.
+// Previously 'general_info' was here because it pointed at the audit
+// `created_at` (which would always be "today" and skew the range).
+// Since 2026-05-28 general_info uses the operator-set `item_created_at`
+// instead, so it IS a real workflow event and belongs on the timeline
+// (Dima caught this — «общая информация без диаграммы времени»).
+const META_STAGE_CODES = new Set()
 
 // Collect all dates across stages → min/max for shared time axis (full precision)
 const timeRange = computed(() => {
@@ -132,19 +135,43 @@ const timeRange = computed(() => {
   return { minDate, maxDate, minMs, maxMs, spanMs }
 })
 
-// Position of a stage's date on the shared timeline (0–100%), precision to seconds
-// Meta stages (general_info / cutting) intentionally have no marker — they
-// represent metadata, not a workflow event on the timeline.
+// Sort all dated stages chronologically. Each stage's marker position
+// is then its slot index in this sorted list, evenly spaced across
+// the bar. Result: earlier date → left, later date → right (no matter
+// in what order the workflow stages are listed in the schema), and
+// stages without a date are simply skipped (no marker rendered).
+const sortedDatedStages = computed(() => {
+  if (!activeTapeState.value) return []
+  const out = []
+  for (const stage of props.stages) {
+    if (META_STAGE_CODES.has(stage.code)) continue
+    const dt = getStageDateTime(stage.code)
+    if (!dt) continue
+    const d = parseDateTimeFull(dt)
+    if (!d || !Number.isFinite(d.getTime())) continue
+    out.push({ code: stage.code, ms: d.getTime() })
+  }
+  out.sort((a, b) => a.ms - b.ms)
+  return out
+})
+
+// Position of a stage marker on the shared timeline (0–100%).
+//
+// Layout: EQUAL SPACING in CHRONOLOGICAL order. Stages without a date
+// have no marker. Stages with a date get a slot whose index reflects
+// where their timestamp falls relative to the others — earlier left,
+// later right. This avoids the «one far-away date compresses everything
+// else» problem of literal time-axis layout, while still showing the
+// real chronological order to the operator (Dima 2026-05-28).
 function barPosition(code) {
   if (META_STAGE_CODES.has(code)) return null
-  const tr = timeRange.value
-  if (!tr) return null
-  const dt = getStageDateTime(code)
-  if (!dt) return null
-  const d = parseDateTimeFull(dt)
-  if (!d || !Number.isFinite(d.getTime())) return null
-  if (tr.spanMs === 0) return 5 // single point — left edge
-  return 5 + ((d.getTime() - tr.minMs) / tr.spanMs) * 90
+  const sorted = sortedDatedStages.value
+  const idx = sorted.findIndex(s => s.code === code)
+  if (idx < 0) return null
+  const total = sorted.length
+  if (total === 1) return 50
+  // Inset 5% on each side so badges don't clip the card edges.
+  return 5 + (idx / (total - 1)) * 90
 }
 
 function formatDateShort(dateStr) {
