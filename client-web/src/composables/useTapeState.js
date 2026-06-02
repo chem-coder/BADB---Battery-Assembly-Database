@@ -448,6 +448,9 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
 
     await api.post(`/api/tapes/${currentTapeId.value}/actuals`, payload)
     setDirty('recipe_materials', false)
+    // RecipeActualsEditor calls this directly (not via saveStep), so
+    // refresh the meta footer here too — keeps «Изменил» live.
+    await refreshMeta()
   }
 
   // ── Drop cached instances for a specific line (e.g. when material_id changes) ──
@@ -559,19 +562,46 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
 
   // ── Unified step save ──
   async function saveStep(code) {
+    let result
     switch (code) {
       case 'general_info':
       case 'recipe_materials':
-        return saveGeneral()
+        result = await saveGeneral()
+        break
       case 'drying_am':
       case 'drying_tape':
       case 'drying_pressed_tape':
-        return saveDryingStep(code)
-      case 'weighing': return saveWeighing()
-      case 'mixing': return saveMixing()
-      case 'coating': return saveCoating()
-      case 'calendering': return saveCalendering()
+        result = await saveDryingStep(code)
+        break
+      case 'weighing': result = await saveWeighing(); break
+      case 'mixing':   result = await saveMixing(); break
+      case 'coating':  result = await saveCoating(); break
+      case 'calendering': result = await saveCalendering(); break
     }
+    // After every save the audit footer should reflect the new updated_at
+    // and updated_by_name — Dima 2026-05-28 noticed it was frozen until
+    // a full reload. Backend stamps these on every PUT/POST, GET the
+    // tape and patch `meta` so EntityMeta re-renders.
+    await refreshMeta()
+    return result
+  }
+
+  /**
+   * Pull the freshest audit fields (updated_at / updated_by_name +
+   * created_at / created_by_name) from the backend and merge into the
+   * reactive `meta`. Lightweight — used right after any save.
+   */
+  async function refreshMeta() {
+    if (!currentTapeId.value) return
+    try {
+      const { data: t } = await api.get(`/api/tapes/${currentTapeId.value}`)
+      if (t) {
+        meta.created_by_name = t.created_by_name || null
+        meta.created_at = t.created_at || null
+        meta.updated_by_name = t.updated_by_name || null
+        meta.updated_at = t.updated_at || null
+      }
+    } catch {}
   }
 
   // ── Restore tape from API ──
