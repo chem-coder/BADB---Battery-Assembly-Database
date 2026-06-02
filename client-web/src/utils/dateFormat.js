@@ -88,6 +88,46 @@ export function todayIsoMsk(now = new Date()) {
 }
 
 /**
+ * Normalise a backend `item_created_at` value to the YYYY-MM-DD string a
+ * date picker expects, read as the MOSCOW calendar day.
+ *
+ * Why this exists (Dima 2026-06-02): `item_created_at` is a Postgres
+ * DATE column, but node-postgres parses DATE into a JS Date at the
+ * server's local midnight, and JSON serialises that instant as UTC. On
+ * the MSK dev/prod server, DATE `2026-05-12` comes back as
+ * `"2026-05-11T21:00:00.000Z"`. Naively slicing the first 10 chars gives
+ * `2026-05-11` — the operator sees the day BEFORE the one they picked.
+ *
+ * Fix: if the value is a bare `YYYY-MM-DD` (no time part) trust it as-is;
+ * otherwise re-read the instant as the Moscow calendar day via Intl, which
+ * recovers the originally-entered date for any server at or west of MSK
+ * (covers the LAN-only Moscow deployment). The proper long-term fix is a
+ * backend DATE type-parser that returns the raw string — see
+ * docs/instructions/operator-vs-creator.md.
+ */
+export function isoDateToMskInput(raw) {
+  if (!raw) return '';
+  const s = String(raw);
+  // Already a plain calendar date — no timezone ambiguity, use directly.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = safeDate(s);
+  if (!d) {
+    // Unparseable but date-prefixed — fall back to the leading 10 chars.
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : s;
+  }
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: MSK,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(d).map((p) => [p.type, p.value])
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+/**
  * Compact "17.05" date label for chips/badges in MSK.
  */
 export function formatDateShortMsk(input) {
