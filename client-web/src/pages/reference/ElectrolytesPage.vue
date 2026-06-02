@@ -1,316 +1,358 @@
 <script setup>
 /**
- * ElectrolytesPage — "Электролиты" (справочник)
- * Uses CrudTable + SaveIndicator (from Design System).
- * Inline create/edit form preserved — CrudTable handles the list display.
+ * ElectrolytesPage — "Электролиты" (electrolyte reference).
+ *
+ * Migrated to row-open + foundation pattern per V2 parity. See:
+ *   - docs/current/electrolytes.md
+ *   - docs/instructions/frontend_parity_handoff.md §"Electrolytes And Separators"
+ *   - public/js/electrolytes.js (vanilla reference)
+ *
+ * Files block is delegated to the shared <RecordFiles> foundation
+ * component (added 2026-05-14 as the third per-surface migration
+ * exposed the duplication with Separators).
  */
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useToast } from 'primevue/usetoast'
-import api from '@/services/api'
-import { toastApiError } from '@/utils/errorClassifier'
-import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
-import CrudTable from '@/components/CrudTable.vue'
-import EntityMeta from '@/components/EntityMeta.vue'
-import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
-import Textarea from 'primevue/textarea'
-import Select from 'primevue/select'
+import { ref, onMounted } from 'vue';
+import api from '@/services/api';
+import { usePrintHandlers } from '@/composables/usePrintHandlers';
 
-const toast = useToast()
-const crudTable = ref(null)
+import RowOpenPage from '@/components/parity/RowOpenPage.vue';
+import OpenedRecordHeader from '@/components/parity/OpenedRecordHeader.vue';
+import EditableTitle from '@/components/parity/EditableTitle.vue';
+import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue';
+import RecordFiles from '@/components/parity/RecordFiles.vue';
+import { useRowOpenForm } from '@/composables/useRowOpenForm';
 
-// ── Data ───────────────────────────────────────────────────────────────
-const electrolytes = ref([])
-const loading = ref(false)
+import InputText from 'primevue/inputtext';
+import Textarea from 'primevue/textarea';
+import Select from 'primevue/select';
 
-async function loadElectrolytes() {
-  loading.value = true
+// ── Constants ────────────────────────────────────────────────────────
+const TYPE_OPTIONS = [
+  { value: 'liquid', label: 'жидкий' },
+  { value: 'solid',  label: 'твёрдый' },
+  { value: 'gel',    label: 'гель' },
+];
+
+const STATUS_OPTIONS = [
+  { value: 'active',   label: 'активный' },
+  { value: 'inactive', label: 'неактивный' },
+  { value: 'archived', label: 'архивный' },
+];
+
+// ── List state ───────────────────────────────────────────────────────
+const electrolytes = ref([]);
+const loading = ref(false);
+
+async function loadList() {
+  loading.value = true;
   try {
-    const { data } = await api.get('/api/electrolytes')
-    electrolytes.value = data
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось загрузить электролиты')
+    const { data } = await api.get('/api/electrolytes');
+    electrolytes.value = data;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
-onMounted(() => { loadElectrolytes() })
+onMounted(() => loadList());
 
-// ── Column config ──────────────────────────────────────────────────────
+// ── Form ─────────────────────────────────────────────────────────────
+function emptyForm() {
+  return {
+    name: '',
+    electrolyte_type: '',
+    solvent_system: '',
+    salts: '',
+    concentration: '',
+    additives: '',
+    notes: '',
+    status: 'active',
+  };
+}
+
+async function loadOne(id) {
+  const item = electrolytes.value.find((e) => e.electrolyte_id === id);
+  if (!item) throw new Error(`Электролит #${id} не найден`);
+  return {
+    item,
+    form: {
+      name: item.name || '',
+      electrolyte_type: item.electrolyte_type || '',
+      solvent_system: item.solvent_system || '',
+      salts: item.salts || '',
+      concentration: item.concentration || '',
+      additives: item.additives || '',
+      notes: item.notes || '',
+      status: item.status || 'active',
+    },
+  };
+}
+
+async function saveOne(form, mode, currentId) {
+  const payload = {
+    name: form.name.trim(),
+    electrolyte_type: form.electrolyte_type,
+    solvent_system: form.solvent_system || null,
+    salts: form.salts || null,
+    concentration: form.concentration || null,
+    additives: form.additives || null,
+    notes: form.notes || null,
+    status: form.status,
+  };
+
+  let response;
+  if (mode === 'create') {
+    response = await api.post('/api/electrolytes', payload);
+  } else {
+    response = await api.put(`/api/electrolytes/${currentId}`, payload);
+  }
+  return response.data;
+}
+
+function validate(form) {
+  if (!form.name?.trim()) return 'Заполните название электролита';
+  if (!form.electrolyte_type) return 'Выберите тип электролита';
+  return true;
+}
+
+// ── Foundation hook ──────────────────────────────────────────────────
+const ctx = useRowOpenForm({
+  entityType: 'electrolytes',
+  idField: 'electrolyte_id',
+  emptyForm,
+  validate,
+  loadOne,
+  saveOne,
+  list: { ref: electrolytes, load: loadList },
+  deletePhrase: (id) => `DELETE ELECTROLYTE ${id}`,
+  hasDeleteCheck: true,
+  deleteMessages: {
+    success: 'Электролит удалён',
+  },
+});
+
+// ── Filters ──────────────────────────────────────────────────────────
+const filters = [
+  { field: 'text', type: 'text', placeholder: 'Название, заметки, соли...', label: 'Поиск' },
+  {
+    field: 'status',
+    type: 'select',
+    label: 'Статус',
+    emptyOption: 'Все статусы',
+    options: STATUS_OPTIONS,
+  },
+  {
+    field: 'electrolyte_type',
+    type: 'select',
+    label: 'Тип',
+    emptyOption: 'Все типы',
+    options: TYPE_OPTIONS,
+  },
+];
+
+function textHaystack(row) {
+  return [
+    row.name,
+    row.solvent_system,
+    row.salts,
+    row.concentration,
+    row.additives,
+    row.notes,
+    row.electrolyte_type,
+    row.status,
+  ].filter(Boolean).join(' ');
+}
+
+// ── Columns ──────────────────────────────────────────────────────────
 const columns = [
-  { field: 'name',             header: 'Название',    minWidth: '120px' },
-  { field: 'electrolyte_type', header: 'Тип',         minWidth: '80px',  width: '120px' },
-  { field: 'solvent_system',   header: 'Растворители', minWidth: '100px' },
-  { field: 'salts',            header: 'Соли',         minWidth: '80px',  width: '110px' },
-  { field: 'concentration',    header: 'Концентрация', minWidth: '80px',  width: '120px' },
-  { field: 'status',           header: 'Статус',       minWidth: '80px',  width: '115px' },
-  { field: 'created_by_name',  header: 'Оператор',     minWidth: '90px',  width: '130px' },
-]
+  { field: 'name', header: 'Название' },
+  { field: 'electrolyte_type', header: 'Тип', width: '100px' },
+  { field: 'salts', header: 'Соли', width: '180px' },
+  { field: 'concentration', header: 'Концентрация', width: '140px' },
+  { field: 'status', header: 'Статус', width: '120px' },
+];
 
-// ── Save indicator (delete flow) ──────────────────────────────────────
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
-
-function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
+function typeLabel(t) {
+  return TYPE_OPTIONS.find((o) => o.value === t)?.label || t || '—';
+}
+function statusLabel(s) {
+  return STATUS_OPTIONS.find((o) => o.value === s)?.label || s || '—';
 }
 
-async function confirmSave() {
-  try {
-    for (const item of pendingDelete.value) {
-      await api.delete(`/api/electrolytes/${item.electrolyte_id}`)
-    }
-    pendingDelete.value = []
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
-    crudTable.value?.clearSelection()
-    await loadElectrolytes()
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось удалить')
-  }
+// ── Meta string for sticky header ────────────────────────────────────
+function formatMeta(item) {
+  if (!item) return '';
+  const parts = [`ID: ${item.electrolyte_id}`];
+  if (item.electrolyte_type) parts.push(`тип: ${typeLabel(item.electrolyte_type)}`);
+  if (item.status) parts.push(`статус: ${statusLabel(item.status)}`);
+  return parts.join(' · ');
 }
 
-function discardChanges() {
-  pendingDelete.value = []
-  saveState.value = 'idle'
-  crudTable.value?.clearSelection()
-}
-
-onUnmounted(() => clearTimeout(saveTimer))
-
-// ── Form (Dialog) ─────────────────────────────────────────────────────
-const formVisible = ref(false)
-const mode = ref(null) // 'create' | 'edit'
-const currentId = ref(null)
-// Full row of the entity being edited — kept so EntityMeta can show
-// `Создано: ФИО, дата` + `Изменено: ФИО, дата` from the backend's
-// JOIN-populated created_by_name / updated_by_name fields.
-const currentItem = ref(null)
-
-// `created_by` is NOT part of the form — backend forces it from the
-// authenticated user (req.user.userId). Storing it on the form would
-// invite an "edit creator" UI that the backend ignores anyway. The
-// existing creator is shown read-only via EntityMeta when available.
-const form = ref({
-  name: '',
-  electrolyte_type: '',
-  solvent_system: '',
-  salts: '',
-  concentration: '',
-  additives: '',
-  notes: '',
-  status: 'active',
-})
-
-const typeOptions = [
-  { label: 'Жидкий', value: 'liquid' },
-  { label: 'Твёрдый', value: 'solid' },
-  { label: 'Гелевый', value: 'gel' },
-]
-
-const statusOptions = [
-  { label: 'Активный', value: 'active' },
-  { label: 'Не используется', value: 'inactive' },
-  { label: 'Архив', value: 'archived' },
-]
-
-function resetForm() {
-  form.value = {
-    name: '', electrolyte_type: '', solvent_system: '',
-    salts: '', concentration: '', additives: '', notes: '', status: 'active',
-  }
-  mode.value = null
-  currentId.value = null
-  currentItem.value = null
-  formVisible.value = false
-}
-
-function openCreate() {
-  resetForm()
-  mode.value = 'create'
-  formVisible.value = true
-}
-
-function openEdit(el) {
-  mode.value = 'edit'
-  currentId.value = el.electrolyte_id
-  currentItem.value = el
-  form.value = {
-    name: el.name || '',
-    electrolyte_type: el.electrolyte_type || '',
-    solvent_system: el.solvent_system || '',
-    salts: el.salts || '',
-    concentration: el.concentration || '',
-    additives: el.additives || '',
-    notes: el.notes || '',
-    status: el.status || 'active',
-  }
-  formVisible.value = true
-}
-
-async function saveElectrolyte() {
-  if (!mode.value) return
-  if (!form.value.name?.trim()) {
-    toast.add({ severity: 'warn', summary: 'Заполните название', life: 3000 })
-    return
-  }
-
-  // created_by intentionally NOT in the payload — backend forces it
-  // from the authenticated user (routes/electrolytes.js:31).
-  const payload = { ...form.value }
-
-  try {
-    if (mode.value === 'create') {
-      await api.post('/api/electrolytes', payload)
-      toast.add({ severity: 'success', summary: 'Электролит создан', life: 3000 })
-    } else {
-      await api.put(`/api/electrolytes/${currentId.value}`, payload)
-      toast.add({ severity: 'success', summary: 'Изменения сохранены', life: 3000 })
-    }
-    resetForm()
-    await loadElectrolytes()
-  } catch (err) {
-    toastApiError(toast, err, 'Ошибка сохранения')
-  }
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────
-function typeLabel(type) {
-  const map = { liquid: 'Жидкий', solid: 'Твёрдый', gel: 'Гелевый' }
-  return map[type] || type || '—'
-}
-
-function statusLabel(status) {
-  const map = { active: 'активный', inactive: 'не используется', archived: 'архив' }
-  return map[status] || status || '—'
-}
+// ── List-row actions ─────────────────────────────────────────────────
+const { onRowPrint, onHeaderPrint } = usePrintHandlers('electrolytes', ctx);
 </script>
 
 <template>
-  <div class="electrolytes-page">
+  <RowOpenPage
+    title="Электролиты"
+    icon="pi pi-flask"
+    add-placeholder="+ Добавить электролит"
+    :list="electrolytes"
+    :columns="columns"
+    :filters="filters"
+    :row-actions="['print', 'duplicate']"
+    :current-id="ctx.currentId.value"
+    :mode="ctx.mode.value"
+    id-field="electrolyte_id"
+    :loading="loading"
+    :text-haystack="textHaystack"
+    @create="(name) => ctx.openCreate(name)"
+    @row-click="ctx.openEdit"
+    @row-print="onRowPrint"
+    @row-duplicate="ctx.openDuplicate"
+  >
+    <template #col-name="{ data }">
+      <strong>{{ data.name }}</strong>
+    </template>
+    <template #col-electrolyte_type="{ data }">
+      <span class="meta-text">{{ typeLabel(data.electrolyte_type) }}</span>
+    </template>
+    <template #col-status="{ data }">
+      <span :class="['status-pill', `status-pill--${data.status || 'unknown'}`]">
+        {{ statusLabel(data.status) }}
+      </span>
+    </template>
+    <template #col-salts="{ data }">
+      <span class="meta-text">{{ data.salts || '' }}</span>
+    </template>
+    <template #col-concentration="{ data }">
+      <span class="meta-text">{{ data.concentration || '' }}</span>
+    </template>
 
-    <PageHeader title="Электролиты" icon="pi pi-sparkles">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
+    <template #opened-record>
+      <OpenedRecordHeader
+        :meta="formatMeta(ctx.currentItem.value)"
+        :dirty="ctx.isDirty.value"
+        :status="ctx.status.value"
+        :show-print="ctx.mode.value === 'edit'"
+        :show-delete="ctx.mode.value === 'edit'"
+        @save="ctx.save"
+        @print="onHeaderPrint"
+        @exit="ctx.exit"
+        @delete="ctx.deleteRecord"
+      >
+        <template #title>
+          <EditableTitle
+            v-model="ctx.form.value.name"
+            placeholder="Новый электролит"
+            class="electrolyte-title"
+          />
+        </template>
+      </OpenedRecordHeader>
+
+      <div class="electrolyte-form">
+        <div class="form-grid">
+          <label for="el-type">Тип</label>
+          <Select
+            id="el-type"
+            v-model="ctx.form.value.electrolyte_type"
+            :options="TYPE_OPTIONS"
+            option-label="label"
+            option-value="value"
+            placeholder="— выбрать —"
+            class="w-full"
+          />
+
+          <label for="el-status">Статус</label>
+          <Select
+            id="el-status"
+            v-model="ctx.form.value.status"
+            :options="STATUS_OPTIONS"
+            option-label="label"
+            option-value="value"
+            class="w-full"
+          />
+
+          <label for="el-solvent">Растворитель</label>
+          <InputText
+            id="el-solvent"
+            v-model="ctx.form.value.solvent_system"
+            placeholder="EC:DMC 1:1, EC:EMC:DEC 1:1:1, ..."
+            class="w-full"
+          />
+
+          <label for="el-salts">Соли</label>
+          <InputText
+            id="el-salts"
+            v-model="ctx.form.value.salts"
+            placeholder="LiPF6, LiTFSI, ..."
+            class="w-full"
+          />
+
+          <label for="el-concentration">Концентрация</label>
+          <InputText
+            id="el-concentration"
+            v-model="ctx.form.value.concentration"
+            placeholder="1 моль/л, 1.2 М, ..."
+            class="w-full"
+          />
+
+          <label for="el-additives">Добавки</label>
+          <InputText
+            id="el-additives"
+            v-model="ctx.form.value.additives"
+            placeholder="VC 2%, FEC 5%, ..."
+            class="w-full"
+          />
+
+          <label for="el-notes">Заметки</label>
+          <Textarea
+            id="el-notes"
+            v-model="ctx.form.value.notes"
+            rows="3"
+            placeholder="Особенности приготовления, источник, и т.п."
+            class="w-full"
+          />
+        </div>
+
+        <!-- ── Files section (only for saved records) ── -->
+        <RecordFiles
+          v-if="ctx.mode.value === 'edit'"
+          entity-type="electrolytes"
+          :record-id="ctx.currentId.value"
+          file-id-field="electrolyte_file_id"
         />
-      </template>
-    </PageHeader>
+      </div>
+    </template>
+  </RowOpenPage>
 
-    <CrudTable
-      ref="crudTable"
-      :columns="columns"
-      :data="electrolytes"
-      :loading="loading"
-      id-field="electrolyte_id"
-      table-name="Электролиты"
-      show-add
-      row-clickable
-      @add="openCreate"
-      @delete="onDelete"
-      @row-click="(data) => openEdit(data)"
-    >
-      <!-- Custom cell: Название (bold) -->
-      <template #col-name="{ data }">
-        <strong>{{ data.name || '— без названия —' }}</strong>
-      </template>
-
-      <!-- Custom cell: Тип -->
-      <template #col-electrolyte_type="{ data }">
-        <span v-if="data.electrolyte_type" class="type-badge">
-          {{ typeLabel(data.electrolyte_type) }}
-        </span>
-        <span v-else class="text-muted">—</span>
-      </template>
-
-      <!-- Custom cell: Статус -->
-      <template #col-status="{ data }">
-        <span :class="['status-pill', `status-pill--${data.status || 'active'}`]">
-          {{ statusLabel(data.status) }}
-        </span>
-      </template>
-    </CrudTable>
-
-    <!-- ── Create / Edit Dialog ── -->
-    <Dialog
-      v-model:visible="formVisible"
-      :header="mode === 'create' ? 'Новый электролит' : 'Редактирование электролита'"
-      :style="{ width: '540px' }"
-      modal
-      @hide="resetForm"
-    >
-      <form class="form-grid" @submit.prevent="saveElectrolyte">
-        <label>Название</label>
-        <InputText v-model="form.name" placeholder="Название электролита" class="w-full" />
-
-        <label>Тип электролита</label>
-        <Select v-model="form.electrolyte_type" :options="typeOptions" optionLabel="label" optionValue="value" placeholder="— выбрать —" class="w-full" />
-
-        <label>Растворители (система)</label>
-        <InputText v-model="form.solvent_system" placeholder="EC/DMC 1:1" class="w-full" />
-
-        <label>Соли</label>
-        <InputText v-model="form.salts" placeholder="LiPF6" class="w-full" />
-
-        <label>Концентрация</label>
-        <InputText v-model="form.concentration" placeholder="1 M" class="w-full" />
-
-        <label>Добавки</label>
-        <InputText v-model="form.additives" placeholder="2% VC" class="w-full" />
-
-        <label>Статус</label>
-        <Select v-model="form.status" :options="statusOptions" optionLabel="label" optionValue="value" class="w-full" />
-
-        <label>Примечания</label>
-        <Textarea v-model="form.notes" rows="3" placeholder="Дополнительная информация" class="w-full" />
-      </form>
-
-      <!-- Read-only audit trail (only on edit — `currentItem` is null in create) -->
-      <EntityMeta
-        v-if="mode === 'edit' && currentItem"
-        :createdByName="currentItem.created_by_name"
-        :createdAt="currentItem.created_at"
-        :updatedByName="currentItem.updated_by_name"
-        :updatedAt="currentItem.updated_at"
-      />
-
-      <template #footer>
-        <Button label="Отмена" severity="secondary" outlined @click="resetForm" />
-        <Button :label="mode === 'create' ? 'Создать' : 'Сохранить'" @click="saveElectrolyte" />
-      </template>
-    </Dialog>
-
-  </div>
+  <TypedDeleteConfirm
+    :visible="ctx.deleteModalVisible.value"
+    :phrase="ctx.deleteModalPhrase.value"
+    description="Удаление электролита необратимо."
+    @update:visible="(v) => { if (!v) ctx.cancelDelete() }"
+    @confirmed="ctx.confirmDelete"
+    @cancelled="ctx.cancelDelete"
+  />
 </template>
 
 <style scoped>
-.electrolytes-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1.5rem;
+.electrolyte-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #003274;
+}
+.electrolyte-form {
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 16px;
 }
-.electrolytes-page :deep(.page-header) {
-  margin-bottom: 3px !important;
-}
-
-/* ── Form styles ── */
 .form-grid {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: 140px 1fr;
   gap: 10px 16px;
   align-items: center;
+  max-width: 700px;
 }
 .form-grid label {
   font-size: 13px;
@@ -318,43 +360,18 @@ function statusLabel(status) {
   color: #003274;
 }
 .w-full { width: 100%; }
-/* ── Page-specific cell styles ── */
-.type-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-  background: rgba(0, 50, 116, 0.08);
-  color: #003274;
-  border: 0.5px solid rgba(0, 50, 116, 0.15);
-}
+.meta-text { color: #6B7280; font-size: 13px; }
+
 .status-pill {
   display: inline-flex;
-  align-items: center;
   padding: 2px 10px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
 }
-.status-pill--active {
-  background: rgba(82, 201, 166, 0.14);
-  color: #1d7a5f;
-  border: 0.5px solid rgba(82, 201, 166, 0.35);
-}
-.status-pill--inactive {
-  background: rgba(211, 167, 84, 0.12);
-  color: #8a6d2b;
-  border: 0.5px solid rgba(211, 167, 84, 0.3);
-}
-.status-pill--archived {
-  background: rgba(0, 50, 116, 0.06);
-  color: rgba(0, 50, 116, 0.45);
-  border: 0.5px solid rgba(0, 50, 116, 0.12);
-}
-.text-muted {
-  color: rgba(0, 50, 116, 0.28);
-  font-size: 13px;
-}
+.status-pill--active { background: rgba(82, 201, 166, 0.14); color: #1d7a5f; }
+.status-pill--inactive { background: rgba(176, 0, 32, 0.08); color: #b00020; }
+.status-pill--archived { background: rgba(0, 50, 116, 0.06); color: #003274; }
+.status-pill--unknown { color: #6B7280; }
+/* Files block styling lives in components/parity/RecordFiles.vue */
 </style>
