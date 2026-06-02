@@ -82,7 +82,7 @@ const groupedByDay = computed(() => {
 })
 
 function formatTime(iso) {
-  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
 function describeEvent(e) {
