@@ -38,7 +38,7 @@ import Dialog from 'primevue/dialog';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import MultiSelect from 'primevue/multiselect';
+import DSMultiSelect from '@/components/ds/DSMultiSelect.vue';
 import DateInputISO from '@/components/parity/DateInputISO.vue';
 
 const props = defineProps({
@@ -175,22 +175,14 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
           :autofocus="idx === 0"
           class="ec-input"
         />
-        <!-- See StageCompareEditor's «multiselect» branch — same shared
-             pattern. NO display="chip", max-selected-labels=1 (1 → name,
-             2+ → «Выбрано: N»), show-clear for a small × matching the
-             regular Select fields visually. -->
-        <MultiSelect
+        <!-- DSMultiSelect encapsulates the project's MultiSelect defaults
+             (no chip, counter label, show-clear, auto-filter). -->
+        <DSMultiSelect
           v-else-if="f.type === 'multiselect'"
           :id="`ec-${f.key}`"
           v-model="values[f.key]"
           :options="f.options"
-          option-label="label"
-          option-value="value"
           :placeholder="f.placeholder || '— выбрать —'"
-          :filter="(f.options || []).length > 6"
-          :max-selected-labels="1"
-          selected-items-label="Выбрано: {0}"
-          show-clear
           class="ec-input"
         />
         <DateInputISO
