@@ -13,7 +13,7 @@
  *  - Focus on project subtree
  *  - Type filters + search (Obsidian-style)
  */
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import cytoscape from 'cytoscape'
 import dagre from 'cytoscape-dagre'
@@ -615,6 +615,38 @@ function toggleType(type) {
   applyFilters()
 }
 
+// ── Type-visibility dropdown ──
+const typeMenuOpen = ref(false)
+
+// How many nodes of each type exist in the current data — shown as a
+// count next to each row so the user knows what they're hiding.
+const nodeCountByType = computed(() => {
+  const counts = {}
+  for (const n of (props.graphData?.nodes || [])) {
+    counts[n.type] = (counts[n.type] || 0) + 1
+  }
+  return counts
+})
+
+const visibleTypeCount = computed(
+  () => Object.keys(NODE_COLORS).filter(t => visibleTypes.value[t] !== false).length
+)
+const totalTypeCount = computed(() => Object.keys(NODE_COLORS).length)
+
+function setAllTypes(on) {
+  for (const t of Object.keys(NODE_COLORS)) visibleTypes.value[t] = on
+  applyFilters()
+}
+
+function onTypeMenuToggle() {
+  typeMenuOpen.value = !typeMenuOpen.value
+  if (typeMenuOpen.value) {
+    // Close on the next outside click (matches the page's other menus).
+    setTimeout(() => document.addEventListener('click', closeTypeMenu, { once: true }), 0)
+  }
+}
+function closeTypeMenu() { typeMenuOpen.value = false }
+
 // ── Layout helpers ──
 function relayout() {
   if (cy) { cy.layout(getLayoutConfig()).run(); applyOrphanClass() }
@@ -687,17 +719,41 @@ onUnmounted(() => {
         <input type="range" v-model.number="spacing" min="40" max="160" @change="relayout" />
       </div>
 
-      <div class="graph-type-filters">
+      <!-- Type-visibility dropdown — one tidy control to show/hide each
+           object type on the map (replaced the long inline chip row). -->
+      <div class="graph-type-menu" @click.stop>
         <button
-          v-for="(color, type) in NODE_COLORS"
-          :key="type"
-          :class="['type-toggle', visibleTypes[type] ? '' : 'inactive']"
-          @click="toggleType(type)"
-          :title="(visibleTypes[type] ? 'Скрыть' : 'Показать') + ' ' + (TYPE_LABELS[type] || type)"
+          class="graph-btn graph-type-trigger"
+          :class="{ 'is-open': typeMenuOpen }"
+          @click="onTypeMenuToggle"
+          title="Показать / скрыть типы объектов на карте"
         >
-          <span class="legend-dot" :style="{ background: visibleTypes[type] ? color : '#ccc' }"></span>
-          {{ TYPE_LABELS[type] || type }}
+          <i class="pi pi-eye"></i>
+          Типы
+          <span class="graph-type-count">{{ visibleTypeCount }}/{{ totalTypeCount }}</span>
+          <i class="pi pi-chevron-down graph-type-chevron"></i>
         </button>
+
+        <div v-if="typeMenuOpen" class="graph-type-dropdown">
+          <div class="graph-type-dropdown-head">
+            <button class="graph-type-bulk" @click="setAllTypes(true)">Показать все</button>
+            <button class="graph-type-bulk" @click="setAllTypes(false)">Скрыть все</button>
+          </div>
+          <label
+            v-for="(color, type) in NODE_COLORS"
+            :key="type"
+            class="graph-type-row"
+          >
+            <input
+              type="checkbox"
+              :checked="visibleTypes[type] !== false"
+              @change="toggleType(type)"
+            />
+            <span class="legend-dot" :style="{ background: color }"></span>
+            <span class="graph-type-name">{{ TYPE_LABELS[type] || type }}</span>
+            <span class="graph-type-rowcount">{{ nodeCountByType[type] || 0 }}</span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -843,26 +899,75 @@ onUnmounted(() => {
 }
 .graph-slider input[type="range"] { width: 60px; height: 3px; accent-color: #003274; }
 
-.graph-type-filters { display: flex; gap: 0.25rem; margin-left: auto; flex-wrap: wrap; }
-.type-toggle {
+/* ── Type-visibility dropdown ── */
+.graph-type-menu { position: relative; margin-left: auto; }
+.graph-type-trigger { display: inline-flex; align-items: center; gap: 5px; }
+.graph-type-trigger.is-open { border-color: rgba(0, 50, 116, 0.4); background: rgba(0, 50, 116, 0.06); }
+.graph-type-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: #003274;
+  background: rgba(0, 50, 116, 0.08);
+  padding: 0 5px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.graph-type-chevron { font-size: 9px; color: rgba(0, 50, 116, 0.45); }
+.graph-type-trigger.is-open .graph-type-chevron { transform: rotate(180deg); }
+
+.graph-type-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 190px;
+  padding: 5px;
+  background: rgba(248, 252, 255, 0.98);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(180, 210, 255, 0.5);
+  border-radius: 9px;
+  box-shadow: 0 6px 20px rgba(0, 50, 116, 0.14);
+}
+.graph-type-dropdown-head {
+  display: flex;
+  gap: 6px;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.08);
+  margin-bottom: 4px;
+}
+.graph-type-bulk {
+  flex: 1;
+  font-size: 10.5px;
+  padding: 3px 6px;
+  border: none;
+  background: rgba(0, 50, 116, 0.06);
+  color: #003274;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.graph-type-bulk:hover { background: rgba(0, 50, 116, 0.12); }
+.graph-type-row {
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 7px;
-  border: 0.5px solid rgba(180, 210, 255, 0.55);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
-  font-size: 10px;
-  color: #333;
+  gap: 7px;
+  padding: 4px 6px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s;
-  font-family: inherit;
-  white-space: nowrap;
+  font-size: 12px;
+  color: #333;
+  transition: background 0.12s;
 }
-.type-toggle:hover { border-color: rgba(0, 50, 116, 0.3); }
-.type-toggle.inactive { opacity: 0.45; background: rgba(200, 200, 200, 0.3); text-decoration: line-through; }
-.legend-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.graph-type-row:hover { background: rgba(0, 50, 116, 0.05); }
+.graph-type-row input { accent-color: #003274; cursor: pointer; margin: 0; }
+.graph-type-name { flex: 1; }
+.graph-type-rowcount {
+  font-size: 10.5px;
+  color: #6B7280;
+  font-variant-numeric: tabular-nums;
+}
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
 /* ── Path hint ── */
 .path-hint {
