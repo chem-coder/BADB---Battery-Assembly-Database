@@ -8,7 +8,7 @@
  *
  * Features: multi-cycle overlay, PNG export, cycle toggle chips.
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { Line, Scatter } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -187,6 +187,19 @@ const rawSearchMin = ref(null)      // voltage range lo
 const rawSearchMax = ref(null)      // voltage range hi
 const rawPage = ref(0)
 const RAW_PAGE_SIZE = 500
+
+// Connect the toolbar's global step filter to the raw-points table.
+// stepFilter (both/charge/discharge) and rawFilter both narrow the same
+// step_type field, so two independent controls would silently contradict
+// each other — exactly the "filter disconnected from the table" gripe.
+// The global filter now seeds the local one; the raw panel's own buttons
+// (incl. CCCV/Отдых) still refine within that until the next global change.
+watch(() => props.stepFilter, (sf) => {
+  rawFilter.value = sf === 'charge' ? 'charge'
+    : sf === 'discharge' ? 'discharge'
+    : 'all'
+  rawPage.value = 0
+})
 
 function selectRawView(session, cycleNumber) {
   rawSession.value = session

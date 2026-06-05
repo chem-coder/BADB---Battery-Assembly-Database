@@ -22,6 +22,7 @@ import { useCyclingStyles, CHART_LABELS } from '@/composables/useCyclingStyles'
 import { useBackendCache } from '@/composables/useBackendCache'
 
 const CyclingCharts = defineAsyncComponent(() => import('@/components/CyclingCharts.vue'))
+const CyclingSohChart = defineAsyncComponent(() => import('@/components/CyclingSohChart.vue'))
 
 // Per-chart style + preset library for the cycling charts. Each chart
 // carries its own { palette, borderWidth, pointStyle, pointRadius }
@@ -55,6 +56,16 @@ const loading = ref(true)
 // Template ref to CrudTable → lets us read its filteredData (rows visible
 // after the user applies column filters). Used by "График" header click.
 const tableRef = ref(null)
+
+// Reference-import sessions (notes 'REF_IMPORT:%') are colleague data loaded
+// for SOH verification. Hidden from the session list by default so they don't
+// clutter the real cells — toggled on when comparing protocols.
+const showReferenceData = ref(false)
+function isRefSession(s) { return typeof s?.notes === 'string' && s.notes.startsWith('REF_IMPORT') }
+const refSessionCount = computed(() => sessions.value.filter(isRefSession).length)
+const displaySessions = computed(() =>
+  showReferenceData.value ? sessions.value : sessions.value.filter(s => !isRefSession(s))
+)
 
 // ── Multi-session overlay state ──────────────────────────────────────
 // A session is "active" when it appears on the charts. State is keyed by
@@ -117,6 +128,18 @@ const showHysteresis = ref(false)
 // already loaded into cycleDataMap — we don't auto-fetch it.
 const ghostTrace = ref(false)
 
+// Dedicated SOH (capacity-retention) chart grouped by protocol. Opt-in like
+// hysteresis — a separate analytical view for comparing degradation across
+// protocols/cells. Rendered by <CyclingSohChart> below the main charts.
+const showSoh = ref(false)
+
+// Toolbar regrouping (Dima 2026-06-04): the 10 controls were one flat
+// row with no structure. They're now grouped into «Данные» (data
+// selection that affects everything), «Отображение» (per-view display
+// options), and a collapsible «Оформление и экспорт» (presentation +
+// export — the low-frequency noise tucked away by default).
+const showFormatting = ref(false)
+
 // Per-chart style popover state. Controlled by each chart's ⚙ button in
 // <CyclingCharts> — the chart id (capacity/voltage/dqdv/hysteresis) of
 // the clicked one lands here so the shared popover knows which chart's
@@ -134,6 +157,17 @@ const styleCurrentChartLabel = computed(() => {
 const styleActivePresetReadonly = computed(() => !!activePreset.value?.readonly)
 const styleActivePresetName = computed(() => activePreset.value?.name || '')
 
+// Per-chart DISPLAY options (view settings, not preset style). Which one is
+// relevant depends on the chart, so the ⚙ popover picks by chartId:
+// capacity→вид (абсолют/ретенция), voltage→ghost trace, dqdv→сглаживание.
+// These moved out of the global toolbar (Dima 2026-06-05) so each setting
+// lives on the chart it actually affects — «настройка индивидуальная».
+const styleCurrentDisplay = computed(() => ({
+  capacityView: capacityView.value,
+  ghostTrace: ghostTrace.value,
+  smoothingWindow: smoothingWindow.value,
+}))
+
 // Event from <CyclingCharts @style-click>. Emitted when the user clicks
 // the ⚙ button on any chart card.
 function onChartStyleClick(chartId, event) {
@@ -143,6 +177,13 @@ function onChartStyleClick(chartId, event) {
 function onStyleUpdate(partial) {
   if (!styleCurrentChartId.value) return
   setChartStyle(styleCurrentChartId.value, partial)
+}
+// Display option changed from inside a chart's ⚙ popover. Unlike style,
+// these are plain view refs (not preset-scoped), so we just set them.
+function onDisplayUpdate({ key, value }) {
+  if (key === 'capacityView') capacityView.value = value
+  else if (key === 'ghostTrace') ghostTrace.value = value
+  else if (key === 'smoothingWindow') smoothingWindow.value = value
 }
 function onStyleReset() {
   if (!styleCurrentChartId.value) return
@@ -904,7 +945,7 @@ const batteryOptions = computed(() =>
     <CrudTable
       ref="tableRef"
       :columns="columns"
-      :data="sessions"
+      :data="displaySessions"
       id-field="session_id"
       table-name="Сессии циклирования"
       @row-click="toggleSession"
@@ -912,6 +953,15 @@ const batteryOptions = computed(() =>
       @header-click="onTableHeaderClick"
     >
       <template #toolbar-end>
+        <Button
+          v-if="refSessionCount"
+          :label="showReferenceData ? `Скрыть референсные (${refSessionCount})` : `Референсные (${refSessionCount})`"
+          :icon="showReferenceData ? 'pi pi-eye-slash' : 'pi pi-eye'"
+          size="small"
+          severity="secondary"
+          outlined
+          @click="showReferenceData = !showReferenceData"
+        />
         <Button label="Загрузить файл" icon="pi pi-upload" size="small" @click="showUpload = true" />
       </template>
       <template #col-active="{ data }">
@@ -963,222 +1013,106 @@ const batteryOptions = computed(() =>
 
     <!-- Charts area (multi-session) -->
     <div v-if="activeSessionViews.length" class="charts-area glass-card">
-      <!-- Toolbar: experiment title + publication-mode toggle -->
+      <!-- Toolbar — regrouped into semantic blocks (Dima 2026-06-04):
+           «Данные» (selection affecting everything) · «Отображение»
+           (per-view display options) · «Оформление и экспорт»
+           (presentation + export, collapsed by default to cut noise). -->
       <div class="charts-toolbar">
-        <div class="toolbar-field">
-          <label class="toolbar-label">Название эксперимента</label>
-          <input
-            v-model="experimentLabel"
-            type="text"
-            class="toolbar-input"
-            placeholder="например: NCM (M2C2_RT)_fresh gel"
-            maxlength="120"
-          />
-        </div>
-        <div class="toolbar-pubmode">
-          <label class="toolbar-label" title="Фильтр применяется к профилю напряжения и dQ/dV ниже">Показать ↓</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': stepFilter === 'both' }"
-              @click="stepFilter = 'both'"
-            >
-              Оба
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': stepFilter === 'charge' }"
-              @click="stepFilter = 'charge'"
-              title="Только заряд (пунктир)"
-            >
-              Заряд
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': stepFilter === 'discharge' }"
-              @click="stepFilter = 'discharge'"
-              title="Только разряд (сплошная)"
-            >
-              Разряд
-            </button>
+        <!-- ── Группа: Данные ── -->
+        <div class="tb-group">
+          <span class="tb-group-title">Данные</span>
+          <div class="tb-group-row">
+            <div class="toolbar-pubmode">
+              <label class="toolbar-label" title="Фильтр применяется к профилю напряжения и dQ/dV ниже">Показать ↓</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn" :class="{ 'is-active': stepFilter === 'both' }" @click="stepFilter = 'both'">Оба</button>
+                <button class="pubmode-btn" :class="{ 'is-active': stepFilter === 'charge' }" @click="stepFilter = 'charge'" title="Только заряд (пунктир)">Заряд</button>
+                <button class="pubmode-btn" :class="{ 'is-active': stepFilter === 'discharge' }" @click="stepFilter = 'discharge'" title="Только разряд (сплошная)">Разряд</button>
+              </div>
+            </div>
+            <div class="toolbar-pubmode">
+              <label class="toolbar-label">Единицы ёмкости</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn" :class="{ 'is-active': capacityUnit === 'Ah' }" @click="capacityUnit = 'Ah'">Ah</button>
+                <button
+                  class="pubmode-btn"
+                  :class="{ 'is-active': capacityUnit === 'mAh_per_g' }"
+                  :title="specificAvailable ? 'Удельная ёмкость — нормирована на массу активного материала' : 'Кликните, чтобы ввести массу активного материала'"
+                  @click="specificAvailable ? (capacityUnit = 'mAh_per_g') : openMassEditor()"
+                >
+                  mAh/g
+                  <i v-if="!specificAvailable" class="pi pi-pencil" style="font-size:10px;margin-left:4px"></i>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="toolbar-pubmode">
-          <label class="toolbar-label">Единицы ёмкости</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': capacityUnit === 'Ah' }"
-              @click="capacityUnit = 'Ah'"
-            >
-              Ah
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': capacityUnit === 'mAh_per_g' }"
-              :title="specificAvailable
-                ? 'Удельная ёмкость — нормирована на массу активного материала'
-                : 'Кликните, чтобы ввести массу активного материала'"
-              @click="specificAvailable ? (capacityUnit = 'mAh_per_g') : openMassEditor()"
-            >
-              mAh/g
-              <i v-if="!specificAvailable" class="pi pi-pencil" style="font-size:10px;margin-left:4px"></i>
-            </button>
+
+        <!-- ── Группа: Доп. графики ── (chart-visibility toggles only; the
+             per-chart display options — вид ёмкости, ghost, сглаживание —
+             moved into each chart's own ⚙ popover, Dima 2026-06-05). -->
+        <div class="tb-group">
+          <span class="tb-group-title">Доп. графики</span>
+          <div class="tb-group-row">
+            <div class="toolbar-pubmode" title="Сравнение по протоколам: разрядная ёмкость (Ah) или SOH — удержание (%), с группировкой, ±σ и линией EOL">
+              <label class="toolbar-label">По протоколам (Ah / SOH)</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn" :class="{ 'is-active': !showSoh }" @click="showSoh = false">Скрыт</button>
+                <button class="pubmode-btn" :class="{ 'is-active': showSoh }" @click="showSoh = true">Показать</button>
+              </div>
+            </div>
+            <div class="toolbar-pubmode" title="Рост ΔV̄ = avg_charge − avg_discharge показывает поляризацию (SEI, контакт, дендриты)">
+              <label class="toolbar-label">Гистерезис V̄</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn" :class="{ 'is-active': !showHysteresis }" @click="showHysteresis = false">Скрыт</button>
+                <button class="pubmode-btn" :class="{ 'is-active': showHysteresis }" @click="showHysteresis = true">Показать</button>
+              </div>
+            </div>
+            <span class="tb-group-hint" title="Вид ёмкости, ghost trace и окно сглаживания dQ/dV теперь настраиваются в ⚙ каждого графика">
+              <i class="pi pi-cog"></i> вид · ghost · сглаживание → в ⚙ графика
+            </span>
           </div>
         </div>
-        <div class="toolbar-pubmode" title="Абсолютная ёмкость ↔ нормированная C/C₁ (scientific standard for fade)">
-          <label class="toolbar-label">Вид графика ёмкости</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': capacityView === 'absolute' }"
-              @click="capacityView = 'absolute'"
-              title="Абсолютная ёмкость (Ah или mAh/g)"
-            >
-              Абсолют
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': capacityView === 'retention' }"
-              @click="capacityView = 'retention'"
-              title="Удержание: C(n)/C(1) × 100% — стандарт для публикаций"
-            >
-              Ретенция, %
-            </button>
-          </div>
-        </div>
-        <div class="toolbar-pubmode" title="Рост ΔV̄ = avg_charge − avg_discharge показывает полиризацию (SEI, контакт, дендриты)">
-          <label class="toolbar-label">Гистерезис V̄</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': !showHysteresis }"
-              @click="showHysteresis = false"
-            >
-              Скрыт
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': showHysteresis }"
-              @click="showHysteresis = true"
-            >
-              Показать
-            </button>
-          </div>
-        </div>
-        <div class="toolbar-pubmode" title="Предыдущий цикл (N-1) в профиле V как призрак — видно fade между соседними циклами">
-          <label class="toolbar-label">Ghost trace</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': !ghostTrace }"
-              @click="ghostTrace = false"
-            >
-              Выкл
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': ghostTrace }"
-              @click="ghostTrace = true"
-            >
-              Вкл
-            </button>
-          </div>
-        </div>
-        <div class="toolbar-pubmode">
-          <label class="toolbar-label">Стиль</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': !publicationMode }"
-              @click="publicationMode = false"
-            >
-              <i class="pi pi-cog"></i> Интерактив
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': publicationMode }"
-              @click="publicationMode = true"
-            >
-              <i class="pi pi-file-pdf"></i> Статья
-            </button>
-          </div>
-        </div>
-        <!-- Style preset library (per-user, persisted in localStorage).
-             Dropdown = active preset (Mine, Publication B/W, Colorblind,
-             or any user-saved clone). 💾 saves current settings as a new
-             named preset; ✏️ renames; 🗑 deletes (only for user presets). -->
-        <div class="toolbar-pubmode" title="Библиотека пресетов стилей — по одному на пользователя, сохраняется в браузере">
-          <label class="toolbar-label">Пресет стилей</label>
-          <div class="pubmode-row preset-row">
-            <select
-              class="preset-select"
-              :value="activePreset?.id"
-              @change="onApplyPreset($event.target.value)"
-            >
-              <option
-                v-for="p in styleLibrary.presets"
-                :key="p.id"
-                :value="p.id"
-              >
-                {{ p.name }}{{ p.readonly ? ' 🔒' : '' }}
-              </option>
-            </select>
-            <button
-              class="pubmode-btn preset-icon-btn"
-              title="Сохранить как новый пресет"
-              @click="onPresetSaveAs"
-            ><i class="pi pi-save"></i></button>
-            <button
-              class="pubmode-btn preset-icon-btn"
-              :disabled="!activePreset || activePreset.readonly"
-              :title="activePreset?.readonly ? 'Встроенный пресет нельзя переименовать' : 'Переименовать активный пресет'"
-              @click="onPresetRename"
-            ><i class="pi pi-pencil"></i></button>
-            <button
-              class="pubmode-btn preset-icon-btn preset-icon-btn--danger"
-              :disabled="!activePreset || activePreset.readonly || activePreset.id === 'default'"
-              :title="activePreset?.readonly || activePreset?.id === 'default'
-                ? 'Этот пресет нельзя удалить'
-                : 'Удалить активный пресет'"
-              @click="onPresetDelete"
-            ><i class="pi pi-trash"></i></button>
-          </div>
-        </div>
-        <div class="toolbar-smoothing" title="Окно скользящего среднего для dQ/dV. 1 = без сглаживания, 21 = максимум.">
-          <label class="toolbar-label">
-            Сглаживание dQ/dV
-            <span class="toolbar-smoothing__val">{{ smoothingWindow }}</span>
-          </label>
-          <div class="toolbar-smoothing__row">
-            <span class="toolbar-smoothing__edge">1</span>
-            <input
-              v-model.number="smoothingWindow"
-              type="range"
-              min="1"
-              max="21"
-              step="1"
-              class="toolbar-smoothing__slider"
-              :aria-label="`Окно сглаживания dQ/dV: ${smoothingWindow}`"
-            />
-            <span class="toolbar-smoothing__edge">21</span>
-          </div>
-        </div>
-        <div class="toolbar-pubmode">
-          <label class="toolbar-label">Экспорт</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn export-xlsx-btn"
-              :disabled="excelDownloading || !activeSessionIds.length"
-              :title="selectedCycles.length
-                ? `Скачать Excel: ${activeSessionIds.length} сессий, ${selectedCycles.length} циклов (с данными)`
-                : `Скачать Excel: ${activeSessionIds.length} сессий (только сводка, без сырых данных)`"
-              @click="downloadExcel"
-            >
-              <i v-if="excelDownloading" class="pi pi-spin pi-spinner"></i>
-              <i v-else class="pi pi-file-excel"></i>
-              Excel
-            </button>
+
+        <!-- ── Группа: Оформление и экспорт (сворачиваемая) ── -->
+        <div class="tb-group tb-group--fold">
+          <button class="tb-group-toggle" @click="showFormatting = !showFormatting" :aria-expanded="showFormatting">
+            Оформление и экспорт
+            <i class="pi" :class="showFormatting ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
+          </button>
+          <div v-show="showFormatting" class="tb-group-row">
+            <div class="toolbar-field">
+              <label class="toolbar-label">Название эксперимента</label>
+              <input v-model="experimentLabel" type="text" class="toolbar-input" placeholder="например: NCM (M2C2_RT)_fresh gel" maxlength="120" />
+            </div>
+            <div class="toolbar-pubmode">
+              <label class="toolbar-label">Стиль</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn" :class="{ 'is-active': !publicationMode }" @click="publicationMode = false"><i class="pi pi-cog"></i> Интерактив</button>
+                <button class="pubmode-btn" :class="{ 'is-active': publicationMode }" @click="publicationMode = true"><i class="pi pi-file-pdf"></i> Статья</button>
+              </div>
+            </div>
+            <div class="toolbar-pubmode" title="Библиотека пресетов стилей — по одному на пользователя, сохраняется в браузере">
+              <label class="toolbar-label">Пресет стилей</label>
+              <div class="pubmode-row preset-row">
+                <select class="preset-select" :value="activePreset?.id" @change="onApplyPreset($event.target.value)">
+                  <option v-for="p in styleLibrary.presets" :key="p.id" :value="p.id">{{ p.name }}{{ p.readonly ? ' 🔒' : '' }}</option>
+                </select>
+                <button class="pubmode-btn preset-icon-btn" title="Сохранить как новый пресет" @click="onPresetSaveAs"><i class="pi pi-save"></i></button>
+                <button class="pubmode-btn preset-icon-btn" :disabled="!activePreset || activePreset.readonly" :title="activePreset?.readonly ? 'Встроенный пресет нельзя переименовать' : 'Переименовать активный пресет'" @click="onPresetRename"><i class="pi pi-pencil"></i></button>
+                <button class="pubmode-btn preset-icon-btn preset-icon-btn--danger" :disabled="!activePreset || activePreset.readonly || activePreset.id === 'default'" :title="activePreset?.readonly || activePreset?.id === 'default' ? 'Этот пресет нельзя удалить' : 'Удалить активный пресет'" @click="onPresetDelete"><i class="pi pi-trash"></i></button>
+              </div>
+            </div>
+            <div class="toolbar-pubmode">
+              <label class="toolbar-label">Экспорт</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn export-xlsx-btn" :disabled="excelDownloading || !activeSessionIds.length" :title="selectedCycles.length ? `Скачать Excel: ${activeSessionIds.length} сессий, ${selectedCycles.length} циклов (с данными)` : `Скачать Excel: ${activeSessionIds.length} сессий (только сводка, без сырых данных)`" @click="downloadExcel">
+                  <i v-if="excelDownloading" class="pi pi-spin pi-spinner"></i>
+                  <i v-else class="pi pi-file-excel"></i>
+                  Excel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1198,6 +1132,7 @@ const batteryOptions = computed(() =>
         @replace-cycles="replaceCycles"
         @style-click="onChartStyleClick"
       />
+      <CyclingSohChart v-if="showSoh" :sessions="activeSessionViews" />
     </div>
     <div v-else class="charts-placeholder glass-card">
       <i class="pi pi-chart-line" style="font-size:24px;opacity:0.3"></i>
@@ -1210,9 +1145,11 @@ const batteryOptions = computed(() =>
       :chartId="styleCurrentChartId"
       :chartLabel="styleCurrentChartLabel"
       :style="styleCurrentStyle"
+      :display="styleCurrentDisplay"
       :readonly="styleActivePresetReadonly"
       :presetName="styleActivePresetName"
       @update="onStyleUpdate"
+      @update-display="onDisplayUpdate"
       @reset="onStyleReset"
       @clone="onStyleClone"
     />
@@ -1778,13 +1715,74 @@ const batteryOptions = computed(() =>
    title field shrinks first, toggle groups never wrap into columns. */
 .charts-toolbar {
   display: flex;
-  align-items: flex-end;
-  gap: 16px;
+  align-items: flex-start;
+  gap: 14px;
   padding: 0.4rem 0 0.9rem;
   border-bottom: 1px solid rgba(0, 50, 116, 0.06);
   margin-bottom: 0.9rem;
   flex-wrap: wrap;
 }
+
+/* ── Toolbar semantic groups (Dima 2026-06-04) ──
+   The 10 controls were one flat row with no grouping. They're now boxed
+   into «Данные» / «Отображение» / collapsible «Оформление и экспорт» so
+   related controls read as a unit and the low-frequency ones stay hidden. */
+.tb-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 7px 12px 10px;
+  background: rgba(0, 50, 116, 0.025);
+  border: 1px solid rgba(0, 50, 116, 0.08);
+  border-radius: 10px;
+}
+.tb-group-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(0, 50, 116, 0.45);
+  padding-left: 2px;
+}
+.tb-group-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+/* Collapsible «Оформление и экспорт»: header is the toggle button itself. */
+.tb-group--fold { padding-top: 5px; }
+.tb-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  padding: 2px 2px 0;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(0, 50, 116, 0.5);
+  font-family: inherit;
+  cursor: pointer;
+}
+.tb-group-toggle:hover { color: #003274; }
+.tb-group-toggle i { font-size: 10px; transition: transform 0.15s; }
+.tb-group--fold .tb-group-row { margin-top: 6px; }
+/* Hint pointing users to where the moved per-chart controls now live. */
+.tb-group-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-end;
+  padding-bottom: 6px;
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(0, 50, 116, 0.4);
+}
+.tb-group-hint i { font-size: 11px; }
 .toolbar-field {
   display: flex;
   flex-direction: column;
@@ -1879,69 +1877,8 @@ const batteryOptions = computed(() =>
   color: #E74C3C;
 }
 
-/* ── dQ/dV smoothing slider ──
-   Sits in the charts toolbar next to the style toggles. Same flex-shrink:0
-   rule as .toolbar-pubmode so it never gets stretched or pushed to a new
-   row when the title field steals horizontal space. Width is fixed so the
-   track length is predictable regardless of the slider's current value. */
-.toolbar-smoothing {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
-  min-width: 180px;
-}
-.toolbar-smoothing__val {
-  display: inline-block;
-  min-width: 22px;
-  padding: 0 6px;
-  margin-left: 6px;
-  border-radius: 4px;
-  background: rgba(0, 50, 116, 0.08);
-  color: #003274;
-  font-weight: 600;
-  font-size: 11px;
-  text-align: center;
-  letter-spacing: 0;
-  text-transform: none;
-}
-.toolbar-smoothing__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border: 1px solid rgba(0, 50, 116, 0.15);
-  border-radius: 6px;
-  background: white;
-  height: 24px;
-  box-sizing: border-box;
-}
-.toolbar-smoothing__edge {
-  font-size: 10px;
-  color: rgba(0, 50, 116, 0.45);
-  font-variant-numeric: tabular-nums;
-}
-.toolbar-smoothing__slider {
-  flex: 1;
-  height: 14px;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  accent-color: #003274;  /* native-native — modern browsers honour this */
-  cursor: pointer;
-}
-/* Make the track slightly thicker and more visible than the browser default
-   so the slider reads as a control at a glance, not a stray line. */
-.toolbar-smoothing__slider::-webkit-slider-runnable-track {
-  height: 3px;
-  background: rgba(0, 50, 116, 0.2);
-  border-radius: 2px;
-}
-.toolbar-smoothing__slider::-moz-range-track {
-  height: 3px;
-  background: rgba(0, 50, 116, 0.2);
-  border-radius: 2px;
-}
+/* (dQ/dV smoothing slider styles removed 2026-06-05 — the control moved
+   into the dQ/dV chart's ⚙ popover and reuses .style-radius-slider there.) */
 
 /* ── Charts placeholder ── */
 .charts-placeholder {

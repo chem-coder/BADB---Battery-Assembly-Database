@@ -24,11 +24,22 @@ const props = defineProps({
   chartId: { type: String, default: '' },
   chartLabel: { type: String, default: '' },
   style: { type: Object, default: () => ({}) },
+  // Per-chart DISPLAY options (view settings, not preset style):
+  // { capacityView, ghostTrace, smoothingWindow }. Which one is shown
+  // depends on chartId. Unlike style, these are NOT preset-scoped and
+  // stay editable even when the active preset is read-only.
+  display: { type: Object, default: () => ({}) },
   readonly: { type: Boolean, default: false },
   presetName: { type: String, default: '' },
 })
 
-const emit = defineEmits(['update', 'reset', 'clone'])
+const emit = defineEmits(['update', 'update-display', 'reset', 'clone'])
+
+// Which charts have a per-chart display option (drives the top section).
+const hasDisplayOption = computed(() =>
+  ['capacity', 'voltage', 'dqdv'].includes(props.chartId)
+)
+function onDisplay(key, value) { emit('update-display', { key, value }) }
 
 const popRef = ref(null)
 
@@ -63,6 +74,57 @@ const paletteEntries = computed(() => Object.entries(PALETTES).map(([id, p]) => 
           <i class="pi pi-lock"></i> read-only
         </span>
       </div>
+
+      <!-- Per-chart display options (view settings, not style). Always
+           editable, even for read-only presets. Shown only for charts
+           that have one; hysteresis has none (it's a global on/off). -->
+      <template v-if="hasDisplayOption">
+        <div v-if="chartId === 'capacity'" class="style-row">
+          <label class="style-label">Вид графика</label>
+          <div class="style-seg">
+            <button
+              class="style-seg-btn"
+              :class="{ 'is-active': display.capacityView === 'absolute' }"
+              @click="onDisplay('capacityView', 'absolute')"
+              title="Абсолютная ёмкость (Ah или mAh/g)"
+            >Абсолют</button>
+            <button
+              class="style-seg-btn"
+              :class="{ 'is-active': display.capacityView === 'retention' }"
+              @click="onDisplay('capacityView', 'retention')"
+              title="Удержание: C(n)/C(1) × 100% — стандарт для публикаций"
+            >Ретенция, %</button>
+          </div>
+        </div>
+
+        <div v-else-if="chartId === 'voltage'" class="style-row">
+          <label class="style-label" title="Цикл N−1 под каждым выбранным циклом — fade между соседними циклами">Ghost trace (цикл N−1)</label>
+          <div class="style-seg">
+            <button class="style-seg-btn" :class="{ 'is-active': !display.ghostTrace }" @click="onDisplay('ghostTrace', false)">Выкл</button>
+            <button class="style-seg-btn" :class="{ 'is-active': display.ghostTrace }" @click="onDisplay('ghostTrace', true)">Вкл</button>
+          </div>
+        </div>
+
+        <div v-else-if="chartId === 'dqdv'" class="style-row">
+          <label class="style-label">Сглаживание dQ/dV
+            <span class="style-radius-val">{{ display.smoothingWindow ?? 5 }}</span>
+          </label>
+          <input
+            type="range"
+            min="1"
+            max="21"
+            step="1"
+            :value="display.smoothingWindow ?? 5"
+            class="style-radius-slider"
+            title="Окно скользящего среднего. 1 = без сглаживания, 21 = максимум"
+            @input="onDisplay('smoothingWindow', Number($event.target.value))"
+          />
+        </div>
+
+        <div class="style-section-sep">
+          <span>Стиль линий</span>
+        </div>
+      </template>
 
       <div v-if="readonly" class="style-readonly-hint">
         Пресет <strong>«{{ presetName }}»</strong> защищён. Чтобы изменить стиль,
@@ -199,6 +261,25 @@ const paletteEntries = computed(() => Object.entries(PALETTES).map(([id, p]) => 
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+/* Divider between per-chart display options and the style controls. */
+.style-section-sep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(0, 50, 116, 0.4);
+}
+.style-section-sep::before,
+.style-section-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 50, 116, 0.1);
 }
 .style-label {
   font-size: 10px;
