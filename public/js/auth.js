@@ -31,11 +31,13 @@
   }
 
   function getToken() {
+    // One browser profile = one shared session. The active token lives in
+    // localStorage (shared across all normal tabs of the profile); the
+    // sessionStorage copy is a same-tab fallback for readers that still use it.
     try {
-      localStorage.removeItem(TOKEN_KEY);
-    } catch {}
-    try {
-      return sessionStorage.getItem(TOKEN_KEY) || '';
+      return localStorage.getItem(TOKEN_KEY)
+        || sessionStorage.getItem(TOKEN_KEY)
+        || '';
     } catch {
       return '';
     }
@@ -47,44 +49,38 @@
       return;
     }
 
+    // Persist in localStorage so every normal tab in this browser profile
+    // shares the same active session, and mirror into sessionStorage for
+    // same-origin readers (e.g. print/report windows).
     try {
-      localStorage.clear();
+      localStorage.setItem(TOKEN_KEY, token);
     } catch {}
     try {
-      sessionStorage.clear();
       sessionStorage.setItem(TOKEN_KEY, token);
     } catch {}
   }
 
   function openAuthenticatedWindow(url, target = '_blank') {
-    const token = getToken();
     let nextUrl = url;
 
     try {
       nextUrl = new URL(url, window.location.origin).href;
     } catch {}
 
-    const opened = window.open('about:blank', target);
+    // localStorage is shared across same-origin tabs/windows in one browser
+    // profile, so a normally-opened same-origin window inherits the active
+    // session token automatically — no token copy and no token-in-URL needed.
+    // Do NOT clear the opened window's localStorage: it is the shared store and
+    // clearing it would log every tab in this profile out.
+    const opened = window.open(nextUrl, target);
     if (!opened) {
       window.location.href = nextUrl;
       return null;
     }
 
     try {
-      opened.localStorage.clear();
-    } catch {}
-    try {
-      opened.sessionStorage.clear();
-      if (token) opened.sessionStorage.setItem(TOKEN_KEY, token);
-    } catch {}
-    try {
       opened.opener = null;
     } catch {}
-    try {
-      opened.location.replace(nextUrl);
-    } catch {
-      opened.location.href = nextUrl;
-    }
     try {
       opened.focus();
     } catch {}
@@ -443,6 +439,52 @@
       subtree: true
     });
   }
+
+  function getSharedToken() {
+    // Cross-tab sync is authoritative on the SHARED store (localStorage) only.
+    // Never fall back to sessionStorage here: a remote logout clears the shared
+    // localStorage, but each tab keeps its own per-tab sessionStorage mirror, so
+    // consulting it would mask the logout and leave this tab logged in.
+    try {
+      return localStorage.getItem(TOKEN_KEY) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  function handleCrossTabAuthChange() {
+    const sharedToken = getSharedToken();
+
+    if (!sharedToken) {
+      // Another tab logged out (cleared the shared session). Drop this tab's
+      // per-tab token mirror so it can no longer authenticate, then reflect the
+      // logged-out state. Dev bypass has no token, so leave it alone.
+      try {
+        sessionStorage.removeItem(TOKEN_KEY);
+      } catch {}
+
+      if (bypassMode || !currentUser) return;
+      currentUser = null;
+      bypassMode = false;
+      resetAuthGate();
+      renderAuthUi();
+      showLogin('Сессия завершена в другой вкладке');
+      return;
+    }
+
+    // Another tab logged in or switched the active user. Re-bootstrap this tab
+    // so it adopts the shared session/identity instead of keeping a stale one.
+    window.location.reload();
+  }
+
+  // Cross-tab session sync: localStorage `storage` events fire in OTHER tabs of
+  // the same profile (never the tab that made the change), so login/logout/user
+  // switch in one tab propagates to the rest without per-tab re-login.
+  window.addEventListener('storage', (event) => {
+    if (event.storageArea && event.storageArea !== window.localStorage) return;
+    if (event.key !== null && event.key !== TOKEN_KEY) return;
+    handleCrossTabAuthChange();
+  });
 
   resetAuthGate();
   window.fetch = badbAuthFetch;

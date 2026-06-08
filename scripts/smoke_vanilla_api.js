@@ -394,7 +394,14 @@ async function runGetSmoke(client) {
   }
 
   const project = first(seed.projects);
-  if (project) await client.get(`/api/projects/${project.project_id}/access`, [200, 403]);
+  if (project) {
+    await client.get(`/api/projects/${project.project_id}/access`, [200, 403]);
+    await client.get(`/api/projects/${project.project_id}/participants`, [200, 403]);
+    await client.get(`/api/projects/${project.project_id}/report`, [200, 403]);
+  }
+
+  const user = first(seed.users);
+  if (user) await client.get(`/api/users/${user.user_id}/projects`, [200, 403]);
 
   const material = first(seed.materials);
   if (material) await client.get(`/api/materials/${material.material_id}/instances`);
@@ -542,6 +549,22 @@ async function runWriteSmoke(client, seed, context) {
       description: 'smoke update',
       confidentiality_level: 'public'
     });
+    const leadParticipants = await client.get(`/api/projects/${made.projectId}/participants`);
+    client.assertEqual(
+      leadParticipants.some((row) => Number(row.user_id) === Number(userId)),
+      true,
+      'project lead is added to project participants'
+    );
+    const leadAccessRows = await client.get(`/api/projects/${made.projectId}/access`);
+    client.assertEqual(
+      leadAccessRows.some((row) => (
+        row.grantee_type === 'user' &&
+        Number(row.grantee_id) === Number(userId) &&
+        row.access_level === 'admin'
+      )),
+      true,
+      'project lead receives admin access'
+    );
     const participant = await client.post(`/api/projects/${made.projectId}/participants`, {
       user_id: made.userId,
       role_in_team: 'Smoke analyst'
@@ -586,6 +609,46 @@ async function runWriteSmoke(client, seed, context) {
       true,
       'project participant access can be changed to edit'
     );
+    const userProjectRows = await client.get(`/api/users/${made.userId}/projects`);
+    client.assertEqual(
+      userProjectRows.some((row) => (
+        Number(row.project_id) === Number(made.projectId) &&
+        row.role_in_team === 'Smoke lead analyst' &&
+        row.access_level === 'edit'
+      )),
+      true,
+      'user projects endpoint lists participant role and access level'
+    );
+    const projectReport = await client.get(`/api/projects/${made.projectId}/report`);
+    client.assertEqual(
+      Array.isArray(projectReport.participants) &&
+      projectReport.participants.some((row) => row.participant_id === made.projectParticipantId),
+      true,
+      'project report includes participants'
+    );
+    client.assertEqual(
+      Array.isArray(projectReport.access?.effective_users) &&
+      projectReport.access.effective_users.some((row) => (
+        Number(row.user_id) === Number(made.userId) &&
+        row.access_level === 'edit'
+      )),
+      true,
+      'project report includes effective participant access'
+    );
+    await client.del(`/api/projects/${made.projectId}/participants/${made.projectParticipantId}`, [204]);
+    const participantsAfterDelete = await client.get(`/api/projects/${made.projectId}/participants`);
+    client.assertEqual(
+      participantsAfterDelete.some((row) => row.participant_id === made.projectParticipantId),
+      false,
+      'participant removal deletes team membership'
+    );
+    const accessAfterDelete = await client.get(`/api/projects/${made.projectId}/access`);
+    client.assertEqual(
+      accessAfterDelete.some((row) => row.grantee_type === 'user' && Number(row.grantee_id) === Number(made.userId)),
+      false,
+      'participant removal revokes direct user access grant'
+    );
+    made.projectParticipantId = null;
 
     made.structureId = (await client.post('/api/structures', {
       name: `Codex Smoke Structure ${suffix}`,

@@ -127,15 +127,15 @@ Open print/report pages with the shared auth helper:
 window.BADB_AUTH.openAuthenticatedWindow(reportUrl);
 ```
 
-Do not use raw `window.open(reportUrl, '_blank', 'noopener')` for authenticated
-vanilla report pages. The app stores the active token in `sessionStorage` so
-logout can fully clear browser-held session state. New windows opened with
-`noopener` do not receive that session token and will ask for a fresh login.
+The app stores the active session token in `localStorage`, which is shared
+across all normal tabs/windows of one browser profile (see
+`docs/rules/auth_policy.md`). The helper opens a same-origin window that inherits
+that shared session automatically, so report windows stay authenticated without
+putting tokens in URLs and without a fresh login. Print/report pages read the
+token from `localStorage` first (falling back to `sessionStorage`).
 
-The helper opens a new same-origin window, copies the current session token into
-that window's `sessionStorage`, then detaches the opener before navigating to
-the report URL. This keeps report windows authenticated without putting tokens
-in URLs and without returning to persistent `localStorage`.
+Do not have the helper clear the opened window's `localStorage`: it is the
+shared session store, so clearing it would log every tab in the profile out.
 
 ## Access Terminology
 

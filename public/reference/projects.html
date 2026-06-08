@@ -98,6 +98,19 @@
       <fieldset id="project-participants-section" hidden>
         <legend>Команда</legend>
 
+        <table class="project-access-table project-participants-table">
+          <thead>
+            <tr>
+              <th>№</th>
+              <th>Пользователь</th>
+              <th>Роль в команде (функционал)</th>
+              <th>Доступ</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="projectParticipantsBody"></tbody>
+        </table>
+
         <div class="project-participant-add">
           <div class="project-team-add-line">
             <div class="form-field project-team-user-field">
@@ -125,19 +138,6 @@
               autocomplete="off">
           </div>
         </div>
-
-        <table class="project-access-table project-participants-table">
-          <thead>
-            <tr>
-              <th>№</th>
-              <th>Пользователь</th>
-              <th>Роль в команде (функционал)</th>
-              <th>Доступ</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody id="projectParticipantsBody"></tbody>
-        </table>
       </fieldset>
 
       <div id="project-department-block" hidden>

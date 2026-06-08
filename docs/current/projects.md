@@ -1,9 +1,9 @@
 # Projects
 
 Created: 2026-05-09
-Edited: 2026-06-02
+Edited: 2026-06-08
 Status: current
-Verified against code: 2026-06-02
+Verified against code: 2026-06-08
 
 Source paths:
 
@@ -71,6 +71,12 @@ Project team membership is intentionally separate from access grants:
 - removing a participant removes that user's direct grant for the project;
 - the current project lead cannot be removed from the team until the project
   lead field is changed.
+
+Team membership is a baseline view-access source. Deleting a participant removes
+the team row and that user's direct project grant. Revoking a user access grant
+removes only the explicit grant/elevation; if the user remains a participant,
+they still retain view access through team membership. Public-project and creator
+visibility rules may still allow visibility independently.
 
 ## Access Behavior
 
@@ -177,6 +183,7 @@ Report page displays:
 
 - project metadata;
 - project participants;
+- effective user access (level and source labels from the report API);
 - downstream tapes;
 - downstream electrode cut batches;
 - downstream batteries;

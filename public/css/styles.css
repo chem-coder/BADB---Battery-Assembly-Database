@@ -1594,7 +1594,9 @@ body[data-page] .badb-lock-banner.visible {
 }
 
 .project-participant-add {
-  margin-bottom: 0.6rem;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 0;
+  padding-top: 0.85rem;
 }
 
 .project-team-add-line,
@@ -1654,6 +1656,10 @@ body[data-page="projectsList"] .project-team-user-field .badb-current-user-butto
 .project-participants-table th:first-child,
 .project-participants-table td:first-child {
   width: 3.5rem;
+}
+
+.project-participants-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .project-participant-role-input {

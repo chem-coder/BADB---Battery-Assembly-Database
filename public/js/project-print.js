@@ -125,6 +125,16 @@ function formatBatteryStatus(value) {
   return map[value] || value || '—';
 }
 
+function formatProjectAccess(value) {
+  const map = {
+    view: 'просмотр',
+    edit: 'редактирование',
+    admin: 'администратор проекта'
+  };
+
+  return map[value] || value || 'просмотр';
+}
+
 function renderRow(label, value, options = {}) {
   const fieldClass = options.wide ? ' report_field_wide' : '';
   const valueClass = [
@@ -143,6 +153,38 @@ function renderRow(label, value, options = {}) {
 
 function renderFieldGrid(rows) {
   return `<div class="report_field_grid">${rows.join('')}</div>`;
+}
+
+function renderEffectiveAccessSection(rows) {
+  const users = Array.isArray(rows) ? rows : [];
+
+  return `
+    <section class="report_section">
+      <h2>Доступ к проекту</h2>
+      ${users.length === 0 ? '<p class="muted">Пользователи с доступом не найдены.</p>' : `
+        <table class="report_table">
+          <thead>
+            <tr>
+              <th>ФИО</th>
+              <th>Отдел</th>
+              <th>Уровень доступа</th>
+              <th>Источник</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${users.map((row) => `
+              <tr>
+                <td>${escapeHtml(row.user_name || `#${row.user_id}`)}</td>
+                <td>${escapeHtml(row.department_name || '—')}</td>
+                <td>${escapeHtml(formatProjectAccess(row.access_level))}</td>
+                <td>${escapeHtml(row.access_sources || '—')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </section>
+  `;
 }
 
 function renderParticipantsSection(rows) {
@@ -303,6 +345,7 @@ function renderConnectedBatteriesSection(rows) {
 function renderReport(report) {
   const project = report?.project || {};
   const participants = report?.participants || [];
+  const effectiveUsers = report?.access?.effective_users || [];
   const downstream = report?.downstream || {};
   const counts = report?.downstream_counts || {};
   const root = document.getElementById('reportRoot');
@@ -345,6 +388,7 @@ function renderReport(report) {
     </section>
 
     ${renderParticipantsSection(participants)}
+    ${renderEffectiveAccessSection(effectiveUsers)}
     ${renderDownstreamSummarySection(counts)}
     ${renderConnectedTapesSection(downstream.tapes)}
     ${renderConnectedElectrodeBatchesSection(downstream.electrode_batches)}
@@ -354,7 +398,7 @@ function renderReport(report) {
 
 function getAuthHeader() {
   try {
-    const token = sessionStorage.getItem('badb_auth_token');
+    const token = localStorage.getItem('badb_auth_token') || sessionStorage.getItem('badb_auth_token');
     return token && token !== 'bypass' ? { Authorization: `Bearer ${token}` } : {};
   } catch {
     return {};
