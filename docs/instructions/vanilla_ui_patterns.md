@@ -215,6 +215,33 @@ global auth enhancer can insert that button directly after select elements, so
 Users page CSS must keep the role select and injected button on the same filter
 row.
 
+## Date-Only Fields
+
+Date-only fields (such as a tape/electrode-batch/battery creation date,
+`item_created_at`) must be treated as date-only values end to end, never as
+timezone-sensitive timestamps:
+
+- keep the value as a normalized `YYYY-MM-DD` string in form state and in the
+  request body; do not convert it to an ISO timestamp;
+- never round-trip a date-only string through `new Date(value)` and then read
+  back local `getFullYear/getMonth/getDate`. Parsing `YYYY-MM-DD` yields UTC
+  midnight, so the local getters can shift it a day on some devices/timezones
+  (this caused "today" to be rejected as a future date on a Windows lab PC while
+  the same date saved from a Mac). Take the leading `YYYY-MM-DD` portion verbatim
+  instead;
+- build "today" from local calendar components directly
+  (`getFullYear()/getMonth()+1/getDate()`), the same way the backend computes its
+  `getTodayDateString()`;
+- future-date blocking stays in the UI (the date input `max` is local today), but
+  the backend remains authoritative: it accepts only `^\d{4}-\d{2}-\d{2}$` and
+  compares that string to server-local today as `YYYY-MM-DD`. Do not validate
+  date-only fields with `new Date(input) > new Date()`.
+
+The tape page (`public/js/1-tapes.js`, `formatDateInputValue` /
+`getTodayDateInputValue`) is the reference implementation. The backend rule lives
+in the `normalizeOptional*Date` helpers in `services/tapeCatalogService.js`,
+`services/electrodeCutBatchService.js`, and `services/batteryCatalogService.js`.
+
 ## Verification
 
 For a small vanilla UI behavior change, run at least:
