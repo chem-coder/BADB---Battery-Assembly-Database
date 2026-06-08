@@ -42,7 +42,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd038_add_electrode_capacity_average_flag.sql'),
   path.join(ROOT, 'migrations', 'd039_add_electrode_test_batch_flag.sql'),
   path.join(ROOT, 'migrations', 'd040_add_coated_thickness_fields.sql'),
-  path.join(ROOT, 'migrations', 'd041_project_participants.sql')
+  path.join(ROOT, 'migrations', 'd041_project_participants.sql'),
+  path.join(ROOT, 'migrations', 'd042_project_leads_as_team_members.sql')
 ];
 
 function parseArgs(argv) {

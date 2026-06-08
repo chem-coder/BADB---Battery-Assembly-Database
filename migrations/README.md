@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-06-01:
+Current migration file state as of 2026-06-02:
 
-- `migrations/` has 50 SQL files.
-- `migrations_ASCII/` has 50 SQL files.
+- `migrations/` has 51 SQL files.
+- `migrations_ASCII/` has 51 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d041_project_participants.sql`.
+- Dalia's `dNNN` stream exists through `d042_project_leads_as_team_members.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 29` after `d041` is applied.
+  counts of `dima = 21` and `dalia = 30` after `d042` is applied.
 
 ## How to apply
 
@@ -153,6 +153,9 @@ Full timeline is in the git log. High-level:
   membership, visible order, and functional roles are stored separately from
   project access grants. The current API ensures participants have at least
   direct `view` access while preserving stronger `edit`/`admin` grants.
+- `d042_project_leads_as_team_members` — backfills existing project leads into
+  `project_participants` and ensures each current lead has direct `admin`
+  project access.
 
 ## Check migration ledger
 
@@ -171,7 +174,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 29
+dalia = 30
 dima = 21
 ```
 

@@ -37,66 +37,89 @@
     <fieldset id="addUserFieldset" hidden>
       <legend><span id="userFormLegend">Новый пользователь</span> <span id="dirty-user-create" style="display:none; margin-left:8px;">● не сохранено</span></legend>
 
-      <form id="addUserForm" class="form-grid cols-2" autocomplete="off">
-        <div class="form-field">
-          <label for="newUserName">Имя</label>
-          <input id="newUserName" name="name" required autocomplete="off">
+      <form id="addUserForm" class="user-form-compact" autocomplete="off">
+        <div class="user-form-line user-form-line-name">
+          <div class="form-field user-name-field">
+            <label for="newUserName">Имя</label>
+            <input id="newUserName" name="name" required autocomplete="off">
+          </div>
+
+          <div class="form-field user-login-field">
+            <label for="newUserLogin">Логин</label>
+            <input id="newUserLogin" name="login" required autocomplete="off">
+          </div>
         </div>
 
-        <div class="form-field">
-          <label for="newUserLogin">Логин</label>
-          <input id="newUserLogin" name="login" required autocomplete="off">
+        <div class="user-form-line user-form-line-org">
+          <div class="form-field user-department-field">
+            <label for="newUserDepartment">Отдел</label>
+            <select id="newUserDepartment" name="department_id" required></select>
+          </div>
+
+          <div class="form-field user-position-field">
+            <label for="newUserPosition">Должность</label>
+            <select id="newUserPosition" name="position" required></select>
+          </div>
         </div>
 
-        <div id="newUserPasswordField" class="form-field">
-          <label id="newUserPasswordLabel" for="newUserPassword">Пароль</label>
-          <input id="newUserPassword" name="password" type="password" required autocomplete="new-password" minlength="6">
-        </div>
+        <div class="user-form-line user-form-line-account">
+          <div class="form-field user-role-field">
+            <label for="newUserRole">Роль</label>
+            <select id="newUserRole" name="role" required>
+              <option value="">Выберите роль</option>
+              <option value="employee">Сотрудник</option>
+              <option value="lead">Руководитель</option>
+              <option value="admin">Администратор</option>
+            </select>
+          </div>
 
-        <div id="confirmUserPasswordField" class="form-field" hidden>
-          <label for="confirmUserPassword">Подтвердите пароль</label>
-          <input id="confirmUserPassword" type="password" autocomplete="new-password" minlength="6">
-        </div>
+          <div class="form-field user-status-field">
+            <label for="newUserActive">Статус</label>
+            <select id="newUserActive" name="active" required>
+              <option value="true">активен</option>
+              <option value="false">неактивен</option>
+            </select>
+          </div>
 
-        <div id="resetUserPasswordField" class="form-field" hidden>
-          <label>&nbsp;</label>
-          <button id="showResetUserPasswordBtn" type="button" title="Показать поля сброса пароля">Сбросить пароль</button>
-        </div>
+          <div id="newUserPasswordField" class="form-field user-password-field">
+            <label id="newUserPasswordLabel" for="newUserPassword">Пароль</label>
+            <input id="newUserPassword" name="password" type="password" required autocomplete="new-password" minlength="6">
+          </div>
 
-        <div id="cancelUserPasswordResetField" class="form-field" hidden>
-          <label>&nbsp;</label>
-          <button id="cancelResetUserPasswordBtn" type="button" title="Отменить сброс пароля">Отмена сброса пароля</button>
-        </div>
+          <div id="confirmUserPasswordField" class="form-field user-password-field" hidden>
+            <label for="confirmUserPassword">Подтвердите пароль</label>
+            <input id="confirmUserPassword" type="password" autocomplete="new-password" minlength="6">
+          </div>
 
-        <div class="form-field">
-          <label for="newUserRole">Роль</label>
-          <select id="newUserRole" name="role" required>
-            <option value="">Выберите роль</option>
-            <option value="employee">Сотрудник</option>
-            <option value="lead">Руководитель</option>
-            <option value="admin">Администратор</option>
-          </select>
-        </div>
+          <div id="resetUserPasswordField" class="form-field user-password-action" hidden>
+            <label>&nbsp;</label>
+            <button id="showResetUserPasswordBtn" type="button" title="Показать поля сброса пароля">Сбросить пароль</button>
+          </div>
 
-        <div class="form-field">
-          <label for="newUserPosition">Должность</label>
-          <select id="newUserPosition" name="position" required></select>
-        </div>
-
-        <div class="form-field">
-          <label for="newUserDepartment">Отдел</label>
-          <select id="newUserDepartment" name="department_id" required></select>
-        </div>
-
-        <div class="form-field">
-          <label for="newUserActive">Статус</label>
-          <select id="newUserActive" name="active" required>
-            <option value="true">активен</option>
-            <option value="false">неактивен</option>
-          </select>
+          <div id="cancelUserPasswordResetField" class="form-field user-password-action" hidden>
+            <label>&nbsp;</label>
+            <button id="cancelResetUserPasswordBtn" type="button" title="Отменить сброс пароля">Отмена сброса пароля</button>
+          </div>
         </div>
       </form>
 
+    </fieldset>
+
+    <fieldset id="user-projects-section" class="user-projects-section" hidden>
+      <legend>Проекты</legend>
+      <table class="user-projects-table">
+        <thead>
+          <tr>
+            <th>Проект</th>
+            <th>Статус</th>
+            <th>Функциональная роль</th>
+            <th>Доступ</th>
+            <th>Руководитель</th>
+            <th>Сроки</th>
+          </tr>
+        </thead>
+        <tbody id="userProjectsBody"></tbody>
+      </table>
     </fieldset>
 
     <div id="users-page-status" class="status-feedback" aria-live="polite"></div>
@@ -146,7 +169,7 @@
 
     <script src="/js/auth.js"></script>
     <script src="/js/badb-ui.js?v=badb-ui-20260507a"></script>
-    <script src="/js/users.js?v=users-page-upgrade-20260508a"></script>
+    <script src="/js/users.js?v=users-projects-20260602a"></script>
 
   </body>
 </html>

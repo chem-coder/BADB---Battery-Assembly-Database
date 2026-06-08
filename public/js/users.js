@@ -19,6 +19,9 @@ const filterDepartmentSelect = document.getElementById('user-filter-department')
 const filterActiveSelect = document.getElementById('user-filter-active');
 const clearFiltersBtn = document.getElementById('clearUserFiltersBtn');
 const filterSummary = document.getElementById('user-filter-summary');
+const userFilters = document.getElementById('user_filters');
+const userProjectsSection = document.getElementById('user-projects-section');
+const userProjectsBody = document.getElementById('userProjectsBody');
 
 const newUserName = document.getElementById('newUserName');
 const newUserLogin = document.getElementById('newUserLogin');
@@ -42,6 +45,17 @@ const ROLE_LABELS = {
   employee: 'Сотрудник',
   lead: 'Руководитель',
   admin: 'Администратор'
+};
+const PROJECT_STATUS_LABELS = {
+  active: 'активный',
+  paused: 'приостановлен',
+  completed: 'завершён',
+  archived: 'архивирован'
+};
+const PROJECT_ACCESS_LABELS = {
+  view: 'просмотр',
+  edit: 'редактирование',
+  admin: 'администратор проекта'
 };
 
 let currentUsers = [];
@@ -75,6 +89,11 @@ async function fetchUsers() {
 async function fetchDepartments() {
   const res = await fetch('/api/departments');
   return readJsonResponse(res, 'Ошибка загрузки отделов');
+}
+
+async function fetchUserProjects(id) {
+  const res = await fetch(`/api/users/${encodeURIComponent(id)}/projects`);
+  return readJsonResponse(res, 'Ошибка загрузки проектов пользователя');
 }
 
 async function createUser(payload) {
@@ -160,12 +179,34 @@ function canManageUser(user) {
   return isCurrentUserAdmin() || isCurrentAuthUser(user);
 }
 
+function canViewUserProjects(user) {
+  return Boolean(user?.user_id && (isCurrentUserAdmin() || isCurrentAuthUser(user)));
+}
+
 function canDeleteUser(user) {
   return Boolean(user?.user_id) && canManageUser(user);
 }
 
+function isViewingOwnUserRecord() {
+  return formMode === 'edit' && Boolean(currentOpenedUser?.user_id) && isCurrentAuthUser(currentOpenedUser);
+}
+
 function renderAddUserButtonAccess() {
-  showAddUserFormBtn.hidden = !isCurrentUserAdmin();
+  showAddUserFormBtn.hidden = !isCurrentUserAdmin() || isViewingOwnUserRecord();
+}
+
+function renderUserDirectoryVisibility() {
+  const hideDirectory = isViewingOwnUserRecord();
+
+  if (userFilters) {
+    userFilters.hidden = hideDirectory;
+  }
+
+  if (usersList) {
+    usersList.hidden = hideDirectory;
+  }
+
+  renderAddUserButtonAccess();
 }
 
 function getSelectedOptionText(select) {
@@ -316,6 +357,7 @@ function resetCreateUserForm() {
 function hideCreateUserForm() {
   resetCreateUserForm();
   addUserFieldset.hidden = true;
+  hideUserProjectsSection();
   if (stickyHeader) stickyHeader.hidden = true;
   showAddUserFormBtn.disabled = false;
   newUserRole.disabled = false;
@@ -323,6 +365,8 @@ function hideCreateUserForm() {
   currentEditUserId = null;
   currentOpenedUser = null;
   clearUserStatuses();
+  renderUserDirectoryVisibility();
+  renderFilteredUsers();
 }
 
 function showCreateUserForm() {
@@ -331,6 +375,8 @@ function showCreateUserForm() {
   formMode = 'create';
   currentEditUserId = null;
   currentOpenedUser = null;
+  hideUserProjectsSection();
+  renderUserDirectoryVisibility();
   renderCreateUserSelects();
   userFormLegend.textContent = 'Новый пользователь';
   resetCreateUserForm();
@@ -339,6 +385,7 @@ function showCreateUserForm() {
   setUserFormEditable(true);
   markUserFormClean();
   renderUserStickyHeader();
+  renderUserDirectoryVisibility();
   window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
   newUserName.focus();
   return true;
@@ -366,6 +413,7 @@ function showEditUserForm(user, options = {}) {
   formMode = 'edit';
   currentEditUserId = user.user_id;
   currentOpenedUser = user;
+  hideUserProjectsSection();
   renderCreateUserSelects();
   resetCreateUserForm();
 
@@ -386,6 +434,9 @@ function showEditUserForm(user, options = {}) {
   showAddUserFormBtn.disabled = true;
   markUserFormClean();
   renderUserStickyHeader();
+  renderUserDirectoryVisibility();
+  loadOpenedUserProjects(user.user_id);
+  renderFilteredUsers();
   if (scroll) {
     window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
   }
@@ -496,6 +547,112 @@ function formatRole(role) {
 
 function formatUserStatus(user) {
   return user?.active ? 'активен' : 'неактивен';
+}
+
+function formatProjectStatus(status) {
+  return PROJECT_STATUS_LABELS[status] || status || UNDECIDED_LABEL;
+}
+
+function formatProjectAccess(accessLevel) {
+  return PROJECT_ACCESS_LABELS[accessLevel] || accessLevel || 'просмотр';
+}
+
+function formatDateOnly(value) {
+  if (!value) return '';
+
+  const text = String(value);
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return `${match[3]}.${match[2]}.${match[1]}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return text;
+
+  return date.toLocaleDateString('ru-RU');
+}
+
+function formatProjectDates(project) {
+  const start = formatDateOnly(project.start_date);
+  const due = formatDateOnly(project.due_date);
+
+  if (start && due) return `${start} — ${due}`;
+  return start || due || '—';
+}
+
+function appendUserProjectCell(row, text, className = '') {
+  const cell = document.createElement('td');
+  if (className) cell.className = className;
+  cell.textContent = text || '—';
+  row.appendChild(cell);
+  return cell;
+}
+
+function renderUserProjectsMessage(message, isError = false) {
+  if (!userProjectsSection || !userProjectsBody) return;
+
+  userProjectsSection.hidden = false;
+  userProjectsBody.innerHTML = '';
+
+  const row = document.createElement('tr');
+  const cell = document.createElement('td');
+  cell.colSpan = 6;
+  cell.className = isError ? 'user-project-empty is-error' : 'user-project-empty';
+  cell.textContent = message;
+  row.appendChild(cell);
+  userProjectsBody.appendChild(row);
+}
+
+function hideUserProjectsSection() {
+  if (!userProjectsSection || !userProjectsBody) return;
+
+  userProjectsBody.innerHTML = '';
+  userProjectsSection.hidden = true;
+}
+
+function renderUserProjects(projects) {
+  if (!userProjectsSection || !userProjectsBody) return;
+
+  const rows = Array.isArray(projects) ? projects : [];
+  userProjectsSection.hidden = false;
+  userProjectsBody.innerHTML = '';
+
+  if (rows.length === 0) {
+    renderUserProjectsMessage('Пользователь пока не добавлен в команду ни одного проекта.');
+    return;
+  }
+
+  rows.forEach((project) => {
+    const row = document.createElement('tr');
+    appendUserProjectCell(row, project.project_name || `Проект #${project.project_id}`, 'user-project-name');
+    appendUserProjectCell(row, formatProjectStatus(project.status));
+    appendUserProjectCell(row, project.role_in_team || '—');
+    appendUserProjectCell(row, formatProjectAccess(project.access_level));
+    appendUserProjectCell(row, project.lead_name || '—');
+    appendUserProjectCell(row, formatProjectDates(project), 'user-project-muted');
+    userProjectsBody.appendChild(row);
+  });
+}
+
+async function loadOpenedUserProjects(userId) {
+  const openedUser = currentOpenedUser;
+
+  if (!openedUser || String(openedUser.user_id) !== String(userId) || !canViewUserProjects(openedUser)) {
+    hideUserProjectsSection();
+    return;
+  }
+
+  renderUserProjectsMessage('Загрузка проектов...');
+
+  try {
+    const projects = await fetchUserProjects(userId);
+
+    if (formMode !== 'edit' || String(currentEditUserId) !== String(userId)) return;
+    renderUserProjects(projects);
+  } catch (err) {
+    if (formMode !== 'edit' || String(currentEditUserId) !== String(userId)) return;
+    renderUserProjectsMessage(err.message || 'Ошибка загрузки проектов пользователя', true);
+  }
 }
 
 function normalizeFilterText(value) {
@@ -813,12 +970,14 @@ async function loadUsers() {
 
     currentUsers = Array.isArray(users) ? users : [];
     currentDepartments = Array.isArray(departments) ? departments : [];
-    renderAddUserButtonAccess();
+    renderUserDirectoryVisibility();
     renderUserFilterOptions();
     renderCreateUserSelects();
     if (!addUserFieldset.hidden && formMode === 'edit') {
       currentOpenedUser = findCurrentUserRecord(currentEditUserId) || currentOpenedUser;
       renderUserStickyHeader();
+      renderUserDirectoryVisibility();
+      loadOpenedUserProjects(currentEditUserId);
     }
     renderFilteredUsers();
   } catch (err) {

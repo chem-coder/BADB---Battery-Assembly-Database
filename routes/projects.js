@@ -89,6 +89,43 @@ async function syncProjectLeadAccess(db, projectId, previousLeadId, nextLeadId, 
   }
 }
 
+async function ensureProjectLeadParticipant(db, projectId, leadId, changedBy) {
+  const normalizedLeadId = normalizeOptionalInteger(leadId);
+  if (!normalizedLeadId) return;
+
+  const displayOrder = await getNextParticipantDisplayOrder(db, projectId);
+
+  await db.query(
+    `
+    INSERT INTO project_participants
+      (project_id, user_id, display_order, role_in_team, notes, created_by, updated_by)
+    VALUES
+      ($1, $2, $3, 'Руководитель проекта', NULL, $4, $4)
+    ON CONFLICT (project_id, user_id) DO NOTHING
+    `,
+    [projectId, normalizedLeadId, displayOrder, changedBy]
+  );
+}
+
+async function clearPreviousProjectLeadParticipantRole(db, projectId, previousLeadId, nextLeadId) {
+  const previousLead = normalizeOptionalInteger(previousLeadId);
+  const nextLead = normalizeOptionalInteger(nextLeadId);
+
+  if (!previousLead || previousLead === nextLead) return;
+
+  await db.query(
+    `
+    UPDATE project_participants
+    SET role_in_team = '',
+        updated_at = now()
+    WHERE project_id = $1
+      AND user_id = $2
+      AND role_in_team = 'Руководитель проекта'
+    `,
+    [projectId, previousLead]
+  );
+}
+
 function normalizeParticipantText(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -689,6 +726,7 @@ router.post('/', auth, async (req, res) => {
     );
 
     await syncProjectLeadAccess(client, result.rows[0].project_id, null, leadId, req.user.userId);
+    await ensureProjectLeadParticipant(client, result.rows[0].project_id, leadId, req.user.userId);
 
     await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
@@ -723,6 +761,7 @@ router.get('/', auth, async (req, res) => {
                p.status, p.description, p.confidentiality_level, p.department_id,
                d.name AS department_name,
                u_created.name AS created_by_name,
+               p.created_at,
                p.updated_by,
                p.updated_at,
                u_updated.name AS updated_by_name
@@ -737,7 +776,7 @@ router.get('/', auth, async (req, res) => {
     }
 
     // Everyone else: public projects + owned/led projects + participant membership
-    // + active explicit user access. Secret/confidential projects are invisible
+    // + active explicit user access. Limited/confidential projects are invisible
     // unless one of those project-specific relationships exists.
 
     const result = await pool.query(`
@@ -746,6 +785,7 @@ router.get('/', auth, async (req, res) => {
              p.status, p.description, p.confidentiality_level, p.department_id,
              d.name AS department_name,
              u_created.name AS created_by_name,
+             p.created_at,
              p.updated_by,
              p.updated_at,
              u_updated.name AS updated_by_name
@@ -965,13 +1005,26 @@ router.delete('/:id/participants/:participantId', auth, requireModify, async (re
     await client.query('BEGIN');
 
     const current = await client.query(
-      'SELECT user_id, role_in_team FROM project_participants WHERE project_id = $1 AND participant_id = $2',
+      `
+      SELECT pp.user_id, pp.role_in_team, p.lead_id
+      FROM project_participants pp
+      JOIN projects p ON p.project_id = pp.project_id
+      WHERE pp.project_id = $1
+        AND pp.participant_id = $2
+      `,
       [projectId, participantId]
     );
 
     if (current.rowCount === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Участник проекта не найден' });
+    }
+
+    if (Number(current.rows[0].user_id) === Number(current.rows[0].lead_id)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Руководителя нельзя убрать из команды; сначала измените руководителя проекта'
+      });
     }
 
     await client.query(
@@ -982,8 +1035,7 @@ router.delete('/:id/participants/:participantId', auth, requireModify, async (re
     await client.query(
       `DELETE FROM user_project_access
        WHERE project_id = $1
-         AND user_id = $2
-         AND access_level <> 'admin'`,
+         AND user_id = $2`,
       [projectId, current.rows[0].user_id]
     );
 
@@ -1113,6 +1165,8 @@ router.put('/:id', auth, requireEdit, async (req, res) => {
     }
 
     await syncProjectLeadAccess(client, id, current.rows[0].lead_id, newVals.lead_id, req.user.userId);
+    await clearPreviousProjectLeadParticipantRole(client, id, current.rows[0].lead_id, newVals.lead_id);
+    await ensureProjectLeadParticipant(client, id, newVals.lead_id, req.user.userId);
     await trackChanges(client, 'project', 'projects', 'project_id', Number(id), current.rows[0], newVals, req.user.userId);
 
     await client.query('COMMIT');

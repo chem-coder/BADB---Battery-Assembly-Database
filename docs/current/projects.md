@@ -1,9 +1,9 @@
 # Projects
 
 Created: 2026-05-09
-Edited: 2026-06-01
+Edited: 2026-06-02
 Status: current
-Verified against code: 2026-06-01
+Verified against code: 2026-06-02
 
 Source paths:
 
@@ -47,10 +47,10 @@ Allowed statuses:
 Allowed confidentiality values:
 
 - `public` / `открытый`
-- `confidential` / `секретный`
+- `confidential` / `ограниченный`
 
 Legacy `department` values can still exist in older data and are treated as
-secret/confidential by the current backend and UI. `projects.department_id`
+confidential/limited by the current backend and UI. `projects.department_id`
 also remains in the schema for legacy data, but the current Projects page does
 not expose department-based project access and sends `department_id = null` on
 create/update.
@@ -66,16 +66,18 @@ Project team membership is intentionally separate from access grants:
 - adding a participant ensures a permanent `view` row in
   `user_project_access`, while preserving an existing active `edit` or `admin`
   grant;
-- removing a participant removes that user's non-admin direct grant for the
-  project; an `admin` grant is retained because project administrators may exist
-  outside the participant roster.
+- the project lead is automatically inserted into `project_participants` with
+  `admin` access when a project is created or saved with a lead;
+- removing a participant removes that user's direct grant for the project;
+- the current project lead cannot be removed from the team until the project
+  lead field is changed.
 
 ## Access Behavior
 
 Project visibility is enforced by the API. Admins and directors see all
 projects. Other users see projects when the project is open (`public`), when
 they are the project lead or creator, when they are listed as a participant, or
-when they have an active explicit user grant. Secret (`confidential`) projects
+when they have an active explicit user grant. Limited (`confidential`) projects
 are invisible by default.
 
 Full project management is allowed for admins, directors, project creators,
@@ -86,6 +88,7 @@ project visibility, participants, or access grants.
 Changing the project lead syncs an explicit access row:
 
 - the new lead receives `admin` access;
+- the new lead is inserted into the team list when not already present;
 - the previous lead is demoted to `view` when replaced.
 
 Project access management supports:
@@ -125,8 +128,8 @@ Current route families:
 - legacy `DELETE /api/projects/:id/access/:userId`
 - access-copy and access-preset routes used by the API layer
 
-Create requires `name`. The current UI exposes only open (`public`) and secret
-(`confidential`) project types.
+Create requires `name`. The current UI exposes only open (`public`) and
+limited (`confidential`) project access.
 
 ## Current Page Behavior
 
@@ -141,17 +144,17 @@ Current behavior:
 - an opened record has a sticky header with compact metadata, save, exit,
   print, delete, dirty flag, and inline status;
 - the project name is edited by clicking the title;
-- the project description field has no placeholder text;
+- the visible project form has one details fieldset with the project name,
+  a `создал` audit line with creator and creation date, lead, status, and
+  open/limited project access;
+- description and project dates remain preserved in hidden fields for existing
+  records, but are not part of the visible Projects form;
 - save keeps the record open;
-- saved records show a project participants section with user, role/function,
-  permissions, and remove action;
-- access tables are shown only for saved records;
-- the participant table is the primary place to manage project team access;
-- the project visibility control is labeled as project type/visibility, not as
-  a second access-management section;
-- the project administrators table is reserved for users who have direct admin
-  rights but are not listed as participants;
-- the add-user control in that table adds a project administrator;
+- saved records show a second fieldset named `Команда`;
+- the `Команда` add controls use a user dropdown, current-user button, required
+  access dropdown, optional functional role input, and `+ Добавить в команду`;
+- the team table is the primary place to manage per-project role/function and
+  user access level;
 - delete lives inside the opened record header;
 - unsaved changes are guarded during in-page exit, logout, record switching,
   and browser unload.

@@ -48,16 +48,8 @@
 
       <!-- FormData ignores fields without `name` -->
 
-      <fieldset id="project-meta">
-        <legend>Метаданные</legend>
-
-        <label for="project-created-by">Создал</label>
-        <select id="project-created-by" name="created_by" disabled>
-          <option value="">— автоматически —</option>
-        </select>
-      </fieldset>
-
-      <fieldset id="project-details">
+      <fieldset id="project-details" class="project-main-fieldset">
+        <legend class="sr-only">Проект</legend>
 
         <!-- Name copied here on create / "Enter" -->
         <input
@@ -69,70 +61,68 @@
         />
         <h2></h2>
 
-        <label for="project-lead-id">Руководитель</label>
-        <select id="project-lead-id" name="lead_id">
-          <option value="">— выбрать пользователя —</option>
-        </select><br>
+        <input id="project-description" type="hidden" name="description">
+        <input id="project-start-date" type="hidden" name="start_date">
+        <input id="project-due-date" type="hidden" name="due_date">
 
-        <label for="project-description">Описание проекта </label><br>
-        <textarea
-          id="project-description"
-          name="description"
-          rows="3"
-          cols="50"
-        ></textarea>
+        <div class="project-form-line project-audit-line">
+          <label for="project-created-by">создал</label>
+          <input id="project-created-by" type="text" disabled value="">
+          <input id="project-created-at" type="text" disabled value="" aria-label="Дата создания">
+        </div>
 
-        <label for="project-start-date">Дата начала</label>
-        <input id="project-start-date" type="date" name="start_date">
+        <div class="project-form-line project-lead-line">
+          <label for="project-lead-id">Руководитель</label>
+          <select id="project-lead-id" name="lead_id">
+            <option value="">— выбрать пользователя —</option>
+          </select>
+        </div>
 
-        <label for="project-due-date">Плановая дата окончания</label>
-        <input id="project-due-date" type="date" name="due_date">
-      </fieldset>
+        <div class="project-form-line project-status-line">
+          <label for="project-status-select">Статус</label>
+          <select id="project-status-select" name="status">
+            <option value="active">активный</option>
+            <option value="paused">приостановлен</option>
+            <option value="completed">завершен</option>
+            <option value="archived">архивирован</option>
+          </select>
 
-      <fieldset id="project-status">
-        <legend>Статус</legend>
-
-        <label for="project-status-select">Статус</label>
-        <select id="project-status-select" name="status">
-          <option value="active">активный</option>
-          <option value="paused">приостановлен</option>
-          <option value="completed">завершен</option>
-          <option value="archived">архивирован</option>
-        </select>
+          <label for="project-confidentiality-level">Доступ</label>
+          <select id="project-confidentiality-level" name="confidentiality_level">
+            <option value="public">открытый</option>
+            <option value="confidential">ограниченный</option>
+          </select>
+        </div>
       </fieldset>
 
       <fieldset id="project-participants-section" hidden>
-        <legend>Участники проекта</legend>
+        <legend>Команда</legend>
 
-        <div class="form-grid cols-4 project-participant-add">
-          <div class="form-field">
-            <label for="project-participant-user-id">Пользователь</label>
-            <select id="project-participant-user-id">
-              <option value="">— выбрать пользователя —</option>
-            </select>
-          </div>
+        <div class="project-participant-add">
+          <div class="project-team-add-line">
+            <div class="form-field project-team-user-field">
+              <label class="sr-only" for="project-participant-user-id">Пользователь</label>
+              <select id="project-participant-user-id">
+                <option value="">— выбрать пользователя —</option>
+              </select>
+            </div>
 
-          <div class="form-field">
-            <label for="project-participant-role">Роль в команде</label>
-            <input
-              id="project-participant-role"
-              type="text"
-              placeholder="Функционал"
-              autocomplete="off">
-          </div>
-
-          <div class="form-field">
-            <label for="project-participant-access-level">Права</label>
+            <label for="project-participant-access-level">Доступ</label>
             <select id="project-participant-access-level">
               <option value="view">просмотр</option>
               <option value="edit">редактирование</option>
               <option value="admin">администратор проекта</option>
             </select>
+
+            <button id="addProjectParticipantBtn" type="button" title="Добавить в команду">+ Добавить в команду</button>
           </div>
 
-          <div class="form-field">
-            <label>&nbsp;</label>
-            <button id="addProjectParticipantBtn" type="button" title="Добавить участника">Добавить участника</button>
+          <div class="project-team-role-line">
+            <label for="project-participant-role">Функциональная роль</label>
+            <input
+              id="project-participant-role"
+              type="text"
+              autocomplete="off">
           </div>
         </div>
 
@@ -142,7 +132,7 @@
               <th>№</th>
               <th>Пользователь</th>
               <th>Роль в команде (функционал)</th>
-              <th>Права</th>
+              <th>Доступ</th>
               <th>Действия</th>
             </tr>
           </thead>
@@ -150,59 +140,12 @@
         </table>
       </fieldset>
 
-      <fieldset id="project-access">
-        <legend>Тип проекта</legend>
-
-        <label for="project-confidentiality-level">Видимость</label>
-        <select id="project-confidentiality-level" name="confidentiality_level">
-          <option value="public">открытый</option>
-          <option value="confidential">секретный</option>
-        </select><br>
-
-        <div id="project-department-block" hidden>
-          <label for="project-department-id">Отдел</label>
-          <select id="project-department-id" name="department_id">
-            <option value="">— выбрать отдел —</option>
-          </select>
-        </div>
-      </fieldset>
-
-      <fieldset id="project-access-section" hidden>
-        <legend>Администраторы проекта</legend>
-        <table class="project-access-table">
-          <thead>
-            <tr>
-              <th>Пользователь</th>
-              <th>Отдел</th>
-              <th>Источник</th>
-              <th>Уровень</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
-          <tbody id="projectUserAccessBody"></tbody>
-        </table>
-
-        <div class="form-grid cols-3 project-user-access-add">
-          <div class="form-field">
-            <label for="project-access-user-id">Пользователь</label>
-            <select id="project-access-user-id">
-              <option value="">— выбрать пользователя —</option>
-            </select>
-          </div>
-
-          <div class="form-field" hidden>
-            <label for="project-user-access-level">Права</label>
-            <select id="project-user-access-level">
-              <option value="admin">администратор проекта</option>
-            </select>
-          </div>
-
-          <div class="form-field">
-            <label>&nbsp;</label>
-            <button id="grantUserAccessBtn" type="button" title="Добавить администратора проекта">Добавить администратора</button>
-          </div>
-        </div>
-      </fieldset>
+      <div id="project-department-block" hidden>
+        <label for="project-department-id">Отдел</label>
+        <select id="project-department-id" name="department_id">
+          <option value="">— выбрать отдел —</option>
+        </select>
+      </div>
 
     </form>
 
@@ -247,7 +190,7 @@
           <select id="project-filter-visibility">
             <option value="">Все типы</option>
             <option value="public">открытый</option>
-            <option value="confidential">секретный</option>
+            <option value="confidential">ограниченный</option>
           </select>
         </label>
 
@@ -260,7 +203,7 @@
 
     <script src="/js/auth.js"></script>
     <script src="/js/badb-ui.js?v=badb-ui-20260507a"></script>
-    <script src="/js/projects.js?v=project-team-access-20260601f"></script>
+    <script src="/js/projects.js?v=project-layout-20260602b"></script>
     
   </body>
 </html>

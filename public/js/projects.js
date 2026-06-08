@@ -6,7 +6,8 @@ const saveBtn = document.getElementById('saveBtn');
 const exitBtn = document.getElementById('exitBtn');
 const printProjectBtn = document.getElementById('printProjectBtn');
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
-const createdBySelect = document.getElementById('project-created-by');
+const createdByInput = document.getElementById('project-created-by');
+const createdAtInput = document.getElementById('project-created-at');
 
 const projectsList = document.getElementById('projectsList');
 const statusSelect = form.querySelector('select[name="status"]');
@@ -14,11 +15,6 @@ const leadSelect = document.getElementById('project-lead-id');
 const confidentialitySelect = document.getElementById('project-confidentiality-level');
 const departmentBlock = document.getElementById('project-department-block');
 const departmentSelect = document.getElementById('project-department-id');
-const projectAccessSection = document.getElementById('project-access-section');
-const projectUserAccessBody = document.getElementById('projectUserAccessBody');
-const projectAccessUserSelect = document.getElementById('project-access-user-id');
-const projectUserAccessLevel = document.getElementById('project-user-access-level');
-const grantUserAccessBtn = document.getElementById('grantUserAccessBtn');
 const projectParticipantsSection = document.getElementById('project-participants-section');
 const projectParticipantUserSelect = document.getElementById('project-participant-user-id');
 const projectParticipantRoleInput = document.getElementById('project-participant-role');
@@ -59,8 +55,8 @@ const PROJECT_STATUS_LABELS = {
 
 const PROJECT_VISIBILITY_LABELS = {
   public: 'открытый',
-  department: 'секретный',
-  confidential: 'секретный'
+  department: 'ограниченный',
+  confidential: 'ограниченный'
 };
 
 function normalizeProjectVisibility(value) {
@@ -129,6 +125,7 @@ function resetForm() {
   initialFormState = null;
   clearRecordStatuses();
   resetProjectParticipantsSection();
+  setProjectAuditFields(null);
   hideForm();
 }
 
@@ -159,6 +156,19 @@ function formatDate(value) {
   if (Number.isNaN(date.getTime())) return '';
 
   return date.toLocaleDateString('ru-RU');
+}
+
+function setProjectAuditFields(project = null) {
+  if (!createdByInput || !createdAtInput) return;
+
+  const currentUser = window.BADB_AUTH?.getCurrentUser?.();
+  const isCreate = mode === 'create' && !project?.created_by;
+  const createdById = project?.created_by || (isCreate ? currentUser?.userId : '');
+  const createdByName = project?.created_by_name || (isCreate ? window.BADB_AUTH?.getCurrentUserLabel?.() : '');
+
+  createdByInput.value = createdByName || '—';
+  createdByInput.dataset.userId = createdById ? String(createdById) : '';
+  createdAtInput.value = project?.created_at ? formatDate(project.created_at) : '';
 }
 
 function normalizeFilterText(value) {
@@ -438,19 +448,6 @@ async function grantUserAccess(projectId, userId, accessLevel) {
   return res.json();
 }
 
-async function revokeUserAccess(projectId, userId) {
-  const res = await fetch(`/api/projects/${projectId}/access/user/${userId}`, {
-    method: 'DELETE'
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Ошибка удаления доступа пользователя');
-  }
-
-  return res.json();
-}
-
 async function fetchProjectParticipants(projectId) {
   const res = await fetch(`/api/projects/${projectId}/participants`);
 
@@ -505,26 +502,8 @@ async function deleteProjectParticipant(projectId, participantId) {
 }
 
 function resetProjectAccessSection() {
-  projectAccessSection.hidden = true;
   currentAccessGrants = [];
   currentUserAccess = [];
-  projectUserAccessBody.innerHTML = '';
-  projectAccessUserSelect.value = '';
-  projectUserAccessLevel.value = 'admin';
-}
-
-function populateAccessUserSelect(visibleUserIds = new Set()) {
-  const prevAccessUser = projectAccessUserSelect.value;
-
-  projectAccessUserSelect.replaceChildren(new Option('— выбрать пользователя —', ''));
-  currentUsers
-    .filter(user => user.active && !visibleUserIds.has(Number(user.user_id)))
-    .forEach(user => {
-      const departmentText = user.department_name ? ` — ${user.department_name}` : '';
-      projectAccessUserSelect.add(new Option(`${user.name}${departmentText}`, user.user_id));
-    });
-
-  projectAccessUserSelect.value = prevAccessUser;
 }
 
 function resetProjectParticipantsSection() {
@@ -564,7 +543,7 @@ function getParticipantAccessLevel(participant) {
   const userId = Number(participant?.user_id);
   const explicit = currentUserAccess.find(grant => Number(grant.grantee_id) === userId);
   const isProjectLead = Number(currentProjectLeadId || form.elements['lead_id'].value) === userId;
-  const isProjectOwner = Number(currentProject?.created_by || createdBySelect.value) === userId;
+  const isProjectOwner = Number(currentProject?.created_by || createdByInput?.dataset.userId) === userId;
 
   if (isProjectLead || isProjectOwner) return 'admin';
   return explicit?.access_level || 'view';
@@ -576,15 +555,13 @@ function buildParticipantAccessLevelSelect(participant) {
   select.name = 'participant_access_level';
 
   const isProjectLead = Number(currentProjectLeadId || form.elements['lead_id'].value) === userId;
-  const isProjectOwner = Number(currentProject?.created_by || createdBySelect.value) === userId;
+  const isProjectOwner = Number(currentProject?.created_by || createdByInput?.dataset.userId) === userId;
 
   if (isProjectLead || isProjectOwner) {
     select.add(new Option('администратор проекта', 'admin'));
     select.value = 'admin';
     select.disabled = true;
-    select.title = isProjectLead
-      ? 'Права заданы ролью руководителя проекта'
-      : 'Права заданы создателем проекта';
+    select.title = 'Доступ задан руководителем проекта и администраторами';
     return select;
   }
 
@@ -596,7 +573,7 @@ function buildParticipantAccessLevelSelect(participant) {
   select.addEventListener('change', async () => {
     try {
       await grantUserAccess(currentId, userId, select.value);
-      showStatus('Права участника обновлены');
+      showStatus('Доступ участника обновлён');
       await loadProjectAccess();
     } catch (err) {
       showStatus(err.message, true);
@@ -639,7 +616,6 @@ function renderProjectParticipants() {
     roleInput.type = 'text';
     roleInput.className = 'project-participant-role-input';
     roleInput.value = participant.role_in_team || '';
-    roleInput.placeholder = 'Функционал';
     roleInput.addEventListener('change', async () => {
       const nextRole = roleInput.value.trim();
       if (nextRole === (participant.role_in_team || '')) return;
@@ -669,11 +645,16 @@ function renderProjectParticipants() {
     const actionsCell = document.createElement('td');
     actionsCell.className = 'actions project-participant-actions';
 
+    const isProjectLead = Number(currentProjectLeadId || form.elements['lead_id'].value) === Number(participant.user_id);
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.textContent = 'Убрать';
-    deleteBtn.title = 'Убрать участника проекта';
+    deleteBtn.disabled = isProjectLead;
+    deleteBtn.title = isProjectLead
+      ? 'Руководителя нельзя убрать из команды; сначала измените руководителя проекта'
+      : 'Убрать участника проекта';
     deleteBtn.addEventListener('click', async () => {
+      if (deleteBtn.disabled) return;
       if (!confirm(`Убрать участника "${userCell.textContent}" из проекта?`)) return;
 
       try {
@@ -707,151 +688,18 @@ async function loadProjectParticipants() {
   renderProjectParticipants();
 }
 
-function buildAccessLevelSelect(userRow) {
-  const select = document.createElement('select');
-  select.name = 'access_level';
-
-  if (userRow.isProjectLead || userRow.isProjectOwner) {
-    select.add(new Option('администратор проекта', 'admin'));
-    select.value = 'admin';
-    select.disabled = true;
-    select.title = userRow.isProjectLead
-      ? 'Права заданы ролью руководителя проекта'
-      : 'Права заданы создателем проекта';
-    return select;
-  }
-
-  select.add(new Option('просмотр', 'view'));
-  select.add(new Option('редактирование', 'edit'));
-  select.add(new Option('администратор проекта', 'admin'));
-  select.value = userRow.effectiveLevel;
-
-  select.addEventListener('change', async () => {
-    try {
-      await grantUserAccess(currentId, userRow.user.user_id, select.value);
-      showStatus('Права пользователя обновлены');
-      await loadProjectAccess();
-    } catch (err) {
-      showStatus(err.message, true);
-      await loadProjectAccess().catch(() => {});
-    }
-  });
-
-  return select;
-}
-
-function renderProjectUserAccess() {
-  projectUserAccessBody.innerHTML = '';
-
-  const personalByUser = new Map(
-    currentUserAccess.map(grant => [Number(grant.grantee_id), grant])
-  );
-  const participantUserIds = new Set(
-    currentParticipants.map(participant => Number(participant.user_id))
-  );
-  const leadUserId = Number(currentProjectLeadId || form.elements['lead_id'].value);
-  const ownerUserId = Number(currentProject?.created_by || createdBySelect.value);
-  const visibleUserIds = new Set(
-    [...personalByUser.keys()].filter(userId => (
-      !participantUserIds.has(userId) &&
-      userId !== leadUserId &&
-      userId !== ownerUserId
-    ))
-  );
-  const userRows = [...visibleUserIds]
-    .map(userId => {
-      const user = currentUsers.find(item => Number(item.user_id) === userId);
-      if (!user) return null;
-
-      const personal = personalByUser.get(userId);
-      const personalLevel = personal?.access_level || null;
-
-      return {
-        user,
-        personal,
-        personalLevel,
-        effectiveLevel: personalLevel || 'view',
-        isProjectLead: false,
-        isProjectOwner: false
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      const departmentCompare = (a.user.department_name || '').localeCompare(b.user.department_name || '', 'ru');
-      if (departmentCompare !== 0) return departmentCompare;
-      return (a.user.name || '').localeCompare(b.user.name || '', 'ru');
-    });
-
-  if (userRows.length === 0) {
-    const row = document.createElement('tr');
-    const cell = document.createElement('td');
-    cell.colSpan = 5;
-    cell.className = 'empty-table-message';
-    cell.textContent = 'Дополнительные администраторы не добавлены';
-    row.appendChild(cell);
-    projectUserAccessBody.appendChild(row);
-  }
-
-  userRows.forEach(userRow => {
-    const row = document.createElement('tr');
-
-    const userCell = document.createElement('td');
-    userCell.textContent = userRow.user.name || `Пользователь #${userRow.user.user_id}`;
-
-    const departmentCell = document.createElement('td');
-    departmentCell.textContent = userRow.user.department_name || '—';
-
-    const sourceCell = document.createElement('td');
-    sourceCell.textContent = 'личное назначение';
-
-    const levelCell = document.createElement('td');
-    levelCell.appendChild(buildAccessLevelSelect(userRow));
-
-    const actionsCell = document.createElement('td');
-    actionsCell.className = 'actions';
-
-    if (userRow.personal) {
-      const revokeBtn = document.createElement('button');
-      revokeBtn.type = 'button';
-      revokeBtn.textContent = 'Убрать';
-      revokeBtn.title = 'Убрать права администратора';
-      revokeBtn.addEventListener('click', async () => {
-        if (!confirm(`Убрать права администратора "${userCell.textContent}"?`)) return;
-
-        try {
-          await revokeUserAccess(currentId, userRow.user.user_id);
-          showStatus('Права администратора убраны');
-          await loadProjectAccess();
-        } catch (err) {
-          showStatus(err.message, true);
-        }
-      });
-      actionsCell.appendChild(revokeBtn);
-    } else {
-      actionsCell.textContent = '—';
-    }
-
-    row.append(userCell, departmentCell, sourceCell, levelCell, actionsCell);
-    projectUserAccessBody.appendChild(row);
-  });
-
-  populateAccessUserSelect(new Set([...visibleUserIds, ...participantUserIds, leadUserId, ownerUserId]));
-}
-
 async function loadProjectAccess() {
   if (!currentId) {
     resetProjectAccessSection();
     return;
   }
 
-  projectAccessSection.hidden = false;
   if (currentUsers.length === 0) await loadUsers();
 
   currentAccessGrants = await fetchProjectAccess(currentId);
   currentUserAccess = currentAccessGrants.filter(grant => (
     grant.grantee_type === 'user' && !grant.is_expired
   ));
-  renderProjectUserAccess();
   renderProjectParticipants();
 }
 
@@ -869,12 +717,7 @@ function populateProjectForm(proj) {
   form.elements['confidentiality_level'].value = normalizeProjectVisibility(proj.confidentiality_level || 'public');
   form.elements['department_id'].value = proj.department_id || '';
   updateDepartmentVisibility();
-
-  if (proj.created_by) {
-    createdBySelect.value = proj.created_by;
-  } else {
-    createdBySelect.value = '';
-  }
+  setProjectAuditFields(proj);
 }
 
 function getProjectSnapshotFromForm() {
@@ -890,8 +733,9 @@ function getProjectSnapshotFromForm() {
     department_id: form.elements['department_id'].value || null,
     department_name: getSelectedOptionText(departmentSelect),
     lead_name: getSelectedOptionText(leadSelect),
-    created_by: createdBySelect.value || null,
-    created_by_name: currentProject?.created_by_name || ''
+    created_by: currentProject?.created_by || createdByInput?.dataset.userId || null,
+    created_by_name: createdByInput?.value || currentProject?.created_by_name || '',
+    created_at: currentProject?.created_at || null
   };
 }
 
@@ -1040,9 +884,9 @@ function duplicateProject(proj) {
   resetProjectAccessSection();
   resetProjectParticipantsSection();
 
-  createdBySelect.value = '';
   leadSelect.value = '';
   currentProjectLeadId = null;
+  setProjectAuditFields(null);
 
   showForm();
   renderProjectStickyHeader();
@@ -1122,7 +966,6 @@ function populateProjectDepartmentFilter() {
 
 // Refresh user options without losing current selections
 async function loadUsers() {
-  const prevCreated = createdBySelect.value;
   const prevLead = leadSelect.value;
   
   const res = await fetch('/api/users');
@@ -1134,25 +977,16 @@ async function loadUsers() {
 
   currentUsers = await res.json();
   
-  createdBySelect.replaceChildren(new Option(
-    window.BADB_AUTH?.getAuditUserPlaceholder?.() || '— автоматически —',
-    ''
-  ));
   leadSelect.innerHTML = '<option value="">— выбрать пользователя —</option>';
-  
-  currentUsers.forEach(u => {
-    createdBySelect.add(new Option(u.name, u.user_id));
-  });
 
   currentUsers.filter(u => u.active).forEach(u => {
     leadSelect.add(new Option(u.name, u.user_id));
   });
   
-  createdBySelect.value = prevCreated;
   leadSelect.value = prevLead;
   populateProjectLeadFilter();
-  populateAccessUserSelect();
   populateParticipantUserSelect();
+  setProjectAuditFields(currentProject);
   if (allProjects.length) renderFilteredProjects();
   renderProjectStickyHeader();
 }
@@ -1186,28 +1020,17 @@ leadSelect.addEventListener('focus', () => {
   loadUsers().catch(err => showStatus(err.message, true, { target: 'page' }));
 });
 leadSelect.addEventListener('change', () => {
-  if (!projectAccessSection.hidden) {
-    renderProjectUserAccess();
-  }
+  renderProjectParticipants();
   renderProjectStickyHeader();
-});
-createdBySelect.addEventListener('focus', () => {
-  loadUsers().catch(err => showStatus(err.message, true, { target: 'page' }));
 });
 departmentSelect.addEventListener('focus', () => {
   loadDepartments().catch(err => showStatus(err.message, true, { target: 'page' }));
 });
 confidentialitySelect.addEventListener('change', () => {
   updateDepartmentVisibility();
-  if (!projectAccessSection.hidden) {
-    renderProjectUserAccess();
-  }
   renderProjectStickyHeader();
 });
 departmentSelect.addEventListener('change', () => {
-  if (!projectAccessSection.hidden) {
-    renderProjectUserAccess();
-  }
   renderProjectStickyHeader();
 });
 
@@ -1237,6 +1060,7 @@ addInput.addEventListener('keydown', (e) => {
   updateDepartmentVisibility();
   resetProjectAccessSection();
   resetProjectParticipantsSection();
+  setProjectAuditFields(null);
   
   showForm();
   
@@ -1366,26 +1190,6 @@ async function deleteCurrentProject() {
 if (deleteProjectBtn) {
   deleteProjectBtn.addEventListener('click', deleteCurrentProject);
 }
-
-grantUserAccessBtn.addEventListener('click', async () => {
-  if (!currentId) return;
-
-  const userId = projectAccessUserSelect.value;
-  if (!userId) {
-    showStatus('Выберите пользователя', true);
-    return;
-  }
-
-  try {
-    await grantUserAccess(currentId, Number(userId), projectUserAccessLevel.value);
-    projectAccessUserSelect.value = '';
-    projectUserAccessLevel.value = 'admin';
-    showStatus('Администратор проекта добавлен');
-    await loadProjectAccess();
-  } catch (err) {
-    showStatus(err.message, true);
-  }
-});
 
 async function handleAddProjectParticipant() {
   if (!currentId) return;

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "public/js/**/*.js",
-  "updatedAt": "2026-05-10",
+  "updatedAt": "2026-06-02",
   "normalization": {
     "pathParams": ":param",
     "query": "?:query"
@@ -750,7 +750,7 @@
     {
       "path": "/api/users",
       "methods": ["GET", "POST"],
-      "auth": "GET currently open; POST auth plus admin/lead",
+      "auth": "GET auth; POST auth plus admin/lead",
       "request": "GET none; POST user form payload",
       "response": "user list or created user JSON",
       "sources": [
@@ -766,9 +766,17 @@
       ]
     },
     {
+      "path": "/api/users/:param/projects",
+      "methods": ["GET"],
+      "auth": "auth plus admin/self",
+      "request": "none",
+      "response": "projects where the user is listed in project_participants",
+      "sources": ["public/js/users.js"]
+    },
+    {
       "path": "/api/users/:param",
       "methods": ["PUT", "DELETE"],
-      "auth": "PUT auth plus admin/lead; DELETE auth plus admin",
+      "auth": "PUT auth plus admin/self; DELETE auth plus admin/self",
       "request": "PUT user update payload; DELETE none",
       "response": "updated user JSON or delete status",
       "sources": ["public/js/users.js"]

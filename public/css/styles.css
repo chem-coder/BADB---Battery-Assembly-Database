@@ -92,6 +92,18 @@ body[data-page] [hidden] {
   display: none !important;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body[data-page] h1 {
   color: var(--badb-text-strong);
   letter-spacing: -0.01em;
@@ -560,6 +572,132 @@ body[data-page="users"] .user-filter-summary {
     grid-column: 1;
     grid-row: 3;
     width: 100%;
+  }
+}
+
+body[data-page="users"] .user-form-compact {
+  --user-form-column-gap: 1.25rem;
+  --user-form-row-gap: 0.65rem;
+  display: block;
+  max-width: 100%;
+}
+
+body[data-page="users"] .user-form-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: var(--user-form-row-gap) var(--user-form-column-gap);
+  max-width: 100%;
+  width: fit-content;
+}
+
+body[data-page="users"] .user-form-line + .user-form-line {
+  margin-top: var(--user-form-row-gap);
+}
+
+body[data-page="users"] .user-form-line .form-field {
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+body[data-page="users"] .user-name-field {
+  width: 26rem;
+}
+
+body[data-page="users"] .user-login-field {
+  width: 18rem;
+}
+
+body[data-page="users"] .user-department-field {
+  width: 31rem;
+}
+
+body[data-page="users"] .user-position-field {
+  width: 38rem;
+}
+
+body[data-page="users"] .user-role-field {
+  width: 13rem;
+}
+
+body[data-page="users"] .user-status-field {
+  width: 13rem;
+}
+
+body[data-page="users"] .user-form-line input,
+body[data-page="users"] .user-form-line select,
+body[data-page="users"] .user-form-line button {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+body[data-page="users"] .user-password-field {
+  width: 22rem;
+}
+
+body[data-page="users"] .user-password-action {
+  width: 18rem;
+}
+
+body[data-page="users"] .user-projects-section {
+  box-sizing: border-box;
+  margin-top: 0.9rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+body[data-page="users"] .user-projects-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+  min-width: 42rem;
+}
+
+body[data-page="users"] .user-projects-table th,
+body[data-page="users"] .user-projects-table td {
+  border-bottom: 1px solid var(--badb-border-soft);
+  padding: 0.42rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+body[data-page="users"] .user-projects-table th {
+  color: #536173;
+  font-weight: 600;
+}
+
+body[data-page="users"] .user-projects-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+body[data-page="users"] .user-project-name {
+  font-weight: 600;
+}
+
+body[data-page="users"] .user-project-muted {
+  color: #667085;
+}
+
+body[data-page="users"] .user-project-empty {
+  color: #667085;
+}
+
+@media (max-width: 980px) {
+  body[data-page="users"] .user-form-line {
+    width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  body[data-page="users"] .user-form-line .form-field {
+    width: 100%;
+  }
+
+  body[data-page="users"] .user-projects-table {
+    font-size: 0.88rem;
   }
 }
 
@@ -1418,8 +1556,99 @@ body[data-page] .badb-lock-banner.visible {
   margin-top: 0.9rem;
 }
 
+.project-main-fieldset h2 {
+  margin: 0 0 0.8rem;
+}
+
+.project-form-line {
+  display: grid;
+  align-items: center;
+  gap: 0.55rem 0.7rem;
+  margin-top: 0.55rem;
+}
+
+.project-audit-line {
+  grid-template-columns: auto minmax(12rem, 1fr) minmax(10rem, 0.7fr);
+}
+
+.project-lead-line {
+  grid-template-columns: auto minmax(16rem, 28rem) auto;
+  justify-content: start;
+}
+
+.project-status-line {
+  grid-template-columns: auto minmax(10rem, 14rem) auto minmax(10rem, 14rem);
+  justify-content: start;
+}
+
+.project-form-line label,
+.project-team-add-line > label,
+.project-team-role-line label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.project-form-line input[disabled] {
+  background: #f6f8fb;
+  color: #465466;
+}
+
 .project-participant-add {
   margin-bottom: 0.6rem;
+}
+
+.project-team-add-line,
+.project-team-role-line {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.project-team-add-line {
+  flex-wrap: nowrap;
+}
+
+.project-team-role-line {
+  flex-wrap: wrap;
+}
+
+.project-team-role-line {
+  margin-top: 0.55rem;
+}
+
+body[data-page="projectsList"] .project-team-user-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 18rem;
+  flex: 1 1 26rem;
+}
+
+body[data-page="projectsList"] .project-team-user-field select {
+  width: auto;
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+body[data-page="projectsList"] .project-team-user-field .badb-current-user-button {
+  flex: 0 0 auto;
+  margin-left: 0;
+  white-space: nowrap;
+}
+
+#project-participant-access-level {
+  flex: 0 0 14rem;
+}
+
+#addProjectParticipantBtn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.project-team-role-line input {
+  width: min(100%, 38rem);
+  flex: 1 1 20rem;
 }
 
 .project-participants-table th:first-child,
@@ -1435,6 +1664,36 @@ body[data-page] .badb-lock-banner.visible {
   display: flex;
   gap: 0.35rem;
   flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  .project-audit-line,
+  .project-lead-line,
+  .project-status-line {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .project-form-line label,
+  .project-team-add-line > label,
+  .project-team-role-line label {
+    white-space: normal;
+  }
+
+  .project-team-add-line {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  body[data-page="projectsList"] .project-team-user-field {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  #project-participant-access-level,
+  #addProjectParticipantBtn {
+    flex: 1 1 100%;
+  }
 }
 
 .access-expired {

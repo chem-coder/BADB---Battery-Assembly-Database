@@ -48,8 +48,8 @@ function formatProjectStatus(value) {
 function formatVisibility(value) {
   const map = {
     public: 'открытый',
-    department: 'секретный',
-    confidential: 'секретный'
+    department: 'ограниченный',
+    confidential: 'ограниченный'
   };
 
   return map[value] || value || '—';
@@ -326,7 +326,7 @@ function renderReport(report) {
       ${renderRow('Тип проекта', formatVisibility(project.confidentiality_level))}
       ${renderRow('Руководитель', project.lead_name || '—')}
       ${renderRow('Создал', project.created_by_name || '—')}
-      ${renderRow('Создан', formatDateTime(project.created_at), { numeric: true })}
+      ${renderRow('Создан', formatDateTime(project.created_at))}
     </div>
 
     <section class="report_section">
@@ -334,8 +334,8 @@ function renderReport(report) {
       ${renderFieldGrid([
         renderRow('Название', project.name || '—'),
         renderRow('Статус', formatProjectStatus(project.status)),
-        renderRow('Дата начала', formatDate(project.start_date), { numeric: true }),
-        renderRow('Плановая дата', formatDate(project.due_date), { numeric: true }),
+        renderRow('Дата начала', formatDate(project.start_date)),
+        renderRow('Плановая дата', formatDate(project.due_date)),
         renderRow(
           'Описание',
           hasMeaningfulText(project.description) ? project.description : '—',

@@ -1,9 +1,9 @@
 # Users
 
 Created: 2026-05-09
-Edited: 2026-06-01
+Edited: 2026-06-02
 Status: current
-Verified against code: 2026-06-01
+Verified against code: 2026-06-02
 
 Source paths:
 
@@ -21,6 +21,12 @@ behavior.
 Primary table:
 
 - `users`
+
+Related project tables used by the user profile view:
+
+- `project_participants`
+- `projects`
+- `user_project_access`
 
 Current user-facing fields:
 
@@ -50,6 +56,7 @@ All current user routes require `auth`.
 Current route families:
 
 - `GET /api/users`
+- `GET /api/users/:id/projects`
 - `POST /api/users`
 - `PUT /api/users/:id`
 - `DELETE /api/users/:id`
@@ -83,6 +90,13 @@ Delete rules:
 - dependency conflicts block deletion when existing records still reference the
   user.
 
+`GET /api/users/:id/projects` returns projects where the user is actually
+listed in `project_participants`. It does not include merely visible public
+projects. Admins may view any user's project list; ordinary users may view only
+their own. The returned access level is `admin` for the project lead, otherwise
+the active explicit `user_project_access` level when present, otherwise `view`
+from participant membership.
+
 ## Current Page Behavior
 
 Current behavior:
@@ -91,8 +105,16 @@ Current behavior:
 - list row summary opens an existing user record;
 - an opened record has a sticky header with compact metadata, save, exit,
   delete when allowed, dirty flag, and inline status;
+- the opened record form is arranged as compact rows: name/login,
+  department/position, then role/status/password controls;
 - fields are disabled when the current user cannot manage the opened user;
 - edit mode hides password fields until the reset-password action is chosen;
+- edit mode shows a `Проекты` fieldset for admins or for the current user's own
+  record, listing projects from `project_participants`;
+- the `Проекты` table shows project name, status, functional role, access
+  level, lead, and dates;
+- when the current user opens their own record, the filters and user list below
+  the record are hidden until they exit the record;
 - save keeps the user record open;
 - delete lives inside the opened record header;
 - users have no list-level print or duplicate action;
