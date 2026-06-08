@@ -237,8 +237,10 @@ timezone-sensitive timestamps:
   compares that string to server-local today as `YYYY-MM-DD`. Do not validate
   date-only fields with `new Date(input) > new Date()`.
 
-The tape page (`public/js/1-tapes.js`, `formatDateInputValue` /
-`getTodayDateInputValue`) is the reference implementation. The backend rule lives
+This rule applies to every vanilla page with a date-only creation field. The tape
+page (`public/js/1-tapes.js`, `formatDateInputValue` / `getTodayDateInputValue`)
+is the reference implementation, and `public/js/2-electrodes.js` and
+`public/js/3-batteries.js` use the same corrected helpers. The backend rule lives
 in the `normalizeOptional*Date` helpers in `services/tapeCatalogService.js`,
 `services/electrodeCutBatchService.js`, and `services/batteryCatalogService.js`.
 

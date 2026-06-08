@@ -313,9 +313,24 @@
 
     function formatDateInputValue(value) {
       if (!value) return '';
-      const date = new Date(value);
+
+      // Date-only fields must stay date-only. Never round-trip a YYYY-MM-DD value
+      // through `new Date()` + local getters: a date-only string parses as UTC
+      // midnight, and the local getters can shift it across a day boundary on some
+      // devices/timezones (the Windows-vs-Mac "future date" bug). Take the leading
+      // YYYY-MM-DD date portion verbatim when present (covers both plain dates and
+      // ISO timestamps from the API).
+      const text = String(value).trim();
+      const isoDateMatch = text.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (isoDateMatch) {
+        return isoDateMatch[1];
+      }
+
+      // Fallback only for non-ISO inputs (e.g. a Date object passed in): derive the
+      // calendar date from local components.
+      const date = new Date(text);
       if (!Number.isFinite(date.getTime())) {
-        return /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? String(value) : '';
+        return '';
       }
 
       const year = date.getFullYear();
@@ -325,7 +340,13 @@
     }
 
     function getTodayDateInputValue() {
-      return formatDateInputValue(new Date());
+      // Build today's date from local calendar components directly (mirrors the
+      // backend's getTodayDateString). Do not parse/convert through UTC.
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
 
     function getCurrentElectrodeSectionSnapshot(sectionKey) {
