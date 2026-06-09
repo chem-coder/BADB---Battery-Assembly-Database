@@ -1,9 +1,9 @@
 # Vanilla Reference Pages
 
 Created: 2026-05-09
-Edited: 2026-05-09
+Edited: 2026-06-09
 Status: current
-Verified against code: 2026-05-09
+Verified against code: 2026-06-09
 
 Source paths:
 
@@ -107,8 +107,10 @@ Duplicate is implemented only where the page exposes it.
 
 Current behavior:
 
-- Tapes duplicate is a client-side unsaved starter copy; it copies name, notes,
-  and project links only.
+- Tapes duplicate is a client-side unsaved create-mode draft. It restores useful
+  source tape setup/workflow fields into the draft, but does not create a record
+  or copy downstream/depleted/dry-box status until the user explicitly saves the
+  appropriate sections.
 - Projects duplicate is a client-side unsaved copy without access grants.
 - Recipes duplicate is a client-side unsaved copy of the recipe form and lines;
   `POST /api/recipes/:id/duplicate` also exists but is not used by the current

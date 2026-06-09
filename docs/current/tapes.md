@@ -1,9 +1,9 @@
 # Tapes
 
 Created: 2026-05-09
-Edited: 2026-05-25
+Edited: 2026-06-09
 Status: current
-Verified against code: 2026-05-25
+Verified against code: 2026-06-09
 
 Source paths:
 
@@ -199,9 +199,17 @@ Current page behavior:
   labels, with full created/updated wording in the tooltip;
 - list row summary opens an existing tape and restores saved steps;
 - list-level print opens the tape report;
-- list-level duplicate creates an unsaved starter copy with copied name, notes,
-  and project links only;
+- list-level duplicate loads the source tape restore data and opens an unsaved
+  create-mode draft with copied general info, recipe/material selections,
+  actuals, operators, timestamps, comments, and workflow technical fields where
+  available;
 - duplicate is client-side and does not call a backend duplicate endpoint;
+- duplicate does not immediately write to the database; the tape row is created
+  only after the user clicks Create, and copied recipe/workflow sections remain
+  unsaved until their section save buttons are used;
+- duplicate does not copy tape identity/audit metadata, downstream electrodes or
+  batteries, depletion status, or dry-box status; dry-box availability starts as
+  `out_of_dry_box`;
 - the opened tape has a sticky header with tape id/name, metadata, dirty flag,
   save/create, print, exit, delete, and inline save status;
 - the record name is edited by clicking the title;

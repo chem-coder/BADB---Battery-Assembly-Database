@@ -39,6 +39,10 @@ const tapePageState = window.tapePageState = {
   form: {
     mode: null,
     isRestoringTape: false,
+    isDuplicateDraft: false,
+    isDuplicateReview: false,
+    duplicateSourceTapeId: null,
+    duplicateCopiedStepCodes: [],
     fields: {
       name: '',
       notes: '',
@@ -373,6 +377,19 @@ function clearCurrentTapeSelection() {
   setCurrentTape(null);
 }
 
+function clearDuplicateDraftState() {
+  state.form.isDuplicateDraft = false;
+  state.form.isDuplicateReview = false;
+  state.form.duplicateSourceTapeId = null;
+  state.form.duplicateCopiedStepCodes = [];
+}
+
+function promoteDuplicateDraftToReview() {
+  state.form.isDuplicateDraft = false;
+  state.form.isDuplicateReview = true;
+  state.form.duplicateSourceTapeId = null;
+}
+
 function setSectionVisibility(sectionId, isVisible, { render = true } = {}) {
   state.ui.sections.visibility[sectionId] = Boolean(isVisible);
   if (render) renderSectionState();
@@ -497,6 +514,39 @@ function markAllSavedSnapshotsCurrent() {
   });
 }
 
+function markDuplicateDraftSnapshotsFromDefaults() {
+  const defaultFields = getDefaultTopLevelFormFields();
+  const defaultWorkflow = getDefaultWorkflowState();
+
+  state.ui.savedSnapshots.general_info = serializeSnapshot({
+    name: defaultFields.name || '',
+    notes: defaultFields.notes || '',
+    item_created_at: defaultFields.item_created_at || '',
+    project_id: defaultFields.project_id || '',
+    project_ids: defaultFields.project_ids || [],
+    tape_type: defaultFields.tape_type || '',
+    tape_recipe_id: defaultFields.tape_recipe_id || '',
+    calc_mode: defaultFields.calc_mode || 'from_active_mass',
+    target_mass_g: defaultFields.target_mass_g || ''
+  });
+
+  state.ui.savedSnapshots.recipe_materials = serializeSnapshot({
+    selectedInstancesByLineId: {}
+  });
+
+  [
+    'drying_am',
+    'weighing',
+    'mixing',
+    'coating',
+    'drying_tape',
+    'calendering',
+    'drying_pressed_tape'
+  ].forEach((stepCode) => {
+    state.ui.savedSnapshots[stepCode] = serializeSnapshot(defaultWorkflow[stepCode]);
+  });
+}
+
 function refreshDirtyFromSnapshots() {
   if (state.form.isRestoringTape) return;
 
@@ -530,6 +580,28 @@ function setFieldsetDisabled(fieldsetId, shouldDisable, lockMessage = '') {
 
 function renderTapeWorkflowProgressionState() {
   const hasTape = Boolean(state.selection.currentTapeId);
+
+  if (state.form.isDuplicateDraft || state.form.isDuplicateReview) {
+    const hasRecipe = Boolean(state.form.fields.tape_recipe_id);
+    const copiedSteps = new Set(state.form.duplicateCopiedStepCodes || []);
+
+    setSectionsVisibility({
+      '0-general-info': true,
+      '0-tape-recipe-materials': hasRecipe,
+      '0-drying_materials': hasRecipe,
+      '1-slurry': hasRecipe,
+      '2-tape': hasRecipe,
+      '3-storage': state.form.isDuplicateReview && copiedSteps.has('drying_pressed_tape'),
+      'calculations-expanded': hasRecipe
+    }, { render: true });
+
+    setFieldsetDisabled('1-mixing', false);
+    setFieldsetDisabled('2-coating', false);
+    setFieldsetDisabled('2-calendering', false);
+    setFieldsetDisabled('2b-drying_pressed_tape', false);
+    return;
+  }
+
   const recipeSaved = hasSavedStep('recipe_materials');
   const dryingAmSaved = hasSavedStep('drying_am');
   const weighingSaved = hasSavedStep('weighing');
@@ -772,6 +844,7 @@ function mergeRestoringActualsIntoState(restoringActuals = []) {
 function resetForm() {
   form.reset();
   
+  clearDuplicateDraftState();
   resetTopLevelFormState();
   resetWorkflowState();
   resetSectionState();
@@ -3517,21 +3590,21 @@ function renderTapesList() {
     duplicateBtn.title = 'Дублировать ленту';
     duplicateBtn.setAttribute('aria-label', `Дублировать ленту #${t.tape_id}`);
     
-    duplicateBtn.onclick = () => {
-      clearCurrentTapeSelection();
-      setMode('create');
-      clearCurrentTapeSelection();
-      
-      const copyName = t.name + ' (копия)';
-      resetSectionState();
-      setTopLevelFormState({
-        ...getDefaultTopLevelFormFields(),
-        name: copyName,
-        notes: t.notes || '',
-        project_id: getTapeProjectIds(t)[0] || '',
-        project_ids: getTapeProjectIds(t)
-      });
-      setNameEditing(false);
+    duplicateBtn.onclick = async () => {
+      if (duplicateBtn.dataset.loading === 'true') return;
+
+      duplicateBtn.dataset.loading = 'true';
+      duplicateBtn.disabled = true;
+
+      try {
+        await duplicateTapeRecord(t);
+      } catch (err) {
+        console.error(err);
+        showStatus('Ошибка дублирования ленты', true);
+      } finally {
+        delete duplicateBtn.dataset.loading;
+        duplicateBtn.disabled = false;
+      }
     };
     
     actions.appendChild(printRowBtn);
@@ -3551,6 +3624,62 @@ function getTapePrintReportUrl(tapeId) {
 function openTapePrintReport(tapeId) {
   if (!tapeId) return;
   window.BADB_AUTH?.openAuthenticatedWindow(getTapePrintReportUrl(tapeId));
+}
+
+function getTapeDuplicateDraftName(tape) {
+  const sourceName = String(tape?.name || '').trim() || 'Лента';
+  return `${sourceName} (копия)`;
+}
+
+function buildTapeDuplicateDraftTape(tape) {
+  return {
+    ...tape,
+    tape_id: null,
+    name: getTapeDuplicateDraftName(tape),
+    created_by: '',
+    created_by_name: '',
+    created_at: null,
+    updated_at: null,
+    updated_by: null,
+    updated_by_name: '',
+    availability_status: 'out_of_dry_box',
+    workflow_status_code: null,
+    workflow_status_label: 'Черновик копии',
+    workflow_complete: false
+  };
+}
+
+function hasRestoredStep(row) {
+  return Boolean(row && typeof row === 'object' && Object.keys(row).length);
+}
+
+function getDuplicateCopiedStepCodes(restoreData) {
+  const copiedCodes = new Set();
+  const { tape, stepsByCode = {}, actuals = [] } = restoreData || {};
+
+  if (tape?.tape_recipe_id || actuals.length) {
+    copiedCodes.add('recipe_materials');
+  }
+
+  Object.entries(stepsByCode).forEach(([code, row]) => {
+    if (hasRestoredStep(row)) {
+      copiedCodes.add(code);
+    }
+  });
+
+  if (actuals.length) {
+    copiedCodes.add('weighing');
+  }
+
+  return Array.from(copiedCodes);
+}
+
+async function duplicateTapeRecord(tape) {
+  const restoreData = await fetchTapeRestoreData(tape);
+  normalizeTapeRestoreDataIntoState(restoreData, { asDuplicateDraft: true });
+  await renderTapeRestoreFromState(restoreData, { asDuplicateDraft: true });
+  window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
+  showStatus('Черновик копии открыт. Лента ещё не создана.');
 }
 
 async function fetchTapeRestoreData(tape) {
@@ -3611,7 +3740,7 @@ function normalizeDryBoxRestoreState(dryBoxState) {
     started_at_time: started.time,
     removed_at_date: removed.date,
     removed_at_time: removed.time,
-    temperature_c: dryBoxState.temperature_c ?? '80',
+    temperature_c: dryBoxState.temperature_c ?? '60',
     atmosphere: dryBoxState.atmosphere ?? 'vacuum',
     other_parameters: dryBoxState.other_parameters ?? '',
     comments: dryBoxState.comments ?? '',
@@ -3621,12 +3750,23 @@ function normalizeDryBoxRestoreState(dryBoxState) {
   };
 }
 
-function normalizeTapeRestoreDataIntoState(restoreData) {
+function normalizeTapeRestoreDataIntoState(restoreData, options = {}) {
   const { tape, stepsByCode, actuals, dryBoxState } = restoreData;
   const defaults = getDefaultWorkflowState();
+  const asDuplicateDraft = Boolean(options.asDuplicateDraft);
+  const draftTape = asDuplicateDraft ? buildTapeDuplicateDraftTape(tape) : null;
 
   state.form.isRestoringTape = true;
-  setCurrentTape(tape, { mode: 'edit', render: false });
+  if (asDuplicateDraft) {
+    state.form.isDuplicateDraft = true;
+    state.form.isDuplicateReview = false;
+    state.form.duplicateSourceTapeId = Number(tape?.tape_id) || null;
+    state.form.duplicateCopiedStepCodes = getDuplicateCopiedStepCodes(restoreData);
+    setCurrentTape(draftTape, { mode: 'create', render: false });
+  } else {
+    clearDuplicateDraftState();
+    setCurrentTape(tape, { mode: 'edit', render: false });
+  }
   setNameEditing(false, { render: false });
 
   setSectionsVisibility({
@@ -3635,18 +3775,30 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
     '0-drying_materials': true,
     '1-slurry': true,
     '2-tape': true,
-    '3-storage': Boolean(stepsByCode.drying_pressed_tape)
+    '3-storage': asDuplicateDraft ? false : Boolean(stepsByCode.drying_pressed_tape)
   }, { render: false });
   setSectionsOpen(
-    getSectionOpenStateForWorkflowStatus(tape?.workflow_status_code || null),
+    asDuplicateDraft
+      ? {
+        '0-general-info': true,
+        '0-tape-recipe-materials': true,
+        '0-drying_materials': false,
+        '1-slurry': false,
+        '2-tape': false,
+        '3-storage': false,
+        'calculations-expanded': false
+      }
+      : getSectionOpenStateForWorkflowStatus(tape?.workflow_status_code || null),
     { render: false }
   );
 
   setTopLevelFormState({
-    name: (tape?.name || '').trim(),
+    name: asDuplicateDraft ? draftTape.name : (tape?.name || '').trim(),
     notes: tape?.notes || '',
-    created_by: tape?.created_by || '',
-    item_created_at: formatDateInputValue(tape?.item_created_at || tape?.created_at),
+    created_by: asDuplicateDraft ? '' : tape?.created_by || '',
+    item_created_at: asDuplicateDraft
+      ? formatDateInputValue(tape?.item_created_at) || getTodayDateInputValue()
+      : formatDateInputValue(tape?.item_created_at || tape?.created_at),
     project_id: getTapeProjectIds(tape)[0] || '',
     project_ids: getTapeProjectIds(tape),
     tape_type: tape?.role || '',
@@ -3668,7 +3820,10 @@ function normalizeTapeRestoreDataIntoState(restoreData) {
   setWorkflowStep('drying_am', normalizeDryingRestoreStep(stepsByCode.drying_am));
   setWorkflowStep('drying_tape', normalizeDryingRestoreStep(stepsByCode.drying_tape));
   setWorkflowStep('drying_pressed_tape', normalizeDryingRestoreStep(stepsByCode.drying_pressed_tape));
-  setWorkflowStep('maintenance_dry_box', normalizeDryBoxRestoreState(dryBoxState));
+  setWorkflowStep(
+    'maintenance_dry_box',
+    asDuplicateDraft ? defaults.maintenance_dry_box : normalizeDryBoxRestoreState(dryBoxState)
+  );
 
   if (stepsByCode.weighing) {
     const { date, time } = splitIsoToDateTime(stepsByCode.weighing.started_at);
@@ -3786,8 +3941,9 @@ function applyDryBoxStateToUi(stateRow) {
   patchCurrentTapeAvailability(normalized.availability_status);
 }
 
-async function renderTapeRestoreFromState(restoreData) {
-  const currentName = (restoreData.tape?.name || '').trim();
+async function renderTapeRestoreFromState(restoreData, options = {}) {
+  const asDuplicateDraft = Boolean(options.asDuplicateDraft);
+  const currentName = (state.form.fields.name || restoreData.tape?.name || '').trim();
 
   await loadRecipesDropdown({
     selectedValue: state.form.fields.tape_recipe_id,
@@ -3810,6 +3966,12 @@ async function renderTapeRestoreFromState(restoreData) {
   renderWorkflowState();
 
   refreshDelayState();
+
+  if (asDuplicateDraft) {
+    markDuplicateDraftSnapshotsFromDefaults();
+    refreshDirtyFromSnapshots();
+    renderTapeForm();
+  }
 
   if (!currentName) {
     nameInput.focus();
@@ -4618,6 +4780,7 @@ addInput.addEventListener('keydown', (e) => {
   const name = addInput.value.trim();
   if (!name) return;
   
+  clearDuplicateDraftState();
   setMode('create');
   clearCurrentTapeSelection();
   setTopLevelFormState({
@@ -4668,6 +4831,7 @@ saveBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('s
   
   try {
     if (state.form.mode === 'create') {
+      const wasDuplicateDraft = Boolean(state.form.isDuplicateDraft);
       const created = await createTape(data);
       
       await loadTapes();
@@ -4680,9 +4844,19 @@ saveBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('s
         item_created_at: formatDateInputValue(createdFromList?.item_created_at || createdFromList?.created_at)
       });
       
-      markAllSavedSnapshotsCurrent();
+      if (wasDuplicateDraft) {
+        promoteDuplicateDraftToReview();
+        markSavedSnapshot('general_info');
+      } else {
+        markAllSavedSnapshotsCurrent();
+      }
       refreshDirtyFromSnapshots();
-      showInlineStatus('saveBtn', 'Изменения сохранены');
+      showInlineStatus(
+        'saveBtn',
+        wasDuplicateDraft
+          ? 'Лента создана. Скопированные разделы пока не сохранены'
+          : 'Изменения сохранены'
+      );
       return;
     }
     

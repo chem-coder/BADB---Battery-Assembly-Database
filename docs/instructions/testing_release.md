@@ -115,6 +115,46 @@ This guard prevents accidental destructive work against the real database.
 Do not point the smoke harness at the Windows/lab pilot database; it is a
 throwaway restored-copy check, not proof that the lab database is migrated.
 
+Smoke uses the documented dev bypass (`AUTH_BYPASS=true`) against a throwaway
+database. It is not a substitute for authenticated E2E/manual runs against the
+real local `badb_app_v1` database.
+
+## E2E / AI Manual Test Login
+
+For AI-assisted or manual UI checks against the real local server, use the
+dedicated test app account through the normal login flow. Do not hardcode
+credentials in committed files.
+
+1. Copy `.env.example` to `.env.local` (gitignored).
+2. Set:
+
+```bash
+E2E_TEST_USERNAME=...
+E2E_TEST_PASSWORD=...
+# optional:
+# E2E_BASE_URL=http://localhost:3003
+```
+
+3. Start the real local server (`npm start` on port 3003).
+4. Log in and persist a reusable session token:
+
+```bash
+npm run e2e:login
+```
+
+This writes gitignored `.e2e-session.json` with `{ baseUrl, token, user }`.
+The scripts never print credentials or the token.
+
+5. Run targeted API-backed E2E checks, for example the tape duplicate harness:
+
+```bash
+npm run e2e:tape-duplicate
+```
+
+Browser/manual UI checks still require opening the vanilla page while the saved
+session token is present in browser `localStorage` (`badb_auth_token`). The E2E
+login scripts authenticate through `/api/auth/login`; they do not bypass auth.
+
 ## Smoke Migration Coverage
 
 The current smoke harness applies these migrations after restoring the dump, in

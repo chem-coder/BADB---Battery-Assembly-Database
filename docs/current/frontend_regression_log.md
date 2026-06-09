@@ -1,7 +1,7 @@
 # Frontend Regression Log
 
 Created: 2026-06-08
-Edited: 2026-06-08
+Edited: 2026-06-09
 Status: current
 
 This log records verified bugs where the user-visible failure was caused by
@@ -21,6 +21,7 @@ Use it as an evidence log, not as a blame document. Each entry should preserve:
 
 | Date | Area | Symptom | Root Cause | Status |
 |---|---|---|---|---|
+| 2026-06-09 | Tapes | Duplicate opened a thin starter copy instead of a useful workflow draft | Frontend duplicate state used only the list row object and April 3 state reset removed accidental restored-form carryover | Fixed with explicit restore-to-draft duplicate path |
 | 2026-06-08 | Tapes | Today's creation date could be rejected as future on a Windows lab PC | Frontend parsed a date-only `YYYY-MM-DD` value as a JavaScript timestamp, then re-serialized it using local getters | Fixed in tapes; related frontend patterns flagged |
 
 ## 2026-06-08: Tape Creation Date Shifted By Frontend Timezone Parsing
@@ -117,6 +118,91 @@ of mixing unrelated changes into the tape fix.
 - compare normalized date strings;
 - do not validate date-only fields by converting them through timezone-sensitive
   JavaScript timestamps.
+
+## 2026-06-09: Tape Duplicate No Longer Preserves Restored Workflow Draft Fields
+
+Source paths:
+
+- `public/js/1-tapes.js`
+- `docs/current/tapes.md`
+- `docs/current/vanilla_reference_pages.md`
+
+### Symptom
+
+Duplicating a tape from the vanilla Tapes list opened an unsaved create-mode
+draft that copied only name, notes, and project links. Useful source tape setup
+and workflow fields such as recipe, material instances, actual weighed values,
+operators, timestamps, comments, and technical parameters were not restored into
+the duplicate draft.
+
+### Backend Finding
+
+The backend restore, create, and section-save endpoints behaved as designed:
+
+- source tape edit restore data was already available through existing GET
+  endpoints;
+- `POST /api/tapes` correctly creates only a new tape header/general row;
+- recipe actuals and workflow steps correctly require a real `tape_id` and are
+  saved through their section endpoints.
+
+The failure was frontend duplicate state construction, not backend validation or
+database behavior.
+
+### Root Cause
+
+The duplicate button used only the already-loaded list row object. That list row
+does not contain the full workflow payload.
+
+Git history shows no committed deterministic full duplicate implementation.
+Before `8e432fc01454530c9c1656c511a153a728e953c6` on 2026-04-03, duplicate did
+not explicitly reset the whole restored form, so users could benefit from
+accidental restored-form carryover after opening a source tape. The April 3
+state reset made the form state cleaner but removed that accidental carryover;
+duplicate never gained an explicit restore-to-draft path.
+
+### Fix
+
+Tape duplicate now loads source restore data, normalizes it into a sanitized
+create-mode draft, and renders copied values visibly without writing anything to
+the database.
+
+The duplicate draft:
+
+- clears `currentTapeId`;
+- stores the source tape id only as frontend debug/draft metadata;
+- copies useful setup/workflow fields where available;
+- clears tape identity and audit metadata;
+- starts dry-box availability as `out_of_dry_box`;
+- leaves copied recipe/workflow sections dirty until the user saves them.
+
+Creating the duplicated tape row marks only General Info saved. Copied material
+instances, actuals, and workflow steps remain unsaved because they can only be
+persisted safely after the new `tape_id` exists.
+
+### Checks
+
+Checks reported for this fix:
+
+- `node --check public/js/1-tapes.js` - PASS
+- `npm run contract:vanilla` - PASS
+- `git diff --check` - PASS
+- `npm run smoke:vanilla` - PASS, 279 checks, 0 failures
+- manual browser verification - not completed in this pass; the first browser
+  run hit an old/thin duplicate state from the already-running server, and the
+  server stopped responding before the updated asset could be verified
+
+### Follow-Up
+
+The current duplicate implementation intentionally reuses existing edit restore
+normalization. Any save/restore mismatches in edit restore, such as fields that
+are displayed but not saved by a section endpoint, should be audited separately
+from this duplicate fix.
+
+### Prevention
+
+When a list action promises duplication of nested workflow data, it should load
+the same restore payload used by edit/open behavior and then sanitize identity,
+audit, lifecycle, and downstream-link fields explicitly.
 
 ## Entry Template
 
