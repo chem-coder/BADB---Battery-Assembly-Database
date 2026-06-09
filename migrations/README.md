@@ -156,6 +156,10 @@ Full timeline is in the git log. High-level:
 - `d042_project_leads_as_team_members` — backfills existing project leads into
   `project_participants` and ensures each current lead has direct `admin`
   project access.
+- `d043_enable_multi_battery_electrode_sources` — promotes
+  `battery_electrode_sources` from one row per battery/role to multiple rows
+  per role with a surrogate row ID, `sort_order`, and exactly one primary row
+  per role.
 
 ## Check migration ledger
 
@@ -174,7 +178,7 @@ as part of the migration file.
 Expected stream counts for a current migrated database:
 
 ```text
-dalia = 30
+dalia = 31
 dima = 21
 ```
 

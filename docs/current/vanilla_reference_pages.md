@@ -1,9 +1,9 @@
 # Vanilla Reference Pages
 
 Created: 2026-05-09
-Edited: 2026-06-09
+Edited: 2026-06-10
 Status: current
-Verified against code: 2026-06-09
+Verified against code: 2026-06-10
 
 Source paths:
 
@@ -155,3 +155,11 @@ Batteries have electrochemistry files documented in `docs/current/batteries.md`.
 
 Tapes, Projects, Recipes, Users, and Departments currently do not have file
 attachments.
+
+## Batteries Source Filters
+
+The Batteries electrode source section treats project and tape dropdowns as
+optional narrowing filters. A user may choose a compatible electrode cut batch
+first without selecting a tape. Depleted or written-off tapes that still have
+existing cut batches remain visible for this workflow, listed after available
+tapes under `--- Списанные / израсходованные ---` and labeled with their status.

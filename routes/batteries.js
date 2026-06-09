@@ -109,23 +109,27 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id/electrode-cut-batches', auth, async (req, res) => {
 
   const batteryId = Number(req.params.id);
-  const tapeId = Number(req.query.tape_id);
-  const selectedBatchIdRaw = req.query.selected_batch_id;
-  const selectedBatchId =
-    selectedBatchIdRaw == null || selectedBatchIdRaw === ''
+  const tapeId =
+    req.query.tape_id == null || req.query.tape_id === ''
       ? null
-      : Number(selectedBatchIdRaw);
+      : Number(req.query.tape_id);
+  const selectedBatchIdsRaw = req.query.selected_batch_ids || req.query.selected_batch_id || '';
+  const selectedBatchIds = String(selectedBatchIdsRaw)
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map(Number);
 
-  if (!Number.isInteger(batteryId) || !Number.isInteger(tapeId)) {
+  if (!Number.isInteger(batteryId) || (tapeId !== null && !Number.isInteger(tapeId))) {
     return res.status(400).json({ error: 'Некорректные battery_id или tape_id' });
   }
 
-  if (selectedBatchId !== null && !Number.isInteger(selectedBatchId)) {
-    return res.status(400).json({ error: 'Некорректный selected_batch_id' });
+  if (selectedBatchIds.some((selectedBatchId) => !Number.isInteger(selectedBatchId))) {
+    return res.status(400).json({ error: 'Некорректный selected_batch_ids' });
   }
 
   try {
-    res.json(await fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selectedBatchId));
+    res.json(await fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selectedBatchIds));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка загрузки совместимых партий электродов' });

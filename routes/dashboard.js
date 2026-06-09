@@ -281,7 +281,9 @@ router.get('/graph', auth, async (req, res) => {
         SELECT bt.battery_id, bt.project_id, bt.form_factor,
                bs.tape_id AS source_tape_id, bs.cut_batch_id AS source_batch_id
         FROM batteries bt
-        LEFT JOIN battery_electrode_sources bs ON bs.battery_id = bt.battery_id
+        LEFT JOIN battery_electrode_sources bs
+          ON bs.battery_id = bt.battery_id
+         AND bs.is_primary
         ${projectFilter ? 'WHERE bt.project_id = $1' : ''}
       `, projectFilter ? [projectFilter] : []),
       pool.query(`SELECT sep_id, name, structure_id, created_by FROM separators`),

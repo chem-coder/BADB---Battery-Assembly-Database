@@ -59,8 +59,11 @@ async function fetchBatteryStackContext(queryable, batteryId) {
 
   return {
     battery: batteryResult.rows[0],
-    sourceByRole: sourcesResult.rows.reduce((acc, row) => {
-      acc[row.role] = Number(row.cut_batch_id);
+    sourceBatchesByRole: sourcesResult.rows.reduce((acc, row) => {
+      const cutBatchId = Number(row.cut_batch_id);
+      if (!Number.isInteger(cutBatchId)) return acc;
+      if (!acc[row.role]) acc[row.role] = new Set();
+      acc[row.role].add(cutBatchId);
       return acc;
     }, {})
   };
@@ -118,16 +121,16 @@ async function assertStackElectrodesMatchSources(queryable, context, stack) {
 
   for (const row of stack) {
     const electrodeId = Number(row.electrode_id);
-    const expectedBatchId = context.sourceByRole[row.role];
+    const expectedBatchIds = context.sourceBatchesByRole[row.role];
     const actualBatchId = batchByElectrodeId[electrodeId];
 
-    if (!expectedBatchId) {
+    if (!expectedBatchIds || expectedBatchIds.size === 0) {
       throw new BatteryElectrodeStackConflictError('Для выбранной роли электрода не сохранён источник');
     }
 
-    if (!actualBatchId || actualBatchId !== expectedBatchId) {
+    if (!actualBatchId || !expectedBatchIds.has(actualBatchId)) {
       throw new BatteryElectrodeStackConflictError(
-        `Электрод ${electrodeId} не принадлежит выбранной партии для этой роли`
+        `Электрод ${electrodeId} не принадлежит выбранным партиям для этой роли`
       );
     }
   }

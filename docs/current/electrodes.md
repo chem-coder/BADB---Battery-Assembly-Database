@@ -136,18 +136,23 @@ individual stack rows are selected.
 
 Important fields:
 
+- `battery_electrode_source_id`;
 - `battery_id`;
 - `role`;
 - `tape_id`;
 - `cut_batch_id`;
+- `sort_order`;
+- `is_primary`;
 - `source_notes`.
 
 The source role must be `cathode` or `anode`.
 
-The source row defines which cut batch is valid for stack electrodes in that
-role. A selected cathode stack electrode must come from the saved cathode cut
-batch; a selected anode stack electrode must come from the saved anode cut
-batch.
+Source rows define which cut batches are valid for stack electrodes in that
+role. Pouch, prism, and cylindrical batteries may have multiple selected source
+batches per role; coin cells stay single-source per role. Exactly one row per
+role is primary for legacy labels and list/detail joins. A selected cathode
+stack electrode must come from one of the saved cathode cut batches; a selected
+anode stack electrode must come from one of the saved anode cut batches.
 
 ## Battery Stack Links
 

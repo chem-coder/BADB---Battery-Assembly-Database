@@ -1,9 +1,9 @@
 # Batteries
 
 Created: 2026-05-06
-Edited: 2026-06-09
+Edited: 2026-06-10
 Status: current
-Verified against code: 2026-06-09
+Verified against code: 2026-06-10
 
 Source paths:
 
@@ -47,8 +47,8 @@ Half-cell role behavior is controlled by `half_cell_type`.
 
 `prism` is stored as its own battery `form_factor` and displayed in the UI as
 `Призматическая`. For v1.1 it intentionally reuses the pouch-like config and
-stack path: rectangular electrode batches, one cathode source plus one anode
-source, and the same `battery_pouch_config` size fields. Dedicated prism
+stack path: rectangular electrode batches, one or more cathode/anode source
+batches, and the same `battery_pouch_config` size fields. Dedicated prism
 physical configuration fields are future work once the lab defines them.
 
 ## Battery-Owned Sections
@@ -57,7 +57,8 @@ Current battery-owned sections include:
 
 - form-factor config:
   `battery_coin_config`, `battery_pouch_config`, `battery_cyl_config`;
-- electrode sources: `battery_electrode_sources`;
+- electrode sources: `battery_electrode_sources` (`is_primary` marks the
+  row used by legacy single-source displays);
 - electrode stack: `battery_electrodes`;
 - separator config: `battery_sep_config`;
 - electrolyte config: `battery_electrolyte`;
@@ -203,8 +204,18 @@ Current high-level behavior:
 - coin half-cell uses one relevant source role;
 - coin full-cell, pouch, prism, and cylindrical batteries use both cathode and
   anode sources;
-- compatible source batches are filtered by tape, shape, form factor, and
-  sidedness rules;
+- compatible source batches are filtered by shape, form factor, sidedness rules,
+  and optional project/tape narrowing filters;
+- project and tape selects in the battery source section are filters, not
+  mandatory gates: an electrode cut batch can be selected first, with no tape
+  selected;
+- depleted or written-off tapes that already have electrode cut batches remain
+  visible in battery source selection. Available tapes are listed first; depleted
+  tapes are listed under `--- Списанные / израсходованные ---` and their option
+  labels include the status;
+- when a source row is saved with a cut batch but no tape id, the backend derives
+  the tape from `electrode_cut_batches` and still validates that the batch is
+  compatible with the battery configuration;
 - stack picker and selected-stack rows show electrode id, mass, and calculated
   per-electrode capacity;
 - for pouch/prism/cylindrical batteries, the user enters cathode count and

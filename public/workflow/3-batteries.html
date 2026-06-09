@@ -136,6 +136,35 @@
         color: #40526b;
       }
 
+      .electrode_source_extra_rows {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .electrode-source-extra-row {
+        border-left: 3px solid #c8d3e2;
+        padding-left: 10px;
+      }
+
+      .electrode-source-extra-row__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+
+      .electrode-source-extra-row__title {
+        font-weight: 600;
+        color: #40526b;
+      }
+
+      .electrode-source-remove-btn {
+        min-height: 28px;
+        padding: 3px 8px;
+      }
+
       .battery-capacity-details ul {
         margin: 8px 0 0;
         padding-left: 1.2rem;
@@ -512,6 +541,8 @@
                     name="cathode_source_notes"
                     placeholder="Комментарии по катодной партии"
                   ></textarea>
+                  <div id="cathode_additional_sources" class="electrode_source_extra_rows"></div>
+                  <button type="button" id="add_cathode_source_btn" class="secondary">+ Добавить катодную партию</button>
                 </div>
 
                 <div class="electrode_source" id="anode_source_block" data-electrode-role="anode">
@@ -531,6 +562,8 @@
                     name="anode_source_notes"
                     placeholder="Комментарии по анодной партии"
                   ></textarea>
+                  <div id="anode_additional_sources" class="electrode_source_extra_rows"></div>
+                  <button type="button" id="add_anode_source_btn" class="secondary">+ Добавить анодную партию</button>
                 </div>
 
                 <label for="battery-project-multiselect-trigger">Проекты аккумулятора</label>

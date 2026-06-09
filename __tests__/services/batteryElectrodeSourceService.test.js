@@ -14,7 +14,10 @@
 // which is out of scope for this first testing-setup PR.
 
 import { describe, it, expect } from 'vitest';
-import { BatteryElectrodeSourceValidationError } from '../../services/batteryElectrodeSourceService.js';
+import {
+  BatteryElectrodeSourceValidationError,
+  normalizeBatteryElectrodeSourcePayload
+} from '../../services/batteryElectrodeSourceService.js';
 
 describe('BatteryElectrodeSourceValidationError', () => {
   describe('constructor — defaults', () => {
@@ -124,5 +127,69 @@ describe('BatteryElectrodeSourceValidationError', () => {
       expect(err.toString()).toContain('BatteryElectrodeSourceValidationError');
       expect(err.toString()).toContain('bad data');
     });
+  });
+});
+
+describe('normalizeBatteryElectrodeSourcePayload', () => {
+  it('accepts multi-row array payloads and keeps one primary per role', () => {
+    const normalized = normalizeBatteryElectrodeSourcePayload({
+      sources: [
+        { role: 'cathode', tape_id: 1, cut_batch_id: 10, is_primary: false },
+        { role: 'cathode', tape_id: 2, cut_batch_id: 11, is_primary: true },
+        { role: 'anode', tape_id: 3, cut_batch_id: 20 }
+      ]
+    });
+
+    expect(normalized.mode).toBe('array');
+    expect(normalized.rows).toHaveLength(3);
+    expect(normalized.rows.filter(row => row.role === 'cathode' && row.is_primary)).toHaveLength(1);
+    expect(normalized.rows.find(row => row.cut_batch_id === 11)?.is_primary).toBe(true);
+    expect(normalized.rows.find(row => row.role === 'anode')?.is_primary).toBe(true);
+  });
+
+  it('maps legacy flat payloads to primary role rows', () => {
+    const normalized = normalizeBatteryElectrodeSourcePayload({
+      cathode_tape_id: '1',
+      cathode_cut_batch_id: '10',
+      cathode_source_notes: 'primary cathode'
+    });
+
+    expect(normalized.mode).toBe('legacy');
+    expect(normalized.requestedRoles).toEqual(['cathode']);
+    expect(normalized.rows).toEqual([
+      expect.objectContaining({
+        role: 'cathode',
+        tape_id: 1,
+        cut_batch_id: 10,
+        source_notes: 'primary cathode',
+        is_primary: true
+      })
+    ]);
+  });
+
+  it('allows cut-batch-first source rows without a tape filter', () => {
+    const normalized = normalizeBatteryElectrodeSourcePayload({
+      sources: [
+        { role: 'cathode', tape_id: null, cut_batch_id: '10' }
+      ]
+    });
+
+    expect(normalized.rows).toEqual([
+      expect.objectContaining({
+        role: 'cathode',
+        tape_id: null,
+        cut_batch_id: 10,
+        is_primary: true
+      })
+    ]);
+  });
+
+  it('rejects duplicate cut batches within the same role', () => {
+    expect(() => normalizeBatteryElectrodeSourcePayload({
+      sources: [
+        { role: 'cathode', tape_id: 1, cut_batch_id: 10 },
+        { role: 'cathode', tape_id: 1, cut_batch_id: 10 }
+      ]
+    })).toThrow(BatteryElectrodeSourceValidationError);
   });
 });

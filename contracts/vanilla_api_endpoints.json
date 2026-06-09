@@ -61,7 +61,7 @@
       "path": "/api/batteries/:param/electrode-cut-batches?:query",
       "methods": ["GET"],
       "auth": "auth",
-      "request": "query includes tape_id and optionally selected_batch_id",
+      "request": "query optionally includes tape_id as a narrowing filter and selected_batch_ids CSV; legacy selected_batch_id is still accepted",
       "response": "compatible electrode cut batch list",
       "sources": ["public/js/3-batteries.js"]
     },
@@ -93,7 +93,7 @@
       "path": "/api/batteries/battery_electrode_sources",
       "methods": ["POST"],
       "auth": "auth",
-      "request": "battery electrode source selection payload",
+      "request": "battery electrode source selection payload; accepts legacy flat cathode/anode fields or sources[] rows",
       "response": "created electrode source JSON",
       "sources": ["public/js/3-batteries.js"]
     },

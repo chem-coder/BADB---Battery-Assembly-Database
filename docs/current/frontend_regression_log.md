@@ -1,7 +1,7 @@
 # Frontend Regression Log
 
 Created: 2026-06-08
-Edited: 2026-06-09
+Edited: 2026-06-10
 Status: current
 
 This log records verified bugs where the user-visible failure was caused by
@@ -21,6 +21,7 @@ Use it as an evidence log, not as a blame document. Each entry should preserve:
 
 | Date | Area | Symptom | Root Cause | Status |
 |---|---|---|---|---|
+| 2026-06-10 | Batteries | Existing electrode batches became hard to select when their source tape was depleted or written off | Source tape reference and compatible-batch UI treated tape selection as a required gate | Fixed with optional project/tape filters, marked depleted tapes, batch-first source save, and stricter tape/batch validation |
 | 2026-06-09 | Tapes | New material instances did not appear in recipe-line dropdowns until page reload | Material instances were cached once per material_id with no on-open refresh | Fixed with focus-triggered instance list refresh that preserves selection |
 | 2026-06-09 | Batteries | No list duplicate action; users had to re-enter setup manually | Batteries page never implemented the restore-to-draft duplicate path used on Tapes | Fixed with client-side unsaved create-mode duplicate draft |
 | 2026-06-09 | Tapes | Duplicate opened a thin starter copy instead of a useful workflow draft | Frontend duplicate state used only the list row object and April 3 state reset removed accidental restored-form carryover | Fixed with explicit restore-to-draft duplicate path |
@@ -205,6 +206,69 @@ from this duplicate fix.
 When a list action promises duplication of nested workflow data, it should load
 the same restore payload used by edit/open behavior and then sanitize identity,
 audit, lifecycle, and downstream-link fields explicitly.
+
+## 2026-06-10: Battery Source Picker Hid Existing Batches Behind Depleted Tapes
+
+Source paths:
+
+- `public/js/3-batteries.js`
+- `routes/batteries.js`
+- `services/tapeReadService.js`
+- `services/batteryCompatibleCutBatchService.js`
+- `services/batteryElectrodeSourceService.js`
+- `services/electrodeCutBatchService.js`
+
+### Symptom
+
+On the Batteries page, electrode cut batches made from depleted or written-off
+tapes became hard to select because the source tape disappeared from source
+dropdowns and the compatible batch loader required a selected tape.
+
+### Backend Finding
+
+Backend validation remains authoritative. Source saves now accept a selected
+cut batch without a submitted tape id, derive the owning tape from
+`electrode_cut_batches`, and still run compatibility validation before writing
+`battery_electrode_sources`.
+
+### Root Cause
+
+The source tape reference query excluded depleted tapes, and the Batteries page
+treated tape selection as a required gate before loading or rendering compatible
+electrode cut batches.
+
+### Fix
+
+Battery source selection now keeps depleted tapes with existing cut batches in
+the reference list, separates and labels them in the tape dropdown, and lets the
+batch dropdown load compatible batches with only the battery configuration and
+role. Project and tape selections narrow the batch list when present, but they
+are no longer required before batch selection.
+
+### Checks
+
+Checks reported for this fix:
+
+- `node --check public/js/3-batteries.js` - PASS
+- `npm test -- --run __tests__/services/batteryElectrodeSourceService.test.js` -
+  PASS, 18 tests
+- `npm run contract:vanilla` - PASS
+- `npm run smoke:vanilla` - PASS, 288 checks, 0 failures
+- manual browser verification on Batteries page - PASS; depleted tapes were
+  grouped and muted, compatible batches from depleted tapes were selectable
+  without preselecting a tape, project/tape filter refreshes preserved selected
+  batch values, save/reload persisted the source, and a mismatched
+  tape/batch save was rejected by backend validation
+
+### Follow-Up
+
+This is intentionally a compatibility workflow fix. It does not implement a new
+multi-source architecture beyond the existing source-row behavior.
+
+### Prevention
+
+Smoke coverage includes a compatible-batch lookup without `tape_id` and a source
+save where cut batches are submitted without tape ids.
 
 ## Entry Template
 

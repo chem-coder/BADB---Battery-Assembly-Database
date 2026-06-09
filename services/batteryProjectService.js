@@ -75,6 +75,21 @@ async function getCutBatchProjectIds(db, cutBatchId) {
   return result.rows.map((row) => Number(row.project_id));
 }
 
+function normalizeCutBatchIds(values) {
+  const source = Array.isArray(values) ? values : [values];
+  const cutBatchIds = [];
+
+  source.forEach((value) => {
+    if (value === null || value === undefined || value === '') return;
+    const cutBatchId = Number(value);
+    if (Number.isInteger(cutBatchId) && !cutBatchIds.includes(cutBatchId)) {
+      cutBatchIds.push(cutBatchId);
+    }
+  });
+
+  return cutBatchIds;
+}
+
 function getRequiredBatterySourceRoles({ formFactor, coinCellMode, halfCellType }) {
   if (formFactor === 'coin' && coinCellMode === 'half_cell') {
     if (halfCellType === 'cathode_vs_li') return ['cathode'];
@@ -101,22 +116,32 @@ async function deriveAllowedBatteryProjectIds(db, {
   coinCellMode,
   halfCellType,
   cathodeCutBatchId,
-  anodeCutBatchId
+  cathodeCutBatchIds,
+  anodeCutBatchId,
+  anodeCutBatchIds
 }) {
   const requiredRoles = getRequiredBatterySourceRoles({ formFactor, coinCellMode, halfCellType });
 
   if (!requiredRoles.length) return [];
 
   const projectGroups = [];
+  const idsByRole = {
+    cathode: normalizeCutBatchIds(cathodeCutBatchIds || cathodeCutBatchId),
+    anode: normalizeCutBatchIds(anodeCutBatchIds || anodeCutBatchId)
+  };
 
   if (requiredRoles.includes('cathode')) {
-    if (!cathodeCutBatchId) return [];
-    projectGroups.push(await getCutBatchProjectIds(db, Number(cathodeCutBatchId)));
+    if (!idsByRole.cathode.length) return [];
+    for (const cutBatchId of idsByRole.cathode) {
+      projectGroups.push(await getCutBatchProjectIds(db, cutBatchId));
+    }
   }
 
   if (requiredRoles.includes('anode')) {
-    if (!anodeCutBatchId) return [];
-    projectGroups.push(await getCutBatchProjectIds(db, Number(anodeCutBatchId)));
+    if (!idsByRole.anode.length) return [];
+    for (const cutBatchId of idsByRole.anode) {
+      projectGroups.push(await getCutBatchProjectIds(db, cutBatchId));
+    }
   }
 
   if (projectGroups.some((group) => group.length === 0)) return [];

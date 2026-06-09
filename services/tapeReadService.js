@@ -162,8 +162,16 @@ async function listTapesForElectrodes(pool) {
     ) coating_step ON TRUE
 
     WHERE t.availability_status IS DISTINCT FROM 'depleted'
+       OR EXISTS (
+         SELECT 1
+         FROM electrode_cut_batches cb
+         WHERE cb.tape_id = t.tape_id
+       )
 
-    ORDER BY coating_step.started_at DESC NULLS LAST, t.tape_id DESC;
+    ORDER BY
+      CASE WHEN t.availability_status IS DISTINCT FROM 'depleted' THEN 0 ELSE 1 END,
+      coating_step.started_at DESC NULLS LAST,
+      t.tape_id DESC;
   `);
 
   return attachTapeProjects(pool, result.rows);

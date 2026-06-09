@@ -43,7 +43,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd039_add_electrode_test_batch_flag.sql'),
   path.join(ROOT, 'migrations', 'd040_add_coated_thickness_fields.sql'),
   path.join(ROOT, 'migrations', 'd041_project_participants.sql'),
-  path.join(ROOT, 'migrations', 'd042_project_leads_as_team_members.sql')
+  path.join(ROOT, 'migrations', 'd042_project_leads_as_team_members.sql'),
+  path.join(ROOT, 'migrations', 'd043_enable_multi_battery_electrode_sources.sql')
 ];
 
 function parseArgs(argv) {
@@ -1288,6 +1289,12 @@ async function runWriteSmoke(client, seed, context) {
       true,
       'prism battery sees prism rectangular electrode cut batches as compatible'
     );
+    const prismCompatibleBatchesWithoutTape = await client.get(`/api/batteries/${made.prismBatteryId}/electrode-cut-batches`);
+    client.assertEqual(
+      prismCompatibleBatchesWithoutTape.some((batch) => Number(batch.cut_batch_id) === Number(made.prismCutBatchId)),
+      true,
+      'battery compatible cut batch lookup works without a tape filter'
+    );
     made.cylBatteryId = (await client.post('/api/batteries', {
       project_id: projectId,
       form_factor: 'cylindrical',
@@ -1342,6 +1349,69 @@ async function runWriteSmoke(client, seed, context) {
         anode_source_notes: null
       });
     }
+
+    const multiSourceBatteryId = (await client.post('/api/batteries', {
+      project_id: projectId,
+      project_ids: [projectId],
+      form_factor: 'pouch',
+      battery_notes: `Codex Smoke Battery ${suffix} Multi Source`
+    })).battery_id;
+    await client.post('/api/batteries/battery_pouch_config', {
+      battery_id: multiSourceBatteryId,
+      pouch_case_size_code: '103x83',
+      pouch_case_size_other: null,
+      pouch_notes: 'smoke multi-source pouch config'
+    });
+    const multiSourceRows = await client.post('/api/batteries/battery_electrode_sources', {
+      battery_id: multiSourceBatteryId,
+      sources: [
+        { role: 'cathode', cut_batch_id: made.cutBatchId, sort_order: 0, is_primary: true },
+        { role: 'cathode', cut_batch_id: made.prismCutBatchId, sort_order: 1, is_primary: false },
+        { role: 'anode', cut_batch_id: made.cutBatchId, sort_order: 0, is_primary: true },
+        { role: 'anode', cut_batch_id: made.prismCutBatchId, sort_order: 1, is_primary: false }
+      ]
+    });
+    client.assertEqual(multiSourceRows.length, 4, 'multi-source save persists all selected source rows');
+    await client.put(`/api/batteries/battery_electrodes/${multiSourceBatteryId}`, [
+      {
+        electrode_id: made.electrodeId,
+        role: 'cathode',
+        position_index: 1
+      },
+      {
+        electrode_id: made.prismAnodeElectrodeId,
+        role: 'anode',
+        position_index: 2
+      }
+    ]);
+    const multiAssembly = await client.get(`/api/batteries/${multiSourceBatteryId}/assembly`);
+    client.assertEqual(
+      Array.isArray(multiAssembly.electrode_sources) && multiAssembly.electrode_sources.length,
+      4,
+      'assembly returns every multi-source electrode batch row'
+    );
+    client.assertEqual(
+      multiAssembly.electrode_sources.filter(row => row.role === 'cathode' && row.is_primary).length,
+      1,
+      'multi-source cathode rows expose exactly one primary'
+    );
+    client.assertEqual(
+      multiAssembly.electrodes.some(row => Number(row.electrode_id) === Number(made.prismAnodeElectrodeId)),
+      true,
+      'stack accepts an electrode from a secondary selected source batch'
+    );
+    await client.put(`/api/batteries/battery_electrodes/${multiSourceBatteryId}`, []);
+    await client.patch(`/api/batteries/battery_electrode_sources/${multiSourceBatteryId}`, {
+      cathode_tape_id: null,
+      cathode_cut_batch_id: null,
+      cathode_source_notes: null,
+      anode_tape_id: null,
+      anode_cut_batch_id: null,
+      anode_source_notes: null
+    });
+    await client.request('DELETE', `/api/batteries/${multiSourceBatteryId}`, {
+      confirmation: `DELETE BATTERY ${multiSourceBatteryId}`
+    });
 
     const lifecycleBattery = await client.post('/api/batteries', {
       project_id: projectId,

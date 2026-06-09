@@ -204,6 +204,7 @@ async function listElectrodeCutBatches(pool) {
     SELECT
       b.*,
       t.name AS tape_name,
+      t.availability_status AS tape_availability_status,
       t.project_id,
       p.name AS project_name,
       r.role AS tape_role,

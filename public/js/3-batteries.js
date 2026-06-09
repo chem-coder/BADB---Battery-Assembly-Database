@@ -51,12 +51,17 @@ function getDefaultElectrodeSourcesState() {
     cathode_source_notes: null,
     anode_tape_id: null,
     anode_cut_batch_id: null,
-    anode_source_notes: null
+    anode_source_notes: null,
+    sources: {
+      cathode: [],
+      anode: []
+    }
   };
 }
 
 function getElectrodeSourceFieldNames() {
-  return Object.keys(getDefaultElectrodeSourcesState());
+  return Object.keys(getDefaultElectrodeSourcesState())
+    .filter(fieldName => fieldName !== 'sources');
 }
 
 function normalizeElectrodeSourcesState(electrodeSources) {
@@ -68,7 +73,141 @@ function normalizeElectrodeSourcesState(electrodeSources) {
     }
   });
 
+  const sourceRows = {
+    cathode: normalizeElectrodeSourceRowsForRole(electrodeSources, 'cathode'),
+    anode: normalizeElectrodeSourceRowsForRole(electrodeSources, 'anode')
+  };
+
+  nextState.sources = sourceRows;
+  syncPrimaryElectrodeSourceFields(nextState, 'cathode');
+  syncPrimaryElectrodeSourceFields(nextState, 'anode');
+
   return nextState;
+}
+
+function hasElectrodeSourceRowValue(row) {
+  return Boolean(
+    row &&
+    (
+      row.is_draft ||
+      row.tape_id ||
+      row.cut_batch_id ||
+      String(row.source_notes || '').trim()
+    )
+  );
+}
+
+function normalizeElectrodeSourceRow(row, role, fallbackSortOrder = 0) {
+  return {
+    role,
+    tape_id: row?.tape_id || null,
+    cut_batch_id: row?.cut_batch_id || null,
+    source_notes: row?.source_notes ?? null,
+    sort_order: Number.isInteger(Number(row?.sort_order))
+      ? Number(row.sort_order)
+      : fallbackSortOrder,
+    is_primary: row?.is_primary === undefined
+      ? fallbackSortOrder === 0
+      : Boolean(row.is_primary),
+    is_draft: Boolean(row?.is_draft)
+  };
+}
+
+function normalizeElectrodeSourceRowsForRole(electrodeSources, role) {
+  const explicitRows =
+    electrodeSources?.sources?.[role] ||
+    electrodeSources?.[role] ||
+    [];
+  let rows = Array.isArray(explicitRows)
+    ? explicitRows
+      .map((row, index) => normalizeElectrodeSourceRow(row, role, index))
+      .filter(hasElectrodeSourceRowValue)
+    : [];
+
+  if (!rows.length) {
+    const legacyRow = normalizeElectrodeSourceRow({
+      tape_id: electrodeSources?.[`${role}_tape_id`],
+      cut_batch_id: electrodeSources?.[`${role}_cut_batch_id`],
+      source_notes: electrodeSources?.[`${role}_source_notes`],
+      sort_order: 0,
+      is_primary: true
+    }, role, 0);
+
+    if (hasElectrodeSourceRowValue(legacyRow)) {
+      rows = [legacyRow];
+    }
+  }
+
+  rows.sort((a, b) => {
+    if (Boolean(a.is_primary) !== Boolean(b.is_primary)) {
+      return a.is_primary ? -1 : 1;
+    }
+    return Number(a.sort_order || 0) - Number(b.sort_order || 0);
+  });
+
+  rows.forEach((row, index) => {
+    row.sort_order = index;
+    row.is_primary = index === 0;
+  });
+
+  return rows;
+}
+
+function getElectrodeSourceRows(role) {
+  return Array.isArray(state.electrodeSources?.sources?.[role])
+    ? state.electrodeSources.sources[role]
+    : [];
+}
+
+function getPrimaryElectrodeSource(role) {
+  return getElectrodeSourceRows(role)[0] || null;
+}
+
+function syncPrimaryElectrodeSourceFields(targetState, role) {
+  const primary = Array.isArray(targetState.sources?.[role])
+    ? targetState.sources[role][0]
+    : null;
+
+  targetState[`${role}_tape_id`] = primary?.tape_id || null;
+  targetState[`${role}_cut_batch_id`] = primary?.cut_batch_id || null;
+  targetState[`${role}_source_notes`] = primary?.source_notes ?? null;
+}
+
+function setElectrodeSourceRows(role, rows) {
+  setElectrodeSourcesState({
+    ...state.electrodeSources,
+    sources: {
+      ...(state.electrodeSources.sources || {}),
+      [role]: rows
+    }
+  });
+}
+
+function getSelectedSourceBatchIds(role) {
+  return getElectrodeSourceRows(role)
+    .map(row => row.cut_batch_id)
+    .filter(Boolean);
+}
+
+function getSelectedSourceTapeIds(role) {
+  return getElectrodeSourceRows(role)
+    .map(row => row.tape_id)
+    .filter(Boolean);
+}
+
+function getElectrodeSourcesPayloadRows() {
+  return ['cathode', 'anode'].flatMap(role =>
+    getElectrodeSourceRows(role)
+      .filter(row => row.tape_id || row.cut_batch_id || String(row.source_notes || '').trim())
+      .map((row, index) => ({
+        role,
+        tape_id: row.tape_id || null,
+        cut_batch_id: row.cut_batch_id || null,
+        source_notes: row.source_notes || null,
+        sort_order: index,
+        is_primary: index === 0
+      }))
+  );
 }
 
 function getDefaultAssemblyState() {
@@ -451,7 +590,7 @@ function hasStartedBatterySection(sectionKey) {
   }
 
   if (sectionKey === 'electrode_sources') {
-    return hasMeaningfulObjectValue(state.electrodeSources);
+    return getElectrodeSourcesPayloadRows().length > 0;
   }
 
   if (sectionKey === 'battery_stack') {
@@ -563,12 +702,11 @@ function isBatteryConfigSectionComplete() {
 }
 
 function isBatterySourcesSectionComplete() {
-  const sources = state.electrodeSources || {};
   const requiredRoles = getRequiredBatterySourceRolesForContext();
   const hasBatteryProject = normalizeProjectIds(state.meta.project_ids).length > 0;
   const roleComplete = {
-    cathode: Boolean(sources.cathode_tape_id) && Boolean(sources.cathode_cut_batch_id),
-    anode: Boolean(sources.anode_tape_id) && Boolean(sources.anode_cut_batch_id)
+    cathode: getElectrodeSourceRows('cathode').some(row => row.cut_batch_id),
+    anode: getElectrodeSourceRows('anode').some(row => row.cut_batch_id)
   };
 
   if (requiredRoles.length === 0) return false;
@@ -660,12 +798,11 @@ function isBatterySourceSelectionCompleteForStack() {
   const formFactor = state.meta.form_factor;
   const coinMode = state.config.coin?.coin_cell_mode || null;
   const halfCellType = state.config.coin?.half_cell_type || null;
-  const sources = state.electrodeSources || {};
 
-  const hasCathodeSource =
-    Boolean(sources.cathode_tape_id) && Boolean(sources.cathode_cut_batch_id);
-  const hasAnodeSource =
-    Boolean(sources.anode_tape_id) && Boolean(sources.anode_cut_batch_id);
+  const hasCathodeSource = getElectrodeSourceRows('cathode')
+    .some(row => row.cut_batch_id);
+  const hasAnodeSource = getElectrodeSourceRows('anode')
+    .some(row => row.cut_batch_id);
 
   if (formFactor === 'coin' && coinMode === 'half_cell') {
     if (halfCellType === 'cathode_vs_li') return hasCathodeSource && !hasAnodeSource;
@@ -998,15 +1135,17 @@ function setCutBatches(cutBatches) {
 }
 
 function setCathodeBatches(batches) {
+  const primary = getPrimaryElectrodeSource('cathode');
   state.reference.cathodeBatches = sortElectrodeCutBatches(batches, {
-    selectedBatchId: state.electrodeSources.cathode_cut_batch_id
+    selectedBatchId: primary?.cut_batch_id
   });
   renderCathodeBatchOptions();
 }
 
 function setAnodeBatches(batches) {
+  const primary = getPrimaryElectrodeSource('anode');
   state.reference.anodeBatches = sortElectrodeCutBatches(batches, {
-    selectedBatchId: state.electrodeSources.anode_cut_batch_id
+    selectedBatchId: primary?.cut_batch_id
   });
   renderAnodeBatchOptions();
 }
@@ -1104,10 +1243,46 @@ function syncConfigStateFromDom() {
   });
 }
 
+function collectElectrodeSourceRowsFromDom(role) {
+  const rows = [];
+  const primaryRow = normalizeElectrodeSourceRow({
+    tape_id: document.getElementById(`${role}_tape_id`)?.value || null,
+    cut_batch_id: document.getElementById(`${role}_cut_batch_id`)?.value || null,
+    source_notes: document.getElementById(`${role}_source_notes`)?.value || null,
+    sort_order: 0,
+    is_primary: true
+  }, role, 0);
+
+  if (hasElectrodeSourceRowValue(primaryRow)) {
+    rows.push(primaryRow);
+  }
+
+  document
+    .querySelectorAll(`[data-source-row-role="${role}"]`)
+    .forEach((rowEl, index) => {
+      const row = normalizeElectrodeSourceRow({
+        tape_id: rowEl.querySelector('[data-source-field="tape_id"]')?.value || null,
+        cut_batch_id: rowEl.querySelector('[data-source-field="cut_batch_id"]')?.value || null,
+        source_notes: rowEl.querySelector('[data-source-field="source_notes"]')?.value || null,
+        sort_order: index + 1,
+        is_primary: false
+      }, role, index + 1);
+
+      if (hasElectrodeSourceRowValue(row)) {
+        rows.push(row);
+      }
+    });
+
+  return rows;
+}
+
 function syncElectrodeSourcesStateFromDom() {
-  setElectrodeSourcesState(
-    serializeFieldset(document.getElementById('battery_electrode_sources'))
-  );
+  setElectrodeSourcesState({
+    sources: {
+      cathode: collectElectrodeSourceRowsFromDom('cathode'),
+      anode: collectElectrodeSourceRowsFromDom('anode')
+    }
+  });
 }
 
 function syncAssemblyStateFromDom() {
@@ -1248,7 +1423,7 @@ function captureSectionState(sectionKey) {
   }
 
   if (sectionKey === 'electrode_sources') {
-    return captureNamedState(document.getElementById('battery_electrode_sources'));
+    return JSON.stringify(getElectrodeSourcesPayloadRows());
   }
 
   if (sectionKey === 'battery_stack') {
@@ -1799,13 +1974,12 @@ function hasSavedBatteryStackLinks() {
 }
 
 function hasSavedBatteryLifecycleLinks() {
+  const sourceRows = parseBatterySnapshot(state.snapshots.savedSectionStates.electrode_sources);
+  const hasSavedSourceRows = Array.isArray(sourceRows) &&
+    sourceRows.some(row => row?.tape_id && row?.cut_batch_id);
+
   return (
-    hasSavedNamedFieldValue('electrode_sources', [
-      'cathode_tape_id',
-      'cathode_cut_batch_id',
-      'anode_tape_id',
-      'anode_cut_batch_id'
-    ]) ||
+    hasSavedSourceRows ||
     hasSavedBatteryStackLinks() ||
     hasSavedNamedFieldValue('battery_assembly', [
       'separator_id',
@@ -2240,9 +2414,7 @@ function getProjectNameById(projectId) {
 }
 
 function getSelectedSourceBatch(role) {
-  const batchId = role === 'cathode'
-    ? state.electrodeSources.cathode_cut_batch_id
-    : state.electrodeSources.anode_cut_batch_id;
+  const batchId = getPrimaryElectrodeSource(role)?.cut_batch_id;
   const batches = role === 'cathode'
     ? state.reference.cathodeBatches
     : state.reference.anodeBatches;
@@ -2250,6 +2422,22 @@ function getSelectedSourceBatch(role) {
   return batches.find((batch) => String(batch.cut_batch_id) === String(batchId || '')) ||
     state.reference.cutBatches.find((batch) => String(batch.cut_batch_id) === String(batchId || '')) ||
     null;
+}
+
+function getSelectedSourceBatches(role) {
+  const roleBatches = role === 'cathode'
+    ? state.reference.cathodeBatches
+    : state.reference.anodeBatches;
+  const allBatches = [
+    ...roleBatches,
+    ...state.reference.cutBatches
+  ];
+
+  return getSelectedSourceBatchIds(role)
+    .map(batchId => allBatches.find(
+      batch => String(batch.cut_batch_id) === String(batchId)
+    ))
+    .filter(Boolean);
 }
 
 function getRequiredBatteryProjectRoles() {
@@ -2283,11 +2471,14 @@ function getAllowedBatteryProjectIds() {
   const projectGroups = [];
 
   for (const role of roles) {
-    const batch = getSelectedSourceBatch(role);
-    if (!batch) return [];
-    const projectIds = normalizeProjectIds(batch.project_ids || batch.project_id);
-    if (!projectIds.length) return [];
-    projectGroups.push(projectIds);
+    const batches = getSelectedSourceBatches(role);
+    if (!batches.length) return [];
+
+    for (const batch of batches) {
+      const projectIds = normalizeProjectIds(batch.project_ids || batch.project_id);
+      if (!projectIds.length) return [];
+      projectGroups.push(projectIds);
+    }
   }
 
   return intersectBatteryProjectIds(projectGroups);
@@ -2417,11 +2608,239 @@ function renderConfigForm() {
   renderPouchCaseSizeUi();
 }
 
-function renderElectrodeSourcesForm() {
-  populateFieldset(
-    document.getElementById('battery_electrode_sources'),
-    state.electrodeSources
+function canUseMultipleElectrodeSources() {
+  const formFactor = state.meta.form_factor || document.getElementById('battery_form_factor')?.value || null;
+  return isPouchLikeFormFactor(formFactor) || formFactor === 'cylindrical';
+}
+
+function getTapeOptionLabel(tape) {
+  const sidednessLabel = formatTapeSidednessLabel(tape.coating_sidedness);
+  const statusLabel = getTapeAvailabilityLabel(tape);
+  return `#${tape.tape_id} | ${tape.name}${sidednessLabel ? ` | ${sidednessLabel}` : ''}${statusLabel ? ` | ${statusLabel}` : ''} | ${tape.created_by}`;
+}
+
+function isTapeUnavailableForSourceSelection(tape) {
+  return tape?.availability_status === 'depleted';
+}
+
+function getTapeAvailabilityLabel(tape) {
+  if (tape?.availability_status === 'depleted') return 'списана / израсходована';
+  return '';
+}
+
+function getFilteredTapesForRole(role) {
+  const projectFilterId = projectFilterSelect?.value || '';
+
+  return state.reference.tapes.filter(tape => {
+    if (tape.role !== role) return false;
+    if (!projectFilterId) return true;
+    const tapeProjectIds = normalizeProjectIds(tape.project_ids || tape.project_id);
+    return tapeProjectIds.includes(String(projectFilterId));
+  });
+}
+
+function renderTapeOptionsForSelect(select, role, selectedTapeId) {
+  if (!select) return;
+
+  select.innerHTML = '<option value="">— выбрать ленту —</option>';
+
+  const tapes = getFilteredTapesForRole(role);
+  const availableTapes = tapes.filter(tape => !isTapeUnavailableForSourceSelection(tape));
+  const unavailableTapes = tapes.filter(isTapeUnavailableForSourceSelection);
+
+  function appendTapeOption(parent, tape) {
+    const option = document.createElement('option');
+    option.value = tape.tape_id;
+    option.textContent = getTapeOptionLabel(tape);
+    if (isTapeUnavailableForSourceSelection(tape)) {
+      option.className = 'battery-source-unavailable-option';
+      option.style.color = '#7a7f88';
+    }
+    parent.appendChild(option);
+  }
+
+  availableTapes.forEach(tape => appendTapeOption(select, tape));
+
+  if (unavailableTapes.length) {
+    const group = document.createElement('optgroup');
+    group.label = '--- Списанные / израсходованные ---';
+    unavailableTapes.forEach(tape => appendTapeOption(group, tape));
+    select.appendChild(group);
+  }
+
+  const tape = state.reference.tapes.find(
+    item => String(item.tape_id) === String(selectedTapeId || '')
   );
+  ensureSelectOption(
+    select,
+    selectedTapeId,
+    tape
+      ? getTapeOptionLabel(tape)
+      : selectedTapeId
+        ? `#${selectedTapeId} | сохранённая лента`
+        : ''
+  );
+  select.value = selectedTapeId || '';
+}
+
+function getRoleBatchReference(role) {
+  return role === 'cathode'
+    ? state.reference.cathodeBatches
+    : state.reference.anodeBatches;
+}
+
+function getUnfilteredCompatibleBatchReference(role) {
+  return getLocalCompatibleBatteryCutBatches(null, getSelectedSourceBatchIds(role))
+    .filter(batch => !batch.tape_role || batch.tape_role === role);
+}
+
+function hasBatchProjectOverlapWithRole(batch, role) {
+  const oppositeBatches = getSelectedSourceBatches(role);
+  if (!oppositeBatches.length) return true;
+
+  return oppositeBatches.every(oppositeBatch => hasBatchProjectOverlap(batch, oppositeBatch));
+}
+
+function renderBatchOptionsForSelect(select, role, row) {
+  if (!select) return;
+
+  const selectedBatchId = row?.cut_batch_id || '';
+  const oppositeRole = role === 'cathode' ? 'anode' : 'cathode';
+
+  select.innerHTML = '<option value="">— выбрать партию —</option>';
+
+  sortElectrodeCutBatches(
+    (row?.tape_id ? getRoleBatchReference(role) : getUnfilteredCompatibleBatchReference(role)).filter(batch => (
+      (!row?.tape_id || String(batch.tape_id) === String(row.tape_id)) &&
+      (!batch.tape_role || batch.tape_role === role) &&
+      (
+        batchMatchesProjectFilter(batch) ||
+        String(batch.cut_batch_id) === String(selectedBatchId)
+      )
+    )),
+    { selectedBatchId }
+  ).forEach(batch => {
+    const option = document.createElement('option');
+    option.value = batch.cut_batch_id;
+
+    const hasOverlap = hasBatchProjectOverlapWithRole(batch, oppositeRole);
+    option.disabled = !hasOverlap && String(batch.cut_batch_id) !== String(selectedBatchId);
+    option.textContent = hasOverlap
+      ? formatElectrodeBatchOptionLabel(batch)
+      : `${formatElectrodeBatchOptionLabel(batch)} | нет общего проекта`;
+
+    select.appendChild(option);
+  });
+
+  ensureSelectOption(
+    select,
+    selectedBatchId,
+    selectedBatchId ? `#${selectedBatchId} | сохранённая партия` : ''
+  );
+  select.value = selectedBatchId || '';
+}
+
+function createAdditionalSourceRowElement(role, row, index) {
+  const rowEl = document.createElement('div');
+  rowEl.className = 'electrode-source-extra-row';
+  rowEl.dataset.sourceRowRole = role;
+  rowEl.dataset.sourceRowIndex = String(index + 1);
+
+  const header = document.createElement('div');
+  header.className = 'electrode-source-extra-row__header';
+
+  const title = document.createElement('span');
+  title.className = 'electrode-source-extra-row__title';
+  title.textContent = `${role === 'cathode' ? 'Катодная' : 'Анодная'} партия ${index + 2}`;
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'secondary electrode-source-remove-btn';
+  removeBtn.textContent = 'Удалить';
+  removeBtn.title = 'Удалить источник';
+  removeBtn.dataset.sourceRemoveRole = role;
+  removeBtn.dataset.sourceRemoveIndex = String(index + 1);
+
+  header.appendChild(title);
+  header.appendChild(removeBtn);
+  rowEl.appendChild(header);
+
+  const tapeLabel = document.createElement('label');
+  const tapeSelectId = `${role}_tape_id_extra_${index + 1}`;
+  tapeLabel.setAttribute('for', tapeSelectId);
+  tapeLabel.textContent = role === 'cathode' ? 'Катодная лента' : 'Анодная лента';
+
+  const tapeSelect = document.createElement('select');
+  tapeSelect.id = tapeSelectId;
+  tapeSelect.dataset.sourceField = 'tape_id';
+  tapeSelect.dataset.sourceRole = role;
+  tapeSelect.dataset.sourceIndex = String(index + 1);
+  renderTapeOptionsForSelect(tapeSelect, role, row.tape_id);
+
+  const batchLabel = document.createElement('label');
+  const batchSelectId = `${role}_cut_batch_id_extra_${index + 1}`;
+  batchLabel.setAttribute('for', batchSelectId);
+  batchLabel.textContent = 'Партия вырезанных электродов';
+
+  const batchSelect = document.createElement('select');
+  batchSelect.id = batchSelectId;
+  batchSelect.dataset.sourceField = 'cut_batch_id';
+  batchSelect.dataset.sourceRole = role;
+  batchSelect.dataset.sourceIndex = String(index + 1);
+  renderBatchOptionsForSelect(batchSelect, role, row);
+
+  const notesLabel = document.createElement('label');
+  const notesId = `${role}_source_notes_extra_${index + 1}`;
+  notesLabel.setAttribute('for', notesId);
+  notesLabel.textContent = 'Заметки';
+
+  const notesInput = document.createElement('textarea');
+  notesInput.id = notesId;
+  notesInput.dataset.sourceField = 'source_notes';
+  notesInput.dataset.sourceRole = role;
+  notesInput.dataset.sourceIndex = String(index + 1);
+  notesInput.placeholder = role === 'cathode'
+    ? 'Комментарии по катодной партии'
+    : 'Комментарии по анодной партии';
+  notesInput.value = row.source_notes || '';
+
+  rowEl.appendChild(tapeLabel);
+  rowEl.appendChild(tapeSelect);
+  rowEl.appendChild(document.createElement('br'));
+  rowEl.appendChild(batchLabel);
+  rowEl.appendChild(batchSelect);
+  rowEl.appendChild(document.createElement('br'));
+  rowEl.appendChild(notesLabel);
+  rowEl.appendChild(notesInput);
+
+  return rowEl;
+}
+
+function renderAdditionalSourceRows(role) {
+  const container = document.getElementById(`${role}_additional_sources`);
+  const addBtn = document.getElementById(`add_${role}_source_btn`);
+  const rows = getElectrodeSourceRows(role);
+  const additionalRows = rows.slice(1);
+  const canAdd = canUseMultipleElectrodeSources() && !isBatteryIdentityLocked();
+
+  if (container) {
+    container.innerHTML = '';
+    additionalRows.forEach((row, index) => {
+      container.appendChild(createAdditionalSourceRowElement(role, row, index));
+    });
+  }
+
+  if (addBtn) {
+    addBtn.hidden = !canAdd;
+    addBtn.disabled = !canAdd;
+  }
+}
+
+function renderElectrodeSourcesForm() {
+  const fieldset = document.getElementById('battery_electrode_sources');
+  populateFieldset(fieldset, state.electrodeSources);
+  renderAdditionalSourceRows('cathode');
+  renderAdditionalSourceRows('anode');
 }
 
 function ensureBatchMismatchWarning(selectId, warningId) {
@@ -2454,15 +2873,15 @@ function renderBatchCompatibilityWarnings() {
   );
 
   const cathodeBatch = state.reference.cathodeBatches.find(
-    batch => String(batch.cut_batch_id) === String(state.electrodeSources.cathode_cut_batch_id || '')
+    batch => String(batch.cut_batch_id) === String(getPrimaryElectrodeSource('cathode')?.cut_batch_id || '')
   );
   const anodeBatch = state.reference.anodeBatches.find(
-    batch => String(batch.cut_batch_id) === String(state.electrodeSources.anode_cut_batch_id || '')
+    batch => String(batch.cut_batch_id) === String(getPrimaryElectrodeSource('anode')?.cut_batch_id || '')
   );
 
   if (cathodeWarning) {
     const isMismatch =
-      Boolean(state.electrodeSources.cathode_cut_batch_id) &&
+      Boolean(getPrimaryElectrodeSource('cathode')?.cut_batch_id) &&
       cathodeBatch &&
       cathodeBatch.is_compatibility_match === false;
 
@@ -2474,7 +2893,7 @@ function renderBatchCompatibilityWarnings() {
 
   if (anodeWarning) {
     const isMismatch =
-      Boolean(state.electrodeSources.anode_cut_batch_id) &&
+      Boolean(getPrimaryElectrodeSource('anode')?.cut_batch_id) &&
       anodeBatch &&
       anodeBatch.is_compatibility_match === false;
 
@@ -4732,28 +5151,30 @@ async function loadCutBatches() {
   setCutBatches(data);
 }
 
-function getBatteryCutBatchParams(tapeId, selectedBatchId) {
-  const params = new URLSearchParams({
-    tape_id: String(tapeId)
-  });
+function getBatteryCutBatchParams(tapeId, selectedBatchIds) {
+  const params = new URLSearchParams();
 
-  if (selectedBatchId) {
-    params.set('selected_batch_id', String(selectedBatchId));
+  if (tapeId) {
+    params.set('tape_id', String(tapeId));
+  }
+
+  const ids = Array.isArray(selectedBatchIds)
+    ? selectedBatchIds.filter(Boolean)
+    : [selectedBatchIds].filter(Boolean);
+
+  if (ids.length) {
+    params.set('selected_batch_ids', ids.join(','));
   }
 
   return params;
 }
 
-async function fetchCompatibleBatteryCutBatches(tapeId, selectedBatchId) {
-  if (!tapeId) {
-    return [];
-  }
-
+async function fetchCompatibleBatteryCutBatches(tapeId, selectedBatchIds = []) {
   if (!state.selection.currentBatteryId) {
-    return getLocalCompatibleBatteryCutBatches(tapeId, selectedBatchId);
+    return getLocalCompatibleBatteryCutBatches(tapeId, selectedBatchIds);
   }
 
-  const params = getBatteryCutBatchParams(tapeId, selectedBatchId);
+  const params = getBatteryCutBatchParams(tapeId, selectedBatchIds);
   const data = await fetchBatteryArray(
     `/api/batteries/${state.selection.currentBatteryId}/electrode-cut-batches?${params.toString()}`,
     'compatible cut batches'
@@ -4773,15 +5194,19 @@ function getBatchSidedness(batch) {
   return batch?.coating_sidedness || batch?.tape_coating_sidedness || null;
 }
 
-function getLocalCompatibleBatteryCutBatches(tapeId, selectedBatchId) {
+function getLocalCompatibleBatteryCutBatches(tapeId, selectedBatchIds = []) {
   const expectedShape = getExpectedBatteryBatchShape();
   const formFactor = state.meta.form_factor;
+  const selectedSet = new Set(
+    (Array.isArray(selectedBatchIds) ? selectedBatchIds : [selectedBatchIds])
+      .filter(Boolean)
+      .map(String)
+  );
 
   const compatible = state.reference.cutBatches.filter((batch) => {
-    if (String(batch.tape_id) !== String(tapeId)) return false;
+    if (tapeId && String(batch.tape_id) !== String(tapeId)) return false;
 
-    const isSelected = selectedBatchId &&
-      String(batch.cut_batch_id) === String(selectedBatchId);
+    const isSelected = selectedSet.has(String(batch.cut_batch_id));
     const isCompatible =
       expectedShape &&
       batch.shape === expectedShape &&
@@ -4794,31 +5219,52 @@ function getLocalCompatibleBatteryCutBatches(tapeId, selectedBatchId) {
     return isSelected || isCompatible;
   });
 
-  return sortElectrodeCutBatches(compatible, { selectedBatchId });
+  return sortElectrodeCutBatches(compatible, { selectedBatchId: selectedSet.values().next().value });
 }
 
 async function loadCathodeBatches(tapeId) {
-  if (!tapeId) {
-    setCathodeBatches([]);
-    return;
-  }
+  const selectedBatchIds = getSelectedSourceBatchIds('cathode');
 
-  const selectedBatchId = state.electrodeSources.cathode_cut_batch_id || '';
-
-  const data = await fetchCompatibleBatteryCutBatches(tapeId, selectedBatchId);
+  const data = await fetchCompatibleBatteryCutBatches(tapeId, selectedBatchIds);
   setCathodeBatches(data);
 }
 
 async function loadAnodeBatches(tapeId) {
-  if (!tapeId) {
-    setAnodeBatches([]);
+  const selectedBatchIds = getSelectedSourceBatchIds('anode');
+
+  const data = await fetchCompatibleBatteryCutBatches(tapeId, selectedBatchIds);
+  setAnodeBatches(data);
+}
+
+function mergeCutBatchLists(lists) {
+  const byId = new Map();
+
+  lists.flat().forEach((batch) => {
+    if (!batch?.cut_batch_id) return;
+    byId.set(String(batch.cut_batch_id), batch);
+  });
+
+  return Array.from(byId.values());
+}
+
+async function loadRoleBatchesForSources(role) {
+  const tapeIds = [...new Set(getSelectedSourceTapeIds(role).map(String).filter(Boolean))];
+  const selectedBatchIds = getSelectedSourceBatchIds(role);
+
+  if (!tapeIds.length) {
+    const batches = await fetchCompatibleBatteryCutBatches(null, selectedBatchIds);
+    if (role === 'cathode') setCathodeBatches(batches);
+    else setAnodeBatches(batches);
     return;
   }
 
-  const selectedBatchId = state.electrodeSources.anode_cut_batch_id || '';
+  const lists = await Promise.all(
+    tapeIds.map(tapeId => fetchCompatibleBatteryCutBatches(tapeId, selectedBatchIds))
+  );
+  const merged = mergeCutBatchLists(lists);
 
-  const data = await fetchCompatibleBatteryCutBatches(tapeId, selectedBatchId);
-  setAnodeBatches(data);
+  if (role === 'cathode') setCathodeBatches(merged);
+  else setAnodeBatches(merged);
 }
 
 async function fetchCutBatchElectrodes(batchId) {
@@ -4842,6 +5288,34 @@ async function loadCathodeElectrodes(batchId) {
 async function loadAnodeElectrodes(batchId) {
   const data = await fetchCutBatchElectrodes(batchId);
   setAnodeElectrodes(data.filter(e => isAvailableElectrodeStatus(e.status_code)));
+}
+
+function mergeElectrodeLists(lists) {
+  const byId = new Map();
+
+  lists.flat().forEach((electrode) => {
+    if (!electrode?.electrode_id) return;
+    byId.set(String(electrode.electrode_id), electrode);
+  });
+
+  return Array.from(byId.values());
+}
+
+async function loadRoleElectrodesForSources(role) {
+  const batchIds = [...new Set(getSelectedSourceBatchIds(role).map(String).filter(Boolean))];
+
+  if (!batchIds.length) {
+    if (role === 'cathode') setCathodeElectrodes([]);
+    else setAnodeElectrodes([]);
+    return;
+  }
+
+  const lists = await Promise.all(batchIds.map(fetchCutBatchElectrodes));
+  const available = mergeElectrodeLists(lists)
+    .filter(e => isAvailableElectrodeStatus(e.status_code));
+
+  if (role === 'cathode') setCathodeElectrodes(available);
+  else setAnodeElectrodes(available);
 }
 
 async function fetchBatteryAssembly(batteryId) {
@@ -4916,28 +5390,29 @@ function applyBatteryConfigToState(data) {
 }
 
 function applyElectrodeSourcesToState(data) {
-  const nextElectrodeSourcesState = getDefaultElectrodeSourcesState();
+  const nextElectrodeSourcesState = {
+    sources: {
+      cathode: [],
+      anode: []
+    }
+  };
   let savedCathodeBatchId = '';
   let savedAnodeBatchId = '';
 
   if (Array.isArray(data?.electrode_sources)) {
     data.electrode_sources.forEach(src => {
       if (src.role === 'cathode') {
-        nextElectrodeSourcesState.cathode_tape_id = src.tape_id || null;
-        nextElectrodeSourcesState.cathode_cut_batch_id = src.cut_batch_id || null;
-        nextElectrodeSourcesState.cathode_source_notes = src.source_notes ?? null;
+        nextElectrodeSourcesState.sources.cathode.push(src);
 
-        if (src.cut_batch_id) {
+        if ((src.is_primary || !savedCathodeBatchId) && src.cut_batch_id) {
           savedCathodeBatchId = String(src.cut_batch_id);
         }
       }
 
       if (src.role === 'anode') {
-        nextElectrodeSourcesState.anode_tape_id = src.tape_id || null;
-        nextElectrodeSourcesState.anode_cut_batch_id = src.cut_batch_id || null;
-        nextElectrodeSourcesState.anode_source_notes = src.source_notes ?? null;
+        nextElectrodeSourcesState.sources.anode.push(src);
 
-        if (src.cut_batch_id) {
+        if ((src.is_primary || !savedAnodeBatchId) && src.cut_batch_id) {
           savedAnodeBatchId = String(src.cut_batch_id);
         }
       }
@@ -5027,22 +5502,17 @@ function applyBatteryAssemblyDataToState(data) {
 }
 
 async function loadSavedSourceBatches() {
-  if (state.electrodeSources.cathode_tape_id) {
-    await loadCathodeBatches(state.electrodeSources.cathode_tape_id);
-  }
-
-  if (state.electrodeSources.anode_tape_id) {
-    await loadAnodeBatches(state.electrodeSources.anode_tape_id);
-  }
+  await loadRoleBatchesForSources('cathode');
+  await loadRoleBatchesForSources('anode');
 }
 
 async function loadSavedStackElectrodes(savedCathodeBatchId, savedAnodeBatchId) {
-  if (savedCathodeBatchId) {
-    await loadCathodeElectrodes(savedCathodeBatchId);
+  if (savedCathodeBatchId || getSelectedSourceBatchIds('cathode').length) {
+    await loadRoleElectrodesForSources('cathode');
   }
 
-  if (savedAnodeBatchId) {
-    await loadAnodeElectrodes(savedAnodeBatchId);
+  if (savedAnodeBatchId || getSelectedSourceBatchIds('anode').length) {
+    await loadRoleElectrodesForSources('anode');
   }
 }
 
@@ -5526,70 +5996,21 @@ function renderBatteriesList() {
 }
 
 function renderTapeOptions() {
-  const projectFilterId = projectFilterSelect?.value || '';
   const cathodeSelect = document.getElementById('cathode_tape_id');
   const anodeSelect = document.getElementById('anode_tape_id');
 
   if (!cathodeSelect || !anodeSelect) return;
 
-  const cathodeTapeId =
-    state.electrodeSources.cathode_tape_id ?? cathodeSelect.value ?? '';
-  const anodeTapeId =
-    state.electrodeSources.anode_tape_id ?? anodeSelect.value ?? '';
-
-  cathodeSelect.innerHTML = '<option value="">— выбрать ленту —</option>';
-  anodeSelect.innerHTML = '<option value="">— выбрать ленту —</option>';
-
-  const filtered = state.reference.tapes.filter(t => {
-    if (!projectFilterId) return true;
-    const tapeProjectIds = normalizeProjectIds(t.project_ids || t.project_id);
-    return tapeProjectIds.includes(String(projectFilterId));
-  });
-
-  filtered.forEach(t => {
-    const option = document.createElement('option');
-    option.value = t.tape_id;
-    const sidednessLabel = formatTapeSidednessLabel(t.coating_sidedness);
-    option.textContent = `#${t.tape_id} | ${t.name}${sidednessLabel ? ` | ${sidednessLabel}` : ''} | ${t.created_by}`;
-
-    if (t.role === 'cathode') {
-      cathodeSelect.appendChild(option.cloneNode(true));
-    }
-
-    if (t.role === 'anode') {
-      anodeSelect.appendChild(option.cloneNode(true));
-    }
-  });
-
-  const cathodeTape = state.reference.tapes.find(
-    tape => String(tape.tape_id) === String(cathodeTapeId || '')
-  );
-  const anodeTape = state.reference.tapes.find(
-    tape => String(tape.tape_id) === String(anodeTapeId || '')
-  );
-
-  ensureSelectOption(
+  renderTapeOptionsForSelect(
     cathodeSelect,
-    cathodeTapeId,
-    cathodeTape
-      ? `#${cathodeTape.tape_id} | ${cathodeTape.name}${formatTapeSidednessLabel(cathodeTape.coating_sidedness) ? ` | ${formatTapeSidednessLabel(cathodeTape.coating_sidedness)}` : ''} | ${cathodeTape.created_by}`
-      : cathodeTapeId
-        ? `#${cathodeTapeId} | сохранённая лента`
-        : ''
+    'cathode',
+    getPrimaryElectrodeSource('cathode')?.tape_id || cathodeSelect.value || ''
   );
-
-  ensureSelectOption(
+  renderTapeOptionsForSelect(
     anodeSelect,
-    anodeTapeId,
-    anodeTape
-      ? `#${anodeTape.tape_id} | ${anodeTape.name}${formatTapeSidednessLabel(anodeTape.coating_sidedness) ? ` | ${formatTapeSidednessLabel(anodeTape.coating_sidedness)}` : ''} | ${anodeTape.created_by}`
-      : anodeTapeId
-        ? `#${anodeTapeId} | сохранённая лента`
-        : ''
+    'anode',
+    getPrimaryElectrodeSource('anode')?.tape_id || anodeSelect.value || ''
   );
-
-  cathodeSelect.value = cathodeTapeId || '';
-  anodeSelect.value = anodeTapeId || '';
 }
 
 function formatElectrodeBatchGeometry(batch) {
@@ -5626,23 +6047,25 @@ function formatElectrodesSidednessLabel(value) {
 }
 
 function deriveSelectedBatterySidedness() {
-  const cathodeBatch = state.reference.cathodeBatches.find(
-    batch => String(batch.cut_batch_id) === String(state.electrodeSources.cathode_cut_batch_id || '')
-  );
-  const anodeBatch = state.reference.anodeBatches.find(
-    batch => String(batch.cut_batch_id) === String(state.electrodeSources.anode_cut_batch_id || '')
-  );
-  const cathodeTape = state.reference.tapes.find(
-    tape => String(tape.tape_id) === String(state.electrodeSources.cathode_tape_id || '')
-  );
-  const anodeTape = state.reference.tapes.find(
-    tape => String(tape.tape_id) === String(state.electrodeSources.anode_tape_id || '')
+  const selectedBatchIds = [
+    ...getSelectedSourceBatchIds('cathode'),
+    ...getSelectedSourceBatchIds('anode')
+  ].map(String);
+  const selectedTapeIds = [
+    ...getSelectedSourceTapeIds('cathode'),
+    ...getSelectedSourceTapeIds('anode')
+  ].map(String);
+  const selectedBatch = [
+    ...state.reference.cathodeBatches,
+    ...state.reference.anodeBatches,
+    ...state.reference.cutBatches
+  ].find(batch => selectedBatchIds.includes(String(batch.cut_batch_id)));
+  const selectedTape = state.reference.tapes.find(
+    tape => selectedTapeIds.includes(String(tape.tape_id))
   );
 
-  return cathodeBatch?.coating_sidedness
-    || anodeBatch?.coating_sidedness
-    || cathodeTape?.coating_sidedness
-    || anodeTape?.coating_sidedness
+  return selectedBatch?.coating_sidedness
+    || selectedTape?.coating_sidedness
     || '';
 }
 
@@ -5661,6 +6084,10 @@ function formatElectrodeBatchOptionLabel(batch) {
   const target = formatElectrodeBatchTarget(batch);
   const geometry = formatElectrodeBatchGeometry(batch);
   const count = Number(batch.electrode_count) || 0;
+  const tapeLabel = batch.tape_name ? `лента: ${batch.tape_name}` : '';
+  const tapeStatus = batch.tape_availability_status === 'depleted'
+    ? 'лента списана / израсходована'
+    : '';
 
   if (sidedness) {
     parts.push(sidedness);
@@ -5676,6 +6103,14 @@ function formatElectrodeBatchOptionLabel(batch) {
 
   if (count) {
     parts.push(`${count} эл.`);
+  }
+
+  if (tapeLabel) {
+    parts.push(tapeLabel);
+  }
+
+  if (tapeStatus) {
+    parts.push(tapeStatus);
   }
 
   if (batch.created_by_name || batch.created_by) {
@@ -5704,91 +6139,13 @@ function hasBatchProjectOverlap(batch, oppositeBatch) {
 }
 
 function renderCathodeBatchOptions() {
-  
-  const select =
-  document.getElementById('cathode_cut_batch_id');
-  
-  select.innerHTML =
-  '<option value="">— выбрать партию —</option>';
-  
-  const selectedBatchId = state.electrodeSources.cathode_cut_batch_id || '';
-  const oppositeBatch = getSelectedSourceBatch('anode');
-
-  sortElectrodeCutBatches(
-    state.reference.cathodeBatches.filter(
-      b => batchMatchesProjectFilter(b) || String(b.cut_batch_id) === String(selectedBatchId)
-    ),
-    { selectedBatchId }
-  ).forEach(b => {
-    
-    const option = document.createElement('option');
-    
-    option.value = b.cut_batch_id;
-    
-    const hasOverlap = hasBatchProjectOverlap(b, oppositeBatch);
-    option.disabled = !hasOverlap && String(b.cut_batch_id) !== String(selectedBatchId);
-    option.textContent = hasOverlap
-      ? formatElectrodeBatchOptionLabel(b)
-      : `${formatElectrodeBatchOptionLabel(b)} | нет общего проекта`;
-    
-    select.appendChild(option);
-    
-  });
-
-  ensureSelectOption(
-    select,
-    state.electrodeSources.cathode_cut_batch_id,
-    state.electrodeSources.cathode_cut_batch_id
-      ? `#${state.electrodeSources.cathode_cut_batch_id} | сохранённая партия`
-      : ''
-  );
-
-  select.value = selectedBatchId || '';
-  
+  const select = document.getElementById('cathode_cut_batch_id');
+  renderBatchOptionsForSelect(select, 'cathode', getPrimaryElectrodeSource('cathode') || {});
 }
 
 function renderAnodeBatchOptions() {
-  
-  const select =
-  document.getElementById('anode_cut_batch_id');
-  
-  select.innerHTML =
-  '<option value="">— выбрать партию —</option>';
-  
-  const selectedBatchId = state.electrodeSources.anode_cut_batch_id || '';
-  const oppositeBatch = getSelectedSourceBatch('cathode');
-
-  sortElectrodeCutBatches(
-    state.reference.anodeBatches.filter(
-      b => batchMatchesProjectFilter(b) || String(b.cut_batch_id) === String(selectedBatchId)
-    ),
-    { selectedBatchId }
-  ).forEach(b => {
-    
-    const option = document.createElement('option');
-    
-    option.value = b.cut_batch_id;
-    
-    const hasOverlap = hasBatchProjectOverlap(b, oppositeBatch);
-    option.disabled = !hasOverlap && String(b.cut_batch_id) !== String(selectedBatchId);
-    option.textContent = hasOverlap
-      ? formatElectrodeBatchOptionLabel(b)
-      : `${formatElectrodeBatchOptionLabel(b)} | нет общего проекта`;
-    
-    select.appendChild(option);
-    
-  });
-
-  ensureSelectOption(
-    select,
-    state.electrodeSources.anode_cut_batch_id,
-    state.electrodeSources.anode_cut_batch_id
-      ? `#${state.electrodeSources.anode_cut_batch_id} | сохранённая партия`
-      : ''
-  );
-
-  select.value = selectedBatchId || '';
-  
+  const select = document.getElementById('anode_cut_batch_id');
+  renderBatchOptionsForSelect(select, 'anode', getPrimaryElectrodeSource('anode') || {});
 }
 
 function renderStackTables() {
@@ -6509,6 +6866,7 @@ function buildBatteryHeaderPayloadFromState() {
 
   return {
     ...state.electrodeSources,
+    sources: getElectrodeSourcesPayloadRows(),
     ...(activeConfig || {}),
     project_id: state.meta.project_id ? Number(state.meta.project_id) : null,
     project_ids: normalizeProjectIds(state.meta.project_ids).map(Number),
@@ -6570,16 +6928,27 @@ function getBatteryHeaderValidationMessage(headerPayload) {
 
   if (
     requiredRoles.includes('cathode') &&
-    (!headerPayload.cathode_tape_id || !headerPayload.cathode_cut_batch_id)
+    !headerPayload.cathode_cut_batch_id
   ) {
-    return 'Выберите катодную ленту и партию вырезанных электродов.';
+    return 'Выберите катодную партию вырезанных электродов.';
   }
 
   if (
     requiredRoles.includes('anode') &&
-    (!headerPayload.anode_tape_id || !headerPayload.anode_cut_batch_id)
+    !headerPayload.anode_cut_batch_id
   ) {
-    return 'Выберите анодную ленту и партию вырезанных электродов.';
+    return 'Выберите анодную партию вырезанных электродов.';
+  }
+
+  const incompleteSource = (Array.isArray(headerPayload.sources) ? headerPayload.sources : [])
+    .find(row => (
+      row &&
+      (row.tape_id || row.cut_batch_id || String(row.source_notes || '').trim()) &&
+      !row.cut_batch_id
+    ));
+
+  if (incompleteSource) {
+    return 'Для каждого дополнительного источника электродов выберите партию.';
   }
 
   if (!Array.isArray(headerPayload.project_ids) || headerPayload.project_ids.length === 0) {
@@ -6780,6 +7149,7 @@ async function handleProjectChange() {
   renderTapeOptions();
   renderCathodeBatchOptions();
   renderAnodeBatchOptions();
+  renderElectrodeSourcesForm();
   syncAllSectionStateFromDom();
   autoSelectAllowedBatteryProjects();
   renderBatteryProjectMultiSelect();
@@ -6804,11 +7174,10 @@ async function handleTapeSelectionChange(role, tapeId) {
   syncElectrodeSourcesStateFromDom();
   setBatteryProjectIds([], { render: false });
 
-  if (tapeId) {
-    await loadRoleBatches(role, tapeId);
-  }
+  await refreshRoleSourceReferences(role);
 
   autoSelectAllowedBatteryProjects();
+  renderElectrodeSourcesForm();
   renderBatteryProjectMultiSelect();
   finalizeInteractiveBatteryChange();
 }
@@ -6821,16 +7190,66 @@ async function loadRoleElectrodes(role, batchId) {
   }
 }
 
+async function refreshRoleSourceReferences(role) {
+  await loadRoleBatchesForSources(role);
+  await loadRoleElectrodesForSources(role);
+}
+
 async function handleBatchSelectionChange(role, batchId) {
   syncElectrodeSourcesStateFromDom();
 
-  if (batchId) {
-    await loadRoleElectrodes(role, batchId);
-  }
+  await refreshRoleSourceReferences(role);
 
   autoSelectAllowedBatteryProjects();
   renderCathodeBatchOptions();
   renderAnodeBatchOptions();
+  renderAdditionalSourceRows('cathode');
+  renderAdditionalSourceRows('anode');
+  renderBatteryProjectMultiSelect();
+  finalizeInteractiveBatteryChange();
+}
+
+async function handleSourceTapeSelectionChange(role) {
+  syncElectrodeSourcesStateFromDom();
+  setBatteryProjectIds([], { render: false });
+  await refreshRoleSourceReferences(role);
+  autoSelectAllowedBatteryProjects();
+  renderElectrodeSourcesForm();
+  renderBatteryProjectMultiSelect();
+  finalizeInteractiveBatteryChange();
+}
+
+async function handleSourceBatchSelectionChange(role) {
+  syncElectrodeSourcesStateFromDom();
+  await refreshRoleSourceReferences(role);
+  autoSelectAllowedBatteryProjects();
+  renderElectrodeSourcesForm();
+  renderBatteryProjectMultiSelect();
+  finalizeInteractiveBatteryChange();
+}
+
+function addElectrodeSourceRow(role) {
+  syncElectrodeSourcesStateFromDom();
+  const rows = getElectrodeSourceRows(role);
+  const baseRows = rows.length
+    ? rows
+    : [normalizeElectrodeSourceRow({ is_draft: true }, role, 0)];
+  setElectrodeSourceRows(role, [
+    ...baseRows,
+    normalizeElectrodeSourceRow({ is_draft: true }, role, baseRows.length)
+  ]);
+  renderElectrodeSourcesForm();
+  updateDirtyFlags();
+}
+
+async function removeElectrodeSourceRow(role, sourceIndex) {
+  syncElectrodeSourcesStateFromDom();
+  const rows = getElectrodeSourceRows(role)
+    .filter((row, index) => index !== sourceIndex);
+  setElectrodeSourceRows(role, rows);
+  await refreshRoleSourceReferences(role);
+  autoSelectAllowedBatteryProjects();
+  renderElectrodeSourcesForm();
   renderBatteryProjectMultiSelect();
   finalizeInteractiveBatteryChange();
 }
@@ -7064,6 +7483,48 @@ batteryProjectMultiSelectTrigger.addEventListener('click', () => {
 document.addEventListener('click', (event) => {
   if (!batteryProjectMultiSelect || batteryProjectMultiSelect.contains(event.target)) return;
   setBatteryProjectMultiSelectOpen(false);
+});
+
+document
+.getElementById('add_cathode_source_btn')
+?.addEventListener('click', () => {
+  addElectrodeSourceRow('cathode');
+});
+
+document
+.getElementById('add_anode_source_btn')
+?.addEventListener('click', () => {
+  addElectrodeSourceRow('anode');
+});
+
+document
+.getElementById('battery_electrode_sources')
+?.addEventListener('click', async event => {
+  const removeBtn = event.target?.closest?.('[data-source-remove-role]');
+  if (!removeBtn) return;
+
+  await removeElectrodeSourceRow(
+    removeBtn.dataset.sourceRemoveRole,
+    Number(removeBtn.dataset.sourceRemoveIndex)
+  );
+});
+
+document
+.getElementById('battery_electrode_sources')
+?.addEventListener('change', async event => {
+  const field = event.target?.dataset?.sourceField;
+  const role = event.target?.dataset?.sourceRole;
+
+  if (!field || !role) return;
+
+  if (field === 'tape_id') {
+    await handleSourceTapeSelectionChange(role);
+  } else if (field === 'cut_batch_id') {
+    await handleSourceBatchSelectionChange(role);
+  } else {
+    syncElectrodeSourcesStateFromDom();
+    finalizeInteractiveBatteryChange();
+  }
 });
 
 document
