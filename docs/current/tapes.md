@@ -52,6 +52,9 @@ The visible workflow is progressive:
 1. create or open the tape;
 2. save general info with at least one project and one recipe;
 3. choose concrete material instances for recipe lines;
+   material-instance dropdowns refresh on open (`focus`) through
+   `GET /api/materials/:material_id/instances`; the current selection is
+   preserved when the option list is rebuilt;
 4. save active material drying;
 5. save weighing and actual material amounts;
 6. save mixing;

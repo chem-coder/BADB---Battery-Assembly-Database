@@ -1770,24 +1770,70 @@ async function fetchRecipeLines(recipeId) {
   return res.json();
 }
 
-async function fetchMaterialInstances(materialId) {
+async function fetchMaterialInstances(materialId, { bypassCache = false } = {}) {
   if (!materialId) return [];
-  
-  // simple cache to avoid refetching repeatedly
-  if (state.recipe.instanceCacheByMaterialId[materialId]) {
+
+  if (!bypassCache && state.recipe.instanceCacheByMaterialId[materialId]) {
     return state.recipe.instanceCacheByMaterialId[materialId];
   }
-  
+
   const res = await fetch(`/api/materials/${materialId}/instances`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Ошибка загрузки экземпляров материала');
   }
-  
+
   const data = await res.json();
   state.recipe.instanceCacheByMaterialId[materialId] = data;
-  
+
   return data;
+}
+
+function sortMaterialInstances(instances) {
+  return (Array.isArray(instances) ? instances : [])
+    .slice()
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+}
+
+function renderMaterialInstanceSelectOptions(selectEl, instances, selectedValue = '') {
+  fillSelect(
+    selectEl,
+    sortMaterialInstances(instances),
+    'material_instance_id',
+    (inst) => inst.name || `ID ${inst.material_instance_id}`,
+    '<option value="">— выбрать экземпляр —</option>',
+    selectedValue
+  );
+}
+
+function repopulateMaterialInstanceSelectsForMaterial(materialId, instances) {
+  const normalizedMaterialId = Number(materialId);
+  if (!Number.isFinite(normalizedMaterialId) || normalizedMaterialId <= 0) return;
+
+  state.recipe.currentLines
+    .filter((line) => Number(line.material_id) === normalizedMaterialId)
+    .forEach((line) => {
+      const selectedValue = state.recipe.selectedInstancesByLineId[line.recipe_line_id] || '';
+      document.querySelectorAll(
+        `[data-recipe-line-id="${line.recipe_line_id}"].material-instance-select`
+      ).forEach((select) => {
+        renderMaterialInstanceSelectOptions(select, instances, selectedValue);
+      });
+    });
+}
+
+async function refreshMaterialInstanceSelectOnFocus(selectEl) {
+  const recipeLineId = selectEl.dataset.recipeLineId;
+  const line = state.recipe.currentLines.find(
+    (item) => String(item.recipe_line_id) === String(recipeLineId)
+  );
+  if (!line) return;
+
+  const materialId = Number(line.material_id);
+  if (!Number.isFinite(materialId) || materialId <= 0) return;
+
+  const instances = await fetchMaterialInstances(materialId, { bypassCache: true });
+  repopulateMaterialInstanceSelectsForMaterial(materialId, instances);
 }
 
 async function loadMaterialInstancesForRecipeLines(lines) {
@@ -2210,49 +2256,16 @@ function renderRecipeLines() {
     instanceSelect.className = 'material-instance-select';
     instanceSelect.dataset.recipeLineId = line.recipe_line_id;
     
-    // placeholder option
-    const placeholderOpt = document.createElement('option');
-    placeholderOpt.value = '';
-    placeholderOpt.textContent = '— выбрать экземпляр —';
-    instanceSelect.appendChild(placeholderOpt);
-    
     const slurryInstanceSelect = document.createElement('select');
     slurryInstanceSelect.className = 'material-instance-select slurry-instance-select';
     slurryInstanceSelect.dataset.recipeLineId = line.recipe_line_id;
     slurryInstanceSelect.disabled = true;
 
-    const slurryPlaceholderOpt = document.createElement('option');
-    slurryPlaceholderOpt.value = '';
-    slurryPlaceholderOpt.textContent = '— выбрать экземпляр —';
-    slurryInstanceSelect.appendChild(slurryPlaceholderOpt);
-    
     const instances = state.recipe.instanceCacheByMaterialId[line.material_id] || [];
     const prev = state.recipe.selectedInstancesByLineId[line.recipe_line_id] || '';
 
-    instances
-      .slice()
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-      .forEach(inst => {
-        const opt1 = document.createElement('option');
-        opt1.value = inst.material_instance_id;
-        opt1.textContent = inst.name || `ID ${inst.material_instance_id}`;
-        instanceSelect.appendChild(opt1);
-
-        const opt2 = document.createElement('option');
-        opt2.value = inst.material_instance_id;
-        opt2.textContent = inst.name || `ID ${inst.material_instance_id}`;
-        slurryInstanceSelect.appendChild(opt2);
-      });
-
-    if (prev) {
-      const prevValue = String(prev);
-      if ([...instanceSelect.options].some((option) => option.value === prevValue)) {
-        instanceSelect.value = prevValue;
-      }
-      if ([...slurryInstanceSelect.options].some((option) => option.value === prevValue)) {
-        slurryInstanceSelect.value = prevValue;
-      }
-    }
+    renderMaterialInstanceSelectOptions(instanceSelect, instances, prev);
+    renderMaterialInstanceSelectOptions(slurryInstanceSelect, instances, prev);
     
     // store selection in state
     function setInstanceForLine(recipeLineId, value) {
@@ -4735,6 +4748,21 @@ document.addEventListener('click', (event) => {
   setProjectMultiSelectOpen(false);
 });
 recipeSelect.addEventListener('focus', loadRecipesDropdown);
+
+const recipeLinesContainer = document.getElementById('recipe-lines-container');
+if (recipeLinesContainer) {
+  recipeLinesContainer.addEventListener('focusin', async (event) => {
+    const select = event.target;
+    if (!select.matches('.material-instance-select:not(:disabled)')) return;
+
+    try {
+      await refreshMaterialInstanceSelectOnFocus(select);
+    } catch (err) {
+      console.error(err);
+    }
+  });
+}
+
 tapeTypeSelect.addEventListener('change', loadRecipesDropdown);
 tapeTypeSelect.addEventListener('change', applyDefaultCoatingFoil);
 tapeTypeSelect.addEventListener('change', () => applyDryingTapePrefillFromCoating({ forceDefaults: true }));
