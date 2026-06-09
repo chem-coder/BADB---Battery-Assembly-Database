@@ -1,4 +1,5 @@
 const { attachElectrodeBatchProjects } = require('./electrodeBatchProjectService');
+const { ELECTRODE_CUT_BATCH_ORDER_BY_SQL } = require('../utils/electrodeCutBatchSort');
 
 async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selectedBatchId) {
   const result = await pool.query(
@@ -105,8 +106,7 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
       )
     ORDER BY
       CASE WHEN $3::integer IS NOT NULL AND b.cut_batch_id = $3 THEN 0 ELSE 1 END,
-      b.created_at DESC,
-      b.cut_batch_id DESC
+      ${ELECTRODE_CUT_BATCH_ORDER_BY_SQL}
     `,
     [batteryId, tapeId, selectedBatchId]
   );

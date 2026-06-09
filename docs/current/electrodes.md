@@ -1,9 +1,9 @@
 # Electrodes
 
 Created: 2026-05-06
-Edited: 2026-05-19
+Edited: 2026-06-09
 Status: current
-Verified against code: 2026-05-19
+Verified against code: 2026-06-09
 
 Source paths:
 
@@ -26,6 +26,18 @@ Batteries workflow. Stack-specific hard rules live in
 
 Electrode cut batches are created from tapes and define the pool of individual
 electrodes available for later battery assembly.
+
+List and dropdown ordering is deterministic and shared across the Electrodes
+page, Batteries source-batch selectors, and list APIs:
+
+1. available/active batches first when drying status exists:
+   `drying_end` set, then `drying_start` without `drying_end`, then in-work;
+2. newest physical `item_created_at` first, then record `created_at`;
+3. highest `cut_batch_id` as the final tie-breaker.
+
+Battery-compatible batch dropdowns may still pin the currently selected saved
+batch at the top during refresh; the selected value is preserved when option
+lists are rebuilt.
 
 Battery compatibility uses cut batch attributes including:
 

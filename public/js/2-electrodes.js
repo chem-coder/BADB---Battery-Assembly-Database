@@ -1,3 +1,8 @@
+    function sortElectrodeCutBatches(batches, options = {}) {
+      return window.BADB_ELECTRODE_CUT_BATCH_SORT?.sortElectrodeCutBatches(batches, options) ||
+        (Array.isArray(batches) ? batches : []);
+    }
+
     const roleSelect = document.getElementById('electrode-role');
     const tapeSelect = document.getElementById('electrodes-tape_id');
     const projectSelect = document.getElementById('electrodes-project_id');
@@ -181,11 +186,11 @@
     }
 
     function setAllCutBatches(nextBatches) {
-      state.reference.allCutBatches = Array.isArray(nextBatches) ? nextBatches : [];
+      state.reference.allCutBatches = sortElectrodeCutBatches(nextBatches);
     }
 
     function setCurrentTapeCutBatches(nextBatches) {
-      state.lists.cutBatches = Array.isArray(nextBatches) ? nextBatches : [];
+      state.lists.cutBatches = sortElectrodeCutBatches(nextBatches);
     }
 
     function setCurrentBatchElectrodes(nextElectrodes) {
@@ -1497,16 +1502,7 @@
         })
       );
 
-      const nextBatches = batchGroups
-        .flat()
-        .sort((a, b) => {
-          const aTime = (a.item_created_at || a.created_at) ? new Date(a.item_created_at || a.created_at).getTime() : 0;
-          const bTime = (b.item_created_at || b.created_at) ? new Date(b.item_created_at || b.created_at).getTime() : 0;
-          if (bTime !== aTime) return bTime - aTime;
-          return Number(b.cut_batch_id) - Number(a.cut_batch_id);
-        });
-
-      setAllCutBatches(nextBatches);
+      setAllCutBatches(batchGroups.flat());
       renderElectrodePage();
     }
     

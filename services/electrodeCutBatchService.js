@@ -12,6 +12,7 @@ const {
   validateProjectIdsForTape,
   replaceElectrodeBatchProjects
 } = require('./electrodeBatchProjectService');
+const { ELECTRODE_CUT_BATCH_ORDER_BY_SQL } = require('../utils/electrodeCutBatchSort');
 
 const ALLOWED_TARGET_FORM_FACTORS = new Set(['coin', 'pouch', 'cylindrical', 'prism']);
 const ALLOWED_TARGET_CONFIG_CODES = new Set([
@@ -243,7 +244,7 @@ async function listElectrodeCutBatches(pool) {
       GROUP BY cut_batch_id
     ) ec
       ON ec.cut_batch_id = b.cut_batch_id
-    ORDER BY b.item_created_at DESC, b.created_at DESC, b.cut_batch_id DESC
+    ORDER BY ${ELECTRODE_CUT_BATCH_ORDER_BY_SQL}
     `
   );
 

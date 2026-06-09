@@ -1,5 +1,10 @@
 // -------- DOM Refs --------
 
+function sortElectrodeCutBatches(batches, options = {}) {
+  return window.BADB_ELECTRODE_CUT_BATCH_SORT?.sortElectrodeCutBatches(batches, options) ||
+    (Array.isArray(batches) ? batches : []);
+}
+
 const projectSelect = document.getElementById('battery_project_id');
 const projectIdsInput = document.getElementById('battery_project_ids');
 const projectFilterSelect = document.getElementById('battery_project_filter_id');
@@ -989,16 +994,20 @@ function setTapes(tapes) {
 }
 
 function setCutBatches(cutBatches) {
-  state.reference.cutBatches = Array.isArray(cutBatches) ? cutBatches : [];
+  state.reference.cutBatches = sortElectrodeCutBatches(cutBatches);
 }
 
 function setCathodeBatches(batches) {
-  state.reference.cathodeBatches = Array.isArray(batches) ? batches : [];
+  state.reference.cathodeBatches = sortElectrodeCutBatches(batches, {
+    selectedBatchId: state.electrodeSources.cathode_cut_batch_id
+  });
   renderCathodeBatchOptions();
 }
 
 function setAnodeBatches(batches) {
-  state.reference.anodeBatches = Array.isArray(batches) ? batches : [];
+  state.reference.anodeBatches = sortElectrodeCutBatches(batches, {
+    selectedBatchId: state.electrodeSources.anode_cut_batch_id
+  });
   renderAnodeBatchOptions();
 }
 
@@ -4768,30 +4777,24 @@ function getLocalCompatibleBatteryCutBatches(tapeId, selectedBatchId) {
   const expectedShape = getExpectedBatteryBatchShape();
   const formFactor = state.meta.form_factor;
 
-  return state.reference.cutBatches
-    .filter((batch) => {
-      if (String(batch.tape_id) !== String(tapeId)) return false;
+  const compatible = state.reference.cutBatches.filter((batch) => {
+    if (String(batch.tape_id) !== String(tapeId)) return false;
 
-      const isSelected = selectedBatchId &&
-        String(batch.cut_batch_id) === String(selectedBatchId);
-      const isCompatible =
-        expectedShape &&
-        batch.shape === expectedShape &&
-        batch.target_form_factor === formFactor &&
-        (
-          formFactor !== 'coin' ||
-          getBatchSidedness(batch) === 'one_sided'
-        );
+    const isSelected = selectedBatchId &&
+      String(batch.cut_batch_id) === String(selectedBatchId);
+    const isCompatible =
+      expectedShape &&
+      batch.shape === expectedShape &&
+      batch.target_form_factor === formFactor &&
+      (
+        formFactor !== 'coin' ||
+        getBatchSidedness(batch) === 'one_sided'
+      );
 
-      return isSelected || isCompatible;
-    })
-    .sort((a, b) => {
-      if (selectedBatchId) {
-        if (String(a.cut_batch_id) === String(selectedBatchId)) return -1;
-        if (String(b.cut_batch_id) === String(selectedBatchId)) return 1;
-      }
-      return Number(b.cut_batch_id) - Number(a.cut_batch_id);
-    });
+    return isSelected || isCompatible;
+  });
+
+  return sortElectrodeCutBatches(compatible, { selectedBatchId });
 }
 
 async function loadCathodeBatches(tapeId) {
@@ -5711,9 +5714,12 @@ function renderCathodeBatchOptions() {
   const selectedBatchId = state.electrodeSources.cathode_cut_batch_id || '';
   const oppositeBatch = getSelectedSourceBatch('anode');
 
-  state.reference.cathodeBatches
-  .filter(b => batchMatchesProjectFilter(b) || String(b.cut_batch_id) === String(selectedBatchId))
-  .forEach(b => {
+  sortElectrodeCutBatches(
+    state.reference.cathodeBatches.filter(
+      b => batchMatchesProjectFilter(b) || String(b.cut_batch_id) === String(selectedBatchId)
+    ),
+    { selectedBatchId }
+  ).forEach(b => {
     
     const option = document.createElement('option');
     
@@ -5752,9 +5758,12 @@ function renderAnodeBatchOptions() {
   const selectedBatchId = state.electrodeSources.anode_cut_batch_id || '';
   const oppositeBatch = getSelectedSourceBatch('cathode');
 
-  state.reference.anodeBatches
-  .filter(b => batchMatchesProjectFilter(b) || String(b.cut_batch_id) === String(selectedBatchId))
-  .forEach(b => {
+  sortElectrodeCutBatches(
+    state.reference.anodeBatches.filter(
+      b => batchMatchesProjectFilter(b) || String(b.cut_batch_id) === String(selectedBatchId)
+    ),
+    { selectedBatchId }
+  ).forEach(b => {
     
     const option = document.createElement('option');
     

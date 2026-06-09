@@ -169,6 +169,8 @@ async function listTapesForElectrodes(pool) {
   return attachTapeProjects(pool, result.rows);
 }
 
+const { ELECTRODE_CUT_BATCH_ORDER_BY_SQL } = require('../utils/electrodeCutBatchSort');
+
 async function listElectrodeCutBatchesByTape(pool, tapeId) {
   const result = await pool.query(
     `
@@ -206,7 +208,7 @@ async function listElectrodeCutBatchesByTape(pool, tapeId) {
     ) ec
       ON ec.cut_batch_id = b.cut_batch_id
     WHERE b.tape_id = $1
-    ORDER BY b.item_created_at DESC, b.created_at DESC, b.cut_batch_id DESC
+    ORDER BY ${ELECTRODE_CUT_BATCH_ORDER_BY_SQL}
     `,
     [tapeId]
   );
