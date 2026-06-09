@@ -77,12 +77,16 @@ export const POINT_STYLE_OPTIONS = [
 ]
 
 // ── Built-in presets ─────────────────────────────────────────────────
+// Shapes rotated per line when varyMarkers is on (drops 'none').
+export const MARKER_ROTATION = POINT_STYLE_OPTIONS.filter(o => o.value).map(o => o.value)
+
 function makeDefaultChartStyle(overrides = {}) {
   return {
     palette: 'badb',
     borderWidth: 1.8,
     pointStyle: 'circle',
     pointRadius: 3,
+    varyMarkers: false,   // rotate marker SHAPE per line (not just colour)
     ...overrides,
   }
 }
@@ -287,6 +291,16 @@ export function useCyclingStyles() {
     return colors[i % colors.length]
   }
 
+  // Per-line marker shape: rotates through MARKER_ROTATION when the chart's
+  // varyMarkers flag is on, else the single chosen pointStyle. Lets lines on
+  // one chart differ by SHAPE (▲ ● ■ ◆ ★) as well as colour.
+  function markerForSession(chartId, sessionIndex) {
+    const style = getChartStyle(chartId)
+    if (!style.varyMarkers) return style.pointStyle
+    const i = Number.isFinite(sessionIndex) ? Math.abs(sessionIndex) : 0
+    return MARKER_ROTATION[i % MARKER_ROTATION.length]
+  }
+
   singleton = {
     library,
     activePreset,
@@ -298,6 +312,7 @@ export function useCyclingStyles() {
     renamePreset,
     deletePreset,
     colorForSession,
+    markerForSession,
     PALETTES,
     CHART_IDS,
     CHART_LABELS,

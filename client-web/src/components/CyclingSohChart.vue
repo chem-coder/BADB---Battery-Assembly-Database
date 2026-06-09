@@ -90,12 +90,28 @@ function shortLabel(s) {
   return s.file_name || `№${s.session_id}`
 }
 
+// ── Memoization (perf) ──────────────────────────────────────────────────
+// cell series + per-protocol stats were recomputed in BOTH chartData and
+// eolReadout — a full 2× pass over every cell on each toggle. Compute each
+// once here; both consumers read these maps.
+const seriesBySession = computed(() => {
+  const m = new Map()
+  for (const s of props.sessions) m.set(s.session_id, cellSeries(s))
+  return m
+})
+function seriesOf(s) { return seriesBySession.value.get(s.session_id) || [] }
+
 // Per-protocol mean ± σ. minCoverage = half the cells, so the mean is only
 // drawn where at least half the cohort is still alive (survivorship guard).
 function protocolStats(sessions) {
   const minCoverage = Math.max(1, Math.ceil(sessions.length / 2))
-  return protocolMeanStd(sessions.map(cellSeries), { minCoverage })
+  return protocolMeanStd(sessions.map(seriesOf), { minCoverage })
 }
+const statsByProto = computed(() => {
+  const m = new Map()
+  for (const [proto, sessions] of protocolGroups.value) m.set(proto, protocolStats(sessions))
+  return m
+})
 
 function hexToRgba(hex, a) {
   const h = hex.replace('#', '')
@@ -103,63 +119,120 @@ function hexToRgba(hex, a) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
 }
 
+// Max cycle across VISIBLE protocols only — so hiding a long-running protocol
+// (e.g. LFP 4.0 @ 1000 cyc) rescales the X-axis to the data that's actually
+// shown, instead of leaving empty space out to the global max.
 const maxCycle = computed(() => {
   let m = 1
-  for (const s of props.sessions) {
-    for (const r of (s.summary || [])) {
-      if (Number(r.cycle_number) > m) m = Number(r.cycle_number)
+  for (const [proto, sessions] of protocolGroups.value) {
+    if (hiddenProtocols.value.has(proto)) continue
+    for (const s of sessions) {
+      for (const r of (s.summary || [])) {
+        if (Number(r.cycle_number) > m) m = Number(r.cycle_number)
+      }
     }
   }
   return m
 })
 
+// Marker shapes rotated per line so lines differ by SHAPE as well as colour
+// (triangles vs circles vs squares…). On by default — the user asked for shape
+// distinction; toggle «Формы» off for plain lines. Markers are sampled (~12 per
+// line) so dense 1000-cycle curves don't turn into a wall of dots.
+const MARKER_SHAPES = ['circle', 'triangle', 'rectRot', 'rect', 'star', 'cross', 'crossRot']
+// Off by default — opt in via the «формы» toggle when comparing many lines.
+const varyMarkers = ref(false)
+function markerShape(i) { return MARKER_SHAPES[i % MARKER_SHAPES.length] }
+function sampledRadius(ctx) {
+  const n = ctx.dataset?.data?.length || 0
+  if (n <= 14) return 3
+  return ctx.dataIndex % Math.ceil(n / 12) === 0 ? 3 : 0
+}
+// Count of lines that will actually be drawn (cells: visible cells; mean:
+// visible protocols). Shape-markers exist to TELL LINES APART — so on a single
+// line they're pointless noise. Suppress below 2 lines regardless of the toggle.
+const visibleLineCount = computed(() => {
+  let n = 0
+  for (const [proto, sessions] of protocolGroups.value) {
+    if (hiddenProtocols.value.has(proto)) continue
+    if (mode.value === 'cells') {
+      for (const s of sessions) if (seriesOf(s).length) n++
+    } else if (statsByProto.value.get(proto)?.mean.length) {
+      n++
+    }
+  }
+  return n
+})
+const showShapeMarkers = computed(() => varyMarkers.value && visibleLineCount.value >= 2)
+function markerProps(lineIdx) {
+  if (!showShapeMarkers.value) return { pointStyle: 'circle', pointRadius: 0 }
+  return { pointStyle: markerShape(lineIdx), pointRadius: sampledRadius }
+}
+
+// Display-only decimation: caps a rendered line at ~MAX points (keeps every
+// k-th + last) so 600–1000-cycle series stay smooth to pan/zoom. Applied ONLY
+// to chart datasets — the EOL math runs on the full memoized series. Equal-
+// length arrays (mean/upper/lower) decimate on identical indices → band stays
+// x-aligned.
+const MAX_RENDER_POINTS = 500
+function decimateXY(points) {
+  const n = points.length
+  if (n <= MAX_RENDER_POINTS) return points
+  const k = Math.ceil(n / MAX_RENDER_POINTS)
+  const out = []
+  for (let i = 0; i < n; i += k) out.push(points[i])
+  if (out[out.length - 1] !== points[n - 1]) out.push(points[n - 1])
+  return out
+}
+
 const chartData = computed(() => {
   const datasets = []
+  let lineIdx = 0          // global line counter → distinct shape per line
   for (const [proto, sessions] of protocolGroups.value) {
     if (hiddenProtocols.value.has(proto)) continue   // legend toggle
     const color = protocolColor.value.get(proto)
     if (mode.value === 'cells') {
       sessions.forEach((s, i) => {
-        const data = cellSeries(s)
+        const data = seriesOf(s)
         if (!data.length) return
         // light alpha spread so overlapping cells of one protocol differ
         const alpha = sessions.length > 1 ? 0.55 + 0.4 * (i / (sessions.length - 1)) : 0.8
         datasets.push({
           label: `${proto} · ${shortLabel(s)}`,
-          data,
+          data: decimateXY(data),
           borderColor: hexToRgba(color, alpha),
           backgroundColor: hexToRgba(color, alpha),
           borderWidth: 1.4,
-          pointRadius: 0,
-          pointHoverRadius: 3,
+          pointHoverRadius: 4,
           tension: 0.2,
           fill: false,
           _proto: proto,
+          ...markerProps(lineIdx++),
         })
       })
     } else {
-      const { mean, upper, lower } = protocolStats(sessions)
+      const { mean, upper, lower } = statsByProto.value.get(proto)
       if (!mean.length) continue
       // mean line (bold) + band (upper hidden, lower fills to upper)
       datasets.push({
         label: `${proto} (среднее, n=${sessions.length})`,
-        data: mean,
+        data: decimateXY(mean),
         borderColor: color,
         backgroundColor: color,
         borderWidth: 2.6,
-        pointRadius: 0,
-        pointHoverRadius: 3,
+        pointHoverRadius: 4,
         tension: 0.2,
         fill: false,
         _proto: proto,
+        ...markerProps(lineIdx++),
       })
       datasets.push({
-        label: `${proto} +σ`, data: upper, borderColor: 'transparent',
+        label: `${proto} +σ`, data: decimateXY(upper), borderColor: 'transparent',
         backgroundColor: 'transparent', pointRadius: 0, fill: false, tension: 0.2,
         _band: true,
       })
       datasets.push({
-        label: `${proto} −σ`, data: lower, borderColor: 'transparent',
+        label: `${proto} −σ`, data: decimateXY(lower), borderColor: 'transparent',
         backgroundColor: hexToRgba(color, 0.13), pointRadius: 0, fill: '-1', tension: 0.2,
         _band: true,
       })
@@ -186,10 +259,17 @@ const chartTitle = computed(() => (isSoh.value
 const unit = computed(() => (isSoh.value ? '%' : 'Ah'))
 const yDecimals = computed(() => (isSoh.value ? 2 : 4))
 
+// Axis lock for zoom/pan: 'xy' | 'x' | 'y'. Fix one axis while scaling the
+// other (Origin/Plotly-style). Read live by the zoom config below; toggling it
+// recomputes the options so the plugin picks up the new mode immediately.
+const axisLock = ref('xy')
+
 const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: false,
+  // Minimal 150ms animation for small comparisons; off when many cells/bands
+  // are drawn (animating a large cohort each redraw lagged).
+  animation: chartData.value.datasets.length > 10 ? false : { duration: 150, easing: 'easeOutQuad' },
   interaction: { mode: 'nearest', intersect: false },
   plugins: {
     legend: {
@@ -208,8 +288,10 @@ const chartOptions = computed(() => ({
       filter: (ctx) => !ctx.dataset._band,
     },
     zoom: {
-      pan: { enabled: true, mode: 'xy', modifierKey: 'shift' },
-      zoom: { wheel: { enabled: true, modifierKey: 'ctrl' }, pinch: { enabled: true }, mode: 'xy' },
+      pan: { enabled: true, mode: axisLock.value },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value },
+      // Keep pan/zoom inside the data range — can't drift off into empty space.
+      limits: { x: { min: 'original', max: 'original' }, y: { min: 'original', max: 'original' } },
     },
   },
   scales: {
@@ -233,7 +315,7 @@ const eolReadout = computed(() => {
   const rows = []
   for (const [proto, sessions] of protocolGroups.value) {
     if (hiddenProtocols.value.has(proto)) continue
-    const { mean, minN, maxN } = protocolStats(sessions)
+    const { mean, minN, maxN } = statsByProto.value.get(proto)
     const reached = isSoh.value ? cyclesToThreshold(mean, eolThreshold.value) : null
     const first = mean.length ? mean[0] : null
     const last = mean.length ? mean[mean.length - 1] : null
@@ -298,19 +380,34 @@ function resetZoom() {
           <button class="soh-seg-btn" :class="{ 'is-active': mode === 'mean' }" @click="mode = 'mean'">Среднее ± σ</button>
         </div>
 
+        <label class="soh-field" :class="{ 'soh-field--off': visibleLineCount < 2 }"
+               :title="visibleLineCount < 2 ? 'Формы нужны, чтобы различать НЕСКОЛЬКО линий — на одной линии не применяются' : 'Разные формы маркеров по линиям (▲ ● ■ ★…) — различать линии не только цветом, но и формой'">
+          <input type="checkbox" v-model="varyMarkers" :disabled="visibleLineCount < 2" />
+          формы
+        </label>
+
         <label class="soh-field" :title="isSoh ? 'Исключить первые N формовочных циклов из нормировки (0 = считать с формовкой)' : 'Скрыть первые N формовочных циклов'">
           формовка
           <input v-model.number="formationExclude" type="number" min="0" max="50" class="soh-input" />
         </label>
 
-        <label v-if="isSoh" class="soh-field soh-field--eol" title="Линия конца жизни (End of Life)">
-          <input type="checkbox" v-model="showEol" />
+        <!-- EOL is SOH-only, but we keep it in the layout (dimmed + disabled in
+             capacity mode) so toggling the metric never shifts the buttons. -->
+        <label class="soh-field soh-field--eol" :class="{ 'soh-field--off': !isSoh }"
+               :title="isSoh ? 'Линия конца жизни (End of Life)' : 'EOL — только для режима SOH'">
+          <input type="checkbox" v-model="showEol" :disabled="!isSoh" />
           EOL
-          <input v-model.number="eolThreshold" type="number" min="1" max="100" class="soh-input" :disabled="!showEol" />%
+          <input v-model.number="eolThreshold" type="number" min="1" max="100" class="soh-input" :disabled="!isSoh || !showEol" />%
         </label>
 
+        <div class="soh-axis-lock" title="Фиксация оси при зуме и панораме · XY — обе · X — только X (Y зафиксирован) · Y — только Y">
+          <button class="soh-axis-btn" :class="{ 'is-active': axisLock === 'xy' }" @click="axisLock = 'xy'">XY</button>
+          <button class="soh-axis-btn" :class="{ 'is-active': axisLock === 'x' }" @click="axisLock = 'x'">X</button>
+          <button class="soh-axis-btn" :class="{ 'is-active': axisLock === 'y' }" @click="axisLock = 'y'">Y</button>
+        </div>
+
         <button class="soh-icon-btn" title="Скачать PNG" @click="exportPNG"><i class="pi pi-image"></i></button>
-        <button class="soh-icon-btn" title="Сброс зума" @click="resetZoom"><i class="pi pi-search-minus"></i></button>
+        <button class="soh-icon-btn" title="Сброс зума (или даблклик по графику) · колесо — масштаб у курсора, перетаскивание — панорама" @click="resetZoom"><i class="pi pi-search-minus"></i></button>
       </div>
     </div>
 
@@ -329,7 +426,7 @@ function resetZoom() {
       </button>
     </div>
 
-    <div class="soh-wrap">
+    <div class="soh-wrap" @dblclick="resetZoom">
       <Line v-if="protocolGroups.length" ref="sohChartRef" :data="chartData" :options="chartOptions" />
       <div v-else class="soh-empty">Нет активных измерений с данными циклирования.</div>
     </div>
@@ -405,6 +502,30 @@ function resetZoom() {
 }
 .soh-seg-btn:last-child { border-right: none; }
 .soh-seg-btn.is-active { background: #003274; color: white; font-weight: 600; }
+/* Axis-lock toggle (XY / X / Y) — compact segmented control. */
+.soh-axis-lock {
+  display: inline-flex;
+  border: 1px solid rgba(0, 50, 116, 0.15);
+  border-radius: 6px;
+  overflow: hidden;
+  background: white;
+}
+.soh-axis-btn {
+  padding: 4px 8px;
+  min-width: 26px;
+  border: none;
+  border-right: 1px solid rgba(0, 50, 116, 0.1);
+  background: white;
+  color: rgba(0, 50, 116, 0.6);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.soh-axis-btn:last-child { border-right: none; }
+.soh-axis-btn.is-active { background: #003274; color: white; }
+.soh-axis-btn:not(.is-active):hover { background: rgba(0, 50, 116, 0.06); }
 .soh-field {
   display: inline-flex;
   align-items: center;
@@ -416,6 +537,8 @@ function resetZoom() {
   color: rgba(0, 50, 116, 0.55);
 }
 .soh-field--eol { gap: 4px; text-transform: none; }
+/* Keeps EOL in the layout but inert in capacity mode — no button jitter. */
+.soh-field--off { opacity: 0.3; pointer-events: none; }
 .soh-input {
   width: 48px;
   padding: 3px 6px;

@@ -31,7 +31,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, S
 // Per-chart style resolver from the user's active preset. Gives us
 // { palette, borderWidth, pointStyle, pointRadius } per chart and a
 // palette-aware color per session.
-const { getChartStyle, colorForSession: resolveColor } = useCyclingStyles()
+const { getChartStyle, colorForSession: resolveColor, markerForSession } = useCyclingStyles()
 
 // Multi-session props — each session carries its own summary + cycleDataMap
 // + color. See CyclingPage.activeSessionViews for the shape.
@@ -343,6 +343,12 @@ const voltageChartRef = ref(null)
 const dqdvChartRef = ref(null)
 const hysteresisChartRef = ref(null)
 
+// Axis lock for zoom/pan per chart: 'xy' | 'x' | 'y'. Capacity defaults to 'x'
+// — its dual Y-axis (capacity + CE) makes independent Y-pan misalign CE, so it
+// only offers XY/X. Read live by each chart's zoom config; toggling recomputes
+// the options object so the zoom plugin picks up the new mode immediately.
+const axisLock = ref({ capacity: 'x', voltage: 'xy', dqdv: 'xy', hysteresis: 'xy' })
+
 // ── Session label helper (shown in chart legends) ──
 // Primary format: "Акк. №5" — battery number is the scientific anchor.
 // If the user activates two cycling runs of the same cell (e.g. "Cell 5
@@ -402,10 +408,46 @@ function decimate(points) {
   return out
 }
 
+// Row-level decimation for the per-cycle capacity chart. Decimating the
+// SUMMARY ROWS once (not each {x,y} array) keeps all datasets built from them —
+// discharge, charge, CE, and the parallel pointRadius array — index-aligned.
+// keepSet (selected cycles) is never dropped, so the "currently plotted below"
+// +2px marker bump survives. Only triggers past RENDER_POINT_CAP (avg run is
+// ~158 cycles → no-op; only the 600–1000-cycle runs are thinned).
+function decimateRows(rows, keepSet) {
+  const n = rows.length
+  if (n <= RENDER_POINT_CAP) return rows
+  const step = Math.ceil(n / RENDER_POINT_CAP)
+  const out = []
+  for (let i = 0; i < n; i++) {
+    if (i % step === 0 || i === n - 1 || (keepSet && keepSet.has(rows[i].cycle_number))) {
+      out.push(rows[i])
+    }
+  }
+  return out
+}
+
 // Shared Chart.js animation config — 150ms is short enough to feel
 // instant but smooth enough to avoid jarring jumps when data changes.
 // Default (1000ms) made multi-session toggles feel sluggish.
 const FAST_ANIM = { duration: 150, easing: 'easeOutQuad' }
+
+// Keep the minimal 150ms animation for normal use; drop it only when many
+// lines are on screen — animating 12+ series on every redraw is what lagged.
+// (Honours "минимальные анимации оставь": light by default, off only when heavy.)
+const ANIM_HEAVY_AT = 12
+const chartAnim = computed(() => (props.sessions.length > ANIM_HEAVY_AT ? false : FAST_ANIM))
+
+// Per-session line dash — distinguishes cells by line STYLE (not just colour) on
+// the dense voltage / dQ-dV charts, where per-point markers would be a wall of
+// dots. Applied only when >1 session is overlaid ([] = solid, the 1st session).
+// Honours "различать линии не только цветом" for the charts too dense for shapes.
+const SESSION_DASH = [[], [6, 3], [3, 3], [9, 4, 2, 4], [5, 5], [11, 3], [2, 4]]
+function sessionDashFor(sessionIndex) {
+  if (props.sessions.length <= 1) return null   // single session → keep existing dash semantics
+  const i = sessionIndex >= 0 ? sessionIndex : 0
+  return SESSION_DASH[i % SESSION_DASH.length]
+}
 
 // Legend dedup + adaptive sort.
 //
@@ -519,6 +561,9 @@ const capacityChartData = computed(() => {
 
   for (const s of props.sessions) {
     if (!s.summary?.length) continue
+    // Thin very long runs (600–1000 cycles) for rendering; selected cycles are
+    // always kept so their +2px "plotted below" marker survives.
+    const rows = decimateRows(s.summary, selectedSet)
 
     // Palette-resolved color for this session on the capacity chart.
     const sColor = sessionColorFor('capacity', s)
@@ -534,11 +579,14 @@ const capacityChartData = computed(() => {
     // style + radius come from the active preset; selected cycles still
     // get a +2px bump so "what's currently plotted below" stays visible.
     const baseRadius = Number(cStyle.pointRadius) || 3
-    const markerStyle = cStyle.pointStyle || 'circle'
+    // Per-line marker shape — rotates per session when «разные формы» is on in
+    // the ⚙ popover, so each cell differs by shape as well as colour.
+    const sIdx = props.sessions.findIndex(x => x.session_id === s.session_id)
+    const markerStyle = markerForSession('capacity', sIdx >= 0 ? sIdx : 0) || 'circle'
     if (showDischarge) {
       datasets.push({
         label: sessionShortLabel(s),
-        data: s.summary.map(row => ({
+        data: rows.map(row => ({
           x: row.cycle_number,
           y: projectCapacity(row.discharge_capacity_ah, s, refCap),
         })),
@@ -547,7 +595,7 @@ const capacityChartData = computed(() => {
         backgroundColor: sColor,       // filled marker
         fill: false,
         tension: 0.2,
-        pointRadius: s.summary.map(row => selectedSet.has(row.cycle_number) ? baseRadius + 2 : baseRadius),
+        pointRadius: rows.map(row => selectedSet.has(row.cycle_number) ? baseRadius + 2 : baseRadius),
         pointBackgroundColor: sColor,
         pointBorderColor: sColor,
         pointStyle: markerStyle || 'circle',
@@ -560,7 +608,7 @@ const capacityChartData = computed(() => {
     if (showCharge) {
       datasets.push({
         label: showDischarge ? `${sessionShortLabel(s)} · charge` : sessionShortLabel(s),
-        data: s.summary.map(row => ({
+        data: rows.map(row => ({
           x: row.cycle_number,
           y: projectCapacity(row.charge_capacity_ah, s, refCap),
         })),
@@ -583,7 +631,7 @@ const capacityChartData = computed(() => {
     const ceColor = isSolo ? CE_COLOR : fillColor(sColor, 0.45)
     datasets.push({
       label: `${sessionShortLabel(s)} · CE`,
-      data: s.summary.map(row => ({
+      data: rows.map(row => ({
         x: row.cycle_number,
         y: row.coulombic_efficiency,
       })),
@@ -605,7 +653,7 @@ const capacityChartData = computed(() => {
 const capacityOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: FAST_ANIM,
+  animation: chartAnim.value,
   onClick: (evt, elements, chart) => {
     // Click → toggle the cycle from the first clicked point. Only handle
     // clicks on the capacity dataset (left Y); CE clicks are just noise.
@@ -659,13 +707,13 @@ const capacityOptions = computed(() => ({
     },
     // Zoom/pan: X-only on capacity+CE chart. The dual Y-axis (capacity
     // + CE) panning together would misalign CE values on each axis, so
-    // we lock Y. Shift+drag to pan; Ctrl+wheel to zoom a cycle range
-    // (plain wheel is reserved for scrolling the page). 'original'
+    // we lock Y. Drag pans; wheel zooms at the cursor (no modifier keys).
+    // 'original'
     // bounds stop the user from panning past the real cycle range —
     // no more "negative cycles" or blank space past the last one.
     zoom: {
-      pan:  { enabled: true, mode: 'x', modifierKey: 'shift' },
-      zoom: { wheel: { enabled: true, modifierKey: 'ctrl' }, pinch: { enabled: true }, mode: 'x' },
+      pan:  { enabled: true, mode: axisLock.value.capacity },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value.capacity },
       limits: {
         x: { min: 'original', max: 'original', minRange: 1 },
       },
@@ -757,6 +805,9 @@ const voltageChartData = computed(() => {
     // preset's voltage-chart palette. Alpha gradient (old fade → new
     // vivid) still wraps the base color to preserve cycle readability.
     const colorBase = sessionColorFor('voltage', s)
+    // Per-session dash so overlaid cells differ by line style, not only colour
+    // (null for a single session → keep the charge/discharge dash semantics).
+    const sessionDash = sessionDashFor(props.sessions.indexOf(s))
 
     sortedCycles.forEach((cycleNum, cIdx) => {
       const points = s.cycleDataMap?.[cycleNum] || []
@@ -780,6 +831,12 @@ const voltageChartData = computed(() => {
 
       const alpha = cycleAlpha(cIdx, nCycles)
       const cycleColor = fillColor(colorBase, alpha)
+      // In «Оба» mode charge + discharge of the same cycle share a hue and
+      // overlap into a loop — hard to read. Fade + thin the CHARGE branch so
+      // discharge reads as the primary curve and charge as its companion.
+      const bothMode = props.stepFilter === 'both'
+      const chargeColor = bothMode ? fillColor(colorBase, alpha * 0.4) : cycleColor
+      const chargeWidth = bothMode ? thickness * 0.8 : thickness
 
       // In publication mode, both halves use the same dash (matches
       // colleague's figure — nothing distinguishes charge vs discharge
@@ -841,13 +898,13 @@ const voltageChartData = computed(() => {
         datasets.push(applyChartStyle({
           label: `Ц${cycleNum}_${sessionShortLabel(s)} · заряд`,
           data: charge.map(p => ({ x: xOf(p), y: p.voltage_v })),
-          borderColor: cycleColor,
-          backgroundColor: cycleColor,
-          pointBackgroundColor: cycleColor,
-          pointBorderColor: cycleColor,
+          borderColor: chargeColor,
+          backgroundColor: chargeColor,
+          pointBackgroundColor: chargeColor,
+          pointBorderColor: chargeColor,
           pointRadius: 0,
-          borderWidth: thickness,
-          borderDash: chargeDash,
+          borderWidth: chargeWidth,
+          borderDash: sessionDash || chargeDash,
           showLine: true,
         }, vStyle))
       }
@@ -861,7 +918,7 @@ const voltageChartData = computed(() => {
           pointBorderColor: cycleColor,
           pointRadius: 0,
           borderWidth: thickness,
-          borderDash: dischargeDash,
+          borderDash: sessionDash || dischargeDash,
           showLine: true,
         }, vStyle))
       }
@@ -874,7 +931,7 @@ const voltageChartData = computed(() => {
 const voltageOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: FAST_ANIM,
+  animation: chartAnim.value,
   plugins: {
     legend: {
       display: !props.publicationMode,  // publication figures don't carry legends
@@ -896,12 +953,12 @@ const voltageOptions = computed(() => ({
     },
     // Zoom/pan: XY on voltage profile — a plateau analysis typically
     // zooms into a specific V window (e.g. 3.2–3.6 V for LFP) AND a
-    // capacity window at the same time. Shift+drag pans, Ctrl+wheel
-    // zooms (plain wheel scrolls the page). 'original' bounds keep
+    // capacity window at the same time. Drag pans, wheel zooms at the
+    // cursor (no modifier keys). 'original' bounds keep
     // the user within the real capacity/voltage ranges.
     zoom: {
-      pan:  { enabled: true, mode: 'xy', modifierKey: 'shift' },
-      zoom: { wheel: { enabled: true, modifierKey: 'ctrl' }, pinch: { enabled: true }, mode: 'xy' },
+      pan:  { enabled: true, mode: axisLock.value.voltage },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value.voltage },
       limits: {
         x: { min: 'original', max: 'original' },
         y: { min: 'original', max: 'original' },
@@ -991,6 +1048,8 @@ const dqdvChartData = computed(() => {
 
   for (const s of props.sessions) {
     const colorBase = sessionColorFor('dqdv', s)
+    // Per-session dash so overlaid cells differ by line style, not only colour.
+    const sessionDash = sessionDashFor(props.sessions.indexOf(s))
     sortedCycles.forEach((cycleNum, cIdx) => {
       const points = s.cycleDataMap?.[cycleNum] || []
       if (!points.length) return
@@ -1017,7 +1076,7 @@ const dqdvChartData = computed(() => {
           pointBorderColor: cycleColor,
           pointRadius: 0,
           borderWidth: thickness,
-          borderDash: [4, 2],
+          borderDash: sessionDash || [4, 2],
           showLine: true,
         }, dStyle))
       }
@@ -1031,6 +1090,7 @@ const dqdvChartData = computed(() => {
           pointBorderColor: cycleColor,
           pointRadius: 0,
           borderWidth: thickness,
+          borderDash: sessionDash || undefined,
           showLine: true,
         }, dStyle))
       }
@@ -1043,7 +1103,7 @@ const dqdvChartData = computed(() => {
 const dqdvOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: FAST_ANIM,
+  animation: chartAnim.value,
   plugins: {
     legend: {
       display: !props.publicationMode,
@@ -1061,12 +1121,13 @@ const dqdvOptions = computed(() => ({
     },
     // Zoom/pan: XY on dQ/dV — isolating a single peak (V range) and
     // seeing its height (|dQ/dV| range) both matter for phase analysis.
-    // Shift+drag pans, Ctrl+wheel zooms. 'original' bounds on X keep
+    // Drag pans, wheel zooms at the cursor (no modifier keys). 'original'
+    // bounds on X keep
     // the V window realistic; Y min=0 because |dQ/dV| ≥ 0 always
     // (panning into negative heights would be meaningless).
     zoom: {
-      pan:  { enabled: true, mode: 'xy', modifierKey: 'shift' },
-      zoom: { wheel: { enabled: true, modifierKey: 'ctrl' }, pinch: { enabled: true }, mode: 'xy' },
+      pan:  { enabled: true, mode: axisLock.value.dqdv },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value.dqdv },
       limits: {
         x: { min: 'original', max: 'original' },
         y: { min: 0, max: 'original' },
@@ -1103,10 +1164,13 @@ const hysteresisChartData = computed(() => {
   const hStyle = hysteresisStyle.value
   const userWidth = Number(hStyle.borderWidth) || 1.8
   const baseRadius = Number(hStyle.pointRadius) || 3
-  const markerStyle = hStyle.pointStyle || 'circle'
   for (const s of props.sessions) {
     if (!s.summary?.length) continue
     const sColor = sessionColorFor('hysteresis', s)
+    // Per-line marker shape — rotates per session when «разные формы» включены в
+    // ⚙ поповере, чтобы ячейки различались формой, а не только цветом (как Ёмкость).
+    const sIdx = props.sessions.findIndex(x => x.session_id === s.session_id)
+    const sMarker = markerForSession('hysteresis', sIdx >= 0 ? sIdx : 0) || 'circle'
     const points = s.summary
       .map(row => {
         const chg = Number(row.avg_charge_voltage_v)
@@ -1124,7 +1188,7 @@ const hysteresisChartData = computed(() => {
       tension: 0.2,
       pointRadius: baseRadius,
       pointHoverRadius: baseRadius + 2,
-      pointStyle: markerStyle || 'circle',
+      pointStyle: sMarker,
       borderWidth: userWidth,
     })
   }
@@ -1134,7 +1198,7 @@ const hysteresisChartData = computed(() => {
 const hysteresisOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: FAST_ANIM,
+  animation: chartAnim.value,
   plugins: {
     legend: {
       display: props.sessions.length > 1,
@@ -1159,12 +1223,13 @@ const hysteresisOptions = computed(() => ({
     },
     // XY zoom: sometimes you want a specific cycle window (x) but
     // sometimes a particular hysteresis range (y) to spot inflection.
-    // Shift+drag pans, Ctrl+wheel zooms. Bounds keep the user inside
+    // Drag pans, wheel zooms at the cursor (no modifier keys). Bounds keep
+    // the user inside
     // the real cycle range; Y min=0 because ΔV̄ ≥ 0 for normal cells
     // (avg_charge > avg_discharge by definition of hysteresis).
     zoom: {
-      pan:  { enabled: true, mode: 'xy', modifierKey: 'shift' },
-      zoom: { wheel: { enabled: true, modifierKey: 'ctrl' }, pinch: { enabled: true }, mode: 'xy' },
+      pan:  { enabled: true, mode: axisLock.value.hysteresis },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value.hysteresis },
       limits: {
         x: { min: 'original', max: 'original', minRange: 1 },
         y: { min: 0, max: 'original' },
@@ -1354,16 +1419,20 @@ function resetZoom(chartRef) {
   <div class="cycling-charts">
     <!-- Top: combined Capacity + CE chart (dual Y-axis, publication style) -->
     <div class="chart-card chart-card--wide">
+      <div class="chart-axis-lock" title="Фиксация оси при зуме/панораме · XY — обе · X — только X. Ось Y двойная (Ёмкость + КЭ) — отдельный зум Y недоступен.">
+        <button :class="{ 'is-active': axisLock.capacity === 'xy' }" @click="axisLock.capacity = 'xy'">XY</button>
+        <button :class="{ 'is-active': axisLock.capacity === 'x' }" @click="axisLock.capacity = 'x'">X</button>
+      </div>
       <button class="chart-style-btn" title="Настройки стиля графика" @click="openChartStyle('capacity', $event)">
         <i class="pi pi-sliders-h"></i>
       </button>
-      <button class="chart-reset-zoom-btn" title="Сброс зума (Shift+drag — панорама, Ctrl+колесо — масштаб)" @click="resetZoom(capacityChartRef)">
+      <button class="chart-reset-zoom-btn" title="Сброс зума · колесо — масштаб (где курсор), перетаскивание — панорама" @click="resetZoom(capacityChartRef)">
         <i class="pi pi-refresh"></i>
       </button>
       <button class="chart-export-btn" title="Скачать PNG" @click="exportChartPNG(capacityChartRef, 'capacity_and_ce')">
         <i class="pi pi-download"></i>
       </button>
-      <div class="chart-wrap chart-wrap--tall">
+      <div class="chart-wrap chart-wrap--tall" @dblclick="resetZoom(capacityChartRef)">
         <Line v-if="summary.length" ref="capacityChartRef" :data="capacityChartData" :options="capacityOptions" />
       </div>
     </div>
@@ -1373,16 +1442,21 @@ function resetZoom(chartRef) {
          when the toggle is off or when no session has avg voltages yet
          (older uploads pre-migration-019). -->
     <div v-if="showHysteresis && hasHysteresisData" class="chart-card chart-card--wide">
+      <div class="chart-axis-lock" title="Фиксация оси при зуме/панораме · XY — обе · X — только X (Y зафиксирован) · Y — только Y">
+        <button :class="{ 'is-active': axisLock.hysteresis === 'xy' }" @click="axisLock.hysteresis = 'xy'">XY</button>
+        <button :class="{ 'is-active': axisLock.hysteresis === 'x' }" @click="axisLock.hysteresis = 'x'">X</button>
+        <button :class="{ 'is-active': axisLock.hysteresis === 'y' }" @click="axisLock.hysteresis = 'y'">Y</button>
+      </div>
       <button class="chart-style-btn" title="Настройки стиля графика" @click="openChartStyle('hysteresis', $event)">
         <i class="pi pi-sliders-h"></i>
       </button>
-      <button class="chart-reset-zoom-btn" title="Сброс зума (Shift+drag — панорама, Ctrl+колесо — масштаб)" @click="resetZoom(hysteresisChartRef)">
+      <button class="chart-reset-zoom-btn" title="Сброс зума · колесо — масштаб (где курсор), перетаскивание — панорама" @click="resetZoom(hysteresisChartRef)">
         <i class="pi pi-refresh"></i>
       </button>
       <button class="chart-export-btn" title="Скачать PNG" @click="exportChartPNG(hysteresisChartRef, 'voltage_hysteresis')">
         <i class="pi pi-download"></i>
       </button>
-      <div class="chart-wrap chart-wrap--tall">
+      <div class="chart-wrap chart-wrap--tall" @dblclick="resetZoom(hysteresisChartRef)">
         <Line ref="hysteresisChartRef" :data="hysteresisChartData" :options="hysteresisOptions" />
       </div>
     </div>
@@ -1575,16 +1649,21 @@ function resetZoom(chartRef) {
 
     <!-- Voltage profile (overlay of selected cycles) -->
     <div v-if="selectedCycles.length" class="chart-card chart-card--wide">
+      <div class="chart-axis-lock" title="Фиксация оси при зуме/панораме · XY — обе · X — только X (Y зафиксирован) · Y — только Y">
+        <button :class="{ 'is-active': axisLock.voltage === 'xy' }" @click="axisLock.voltage = 'xy'">XY</button>
+        <button :class="{ 'is-active': axisLock.voltage === 'x' }" @click="axisLock.voltage = 'x'">X</button>
+        <button :class="{ 'is-active': axisLock.voltage === 'y' }" @click="axisLock.voltage = 'y'">Y</button>
+      </div>
       <button class="chart-style-btn" title="Настройки стиля графика" @click="openChartStyle('voltage', $event)">
         <i class="pi pi-sliders-h"></i>
       </button>
-      <button class="chart-reset-zoom-btn" title="Сброс зума (Shift+drag — панорама, Ctrl+колесо — масштаб)" @click="resetZoom(voltageChartRef)">
+      <button class="chart-reset-zoom-btn" title="Сброс зума · колесо — масштаб (где курсор), перетаскивание — панорама" @click="resetZoom(voltageChartRef)">
         <i class="pi pi-refresh"></i>
       </button>
       <button class="chart-export-btn" title="Скачать PNG" @click="exportChartPNG(voltageChartRef, 'voltage_profile')">
         <i class="pi pi-download"></i>
       </button>
-      <div class="chart-wrap chart-wrap--tall">
+      <div class="chart-wrap chart-wrap--tall" @dblclick="resetZoom(voltageChartRef)">
         <Scatter ref="voltageChartRef" :data="voltageChartData" :options="voltageOptions" />
       </div>
     </div>
@@ -1595,16 +1674,21 @@ function resetZoom(chartRef) {
 
     <!-- dQ/dV plot -->
     <div v-if="selectedCycles.length" class="chart-card chart-card--wide">
+      <div class="chart-axis-lock" title="Фиксация оси при зуме/панораме · XY — обе · X — только X (Y зафиксирован) · Y — только Y">
+        <button :class="{ 'is-active': axisLock.dqdv === 'xy' }" @click="axisLock.dqdv = 'xy'">XY</button>
+        <button :class="{ 'is-active': axisLock.dqdv === 'x' }" @click="axisLock.dqdv = 'x'">X</button>
+        <button :class="{ 'is-active': axisLock.dqdv === 'y' }" @click="axisLock.dqdv = 'y'">Y</button>
+      </div>
       <button class="chart-style-btn" title="Настройки стиля графика" @click="openChartStyle('dqdv', $event)">
         <i class="pi pi-sliders-h"></i>
       </button>
-      <button class="chart-reset-zoom-btn" title="Сброс зума (Shift+drag — панорама, Ctrl+колесо — масштаб)" @click="resetZoom(dqdvChartRef)">
+      <button class="chart-reset-zoom-btn" title="Сброс зума · колесо — масштаб (где курсор), перетаскивание — панорама" @click="resetZoom(dqdvChartRef)">
         <i class="pi pi-refresh"></i>
       </button>
       <button class="chart-export-btn" title="Скачать PNG" @click="exportChartPNG(dqdvChartRef, 'dqdv')">
         <i class="pi pi-download"></i>
       </button>
-      <div class="chart-wrap chart-wrap--tall">
+      <div class="chart-wrap chart-wrap--tall" @dblclick="resetZoom(dqdvChartRef)">
         <Scatter ref="dqdvChartRef" :data="dqdvChartData" :options="dqdvOptions" />
       </div>
     </div>
@@ -1778,6 +1862,38 @@ function resetZoom(chartRef) {
   background: #003274;
   color: white;
 }
+
+/* Axis-lock toggle (XY / X / Y) — top-left, kept visible for discoverability. */
+.chart-axis-lock {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  display: inline-flex;
+  border: 1px solid rgba(0, 50, 116, 0.12);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.85);
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+.chart-card:hover .chart-axis-lock { opacity: 1; }
+.chart-axis-lock button {
+  border: none;
+  border-right: 1px solid rgba(0, 50, 116, 0.1);
+  background: transparent;
+  color: rgba(0, 50, 116, 0.6);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  padding: 3px 7px;
+  min-width: 22px;
+  cursor: pointer;
+}
+.chart-axis-lock button:last-child { border-right: none; }
+.chart-axis-lock button.is-active { background: #003274; color: #fff; }
+.chart-axis-lock button:not(.is-active):hover { background: rgba(0, 50, 116, 0.08); }
 
 /* ── Cycle filters (quick-select) ── */
 .cycle-filters {

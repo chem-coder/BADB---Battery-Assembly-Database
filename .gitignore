@@ -13,6 +13,9 @@ dist/
 build/
 .claude/
 .local/
+__pycache__/
+*.pyc
+uploads/
 mempalace.yaml
 mempalace.yaml.old
 entities.json

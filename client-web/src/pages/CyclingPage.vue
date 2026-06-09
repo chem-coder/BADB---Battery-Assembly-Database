@@ -63,9 +63,30 @@ const tableRef = ref(null)
 const showReferenceData = ref(false)
 function isRefSession(s) { return typeof s?.notes === 'string' && s.notes.startsWith('REF_IMPORT') }
 const refSessionCount = computed(() => sessions.value.filter(isRefSession).length)
-const displaySessions = computed(() =>
-  showReferenceData.value ? sessions.value : sessions.value.filter(s => !isRefSession(s))
-)
+// Show all measurements (the «reference» distinction went away once they were
+// migrated to proper batteries under the «Перенос старой базы» project). Sort
+// by the Протокол column to cluster cells by chemistry.
+const displaySessions = computed(() => sessions.value)
+
+// Quick protocol comparison. The SOH chart's value is comparing protocols,
+// but doing so meant hunting "main" cycling blocks out of a paginated table.
+// "Main" = a session that has a protocol and a real long run (≥ MAIN_MIN_CYCLES
+// cycles) — excludes 1-2-cycle formation and 10-15-cycle conditioning steps.
+// The selector below activates them in one click (works even when refs are
+// hidden in the table, since it reads the full session list).
+const MAIN_MIN_CYCLES = 30
+const mainSessions = computed(() => sessions.value.filter(
+  s => s.status === 'ready' && s.protocol && (s.total_cycles ?? 0) >= MAIN_MIN_CYCLES
+))
+const protocolCompareOptions = computed(() => {
+  const byProto = {}
+  for (const s of mainSessions.value) byProto[s.protocol] = (byProto[s.protocol] || 0) + 1
+  const opts = Object.entries(byProto)
+    .sort((a, b) => a[0].localeCompare(b[0], 'ru'))
+    .map(([p, n]) => ({ label: `${p} (${n})`, value: p }))
+  if (opts.length > 1) opts.unshift({ label: `Все протоколы (${mainSessions.value.length})`, value: '__all__' })
+  return opts
+})
 
 // ── Multi-session overlay state ──────────────────────────────────────
 // A session is "active" when it appears on the charts. State is keyed by
@@ -132,6 +153,12 @@ const ghostTrace = ref(false)
 // hysteresis — a separate analytical view for comparing degradation across
 // protocols/cells. Rendered by <CyclingSohChart> below the main charts.
 const showSoh = ref(false)
+
+// Page split into 3 tabs by data level (Dima 2026-06-09): the page was one
+// infinite scroll mixing session list / cross-protocol charts / per-cycle raw
+// points. Tabs: 'sessions' (manage+select), 'compare' (SOH/capacity across
+// protocols), 'detail' (one selection: V-profile, dQ/dV, raw points).
+const activeTab = ref('sessions')
 
 // Toolbar regrouping (Dima 2026-06-04): the 10 controls were one flat
 // row with no structure. They're now grouped into «Данные» (data
@@ -521,6 +548,7 @@ const columns = [
   // the default column filter popover and makes the header itself click-
   // able (emits header-click → onTableHeaderClick toggles all visible).
   { field: 'active', header: 'График', width: 80, sortable: false, filterable: false },
+  { field: 'protocol', header: 'Протокол', width: 110, sortable: true, filterable: true },
   { field: 'battery_id', header: 'Аккумулятор', width: 130, sortable: true },
   { field: 'equipment_type', header: 'Оборудование', width: 130, sortable: true, filterable: true },
   { field: 'total_cycles', header: 'Циклов', width: 80, sortable: true },
@@ -642,6 +670,29 @@ async function onTableHeaderClick(field) {
       activeSessionIds.value = activeSessionIds.value.filter(id => id !== s.session_id)
     }
   }))
+}
+
+// Activate the main blocks of a protocol (or all protocols) and reveal the
+// SOH chart. Additive — builds the comparison up; clear via the «График»
+// header toggle. Fetches summaries for the newly-activated sessions.
+async function compareMainBlocks(proto) {
+  if (!proto) return
+  let mains = mainSessions.value
+  if (proto !== '__all__') mains = mains.filter(s => s.protocol === proto)
+  const toAdd = mains.filter(s => !isSessionActive(s.session_id))
+  if (toAdd.length) {
+    activeSessionIds.value = [...activeSessionIds.value, ...toAdd.map(s => s.session_id)]
+    await Promise.all(toAdd.map(async s => {
+      if (summaryBySession.value[s.session_id]) return
+      try {
+        const { data } = await api.get(`/api/cycling/sessions/${s.session_id}/summary`)
+        summaryBySession.value = { ...summaryBySession.value, [s.session_id]: data }
+      } catch {
+        activeSessionIds.value = activeSessionIds.value.filter(id => id !== s.session_id)
+      }
+    }))
+  }
+  activeTab.value = 'compare'   // jump to the comparison view
 }
 
 
@@ -941,6 +992,8 @@ const batteryOptions = computed(() =>
   <div class="cycling-page">
     <PageHeader title="Циклирование" icon="pi pi-sync" />
 
+    <!-- Measurements list (master). Selecting cells reveals the charts below. -->
+
     <!-- Sessions table -->
     <CrudTable
       ref="tableRef"
@@ -953,14 +1006,17 @@ const batteryOptions = computed(() =>
       @header-click="onTableHeaderClick"
     >
       <template #toolbar-end>
-        <Button
-          v-if="refSessionCount"
-          :label="showReferenceData ? `Скрыть референсные (${refSessionCount})` : `Референсные (${refSessionCount})`"
-          :icon="showReferenceData ? 'pi pi-eye-slash' : 'pi pi-eye'"
+        <Select
+          v-if="protocolCompareOptions.length"
+          :modelValue="null"
+          :options="protocolCompareOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Сравнить протокол…"
           size="small"
-          severity="secondary"
-          outlined
-          @click="showReferenceData = !showReferenceData"
+          style="width: 210px"
+          title="Активировать основные блоки протокола и показать график SOH"
+          @update:modelValue="compareMainBlocks"
         />
         <Button label="Загрузить файл" icon="pi pi-upload" size="small" @click="showUpload = true" />
       </template>
@@ -1011,8 +1067,10 @@ const batteryOptions = computed(() =>
       </template>
     </CrudTable>
 
-    <!-- Charts area (multi-session) -->
+    <!-- Charts (detail) appear below the list once measurements are selected:
+         SOH / protocol comparison on top, then per-cell profile + dQ/dV. -->
     <div v-if="activeSessionViews.length" class="charts-area glass-card">
+      <CyclingSohChart :sessions="activeSessionViews" />
       <!-- Toolbar — regrouped into semantic blocks (Dima 2026-06-04):
            «Данные» (selection affecting everything) · «Отображение»
            (per-view display options) · «Оформление и экспорт»
@@ -1054,18 +1112,11 @@ const batteryOptions = computed(() =>
         <div class="tb-group">
           <span class="tb-group-title">Доп. графики</span>
           <div class="tb-group-row">
-            <div class="toolbar-pubmode" title="Сравнение по протоколам: разрядная ёмкость (Ah) или SOH — удержание (%), с группировкой, ±σ и линией EOL">
-              <label class="toolbar-label">По протоколам (Ah / SOH)</label>
-              <div class="pubmode-row">
-                <button class="pubmode-btn" :class="{ 'is-active': !showSoh }" @click="showSoh = false">Скрыт</button>
-                <button class="pubmode-btn" :class="{ 'is-active': showSoh }" @click="showSoh = true">Показать</button>
-              </div>
-            </div>
             <div class="toolbar-pubmode" title="Рост ΔV̄ = avg_charge − avg_discharge показывает поляризацию (SEI, контакт, дендриты)">
               <label class="toolbar-label">Гистерезис V̄</label>
               <div class="pubmode-row">
-                <button class="pubmode-btn" :class="{ 'is-active': !showHysteresis }" @click="showHysteresis = false">Скрыт</button>
-                <button class="pubmode-btn" :class="{ 'is-active': showHysteresis }" @click="showHysteresis = true">Показать</button>
+                <button class="pubmode-btn" :class="{ 'is-active': !showHysteresis }" @click="showHysteresis = false">Выкл</button>
+                <button class="pubmode-btn" :class="{ 'is-active': showHysteresis }" @click="showHysteresis = true">Вкл</button>
               </div>
             </div>
             <span class="tb-group-hint" title="Вид ёмкости, ghost trace и окно сглаживания dQ/dV теперь настраиваются в ⚙ каждого графика">
@@ -1120,6 +1171,7 @@ const batteryOptions = computed(() =>
         :sessions="activeSessionViews"
         :selectedCycles="selectedCycles"
         :maxSelected="MAX_SELECTED_CYCLES"
+        :showTables="activeSessionViews.length <= 5"
         :experimentLabel="experimentLabel"
         :publicationMode="publicationMode"
         :capacityUnit="capacityUnit"
@@ -1132,11 +1184,10 @@ const batteryOptions = computed(() =>
         @replace-cycles="replaceCycles"
         @style-click="onChartStyleClick"
       />
-      <CyclingSohChart v-if="showSoh" :sessions="activeSessionViews" />
     </div>
     <div v-else class="charts-placeholder glass-card">
       <i class="pi pi-chart-line" style="font-size:24px;opacity:0.3"></i>
-      <div>Выберите одно или несколько измерений в таблице — графики появятся здесь.</div>
+      <div>Выбери измерения в списке (или «Сравнить протокол») — графики появятся здесь.</div>
     </div>
 
     <!-- Per-chart style popover (shared, positions at clicked ⚙ button) -->
@@ -1713,6 +1764,43 @@ const batteryOptions = computed(() =>
 /* ── Charts toolbar ── Applies to the charts below (V profile + dQ/dV).
    Keeps all controls on a single row when the viewport allows; the
    title field shrinks first, toggle groups never wrap into columns. */
+/* ── Page tabs (Сессии / Сравнение / Деталь) ── */
+.cyc-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.12);
+}
+.cyc-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border: none;
+  background: transparent;
+  color: rgba(0, 50, 116, 0.55);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.12s, border-color 0.12s;
+}
+.cyc-tab-btn:hover { color: #003274; }
+.cyc-tab-btn.is-active { color: #003274; border-bottom-color: #003274; }
+.cyc-tab-btn i { font-size: 13px; }
+.cyc-tab-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: rgba(0, 50, 116, 0.1);
+  color: #003274;
+  font-variant-numeric: tabular-nums;
+}
+.cyc-tab-btn.is-active .cyc-tab-badge { background: #003274; color: white; }
+
 .charts-toolbar {
   display: flex;
   align-items: flex-start;

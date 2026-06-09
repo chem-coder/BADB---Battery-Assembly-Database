@@ -53,6 +53,7 @@ const thicknessOptions = [1, 1.5, 2, 3, 4]
 function onPalette(p) { if (!props.readonly) emit('update', { palette: p }) }
 function onThickness(t) { if (!props.readonly) emit('update', { borderWidth: t }) }
 function onPointStyle(v) { if (!props.readonly) emit('update', { pointStyle: v }) }
+function onVaryMarkers(v) { if (!props.readonly) emit('update', { varyMarkers: v }) }
 function onPointRadius(e) {
   if (props.readonly) return
   const n = Number(e.target.value)
@@ -171,14 +172,22 @@ const paletteEntries = computed(() => Object.entries(PALETTES).map(([id, p]) => 
       </div>
 
       <div class="style-row">
-        <label class="style-label">Маркер</label>
+        <label class="style-label" title="Разные формы маркеров по линиям — каждая линия своей формой (▲ ● ■ ◆ ★), отличать не только цветом">Формы по линиям</label>
+        <div class="style-seg">
+          <button class="style-seg-btn" :class="{ 'is-active': !style.varyMarkers }" :disabled="readonly" @click="onVaryMarkers(false)">Одинаковые</button>
+          <button class="style-seg-btn" :class="{ 'is-active': !!style.varyMarkers }" :disabled="readonly" @click="onVaryMarkers(true)">Разные</button>
+        </div>
+      </div>
+
+      <div class="style-row">
+        <label class="style-label">{{ style.varyMarkers ? 'Маркер (базовый)' : 'Маркер' }}</label>
         <div class="style-seg">
           <button
             v-for="p in POINT_STYLE_OPTIONS"
             :key="p.key"
             class="style-seg-btn style-seg-btn--marker"
             :class="{ 'is-active': style.pointStyle === p.value }"
-            :disabled="readonly"
+            :disabled="readonly || !!style.varyMarkers"
             @click="onPointStyle(p.value)"
             :title="p.key"
           >{{ p.label }}</button>
