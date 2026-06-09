@@ -21,6 +21,7 @@ Use it as an evidence log, not as a blame document. Each entry should preserve:
 
 | Date | Area | Symptom | Root Cause | Status |
 |---|---|---|---|---|
+| 2026-06-09 | Batteries | No list duplicate action; users had to re-enter setup manually | Batteries page never implemented the restore-to-draft duplicate path used on Tapes | Fixed with client-side unsaved create-mode duplicate draft |
 | 2026-06-09 | Tapes | Duplicate opened a thin starter copy instead of a useful workflow draft | Frontend duplicate state used only the list row object and April 3 state reset removed accidental restored-form carryover | Fixed with explicit restore-to-draft duplicate path |
 | 2026-06-08 | Tapes | Today's creation date could be rejected as future on a Windows lab PC | Frontend parsed a date-only `YYYY-MM-DD` value as a JavaScript timestamp, then re-serialized it using local getters | Fixed in tapes; related frontend patterns flagged |
 

@@ -1,9 +1,9 @@
 # Batteries
 
 Created: 2026-05-06
-Edited: 2026-05-15
+Edited: 2026-06-09
 Status: current
-Verified against code: 2026-05-15
+Verified against code: 2026-06-09
 
 Source paths:
 
@@ -82,6 +82,40 @@ The workflow is intentionally built from the battery row outward:
 
 Lower sections should not pretend to be independent records without a valid
 `battery_id`.
+
+## List Actions And Duplicate
+
+The vanilla Batteries list row opens the record. Separate list actions do not
+open the record:
+
+- print opens the battery report;
+- duplicate opens an unsaved create-mode draft.
+
+Duplicate is client-side and does not call a backend duplicate endpoint. It loads
+the source battery assembly payload through existing GET endpoints and does not
+POST until the user clicks Create/Save on the header.
+
+The duplicate draft:
+
+- clears `battery_id` and opens with `currentBatteryId = null`;
+- sets `battery_notes` to `<source display label> (копия)` where the source
+  label prefers existing notes, then active-material summary, then project
+  label, then `#<id>`;
+- copies project links, form factor, form-factor config, electrode sources,
+  separator config, and electrolyte config;
+- resets physical `item_created_at` to today;
+- does not copy `created_by`, record `created_at`, `updated_at`, or
+  `updated_by`; `created_by` is assigned by the server on create;
+- does not copy battery status/QC, electrochemistry rows/files, or electrode
+  stack links;
+- leaves copied header/setup sections dirty until the user explicitly saves
+  them; lower sections remain locked until the new battery row is created;
+- when the duplicate draft includes separator, electrolyte, and electrolyte
+  volume, those values stay visible after Create and are auto-saved through the
+  existing `battery_sep_config` and `battery_electrolyte` section endpoints as
+  soon as the new `battery_id` exists; other assembly-only fields such as coin
+  layout or spacer values remain dirty until the user saves the assembly section
+  manually.
 
 ## List Filters
 

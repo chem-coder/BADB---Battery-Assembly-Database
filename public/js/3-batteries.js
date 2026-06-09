@@ -136,6 +136,9 @@ const state = {
     isRestoringBattery: false,
     isFormOpen: false,
     createButtonMode: 'create',
+    isDuplicateDraft: false,
+    duplicateSourceBatteryId: null,
+    duplicateCopiedAssembly: false,
     sectionState: {},
     deleteFlow: getDefaultBatteryDeleteFlowState()
   },
@@ -4144,6 +4147,76 @@ function getActiveAssemblyContext() {
   return null;
 }
 
+function getActiveAssemblySectionState() {
+  const ctx = getActiveAssemblyContext();
+  if (!ctx) return null;
+
+  return ctx.formFactor === 'coin' ? { ...state.assembly.coin }
+    : isPouchLikeFormFactor(ctx.formFactor) ? { ...state.assembly.pouch }
+    : ctx.formFactor === 'cylindrical' ? { ...state.assembly.cylindrical }
+    : null;
+}
+
+function buildBatterySeparatorElectrolytePayloads(sectionState) {
+  return {
+    separatorPayload: {
+      separator_id: sectionState.separator_id ?? null,
+      separator_notes: sectionState.separator_notes || null
+    },
+    electrolytePayload: {
+      electrolyte_id: sectionState.electrolyte_id ?? null,
+      electrolyte_notes: sectionState.electrolyte_notes || null,
+      electrolyte_total_ul: sectionState.electrolyte_total_ul ?? null
+    }
+  };
+}
+
+function hasCopiedBatteryAssemblyDraftPayload() {
+  const sectionState = getActiveAssemblySectionState();
+  if (!sectionState) return false;
+
+  return Boolean(
+    sectionState.separator_id &&
+    sectionState.electrolyte_id &&
+    hasMeaningfulValue(sectionState.electrolyte_total_ul)
+  );
+}
+
+async function saveBatterySeparatorElectrolyteConfig({ refreshStatus = false } = {}) {
+  if (!state.selection.currentBatteryId) {
+    throw new Error('Сначала создайте элемент.');
+  }
+
+  syncAssemblyStateFromDom();
+
+  const sectionState = getActiveAssemblySectionState();
+  if (!sectionState) {
+    throw new Error('Не выбран форм-фактор.');
+  }
+
+  const { separatorPayload, electrolytePayload } =
+    buildBatterySeparatorElectrolytePayloads(sectionState);
+
+  if (
+    !separatorPayload.separator_id ||
+    !electrolytePayload.electrolyte_id ||
+    !hasMeaningfulValue(electrolytePayload.electrolyte_total_ul)
+  ) {
+    return false;
+  }
+
+  await savePayloadSection('battery_sep_config', separatorPayload);
+  await savePayloadSection('battery_electrolyte', electrolytePayload);
+  markSectionsSaved(['battery_assembly']);
+
+  if (refreshStatus) {
+    await refreshBatteryStatusState();
+    await autoSaveAssembledStatusTransition();
+  }
+
+  return true;
+}
+
 async function saveAssemblyParams() {
   let statusTargetId = 'coin_assembly_save_btn';
 
@@ -4170,26 +4243,14 @@ async function saveAssemblyParams() {
 
   return withBatteryInlineSaveStatus(statusTargetId, async () => {
   try {
-    const sectionState =
-      ctx.formFactor === 'coin' ? { ...state.assembly.coin }
-      : isPouchLikeFormFactor(ctx.formFactor) ? { ...state.assembly.pouch }
-      : ctx.formFactor === 'cylindrical' ? { ...state.assembly.cylindrical }
-      : null;
+    const sectionState = getActiveAssemblySectionState();
 
     if (!sectionState) {
       throw new Error('Не удалось собрать данные секции сборки');
     }
 
-    const separatorPayload = {
-      separator_id: sectionState.separator_id ?? null,
-      separator_notes: sectionState.separator_notes || null
-    };
-
-    const electrolytePayload = {
-      electrolyte_id: sectionState.electrolyte_id ?? null,
-      electrolyte_notes: sectionState.electrolyte_notes || null,
-      electrolyte_total_ul: sectionState.electrolyte_total_ul ?? null
-    };
+    const { separatorPayload, electrolytePayload } =
+      buildBatterySeparatorElectrolytePayloads(sectionState);
 
     const configPayload = { ...sectionState };
     delete configPayload.separator_id;
@@ -4989,6 +5050,103 @@ function finalizeRestoredBatteryPage(data) {
   markRestoredBatterySectionsSaved(data);
 }
 
+function clearBatteryDuplicateDraftState() {
+  state.ui.isDuplicateDraft = false;
+  state.ui.duplicateSourceBatteryId = null;
+  state.ui.duplicateCopiedAssembly = false;
+}
+
+function getBatteryDuplicateDraftDisplayLabel(battery) {
+  const notes = String(battery?.battery_notes || battery?.notes || '').trim();
+  if (notes) return notes;
+
+  const materialsInfo = formatBatteryActiveMaterials(battery);
+  if (materialsInfo) return materialsInfo;
+
+  const projectLabel = getBatteryListProjectLabel(battery);
+  if (projectLabel && projectLabel !== '—') return projectLabel;
+
+  return `Аккумулятор #${battery?.battery_id}`;
+}
+
+function getBatteryDuplicateDraftNotes(battery) {
+  return `${getBatteryDuplicateDraftDisplayLabel(battery)} (копия)`;
+}
+
+function applyBatteryMetaToDuplicateDraftState(data, sourceBattery) {
+  const battery = data?.battery || {};
+
+  setMetaState({
+    project_id: battery.project_id ?? null,
+    project_ids: normalizeProjectIds(battery.project_ids || battery.project_id),
+    created_by: null,
+    item_created_at: getTodayDateInputValue(),
+    form_factor: battery.form_factor ?? null,
+    battery_notes: getBatteryDuplicateDraftNotes(sourceBattery)
+  });
+}
+
+function applyBatteryDuplicateDraftDataToState(data, sourceBattery) {
+  applyBatteryMetaToDuplicateDraftState(data, sourceBattery);
+  applyBatteryConfigToState(data);
+  const savedBatchIds = applyElectrodeSourcesToState(data);
+  resetSelectedElectrodes();
+  resetElectrodeUiState();
+  applyAssemblyToState(data);
+  setQcState(getDefaultQcState());
+  setElectrochemState(getDefaultElectrochemState());
+  return savedBatchIds;
+}
+
+async function finalizeBatteryDuplicateDraftPage() {
+  await loadSavedSourceBatches();
+  setCurrentBattery(null);
+  setBatteryFormOpen(true);
+  setBatteryCreateButtonMode('create');
+  setLoadedAssemblyComplete(false);
+  state.ui.isDuplicateDraft = true;
+  state.ui.duplicateCopiedAssembly = hasCopiedBatteryAssemblyDraftPayload();
+  renderBatteryPage();
+  refreshDirtyState();
+}
+
+async function duplicateBatteryRecord(battery) {
+  const batteryId = Number(battery?.battery_id);
+  if (!Number.isInteger(batteryId)) {
+    throw new Error('Некорректный battery_id');
+  }
+
+  if (hasUnsavedBatteryChanges()) {
+    const proceed = confirm('Есть несохранённые изменения. Открыть копию без сохранения?');
+    if (!proceed) return;
+  }
+
+  setIsRestoringBattery(true);
+
+  try {
+    const data = await fetchBatteryAssembly(batteryId);
+
+    resetBatteryPageStateForRestore();
+    clearBatteryDuplicateDraftState();
+    applyBatteryDuplicateDraftDataToState(data, battery);
+    state.ui.duplicateSourceBatteryId = batteryId;
+
+    await loadTapes();
+    await finalizeBatteryDuplicateDraftPage();
+
+    window.BADB_UI?.scrollToTop({ behavior: 'smooth' });
+    showBatteryInlineStatus(
+      'battery_create_btn',
+      'Черновик копии открыт. Аккумулятор ещё не создан.'
+    );
+  } catch (err) {
+    console.error(err);
+    throw err;
+  } finally {
+    setIsRestoringBattery(false);
+  }
+}
+
 function getBatteryPrintReportUrl(batteryId) {
   return `/workflow/battery-print.html?battery_id=${encodeURIComponent(batteryId)}`;
 }
@@ -5327,7 +5485,35 @@ function renderBatteriesList() {
       openBatteryPrintReport(b.battery_id);
     });
 
+    const duplicateBtn = document.createElement('button');
+    duplicateBtn.type = 'button';
+    duplicateBtn.textContent = '📑';
+    duplicateBtn.title = 'Дублировать аккумулятор';
+    duplicateBtn.setAttribute('aria-label', `Дублировать аккумулятор #${b.battery_id}`);
+
+    duplicateBtn.addEventListener('click', async () => {
+      if (duplicateBtn.dataset.loading === 'true') return;
+
+      duplicateBtn.dataset.loading = 'true';
+      duplicateBtn.disabled = true;
+
+      try {
+        await duplicateBatteryRecord(b);
+      } catch (err) {
+        console.error(err);
+        showBatteryInlineStatus(
+          'battery_create_btn',
+          'Ошибка дублирования аккумулятора',
+          true
+        );
+      } finally {
+        delete duplicateBtn.dataset.loading;
+        duplicateBtn.disabled = false;
+      }
+    });
+
     actions.appendChild(printBtn);
+    actions.appendChild(duplicateBtn);
     li.appendChild(info);
     li.appendChild(actions);
     list.appendChild(li);
@@ -6225,6 +6411,7 @@ async function handleBatteryStatusChange() {
 
 function resetBatteryPageState({ openForm = false } = {}) {
   setCurrentBattery(null);
+  clearBatteryDuplicateDraftState();
   setBatteryFormOpen(openForm);
   setLoadedAssemblyComplete(false);
   setBatteryCreateButtonMode('create');
@@ -6442,9 +6629,27 @@ function applySavedBatteryHeaderState(battery, headerPayload, buttonMode) {
 }
 
 async function createBatteryFromHeaderPayload(headerPayload) {
+  const shouldAutoSaveAssembly = Boolean(state.ui.duplicateCopiedAssembly);
   const battery = await createBatteryHeader(headerPayload);
   applySavedBatteryHeaderState(battery, headerPayload, 'createSaved');
+
+  let assemblyAutoSaved = false;
+
+  if (shouldAutoSaveAssembly) {
+    try {
+      assemblyAutoSaved = await saveBatterySeparatorElectrolyteConfig();
+      if (assemblyAutoSaved) {
+        renderBatteryPage();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  clearBatteryDuplicateDraftState();
   await refreshBatteryHeaderDependencies();
+
+  return { assemblyAutoSaved };
 }
 
 async function updateBatteryFromHeaderPayload(headerPayload) {
@@ -6467,6 +6672,9 @@ async function handleBatteryCreateOrUpdate() {
   syncMetaStateFromDom();
   syncConfigStateFromDom();
   syncElectrodeSourcesStateFromDom();
+  if (!state.selection.currentBatteryId && state.ui.duplicateCopiedAssembly) {
+    syncAssemblyStateFromDom();
+  }
   autoSelectAllowedBatteryProjects();
 
   const headerPayload = buildBatteryHeaderPayloadFromState();
@@ -6477,8 +6685,13 @@ async function handleBatteryCreateOrUpdate() {
 
   try {
     if (!state.selection.currentBatteryId) {
-      await createBatteryFromHeaderPayload(headerPayload);
-      showBatteryInlineStatus(statusTargetId, 'Аккумулятор создан.');
+      const { assemblyAutoSaved } = await createBatteryFromHeaderPayload(headerPayload);
+      showBatteryInlineStatus(
+        statusTargetId,
+        assemblyAutoSaved
+          ? 'Аккумулятор создан. Параметры сепаратора и электролита сохранены.'
+          : 'Аккумулятор создан.'
+      );
       return;
     }
 
@@ -6728,6 +6941,7 @@ document.getElementById('battery_create_btn').onclick = async () => {
 async function populateBatteryForm(battery) {
   setIsRestoringBattery(true);
   clearDirtyFlags();
+  clearBatteryDuplicateDraftState();
   setBatteryFormOpen(false);
   setCurrentBattery(battery);
   setMetaState({

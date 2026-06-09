@@ -82,6 +82,7 @@ print icon is `🖨️`; the current common duplicate icon is `📑`.
 | Departments | yes | yes | text, head | no | no | no | no | no |
 | Electrolytes | yes | yes | text, status, type | yes | list action | opened record, typed phrase | yes | DB-backed |
 | Separators | yes | yes | text, status, structure | yes | list action | opened record, typed phrase | yes | DB-backed |
+| Batteries | yes | yes | text, status, form factor | yes | list client starter | opened record, guided flow | yes | electrochem files |
 
 Materials and older/smaller reference pages may still use older page-specific
 UI patterns. Do not infer this matrix for pages not listed here without checking
@@ -116,6 +117,12 @@ Current behavior:
   `POST /api/recipes/:id/duplicate` also exists but is not used by the current
   vanilla list button.
 - Electrolytes and Separators have list-level duplicate actions.
+- Batteries duplicate is a client-side unsaved create-mode draft. It restores
+  useful source setup fields (projects, form-factor config, electrode sources,
+  separator, electrolyte) but does not create a record or copy stack, QC,
+  electrochemistry, or identity/audit metadata until the user explicitly saves.
+  Copied separator/electrolyte/volume auto-save right after Create when present;
+  stack still requires a separate explicit save.
 - Users and Departments have no duplicate action.
 
 Do not add duplicate buttons to pages where they are not implemented.
