@@ -131,6 +131,18 @@ const capacityUnit = ref('Ah')
 // is the fastest way to A/B compare in the UI without reloading.
 const smoothingWindow = ref(5)
 
+// dQ/dV smoothing method: 'savgol' (navani-style Savitzky–Golay on a uniform
+// V-grid — publication-grade peaks, default) vs 'ma' (legacy moving average).
+// Preset = SG strength, calibrated on real ELITECH data (see savitzkyGolay.js).
+const dqdvMethod = ref('savgol')
+const dqdvPreset = ref('standard')
+// Differential chart view: 'dqdv' (peaks vs V) | 'dvdq' (DVA vs Q).
+const dqdvView = ref('dqdv')
+// Auto-annotate detected peaks (last selected cycle per session/step).
+const dqdvPeaks = ref(true)
+// Viridis cycle gradient on voltage profile + differential chart.
+const cycleGradient = ref(false)
+
 // Capacity chart view: 'absolute' (Ah or mAh/g) vs 'retention' (C/C1 × 100%).
 // Retention is the scientific-paper standard for visualising fade — every
 // session starts at 100% and the curve shows % of initial capacity at
@@ -193,6 +205,11 @@ const styleCurrentDisplay = computed(() => ({
   capacityView: capacityView.value,
   ghostTrace: ghostTrace.value,
   smoothingWindow: smoothingWindow.value,
+  dqdvMethod: dqdvMethod.value,
+  dqdvPreset: dqdvPreset.value,
+  dqdvView: dqdvView.value,
+  dqdvPeaks: dqdvPeaks.value,
+  cycleGradient: cycleGradient.value,
 }))
 
 // Event from <CyclingCharts @style-click>. Emitted when the user clicks
@@ -211,6 +228,11 @@ function onDisplayUpdate({ key, value }) {
   if (key === 'capacityView') capacityView.value = value
   else if (key === 'ghostTrace') ghostTrace.value = value
   else if (key === 'smoothingWindow') smoothingWindow.value = value
+  else if (key === 'dqdvMethod') dqdvMethod.value = value
+  else if (key === 'dqdvPreset') dqdvPreset.value = value
+  else if (key === 'dqdvView') dqdvView.value = value
+  else if (key === 'dqdvPeaks') dqdvPeaks.value = value
+  else if (key === 'cycleGradient') cycleGradient.value = value
 }
 function onStyleReset() {
   if (!styleCurrentChartId.value) return
@@ -1177,6 +1199,11 @@ const batteryOptions = computed(() =>
         :capacityUnit="capacityUnit"
         :stepFilter="stepFilter"
         :smoothingWindow="smoothingWindow"
+        :dqdvMethod="dqdvMethod"
+        :dqdvPreset="dqdvPreset"
+        :dqdvView="dqdvView"
+        :dqdvPeaks="dqdvPeaks"
+        :cycleGradient="cycleGradient"
         :capacityView="capacityView"
         :showHysteresis="showHysteresis"
         :ghostTrace="ghostTrace"

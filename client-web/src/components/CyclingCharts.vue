@@ -25,6 +25,7 @@ import {
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { useCyclingStyles } from '@/composables/useCyclingStyles'
+import { dqdvSavGol, dvdqSavGol, findPeaks } from '@/utils/savitzkyGolay'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, SubTitle, Tooltip, Legend, Filler, ScatterController, zoomPlugin)
 
@@ -70,6 +71,21 @@ const props = defineProps({
   // recommended for noisy cells where peaks get buried in measurement
   // jitter. Clamped to [1, 21] inside computeDQDV.
   smoothingWindow: { type: Number, default: 5 },
+  // dQ/dV smoothing method: 'savgol' = navani-style Savitzky–Golay pipeline
+  // (uniform V-grid, double SG smooth — publication-grade peak analysis);
+  // 'ma' = legacy moving average over raw finite differences.
+  dqdvMethod: { type: String, default: 'savgol' },
+  // SG strength preset: 'light' | 'standard' | 'strong' (see SAVGOL_PRESETS)
+  dqdvPreset: { type: String, default: 'standard' },
+  // View of the differential chart: 'dqdv' (|dQ/dV| vs V — phase peaks) or
+  // 'dvdq' (|dV/dQ| vs Q — DVA, degradation-mode localisation). dV/dQ is
+  // SG-only (the MA path has no capacity-grid concept).
+  dqdvView: { type: String, default: 'dqdv' },
+  // Auto-annotate detected peaks (position labels) on the differential chart.
+  dqdvPeaks: { type: Boolean, default: true },
+  // Colour cycles along the viridis gradient (1st violet → last yellow) on
+  // voltage profile + differential chart, instead of session-colour alpha fade.
+  cycleGradient: { type: Boolean, default: false },
   // 'absolute' | 'retention'. Controls what the capacity chart plots:
   //   absolute  — discharge/charge capacity in Ah or mAh/g (default).
   //   retention — C(n) / C(first_valid) × 100 % per session. Scientific
@@ -390,6 +406,23 @@ function fillColor(color, alpha = 0.08) {
 function cycleAlpha(cycleIdx, totalCycles) {
   if (totalCycles <= 1) return 1.0
   return 0.35 + (cycleIdx / (totalCycles - 1)) * 0.65
+}
+
+// Viridis colormap (9 stops, linear RGB interp) — perceptually-uniform cycle
+// gradient: 1st cycle deep violet → last cycle yellow. The publication
+// standard for "peak evolution over cycling" plots (navani uses the same
+// colormap); reads cycle ORDER far better than alpha fade once 10+ cycles
+// are overlaid. Session identity then comes from dash patterns.
+const VIRIDIS = ['#440154', '#472d7b', '#3b528b', '#2c728e', '#21918c', '#28ae80', '#5ec962', '#addc30', '#fde725']
+function viridisAt(t) {
+  const x = Math.max(0, Math.min(1, t)) * (VIRIDIS.length - 1)
+  // clamp to the last segment so the output format is ALWAYS 'rgb(r, g, b)'
+  const i = Math.min(Math.floor(x), VIRIDIS.length - 2)
+  const f = x - i
+  const a = VIRIDIS[i], b = VIRIDIS[i + 1]
+  const ch = (h, o) => parseInt(h.slice(o, o + 2), 16)
+  const mix = (o) => Math.round(ch(a, o) + (ch(b, o) - ch(a, o)) * f)
+  return `rgb(${mix(1)}, ${mix(3)}, ${mix(5)})`
 }
 
 // Client-side decimation. Long cycles (2000+ raw points × N overlayed
@@ -830,12 +863,19 @@ const voltageChartData = computed(() => {
       const thickness = props.publicationMode ? userWidth : userWidth * cycleMul
 
       const alpha = cycleAlpha(cIdx, nCycles)
-      const cycleColor = fillColor(colorBase, alpha)
+      // Cycle colour: viridis gradient (1st violet → last yellow; order-encoding,
+      // publication standard for cycle evolution) or session-colour alpha fade.
+      const gradientBase = props.cycleGradient
+        ? viridisAt(nCycles <= 1 ? 1 : cIdx / (nCycles - 1))
+        : null
+      const cycleColor = gradientBase || fillColor(colorBase, alpha)
       // In «Оба» mode charge + discharge of the same cycle share a hue and
       // overlap into a loop — hard to read. Fade + thin the CHARGE branch so
       // discharge reads as the primary curve and charge as its companion.
       const bothMode = props.stepFilter === 'both'
-      const chargeColor = bothMode ? fillColor(colorBase, alpha * 0.4) : cycleColor
+      const chargeColor = bothMode
+        ? (gradientBase ? gradientBase.replace('rgb(', 'rgba(').replace(')', ', 0.35)') : fillColor(colorBase, alpha * 0.4))
+        : cycleColor
       const chargeWidth = bothMode ? thickness * 0.8 : thickness
 
       // In publication mode, both halves use the same dash (matches
@@ -1040,8 +1080,54 @@ function computeDQDV(points, smoothingWindow = 5) {
   return { charge: process(charge), discharge: process(discharge) }
 }
 
-const dqdvChartData = computed(() => {
+/**
+ * Savitzky–Golay dQ/dV (navani-style pipeline, see utils/savitzkyGolay.js).
+ * Runs on the DOMINANT step segment per step type: capacity_ah resets at each
+ * step boundary, so mixing segments would corrupt the V-grid interpolation.
+ * The dominant CC step carries the dQ/dV information; a CV hold collapses to
+ * a single grid point anyway (constant V), rest steps contribute nothing.
+ */
+function dominantStepPairs(steps) {
+  const segments = new Map()
+  for (const d of steps) {
+    if (d.voltage_v == null || d.capacity_ah == null) continue
+    const arr = segments.get(d.step_number)
+    if (arr) arr.push({ v: d.voltage_v, q: d.capacity_ah })
+    else segments.set(d.step_number, [{ v: d.voltage_v, q: d.capacity_ah }])
+  }
+  let best = []
+  for (const arr of segments.values()) if (arr.length > best.length) best = arr
+  return best
+}
+
+function computeDQDVSavGol(points, preset = 'standard') {
+  const charge = points.filter(d => d.step_type === 'charge' || d.step_type === 'cccv')
+  const discharge = points.filter(d => d.step_type === 'discharge')
+  return {
+    charge: decimate(dqdvSavGol(dominantStepPairs(charge), { preset })),
+    discharge: decimate(dqdvSavGol(dominantStepPairs(discharge), { preset })),
+  }
+}
+
+// dV/dQ (DVA): same pipeline, axes swapped — uniform CAPACITY grid. Display
+// units: x in mAh (coin-cell-friendly), y in V/mAh; the util works in Ah.
+function computeDVDQSavGol(points, preset = 'standard') {
+  const charge = points.filter(d => d.step_type === 'charge' || d.step_type === 'cccv')
+  const discharge = points.filter(d => d.step_type === 'discharge')
+  const toMah = (arr) => arr.map(p => ({ x: p.x * 1000, y: p.y / 1000 }))
+  return {
+    charge: decimate(toMah(dvdqSavGol(dominantStepPairs(charge), { preset }))),
+    discharge: decimate(toMah(dvdqSavGol(dominantStepPairs(discharge), { preset }))),
+  }
+}
+
+// Peaks detected on the currently-drawn differential curves — consumed by the
+// annotation plugin below. Rebuilt together with dqdvChartData (same inputs).
+const dqdvComputed = computed(() => {
   const datasets = []
+  const peaks = []
+  const isDvdq = props.dqdvView === 'dvdq'
+  const useSavgol = props.dqdvMethod === 'savgol' || isDvdq   // dV/dQ is SG-only
   const sortedCycles = [...props.selectedCycles].sort((a, b) => a - b)
   const nCycles = sortedCycles.length
   const dStyle = dqdvStyle.value
@@ -1054,19 +1140,32 @@ const dqdvChartData = computed(() => {
       const points = s.cycleDataMap?.[cycleNum] || []
       if (!points.length) return
 
-      const { charge, discharge } = computeDQDV(points, props.smoothingWindow)
+      const { charge, discharge } = isDvdq
+        ? computeDVDQSavGol(points, props.dqdvPreset)
+        : (useSavgol
+            ? computeDQDVSavGol(points, props.dqdvPreset)
+            : computeDQDV(points, props.smoothingWindow))
       // Same ±30% cycle-index modulation as voltage profile — later
       // cycles slightly thicker so the eye can follow peak evolution.
       const userWidth = Number(dStyle.borderWidth) || 1.2
       const cycleMul = nCycles > 1 ? (0.7 + (cIdx / (nCycles - 1)) * 0.6) : 1
       const thickness = userWidth * cycleMul
-      // Old cycles fade, new cycles vivid — same convention as voltage profile
+      // Cycle colour: viridis gradient (order-encoding, publication style) or
+      // the legacy session-colour alpha fade (old faded → new vivid).
       const alpha = cycleAlpha(cIdx, nCycles)
-      const cycleColor = fillColor(colorBase, alpha)
+      const cycleColor = props.cycleGradient
+        ? viridisAt(nCycles <= 1 ? 1 : cIdx / (nCycles - 1))
+        : fillColor(colorBase, alpha)
       const showCharge = props.stepFilter !== 'discharge'
       const showDischarge = props.stepFilter !== 'charge'
 
+      // Peak auto-annotation: only the LAST selected cycle per session/step —
+      // labels mark the current state, the gradient shows the evolution.
+      const annotate = useSavgol && props.dqdvPeaks && cIdx === nCycles - 1
+      const fmt = (p) => (isDvdq ? `${p.x.toFixed(2)} мА·ч` : `${p.x.toFixed(2)} В`)
+
       if (showCharge && charge.length) {
+        if (annotate) peaks.push(...findPeaks(charge).map(p => ({ ...p, color: cycleColor, label: fmt(p) })))
         datasets.push(applyChartStyle({
           label: `Ц${cycleNum}_${sessionShortLabel(s)} · заряд`,
           data: charge,
@@ -1081,6 +1180,7 @@ const dqdvChartData = computed(() => {
         }, dStyle))
       }
       if (showDischarge && discharge.length) {
+        if (annotate) peaks.push(...findPeaks(discharge).map(p => ({ ...p, color: cycleColor, label: fmt(p) })))
         datasets.push(applyChartStyle({
           label: `Ц${cycleNum}_${sessionShortLabel(s)} · разряд`,
           data: discharge,
@@ -1097,8 +1197,37 @@ const dqdvChartData = computed(() => {
     })
   }
 
-  return { datasets }
+  return { datasets, peaks }
 })
+
+const dqdvChartData = computed(() => ({ datasets: dqdvComputed.value.datasets }))
+
+// Inline Chart.js plugin: draws the detected peak labels (dot + value) above
+// each annotated peak. Reads its data from options.plugins.dqdvPeaks so it
+// re-renders reactively with the chart options.
+const dqdvPeaksPlugin = {
+  id: 'dqdvPeaks',
+  afterDatasetsDraw(chart) {
+    const cfg = chart.options.plugins?.dqdvPeaks
+    if (!cfg?.show || !cfg.peaks?.length) return
+    const { ctx, chartArea, scales: { x, y } } = chart
+    ctx.save()
+    ctx.font = '600 9px Rosatom, "Segoe UI", sans-serif'
+    ctx.textAlign = 'center'
+    for (const p of cfg.peaks) {
+      const px = x.getPixelForValue(p.x)
+      const py = y.getPixelForValue(p.y)
+      if (!Number.isFinite(px) || !Number.isFinite(py)) continue
+      if (px < chartArea.left || px > chartArea.right || py < chartArea.top || py > chartArea.bottom) continue
+      ctx.fillStyle = p.color || '#003274'
+      ctx.beginPath()
+      ctx.arc(px, py, 2.4, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillText(p.label, px, Math.max(py - 7, chartArea.top + 10))
+    }
+    ctx.restore()
+  },
+}
 
 const dqdvOptions = computed(() => ({
   responsive: true,
@@ -1113,11 +1242,18 @@ const dqdvOptions = computed(() => ({
     title: {
       display: true,
       text: props.experimentLabel
-        ? `${props.experimentLabel} — dQ/dV`
-        : 'Дифференциальная ёмкость (|dQ/dV|)',
+        ? `${props.experimentLabel} — ${props.dqdvView === 'dvdq' ? 'dV/dQ' : 'dQ/dV'}`
+        : (props.dqdvView === 'dvdq'
+            ? 'Дифференциальное напряжение (|dV/dQ|, DVA)'
+            : 'Дифференциальная ёмкость (|dQ/dV|)'),
       font: { size: 13, weight: 600 },
       color: '#003274',
       padding: { bottom: 10 },
+    },
+    // Peak auto-annotation (drawn by dqdvPeaksPlugin)
+    dqdvPeaks: {
+      show: props.dqdvPeaks && (props.dqdvMethod === 'savgol' || props.dqdvView === 'dvdq'),
+      peaks: dqdvComputed.value.peaks,
     },
     // Zoom/pan: XY on dQ/dV — isolating a single peak (V range) and
     // seeing its height (|dQ/dV| range) both matter for phase analysis.
@@ -1135,10 +1271,22 @@ const dqdvOptions = computed(() => ({
     },
   },
   scales: {
-    y: { title: { display: true, text: '|dQ/dV|, Ah/V', font: { size: 10 } }, ticks: { font: { size: 10 } }, grid: { color: 'rgba(0,50,116,0.05)' } },
+    y: {
+      title: {
+        display: true,
+        text: props.dqdvView === 'dvdq' ? '|dV/dQ|, В/мА·ч' : '|dQ/dV|, Ah/V',
+        font: { size: 10 },
+      },
+      ticks: { font: { size: 10 } },
+      grid: { color: 'rgba(0,50,116,0.05)' },
+    },
     x: {
       type: 'linear',
-      title: { display: true, text: 'E, V', font: { size: 10 } },
+      title: {
+        display: true,
+        text: props.dqdvView === 'dvdq' ? 'Q, мА·ч' : 'E, V',
+        font: { size: 10 },
+      },
       ticks: { font: { size: 10 } },
       grid: { display: false },
     },
@@ -1689,7 +1837,7 @@ function resetZoom(chartRef) {
         <i class="pi pi-download"></i>
       </button>
       <div class="chart-wrap chart-wrap--tall" @dblclick="resetZoom(dqdvChartRef)">
-        <Scatter ref="dqdvChartRef" :data="dqdvChartData" :options="dqdvOptions" />
+        <Scatter ref="dqdvChartRef" :data="dqdvChartData" :options="dqdvOptions" :plugins="[dqdvPeaksPlugin]" />
       </div>
     </div>
 

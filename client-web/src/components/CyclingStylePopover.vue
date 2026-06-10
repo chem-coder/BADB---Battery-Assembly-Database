@@ -98,29 +98,108 @@ const paletteEntries = computed(() => Object.entries(PALETTES).map(([id, p]) => 
           </div>
         </div>
 
-        <div v-else-if="chartId === 'voltage'" class="style-row">
-          <label class="style-label" title="Цикл N−1 под каждым выбранным циклом — fade между соседними циклами">Ghost trace (цикл N−1)</label>
-          <div class="style-seg">
-            <button class="style-seg-btn" :class="{ 'is-active': !display.ghostTrace }" @click="onDisplay('ghostTrace', false)">Выкл</button>
-            <button class="style-seg-btn" :class="{ 'is-active': display.ghostTrace }" @click="onDisplay('ghostTrace', true)">Вкл</button>
+        <template v-else-if="chartId === 'voltage'">
+          <div class="style-row">
+            <label class="style-label" title="Цикл N−1 под каждым выбранным циклом — fade между соседними циклами">Ghost trace (цикл N−1)</label>
+            <div class="style-seg">
+              <button class="style-seg-btn" :class="{ 'is-active': !display.ghostTrace }" @click="onDisplay('ghostTrace', false)">Выкл</button>
+              <button class="style-seg-btn" :class="{ 'is-active': display.ghostTrace }" @click="onDisplay('ghostTrace', true)">Вкл</button>
+            </div>
           </div>
-        </div>
+          <div class="style-row">
+            <label class="style-label" title="Градиент viridis: 1-й цикл фиолетовый → последний жёлтый. Стандарт публикаций для эволюции циклов; сессии различаются штриховкой">Цвет циклов</label>
+            <div class="style-seg">
+              <button class="style-seg-btn" :class="{ 'is-active': !display.cycleGradient }" @click="onDisplay('cycleGradient', false)">Сессия</button>
+              <button class="style-seg-btn" :class="{ 'is-active': display.cycleGradient }" @click="onDisplay('cycleGradient', true)">Градиент</button>
+            </div>
+          </div>
+        </template>
 
-        <div v-else-if="chartId === 'dqdv'" class="style-row">
-          <label class="style-label">Сглаживание dQ/dV
-            <span class="style-radius-val">{{ display.smoothingWindow ?? 5 }}</span>
-          </label>
-          <input
-            type="range"
-            min="1"
-            max="21"
-            step="1"
-            :value="display.smoothingWindow ?? 5"
-            class="style-radius-slider"
-            title="Окно скользящего среднего. 1 = без сглаживания, 21 = максимум"
-            @input="onDisplay('smoothingWindow', Number($event.target.value))"
-          />
-        </div>
+        <template v-else-if="chartId === 'dqdv'">
+          <div class="style-row">
+            <label class="style-label" title="dQ/dV — пики фазовых переходов по напряжению. dV/dQ (DVA) — локализация деградации по ёмкости (LAM vs LLI)">Вид графика</label>
+            <div class="style-seg">
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': (display.dqdvView ?? 'dqdv') === 'dqdv' }"
+                @click="onDisplay('dqdvView', 'dqdv')"
+              >dQ/dV</button>
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': display.dqdvView === 'dvdq' }"
+                @click="onDisplay('dqdvView', 'dvdq')"
+              >dV/dQ (DVA)</button>
+            </div>
+          </div>
+
+          <div v-if="(display.dqdvView ?? 'dqdv') === 'dqdv'" class="style-row">
+            <label class="style-label" title="Савицкий–Голей: сглаживание на равномерной сетке напряжения (как в проф. пакетах анализа) — гладкие пики для фазового анализа. Скользящее среднее — простое сглаживание сырых разностей">Метод сглаживания</label>
+            <div class="style-seg">
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': (display.dqdvMethod ?? 'savgol') === 'savgol' }"
+                @click="onDisplay('dqdvMethod', 'savgol')"
+              >Сав.–Голей</button>
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': display.dqdvMethod === 'ma' }"
+                @click="onDisplay('dqdvMethod', 'ma')"
+              >Скольз. среднее</button>
+            </div>
+          </div>
+
+          <div v-if="(display.dqdvView ?? 'dqdv') === 'dqdv' && display.dqdvMethod === 'ma'" class="style-row">
+            <label class="style-label">Окно среднего
+              <span class="style-radius-val">{{ display.smoothingWindow ?? 5 }}</span>
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="21"
+              step="1"
+              :value="display.smoothingWindow ?? 5"
+              class="style-radius-slider"
+              title="Окно скользящего среднего. 1 = без сглаживания, 21 = максимум"
+              @input="onDisplay('smoothingWindow', Number($event.target.value))"
+            />
+          </div>
+          <div v-else class="style-row">
+            <label class="style-label" title="Слабое — максимум деталей (острые пики), Стандарт — откалибровано по реальным данным, Сильное — для шумных ячеек">Интенсивность</label>
+            <div class="style-seg">
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': display.dqdvPreset === 'light' }"
+                @click="onDisplay('dqdvPreset', 'light')"
+              >Слабое</button>
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': (display.dqdvPreset ?? 'standard') === 'standard' }"
+                @click="onDisplay('dqdvPreset', 'standard')"
+              >Стандарт</button>
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': display.dqdvPreset === 'strong' }"
+                @click="onDisplay('dqdvPreset', 'strong')"
+              >Сильное</button>
+            </div>
+          </div>
+
+          <div class="style-row">
+            <label class="style-label" title="Автоопределение пиков (локальные максимумы с фильтром значимости) — подписи позиций у последнего выбранного цикла">Пики</label>
+            <div class="style-seg">
+              <button class="style-seg-btn" :class="{ 'is-active': !(display.dqdvPeaks ?? true) }" @click="onDisplay('dqdvPeaks', false)">Выкл</button>
+              <button class="style-seg-btn" :class="{ 'is-active': display.dqdvPeaks ?? true }" @click="onDisplay('dqdvPeaks', true)">Вкл</button>
+            </div>
+          </div>
+
+          <div class="style-row">
+            <label class="style-label" title="Градиент viridis: 1-й цикл фиолетовый → последний жёлтый. Стандарт публикаций для эволюции пиков; сессии различаются штриховкой">Цвет циклов</label>
+            <div class="style-seg">
+              <button class="style-seg-btn" :class="{ 'is-active': !display.cycleGradient }" @click="onDisplay('cycleGradient', false)">Сессия</button>
+              <button class="style-seg-btn" :class="{ 'is-active': display.cycleGradient }" @click="onDisplay('cycleGradient', true)">Градиент</button>
+            </div>
+          </div>
+        </template>
 
         <div class="style-section-sep">
           <span>Стиль линий</span>
