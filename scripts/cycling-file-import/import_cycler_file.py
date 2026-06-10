@@ -131,15 +131,14 @@ def our_summary(points):
     for cyc, pts in sorted(by_cycle.items()):
         chg_cap = max((p['capacity_ah'] for p in pts if p['step_type'] == 'charge'), default=None)
         dch_cap = max((p['capacity_ah'] for p in pts if p['step_type'] == 'discharge'), default=None)
-        # capacity-weighted average voltage per step type (standard ⟨V⟩ = ∫V dQ / Q)
+        # Point-mean voltage per step type — КАНОН contracts/metrics.v1.json
+        # (тот же, что в scripts/parse_cycling.py: простое среднее по точкам,
+        # публикационная конвенция). До 2026-06-10 здесь было ёмкостно-
+        # взвешенное ⟨V⟩=∫V·dQ/Q — расходилось с серверным парсером в одной
+        # и той же колонке БД; выровнено по контракту.
         def avg_v(stype):
-            seq = [p for p in pts if p['step_type'] == stype]
-            num = den = 0.0
-            for a, b in zip(seq, seq[1:]):
-                dq = abs(b['capacity_ah'] - a['capacity_ah'])
-                num += 0.5 * (a['voltage_v'] + b['voltage_v']) * dq
-                den += dq
-            return num / den if den > 0 else None
+            vs = [p['voltage_v'] for p in pts if p['step_type'] == stype and p['voltage_v'] is not None]
+            return sum(vs) / len(vs) if vs else None
         # trapezoid energy ∫V·I dt per step type, Wh
         def energy(stype):
             seq = [p for p in pts if p['step_type'] == stype]
@@ -151,7 +150,7 @@ def our_summary(points):
                 e += 0.5 * (abs(a['voltage_v'] * a['current_a']) + abs(b['voltage_v'] * b['current_a'])) * dt
             return e / 3600.0 if e > 0 else None
         t0, t1 = pts[0]['time_s'], pts[-1]['time_s']
-        temps = [p['temperature_c'] for p in pts if p['temperature_c'] is not None]
+        temps = [p.get('temperature_c') for p in pts if p.get('temperature_c') is not None]
         ce = (dch_cap / chg_cap * 100.0) if chg_cap and dch_cap and chg_cap > 0 else None
         e_chg, e_dch = energy('charge'), energy('discharge')
         out[cyc] = {

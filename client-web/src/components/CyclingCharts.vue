@@ -26,6 +26,8 @@ import {
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { useCyclingStyles } from '@/composables/useCyclingStyles'
 import { dqdvSavGol, dvdqSavGol, findPeaks } from '@/utils/savitzkyGolay'
+import { METRICS } from '@/utils/metricsEngine'
+import ProvenancePopover from '@/components/ProvenancePopover.vue'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, SubTitle, Tooltip, Legend, Filler, ScatterController, zoomPlugin)
 
@@ -1561,10 +1563,68 @@ function resetZoom(chartRef) {
   const inst = chartRef?.value?.chart
   if (inst && typeof inst.resetZoom === 'function') inst.resetZoom()
 }
+
+// ── Происхождение значений (контракт метрик) ──────────────────────────
+// Правый клик по значению в таблице циклов → ProvenancePopover: формула из
+// contracts/metrics.v1.json, подстановка чисел, источник, «Перепроверить».
+const provRef = ref(null)
+
+// Какие входы нужны каждой метрике таблицы (для скалярного пересчёта);
+// stream-пересчёт (ёмкости/энергии/средние V) идёт из загруженных точек цикла.
+function provPayload(s, row, metricId) {
+  const byMetric = {
+    coulombic_efficiency: {
+      value: row.coulombic_efficiency,
+      inputs: { discharge_capacity_ah: row.discharge_capacity_ah, charge_capacity_ah: row.charge_capacity_ah },
+    },
+    energy_efficiency: {
+      value: row.energy_efficiency,
+      inputs: { discharge_energy_wh: row.discharge_energy_wh, charge_energy_wh: row.charge_energy_wh },
+    },
+    charge_capacity_ah: { value: row.charge_capacity_ah, inputs: null },
+    discharge_capacity_ah: { value: row.discharge_capacity_ah, inputs: null },
+    avg_charge_voltage_v: { value: row.avg_charge_voltage_v, inputs: null },
+    avg_discharge_voltage_v: { value: row.avg_discharge_voltage_v, inputs: null },
+  }
+  const base = byMetric[metricId] || { value: row[metricId], inputs: null }
+  return {
+    metricId,
+    ...base,
+    points: s.cycleDataMap?.[row.cycle_number] || null,
+    storedKey: metricId,
+    source: {
+      file_name: s.file_name,
+      equipment_type: s.equipment_type,
+      protocol: s.protocol,
+      uploaded_at: s.uploaded_at,
+      notes: s.notes,
+    },
+  }
+}
+
+function openProv(event, s, row, metricId) {
+  provRef.value?.open(event, provPayload(s, row, metricId))
+}
+
+// Панель «Как считаются параметры» — из контракта (единый источник с
+// сервером/импортёрами), вместо рукописного дубля, который уже дрейфовал
+// (описывал скользящее среднее как дефолт dQ/dV после перехода на Сав-Гол).
+const FORMULA_PANEL_IDS = [
+  'charge_capacity_ah', 'specific_capacity_mah_g',
+  'coulombic_efficiency', 'energy_efficiency',
+  'avg_charge_voltage_v', 'hysteresis_mv',
+  'capacity_retention_pct', 'soh_pct',
+  'dqdv_savgol', 'dvdq_savgol',
+]
+const formulaEntries = FORMULA_PANEL_IDS
+  .map(id => ({ id, ...METRICS[id] }))
+  .filter(m => m.label_ru)
 </script>
 
 <template>
   <div class="cycling-charts">
+    <!-- Происхождение значений: формула из контракта + источник + пересчёт -->
+    <ProvenancePopover ref="provRef" />
     <!-- Top: combined Capacity + CE chart (dual Y-axis, publication style) -->
     <div class="chart-card chart-card--wide">
       <div class="chart-axis-lock" title="Фиксация оси при зуме/панораме · XY — обе · X — только X. Ось Y двойная (Ёмкость + КЭ) — отдельный зум Y недоступен.">
@@ -1655,16 +1715,20 @@ function resetZoom(chartRef) {
                 @click="selectRawView(s, row.cycle_number)"
               >
                 <td class="cell-cycle">{{ row.cycle_number }}</td>
-                <td>{{ formatCap(row.charge_capacity_ah, s) }}</td>
-                <td>{{ formatCap(row.discharge_capacity_ah, s) }}</td>
-                <td>{{ formatPct(row.coulombic_efficiency) }}</td>
-                <td>{{ formatPct(row.energy_efficiency) }}</td>
-                <td>{{ formatVolt(row.avg_charge_voltage_v) }}</td>
-                <td>{{ formatVolt(row.avg_discharge_voltage_v) }}</td>
+                <td @contextmenu.prevent="openProv($event, s, row, 'charge_capacity_ah')">{{ formatCap(row.charge_capacity_ah, s) }}</td>
+                <td @contextmenu.prevent="openProv($event, s, row, 'discharge_capacity_ah')">{{ formatCap(row.discharge_capacity_ah, s) }}</td>
+                <td @contextmenu.prevent="openProv($event, s, row, 'coulombic_efficiency')">{{ formatPct(row.coulombic_efficiency) }}</td>
+                <td @contextmenu.prevent="openProv($event, s, row, 'energy_efficiency')">{{ formatPct(row.energy_efficiency) }}</td>
+                <td @contextmenu.prevent="openProv($event, s, row, 'avg_charge_voltage_v')">{{ formatVolt(row.avg_charge_voltage_v) }}</td>
+                <td @contextmenu.prevent="openProv($event, s, row, 'avg_discharge_voltage_v')">{{ formatVolt(row.avg_discharge_voltage_v) }}</td>
               </tr>
             </tbody>
           </table>
         </div>
+      </div>
+      <div class="prov-hint-line">
+        <i class="pi pi-info-circle"></i>
+        Правый клик по значению — происхождение: формула, источник, пересчёт
       </div>
     </div>
 
@@ -1675,44 +1739,28 @@ function resetZoom(chartRef) {
         📐 Как считаются параметры
         <span class="formulas-hint">{{ formulasOpen ? 'скрыть' : 'показать формулы' }}</span>
       </button>
+      <!-- Содержимое — из contracts/metrics.v1.json (единый источник с
+           серверным парсером и импортёрами; рукописный дубль здесь уже успел
+           дрейфовать — описывал скользящее среднее как дефолт dQ/dV). -->
       <div v-if="formulasOpen" class="formulas-body">
         <dl class="formulas-list">
-          <dt>Ёмкость заряда / разряда (Ah)</dt>
-          <dd>
-            <code>Q = ∑<sub>steps</sub> max<sub>step</sub>(∫ |I|·dt / 3600)</code>
-            <small>Трапецоидальное интегрирование |тока| по времени, per-step максимум (корректно для CCCV: CC + CV шаги складываются), затем суммирование по шагам того же типа внутри одного цикла.</small>
-          </dd>
-          <dt>Удельная ёмкость (mAh/g)</dt>
-          <dd>
-            <code>Q<sub>spec</sub> = Q · 10<sup>6</sup> / m<sub>AM</sub></code>
-            <small>Q в ампер-часах, m<sub>AM</sub> в милиграммах активного материала. Формула выводится из 1 Ah = 1000 mAh и m(g) = m(mg)/1000.</small>
-          </dd>
-          <dt>Кулоновская эффективность, CE (%)</dt>
-          <dd>
-            <code>CE = Q<sub>DChg</sub> / Q<sub>Chg</sub> × 100</code>
-            <small>Показывает долю лития, возвращаемого из анода. CE &lt; 100% — часть заряда идёт на необратимые процессы (SEI, разложение электролита).</small>
-          </dd>
-          <dt>Энергетическая эффективность, EE (%)</dt>
-          <dd>
-            <code>EE = E<sub>DChg</sub> / E<sub>Chg</sub> × 100</code>
-            <small>Round-trip energy efficiency. Учитывает потери на перенапряжение (voltage hysteresis), чего CE не отражает.</small>
-          </dd>
-          <dt>Среднее напряжение (V̄)</dt>
-          <dd>
-            <code>V̄ = ⟨V⟩<sub>step</sub></code>
-            <small>Арифметическое среднее напряжения по точкам шага. Рост ΔV̄ = V̄<sub>chg</sub> − V̄<sub>dch</sub> отражает рост поляризации / омического сопротивления (старение ячейки).</small>
-          </dd>
-          <dt>Дифференциальная ёмкость, dQ/dV (Ah/V)</dt>
-          <dd>
-            <code>|dQ/dV| = |ΔQ<sub>i,i-1</sub> / ΔV<sub>i,i-1</sub>|</code>
-            <small>Пары точек внутри одного шага, |ΔV| &gt; 2 mV (отсечка шума). Сглаживание: скользящее среднее w=5. Пики соответствуют фазовым переходам материала.</small>
-          </dd>
+          <template v-for="m in formulaEntries" :key="m.id">
+            <dt>{{ m.label_ru }} <span v-if="m.unit">({{ m.unit }})</span></dt>
+            <dd>
+              <code>{{ m.formula }}</code>
+              <small>{{ m.formula_text_ru }}</small>
+            </dd>
+          </template>
           <dt>Классификация step_type</dt>
           <dd>
             <code>«Гальваностат» + I̅ &gt; 0 → charge, I̅ &lt; 0 → discharge</code>
-            <small>«Вольтметр» (OCV-измерение) → rest. «Потенциостат» → cccv при I ≠ 0, rest при I = 0. Для файлов без «Тип работы» (EN locale) — только по знаку среднего тока шага.</small>
+            <small>«Вольтметр» (OCV-измерение) → rest. «Потенциостат» → cccv при I ≠ 0, rest при I = 0. Для файлов без «Тип работы» (EN locale) — только по знаку среднего тока шага. (Логика парсера scripts/parse_cycling.py.)</small>
           </dd>
         </dl>
+        <div class="formulas-contract-note">
+          Формулы — из контракта <code>contracts/metrics.v1.json</code>; все реализации
+          (сервер, импортёры, графики) проходят общие golden-тесты соответствия.
+        </div>
       </div>
     </div>
 
@@ -2300,6 +2348,20 @@ function resetZoom(chartRef) {
 .summary-row:hover td { background: rgba(211, 167, 84, 0.08); }
 
 /* ── Formulas panel ── */
+/* Происхождение значений */
+.prov-hint-line {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 6px; font-size: 11px; color: rgba(0, 50, 116, 0.45);
+}
+.prov-hint-line i { font-size: 11px; }
+.summary-table td { cursor: context-menu; }
+.formulas-contract-note {
+  margin-top: 10px; padding-top: 8px;
+  border-top: 1px dashed rgba(0, 50, 116, 0.12);
+  font-size: 11px; color: rgba(0, 50, 116, 0.5);
+}
+.formulas-contract-note code { font-size: 10.5px; }
+
 .formulas-panel {
   border: 1px solid rgba(0, 50, 116, 0.08);
   border-radius: 8px;

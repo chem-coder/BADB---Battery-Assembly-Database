@@ -567,8 +567,10 @@ router.get('/sessions/:id/summary', auth, async (req, res) => {
 // ── GET /api/cycling/sessions/:id/cycles/:cycle ───────────────────────
 router.get('/sessions/:id/cycles/:cycle', auth, async (req, res) => {
   try {
+    // step_number: needed by the provenance "Перепроверить" recompute —
+    // per-step max aggregation (CCCV-correct) mirrors parse_cycling.py.
     const result = await pool.query(`
-      SELECT time_s, voltage_v, current_a, capacity_ah, energy_wh, temperature_c, step_type
+      SELECT step_number, time_s, voltage_v, current_a, capacity_ah, energy_wh, temperature_c, step_type
       FROM cycling_datapoints
       WHERE session_id = $1 AND cycle_number = $2
       ORDER BY time_s
@@ -597,9 +599,11 @@ router.get('/sessions/:id/datapoints', auth, async (req, res) => {
     const total = Number(countResult.rows[0].total);
 
     // If total is small enough, return all
+    // step_number + energy_wh: needed by the provenance "Перепроверить"
+    // recompute (per-step max aggregation mirrors parse_cycling.py).
     if (total <= downsample * (toCycle - fromCycle + 1)) {
       const result = await pool.query(`
-        SELECT cycle_number, time_s, voltage_v, current_a, capacity_ah, step_type
+        SELECT cycle_number, step_number, time_s, voltage_v, current_a, capacity_ah, energy_wh, step_type
         FROM cycling_datapoints
         WHERE session_id = $1 AND cycle_number >= $2 AND cycle_number <= $3
         ORDER BY cycle_number, time_s
@@ -610,7 +614,7 @@ router.get('/sessions/:id/datapoints', auth, async (req, res) => {
     // Downsample using nth-row selection
     const nth = Math.ceil(total / (downsample * (toCycle - fromCycle + 1)));
     const result = await pool.query(`
-      SELECT cycle_number, time_s, voltage_v, current_a, capacity_ah, step_type
+      SELECT cycle_number, step_number, time_s, voltage_v, current_a, capacity_ah, energy_wh, step_type
       FROM (
         SELECT *, row_number() OVER (ORDER BY cycle_number, time_s) AS rn
         FROM cycling_datapoints

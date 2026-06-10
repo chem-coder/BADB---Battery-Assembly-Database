@@ -1,0 +1,99 @@
+{
+  "$comment": "Golden-векторы соответствия для contracts/metrics.v1.json. КАЖДАЯ реализация метрики (серверный парсер, Python-импортёры, клиентские утилиты) обязана воспроизвести эти ожидания в пределах tol — иначе красный CI. Ожидания рассчитаны вручную (трапеции/средние проверяемы на бумаге). stream_cycle_basic: один цикл, заряд 2 точки (CC 1A, 3.2→4.2В, 1ч) + разряд 3 точки (CC 0.45A, 3.9→3.1В, 2ч).",
+  "version": 1,
+  "stream_cycle_basic": {
+    "$comment": "Точки с предвычисленными кумулятивами capacity_ah/energy_wh (как делает finalize_step парсера) — агрегация проверяется у всех реализаций, интегрирование — у тех, кто его делает (python-импортёр).",
+    "points": [
+      { "cycle_number": 1, "step_number": 1, "step_type": "charge",    "time_s": 0,     "current_a": 1.0,   "voltage_v": 3.2, "capacity_ah": 0.0,  "energy_wh": 0.0 },
+      { "cycle_number": 1, "step_number": 1, "step_type": "charge",    "time_s": 3600,  "current_a": 1.0,   "voltage_v": 4.2, "capacity_ah": 1.0,  "energy_wh": 3.7 },
+      { "cycle_number": 1, "step_number": 2, "step_type": "discharge", "time_s": 3600,  "current_a": -0.45, "voltage_v": 3.9, "capacity_ah": 0.0,  "energy_wh": 0.0 },
+      { "cycle_number": 1, "step_number": 2, "step_type": "discharge", "time_s": 7200,  "current_a": -0.45, "voltage_v": 3.5, "capacity_ah": 0.45, "energy_wh": 1.665 },
+      { "cycle_number": 1, "step_number": 2, "step_type": "discharge", "time_s": 10800, "current_a": -0.45, "voltage_v": 3.1, "capacity_ah": 0.9,  "energy_wh": 3.15 }
+    ],
+    "expect": {
+      "charge_capacity_ah":     { "value": 1.0,     "tol": 1e-9 },
+      "discharge_capacity_ah":  { "value": 0.9,     "tol": 1e-9 },
+      "charge_energy_wh":       { "value": 3.7,     "tol": 1e-9 },
+      "discharge_energy_wh":    { "value": 3.15,    "tol": 1e-9 },
+      "coulombic_efficiency":   { "value": 90.0,    "tol": 0.01 },
+      "energy_efficiency":      { "value": 85.1351, "tol": 0.01 },
+      "avg_charge_voltage_v":   { "value": 3.7,     "tol": 1e-4 },
+      "avg_discharge_voltage_v": { "value": 3.5,    "tol": 1e-4 }
+    }
+  },
+  "scalar_cases": {
+    "coulombic_efficiency": [
+      { "inputs": { "discharge_capacity_ah": 0.9, "charge_capacity_ah": 1.0 }, "expect": 90.0, "tol": 1e-9 },
+      { "inputs": { "discharge_capacity_ah": 0.013, "charge_capacity_ah": 0.0132 }, "expect": 98.4848484848, "tol": 1e-6 },
+      { "inputs": { "discharge_capacity_ah": 0.5, "charge_capacity_ah": 0 }, "expect": null, "$comment": "guard: Q_chg must be > 0" },
+      { "inputs": { "discharge_capacity_ah": 0, "charge_capacity_ah": 1.0 }, "expect": 0, "tol": 1e-9, "$comment": "0% CE у мёртвой ячейки — сигнал, не пропуск" }
+    ],
+    "energy_efficiency": [
+      { "inputs": { "discharge_energy_wh": 3.15, "charge_energy_wh": 3.7 }, "expect": 85.1351351351, "tol": 1e-6 },
+      { "inputs": { "discharge_energy_wh": 1, "charge_energy_wh": 0 }, "expect": null }
+    ],
+    "hysteresis_mv": [
+      { "inputs": { "avg_charge_voltage_v": 3.7, "avg_discharge_voltage_v": 3.5 }, "expect": 200.0, "tol": 1e-9 },
+      { "inputs": { "avg_charge_voltage_v": 3.4567, "avg_discharge_voltage_v": 3.4321 }, "expect": 24.6, "tol": 1e-6 }
+    ],
+    "specific_capacity_mah_g": [
+      { "inputs": { "capacity_ah": 0.0013, "active_mass_mg": 12.4 }, "expect": 104.83870967741936, "tol": 1e-9 }
+    ],
+    "capacity_retention_pct": [
+      { "inputs": { "capacity_ah": 1.9, "ref_capacity_ah": 2.0 }, "expect": 95.0, "tol": 1e-9 },
+      { "inputs": { "capacity_ah": 1.0, "ref_capacity_ah": 0 }, "expect": null }
+    ]
+  },
+  "soh_cases": [
+    {
+      "$comment": "база = первый валидный цикл, формовка 0",
+      "rows": [
+        { "cycle_number": 1, "discharge_capacity_ah": 1.0 },
+        { "cycle_number": 2, "discharge_capacity_ah": 0.95 },
+        { "cycle_number": 3, "discharge_capacity_ah": 0.9 }
+      ],
+      "formation_exclude": 0,
+      "expect": [ { "x": 1, "y": 100.0 }, { "x": 2, "y": 95.0 }, { "x": 3, "y": 90.0 } ],
+      "tol": 1e-9
+    },
+    {
+      "$comment": "формовка 1: база = цикл 2",
+      "rows": [
+        { "cycle_number": 1, "discharge_capacity_ah": 1.0 },
+        { "cycle_number": 2, "discharge_capacity_ah": 0.95 },
+        { "cycle_number": 3, "discharge_capacity_ah": 0.9 }
+      ],
+      "formation_exclude": 1,
+      "expect": [ { "x": 2, "y": 100.0 }, { "x": 3, "y": 94.73684210526316 } ],
+      "tol": 1e-9
+    }
+  ],
+  "mean_std_cases": [
+    {
+      "$comment": "две ячейки, полное покрытие: mean 85, ВЫБОРОЧНОЕ σ (n−1) = √50 ≈ 7.071 на цикле 2",
+      "series": [
+        [ { "x": 1, "y": 100 }, { "x": 2, "y": 90 } ],
+        [ { "x": 1, "y": 100 }, { "x": 2, "y": 80 } ]
+      ],
+      "min_coverage": 2,
+      "expect_mean":  [ { "x": 1, "y": 100.0 }, { "x": 2, "y": 85.0 } ],
+      "expect_upper": [ { "x": 1, "y": 100.0 }, { "x": 2, "y": 92.07106781186548 } ],
+      "expect_lower": [ { "x": 1, "y": 100.0 }, { "x": 2, "y": 77.92893218813452 } ],
+      "tol": 1e-9
+    },
+    {
+      "$comment": "survivorship-гейт: вторая ячейка умерла после цикла 1 → цикл 2 не рисуется при minCoverage=2",
+      "series": [
+        [ { "x": 1, "y": 100 }, { "x": 2, "y": 90 } ],
+        [ { "x": 1, "y": 100 } ]
+      ],
+      "min_coverage": 2,
+      "expect_mean": [ { "x": 1, "y": 100.0 } ],
+      "tol": 1e-9
+    }
+  ],
+  "threshold_cases": [
+    { "mean": [ { "x": 1, "y": 100 }, { "x": 2, "y": 85 }, { "x": 3, "y": 79 } ], "threshold": 80, "expect": 3 },
+    { "mean": [ { "x": 1, "y": 100 }, { "x": 2, "y": 85 } ], "threshold": 60, "expect": null }
+  ]
+}

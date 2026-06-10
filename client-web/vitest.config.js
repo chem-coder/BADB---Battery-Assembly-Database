@@ -18,6 +18,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // Versioned project contracts (repo root /contracts) — must match
+      // vite.config.js so the metrics registry resolves in tests too.
+      '@contracts': fileURLToPath(new URL('../contracts', import.meta.url)),
     },
   },
   test: {
