@@ -9,6 +9,7 @@
  */
 import { computed } from 'vue'
 import { perfEnabled, chartPerf } from '@/utils/chartPerf'
+import { useExpanded } from '@/composables/useExpanded'
 
 const props = defineProps({
   // какие режимы фиксации осей предлагает график (Ёмкость: без 'y' —
@@ -27,10 +28,17 @@ const props = defineProps({
 defineEmits(['update:axisLock', 'style-click', 'reset', 'export'])
 
 const perf = computed(() => (perfEnabled.value && props.perfId ? chartPerf[props.perfId] : null))
+
+// Разворот в полноэкранный оверлей (Esc / клик по фону / кнопка — выход).
+// Телепорт в body: fixed внутри glass-карточек с backdrop-filter был бы
+// заперт в их containing block.
+const { expanded, toggle: toggleExpanded } = useExpanded()
 </script>
 
 <template>
-  <div class="chart-card chart-card--wide">
+  <Teleport to="body" :disabled="!expanded">
+    <div v-if="expanded" class="chart-expand-backdrop" @click="toggleExpanded" />
+    <div class="chart-card chart-card--wide" :class="{ 'chart-card--expanded': expanded }">
     <div v-if="axisModes?.length" class="chart-axis-lock" :title="axisTitle">
       <button
         v-for="m in axisModes"
@@ -39,6 +47,9 @@ const perf = computed(() => (perfEnabled.value && props.perfId ? chartPerf[props
         @click="$emit('update:axisLock', m)"
       >{{ m.toUpperCase() }}</button>
     </div>
+    <button class="chart-expand-btn" :title="expanded ? 'Свернуть (Esc)' : 'Развернуть на весь экран'" @click="toggleExpanded">
+      <i :class="expanded ? 'pi pi-window-minimize' : 'pi pi-window-maximize'"></i>
+    </button>
     <button class="chart-style-btn" title="Настройки стиля графика" @click="$emit('style-click', $event)">
       <i class="pi pi-sliders-h"></i>
     </button>
@@ -54,7 +65,8 @@ const perf = computed(() => (perfEnabled.value && props.perfId ? chartPerf[props
     <div v-if="perf" class="chart-perf-badge" title="сборка датасетов · отрисовка канваса · точек после LOD">
       ⏱ {{ perf.build ?? '—' }}мс · 🎨 {{ perf.paint ?? '—' }}мс · {{ perf.points != null ? (perf.points > 999 ? (perf.points/1000).toFixed(1) + 'к' : perf.points) : '—' }} тчк
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -73,6 +85,7 @@ const perf = computed(() => (perfEnabled.value && props.perfId ? chartPerf[props
 /* Кнопки карточки — правый верхний угол, проявляются на ховере */
 .chart-export-btn,
 .chart-reset-zoom-btn,
+.chart-expand-btn,
 .chart-style-btn {
   position: absolute;
   top: 6px;
@@ -94,16 +107,50 @@ const perf = computed(() => (perfEnabled.value && props.perfId ? chartPerf[props
 .chart-export-btn { right: 6px; }
 .chart-reset-zoom-btn { right: 38px; }
 .chart-style-btn    { right: 70px; }
+.chart-expand-btn   { right: 102px; }
 .chart-card:hover .chart-export-btn,
 .chart-card:hover .chart-reset-zoom-btn,
+.chart-card:hover .chart-expand-btn,
 .chart-card:hover .chart-style-btn {
   opacity: 1;
 }
 .chart-export-btn:hover,
 .chart-reset-zoom-btn:hover,
+.chart-expand-btn:hover,
 .chart-style-btn:hover {
   background: #003274;
   color: white;
+}
+
+/* ── Развёрнутый режим: почти полноэкранный оверлей ── */
+.chart-expand-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+  background: rgba(10, 25, 55, 0.4);
+}
+.chart-card--expanded {
+  position: fixed;
+  inset: 18px;
+  z-index: 999;
+  background: #fff;
+  box-shadow: 0 16px 60px rgba(0, 30, 80, 0.3);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+}
+.chart-card--expanded .chart-wrap,
+.chart-card--expanded .chart-wrap--tall {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+.chart-card--expanded .chart-export-btn,
+.chart-card--expanded .chart-reset-zoom-btn,
+.chart-card--expanded .chart-expand-btn,
+.chart-card--expanded .chart-style-btn,
+.chart-card--expanded .chart-axis-lock {
+  opacity: 1;
 }
 
 /* Переключатель фиксации осей — левый верх, всегда слегка виден */

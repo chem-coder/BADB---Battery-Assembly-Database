@@ -28,6 +28,7 @@ import zoomPlugin from 'chartjs-plugin-zoom'
 import { cellSohSeries, protocolMeanStd, cyclesToThreshold } from '@/utils/cyclingSoh'
 import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
 import { timeBuild, makePaintPlugin, perfEnabled, chartPerf } from '@/utils/chartPerf'
+import { useExpanded } from '@/composables/useExpanded'
 
 // Idempotent — CyclingCharts registers the same set; registering twice is a
 // no-op, but we register here too so this component stands on its own.
@@ -61,6 +62,9 @@ function toggleProtocol(proto) {
 }
 
 const sohChartRef = ref(null)
+
+// Разворот в полноэкранный оверлей (Esc / фон / кнопка — выход)
+const { expanded, toggle: toggleExpanded } = useExpanded()
 
 // Group active sessions by protocol (null/'' → «без протокола»).
 const protocolGroups = computed(() => {
@@ -391,7 +395,9 @@ function resetZoom() {
 </script>
 
 <template>
-  <div class="soh-chart-card glass-card">
+  <Teleport to="body" :disabled="!expanded">
+    <div v-if="expanded" class="soh-expand-backdrop" @click="toggleExpanded" />
+    <div class="soh-chart-card glass-card" :class="{ 'soh-chart-card--expanded': expanded }">
     <div class="soh-head">
       <span class="soh-title">Сравнение по протоколам</span>
 
@@ -432,6 +438,7 @@ function resetZoom() {
           <button class="soh-axis-btn" :class="{ 'is-active': axisLock === 'y' }" @click="axisLock = 'y'">Y</button>
         </div>
 
+        <button class="soh-icon-btn" :title="expanded ? 'Свернуть (Esc)' : 'Развернуть на весь экран'" @click="toggleExpanded"><i :class="expanded ? 'pi pi-window-minimize' : 'pi pi-window-maximize'"></i></button>
         <button class="soh-icon-btn" title="Скачать PNG" @click="exportPNG"><i class="pi pi-image"></i></button>
         <button class="soh-icon-btn" title="Сброс зума (или даблклик по графику) · колесо — масштаб у курсора, перетаскивание — панорама" @click="resetZoom"><i class="pi pi-search-minus"></i></button>
       </div>
@@ -484,7 +491,8 @@ function resetZoom() {
         </span>
       </div>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -568,6 +576,29 @@ function resetZoom() {
 .soh-field--eol { gap: 4px; text-transform: none; }
 /* Keeps EOL in the layout but inert in capacity mode — no button jitter. */
 .soh-field--off { opacity: 0.3; pointer-events: none; }
+/* ── Развёрнутый режим ── */
+.soh-expand-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+  background: rgba(10, 25, 55, 0.4);
+}
+.soh-chart-card--expanded {
+  position: fixed;
+  inset: 18px;
+  z-index: 999;
+  background: #fff;
+  box-shadow: 0 16px 60px rgba(0, 30, 80, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+.soh-chart-card--expanded .soh-wrap {
+  flex: 1;
+  height: auto;
+  min-height: 320px;
+}
+
 .soh-perf-badge {
   position: absolute; left: 8px; bottom: 6px; z-index: 2;
   font-size: 10px; font-variant-numeric: tabular-nums;
