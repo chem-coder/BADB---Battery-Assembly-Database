@@ -257,36 +257,60 @@ router.get('/graph', auth, async (req, res) => {
     graphParams.push(limit)
     const graphLimitParam = `$${graphParams.length}`
 
-    // Fetch all entity data in parallel
+    // Fetch all entity data in parallel.
+    // Audit fields (created_by name + dates) feed the node provenance block
+    // («кто записал, когда»). Tables differ: materials track only updated_*,
+    // separator_structure has no audit columns at all — the UI shows what
+    // exists and an honest "не зарегистрировано" otherwise.
     const [projects, tapes, recipes, recipeLines, materials, batches, batteries,
            separators, structures, electrolytes] = await Promise.all([
-      pool.query(`SELECT project_id, name, status FROM projects ${projectFilter ? 'WHERE project_id = $1' : ''} ORDER BY project_id`, projectFilter ? [projectFilter] : []),
+      pool.query(`
+        SELECT p.project_id, p.name, p.status, p.created_at, u.name AS created_by_name
+        FROM projects p LEFT JOIN users u ON u.user_id = p.created_by
+        ${projectFilter ? 'WHERE p.project_id = $1' : ''} ORDER BY p.project_id
+      `, projectFilter ? [projectFilter] : []),
       pool.query(`
         SELECT t.tape_id, t.name, t.project_id, t.tape_recipe_id, t.created_by,
-               u.name AS operator_name
+               t.created_at, t.item_created_at, u.name AS operator_name
         FROM tapes t LEFT JOIN users u ON u.user_id = t.created_by
         ${graphTapeWhere}
         ORDER BY t.tape_id DESC LIMIT ${graphLimitParam}
       `, graphParams),
-      pool.query(`SELECT tape_recipe_id, name, role FROM tape_recipes`),
-      pool.query(`SELECT tape_recipe_id, material_id FROM tape_recipe_lines`),
-      pool.query(`SELECT m.material_id, m.name, m.role FROM materials m`),
       pool.query(`
-        SELECT b.cut_batch_id, b.tape_id, count(e.electrode_id) AS electrode_count
+        SELECT r.tape_recipe_id, r.name, r.role, r.created_at, u.name AS created_by_name
+        FROM tape_recipes r LEFT JOIN users u ON u.user_id = r.created_by
+      `),
+      pool.query(`SELECT tape_recipe_id, material_id FROM tape_recipe_lines`),
+      pool.query(`
+        SELECT m.material_id, m.name, m.role, m.updated_at, u.name AS updated_by_name
+        FROM materials m LEFT JOIN users u ON u.user_id = m.updated_by
+      `),
+      pool.query(`
+        SELECT b.cut_batch_id, b.tape_id, b.created_at, b.item_created_at,
+               u.name AS created_by_name, count(e.electrode_id) AS electrode_count
         FROM electrode_cut_batches b
+        LEFT JOIN users u ON u.user_id = b.created_by
         LEFT JOIN electrodes e ON e.cut_batch_id = b.cut_batch_id
-        GROUP BY b.cut_batch_id, b.tape_id
+        GROUP BY b.cut_batch_id, b.tape_id, b.created_at, b.item_created_at, u.name
       `),
       pool.query(`
         SELECT bt.battery_id, bt.project_id, bt.form_factor,
+               bt.created_at, bt.item_created_at, u.name AS created_by_name,
                bs.tape_id AS source_tape_id, bs.cut_batch_id AS source_batch_id
         FROM batteries bt
+        LEFT JOIN users u ON u.user_id = bt.created_by
         LEFT JOIN battery_electrode_sources bs ON bs.battery_id = bt.battery_id
         ${projectFilter ? 'WHERE bt.project_id = $1' : ''}
       `, projectFilter ? [projectFilter] : []),
-      pool.query(`SELECT sep_id, name, structure_id, created_by FROM separators`),
+      pool.query(`
+        SELECT s.sep_id, s.name, s.structure_id, s.created_at, u.name AS created_by_name
+        FROM separators s LEFT JOIN users u ON u.user_id = s.created_by
+      `),
       pool.query(`SELECT sep_str_id, name FROM separator_structure`),
-      pool.query(`SELECT electrolyte_id, name, electrolyte_type, created_by FROM electrolytes`),
+      pool.query(`
+        SELECT el.electrolyte_id, el.name, el.electrolyte_type, el.created_at, u.name AS created_by_name
+        FROM electrolytes el LEFT JOIN users u ON u.user_id = el.created_by
+      `),
     ])
 
     const nodes = []
@@ -301,12 +325,18 @@ router.get('/graph', auth, async (req, res) => {
 
     // Projects
     for (const p of projects.rows) {
-      addNode(`project-${p.project_id}`, 'project', p.name, { status: p.status })
+      addNode(`project-${p.project_id}`, 'project', p.name, {
+        status: p.status,
+        created_by_name: p.created_by_name, created_at: p.created_at,
+      })
     }
 
     // Tapes
     for (const t of tapes.rows) {
-      addNode(`tape-${t.tape_id}`, 'tape', t.name || `Лента #${t.tape_id}`, { operator: t.operator_name })
+      addNode(`tape-${t.tape_id}`, 'tape', t.name || `Лента #${t.tape_id}`, {
+        operator: t.operator_name,
+        created_by_name: t.operator_name, created_at: t.created_at, item_created_at: t.item_created_at,
+      })
       if (t.project_id) edges.push({ source: `project-${t.project_id}`, target: `tape-${t.tape_id}`, type: 'contains' })
       if (t.tape_recipe_id) edges.push({ source: `tape-${t.tape_id}`, target: `recipe-${t.tape_recipe_id}`, type: 'uses_recipe' })
     }
@@ -315,12 +345,19 @@ router.get('/graph', auth, async (req, res) => {
     const materialMap = new Map()
     for (const m of materials.rows) {
       materialMap.set(m.material_id, m)
-      addNode(`material-${m.material_id}`, 'material', m.name, { role: m.role })
+      // materials carry no created_* columns — only updated_* (schema fact)
+      addNode(`material-${m.material_id}`, 'material', m.name, {
+        role: m.role,
+        updated_by_name: m.updated_by_name, updated_at: m.updated_at,
+      })
     }
 
     // Recipes
     for (const r of recipes.rows) {
-      addNode(`recipe-${r.tape_recipe_id}`, 'recipe', r.name, { role: r.role })
+      addNode(`recipe-${r.tape_recipe_id}`, 'recipe', r.name, {
+        role: r.role,
+        created_by_name: r.created_by_name, created_at: r.created_at,
+      })
     }
 
     // Recipe → Material edges (via recipe_lines)
@@ -338,7 +375,10 @@ router.get('/graph', auth, async (req, res) => {
     // Electrode batches
     const tapeIds = new Set(tapes.rows.map(t => t.tape_id))
     for (const b of batches.rows) {
-      addNode(`batch-${b.cut_batch_id}`, 'electrode_batch', `Партия #${b.cut_batch_id}`, { electrodes: b.electrode_count })
+      addNode(`batch-${b.cut_batch_id}`, 'electrode_batch', `Партия #${b.cut_batch_id}`, {
+        electrodes: b.electrode_count,
+        created_by_name: b.created_by_name, created_at: b.created_at, item_created_at: b.item_created_at,
+      })
       if (tapeIds.has(b.tape_id)) {
         edges.push({ source: `tape-${b.tape_id}`, target: `batch-${b.cut_batch_id}`, type: 'cut_from' })
       }
@@ -349,18 +389,26 @@ router.get('/graph', auth, async (req, res) => {
       addNode(`structure-${s.sep_str_id}`, 'sep_structure', s.name)
     }
     for (const s of separators.rows) {
-      addNode(`separator-${s.sep_id}`, 'separator', s.name)
+      addNode(`separator-${s.sep_id}`, 'separator', s.name, {
+        created_by_name: s.created_by_name, created_at: s.created_at,
+      })
       if (s.structure_id) edges.push({ source: `structure-${s.structure_id}`, target: `separator-${s.sep_id}`, type: 'has_structure' })
     }
 
     // Electrolytes
     for (const el of electrolytes.rows) {
-      addNode(`electrolyte-${el.electrolyte_id}`, 'electrolyte', el.name, { type: el.electrolyte_type })
+      addNode(`electrolyte-${el.electrolyte_id}`, 'electrolyte', el.name, {
+        type: el.electrolyte_type,
+        created_by_name: el.created_by_name, created_at: el.created_at,
+      })
     }
 
     // Batteries (with links to separators, electrolytes, electrode batches)
     for (const bt of batteries.rows) {
-      addNode(`battery-${bt.battery_id}`, 'battery', `${bt.form_factor || 'Акк.'} #${bt.battery_id}`, { form_factor: bt.form_factor })
+      addNode(`battery-${bt.battery_id}`, 'battery', `${bt.form_factor || 'Акк.'} #${bt.battery_id}`, {
+        form_factor: bt.form_factor,
+        created_by_name: bt.created_by_name, created_at: bt.created_at, item_created_at: bt.item_created_at,
+      })
       if (bt.project_id) edges.push({ source: `project-${bt.project_id}`, target: `battery-${bt.battery_id}`, type: 'contains' })
       if (bt.source_batch_id) edges.push({ source: `batch-${bt.source_batch_id}`, target: `battery-${bt.battery_id}`, type: 'assembled_into' })
       if (bt.source_tape_id) edges.push({ source: `tape-${bt.source_tape_id}`, target: `battery-${bt.battery_id}`, type: 'source_tape' })
