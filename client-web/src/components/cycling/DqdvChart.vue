@@ -11,7 +11,8 @@ import { ref, computed } from 'vue'
 import { Scatter } from 'vue-chartjs'
 import '@/utils/cyclingChartSetup'
 import { useCyclingStyles } from '@/composables/useCyclingStyles'
-import { dqdvSavGol, dvdqSavGol, findPeaks } from '@/utils/savitzkyGolay'
+import { findPeaks } from '@/utils/savitzkyGolay'
+import { getDifferentialCurve, savgolCacheVersion } from '@/utils/savgolAsync'
 import {
   sessionShortLabel, fillColor, cycleAlpha, viridisAt,
   chartAnimFor, sessionDashFor, dedupeLegend, legendToggleAll,
@@ -90,45 +91,9 @@ function computeDQDV(points, smoothingWindow = 5) {
   return { charge: process(charge), discharge: process(discharge) }
 }
 
-// ── Савицкий–Голей (navani-конвейер) ───────────────────────────────────
-// Работает на ДОМИНАНТНОМ сегменте шага: capacity_ah сбрасывается на границе
-// шага, смешение сегментов исказило бы интерполяцию на V-сетку. CV-полка
-// схлопывается в одну точку сетки, rest ничего не даёт.
-function dominantStepPairs(steps) {
-  const segments = new Map()
-  for (const d of steps) {
-    if (d.voltage_v == null || d.capacity_ah == null) continue
-    const arr = segments.get(d.step_number)
-    if (arr) arr.push({ v: d.voltage_v, q: d.capacity_ah })
-    else segments.set(d.step_number, [{ v: d.voltage_v, q: d.capacity_ah }])
-  }
-  let best = []
-  for (const arr of segments.values()) if (arr.length > best.length) best = arr
-  return best
-}
-
-// Возвращают ПОЛНУЮ сетку (4000 точек): обзорную децимацию и зум-детализацию
-// делает LOD-слой при построении датасетов.
-function computeDQDVSavGol(points, preset = 'standard') {
-  const charge = points.filter(d => d.step_type === 'charge' || d.step_type === 'cccv')
-  const discharge = points.filter(d => d.step_type === 'discharge')
-  return {
-    charge: dqdvSavGol(dominantStepPairs(charge), { preset }),
-    discharge: dqdvSavGol(dominantStepPairs(discharge), { preset }),
-  }
-}
-
-// dV/dQ (DVA): те же оси наоборот — равномерная сетка ЁМКОСТИ. Отображение:
-// x в мА·ч (удобно монеткам), y в В/мА·ч; util работает в Ah.
-function computeDVDQSavGol(points, preset = 'standard') {
-  const charge = points.filter(d => d.step_type === 'charge' || d.step_type === 'cccv')
-  const discharge = points.filter(d => d.step_type === 'discharge')
-  const toMah = (arr) => arr.map(p => ({ x: p.x * 1000, y: p.y / 1000 }))
-  return {
-    charge: toMah(dvdqSavGol(dominantStepPairs(charge), { preset })),
-    discharge: toMah(dvdqSavGol(dominantStepPairs(discharge), { preset })),
-  }
-}
+// SavGol-кривые считает savgolAsync: мемо-кэш (повторные перестройки ~0 мс) +
+// параллельный пул Web Workers на промахах (UI не блокируется; кривые
+// проявляются прогрессивно по бампу savgolCacheVersion).
 
 // Датасеты + пики + ПОЛНЫЕ серии (LOD-источник) одним проходом.
 // Пики ищутся на полной сетке (точнее позиции, чем на прореженной).
@@ -149,6 +114,8 @@ const dqdvComputed = computed(() => {
   const sortedCycles = [...props.selectedCycles].sort((a, b) => a - b)
   const nCycles = sortedCycles.length
   const dStyle = dqdvStyle.value
+  // реактивная зависимость: готовность кривых из пула воркеров
+  void savgolCacheVersion.value
 
   for (const s of props.sessions) {
     const colorBase = sessionColorFor(s)
@@ -157,11 +124,14 @@ const dqdvComputed = computed(() => {
       const points = s.cycleDataMap?.[cycleNum] || []
       if (!points.length) return
 
-      const { charge, discharge } = isDvdq
-        ? computeDVDQSavGol(points, props.dqdvPreset)
-        : (useSavgol
-            ? computeDQDVSavGol(points, props.dqdvPreset)
-            : computeDQDV(points, props.smoothingWindow))
+      let charge, discharge
+      if (useSavgol) {
+        const kind = isDvdq ? 'dvdq' : 'dqdv'
+        charge = getDifferentialCurve(points, { kind, preset: props.dqdvPreset, step: 'charge' }).curve || []
+        discharge = getDifferentialCurve(points, { kind, preset: props.dqdvPreset, step: 'discharge' }).curve || []
+      } else {
+        ({ charge, discharge } = computeDQDV(points, props.smoothingWindow))
+      }
       // ±30% модуляция толщины по индексу цикла — глаз следит эволюцию пиков.
       const userWidth = Number(dStyle.borderWidth) || 1.2
       const cycleMul = nCycles > 1 ? (0.7 + (cIdx / (nCycles - 1)) * 0.6) : 1
