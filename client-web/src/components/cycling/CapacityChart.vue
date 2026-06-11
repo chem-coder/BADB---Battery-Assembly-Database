@@ -13,10 +13,11 @@ import { Line } from 'vue-chartjs'
 import '@/utils/cyclingChartSetup'
 import { useCyclingStyles } from '@/composables/useCyclingStyles'
 import {
-  sessionShortLabel, fillColor, decimateRows, chartAnimFor,
+  sessionShortLabel, fillColor, chartAnimFor,
   dedupeLegend, legendToggleAll, firstValidDischargeCap, projectCapacity,
   capacityAxisLabel, exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -46,8 +47,12 @@ const CE_COLOR = '#D3A754'  // охра BADB — CE соло-сессии (ка�
 
 const hasSummary = computed(() => props.sessions.some(s => s.summary?.length))
 
-const chartData = computed(() => {
+// Датасеты + ПОЛНЫЕ серии (LOD): обзор — min-max децимация, зум — пересэмплинг
+// окна из полного разрешения. Выбранные циклы доливаются в обзорный уровень,
+// чтобы их +2px маркер «что отрисовано ниже» не пропадал после прореживания.
+const built = computed(() => {
   const datasets = []
+  const fulls = []
   const selectedSet = new Set(props.selectedCycles)
   const isSolo = props.sessions.length === 1
   const showDischarge = props.stepFilter !== 'charge'
@@ -55,11 +60,25 @@ const chartData = computed(() => {
   const cStyle = capacityStyle.value
   const userWidth = Number(cStyle.borderWidth) || 1.8
 
+  function withSelected(dec, full) {
+    if (!selectedSet.size || dec === full) return dec
+    const have = new Set(dec)
+    const add = full.filter(p => selectedSet.has(p.x) && !have.has(p))
+    if (!add.length) return dec
+    return [...dec, ...add].sort((a, b) => a.x - b.x)
+  }
+
+  function pushDs(ds, full) {
+    const sorted = ensureSortedByX(full)
+    ds.data = withSelected(minMaxDecimate(full), full)
+    if (sorted) ds.normalized = true
+    datasets.push(ds)
+    fulls.push(sorted)
+  }
+
   for (const s of props.sessions) {
     if (!s.summary?.length) continue
-    // Прореживание очень длинных прогонов (600–1000 циклов); выбранные циклы
-    // не выбрасываются — их +2px маркер «что отрисовано ниже» сохраняется.
-    const rows = decimateRows(s.summary, selectedSet)
+    const rows = s.summary
 
     const sColor = sessionColorFor(s)
 
@@ -72,34 +91,31 @@ const chartData = computed(() => {
     const sIdx = props.sessions.findIndex(x => x.session_id === s.session_id)
     const markerStyle = markerForSession('capacity', sIdx >= 0 ? sIdx : 0) || 'circle'
     if (showDischarge) {
-      datasets.push({
+      pushDs({
         label: sessionShortLabel(s, props.sessions),
-        data: rows.map(row => ({
-          x: row.cycle_number,
-          y: projectCapacity(row.discharge_capacity_ah, s, refCap, props.capacityView, props.capacityUnit),
-        })),
         yAxisID: 'y',
         borderColor: sColor,
         backgroundColor: sColor,       // залитый маркер
         fill: false,
         tension: 0.2,
-        pointRadius: rows.map(row => selectedSet.has(row.cycle_number) ? baseRadius + 2 : baseRadius),
+        // scriptable вместо параллельного массива: радиус по точке, остаётся
+        // верным при любой LOD-подмене data (массив бы рассинхронизировался)
+        pointRadius: (ctx) => (selectedSet.has(ctx.raw?.x) ? baseRadius + 2 : baseRadius),
         pointBackgroundColor: sColor,
         pointBorderColor: sColor,
         pointStyle: markerStyle || 'circle',
         pointHoverRadius: baseRadius + 3,
         borderWidth: userWidth,
-      })
+      }, rows.map(row => ({
+        x: row.cycle_number,
+        y: projectCapacity(row.discharge_capacity_ah, s, refCap, props.capacityView, props.capacityUnit),
+      })))
     }
 
     // Заряд — ПОЛЫЙ маркер + пунктир (конвенция коллеги)
     if (showCharge) {
-      datasets.push({
+      pushDs({
         label: showDischarge ? `${sessionShortLabel(s, props.sessions)} · charge` : sessionShortLabel(s, props.sessions),
-        data: rows.map(row => ({
-          x: row.cycle_number,
-          y: projectCapacity(row.charge_capacity_ah, s, refCap, props.capacityView, props.capacityUnit),
-        })),
         yAxisID: 'y',
         borderColor: sColor,
         backgroundColor: '#ffffff',     // полый центр
@@ -111,17 +127,16 @@ const chartData = computed(() => {
         pointStyle: markerStyle || 'circle',
         pointBorderWidth: 1.6,
         borderWidth: Math.max(1, userWidth * 0.8),
-      })
+      }, rows.map(row => ({
+        x: row.cycle_number,
+        y: projectCapacity(row.charge_capacity_ah, s, refCap, props.capacityView, props.capacityUnit),
+      })))
     }
 
     // CE — ОТДЕЛЬНАЯ цветовая семья (охра соло; десатурированный мульти)
     const ceColor = isSolo ? CE_COLOR : fillColor(sColor, 0.45)
-    datasets.push({
+    pushDs({
       label: `${sessionShortLabel(s, props.sessions)} · CE`,
-      data: rows.map(row => ({
-        x: row.cycle_number,
-        y: row.coulombic_efficiency,
-      })),
       yAxisID: 'y1',
       borderColor: ceColor,
       backgroundColor: ceColor,
@@ -131,11 +146,19 @@ const chartData = computed(() => {
       pointBorderColor: ceColor,
       pointStyle: 'circle',
       borderWidth: 1.2,
-    })
+    }, rows.map(row => ({
+      x: row.cycle_number,
+      y: row.coulombic_efficiency,
+    })))
   }
 
-  return { datasets }
+  return { datasets, fulls }
 })
+
+const chartData = computed(() => ({ datasets: built.value.datasets }))
+
+// LOD-обработчики зума/панорамы (rAF-гейт внутри)
+const lod = makeLodHandlers(() => built.value.fulls)
 
 const chartOptions = computed(() => ({
   responsive: true,
@@ -190,8 +213,8 @@ const chartOptions = computed(() => ({
     // Drag = панорама, колесо = зум у курсора. 'original'-границы не пускают
     // в «отрицательные циклы» и пустоту за последним.
     zoom: {
-      pan:  { enabled: true, mode: axisLock.value },
-      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value },
+      pan:  { enabled: true, mode: axisLock.value, onPanComplete: lod.onPanComplete },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value, onZoomComplete: lod.onZoomComplete },
       limits: {
         x: { min: 'original', max: 'original', minRange: 1 },
       },

@@ -17,6 +17,7 @@ import {
   sessionShortLabel, chartAnimFor, dedupeLegend, legendToggleAll,
   exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -45,8 +46,10 @@ const hasHysteresisData = computed(() => {
   return false
 })
 
-const chartData = computed(() => {
+// Датасеты + ПОЛНЫЕ серии (LOD): обзор — min-max, зум — пересэмплинг окна.
+const built = computed(() => {
   const datasets = []
+  const fulls = []
   const hStyle = hysteresisStyle.value
   const userWidth = Number(hStyle.borderWidth) || 1.8
   const baseRadius = Number(hStyle.pointRadius) || 3
@@ -65,9 +68,11 @@ const chartData = computed(() => {
       })
       .filter(Boolean)
     if (!points.length) continue
+    const sorted = ensureSortedByX(points)
     datasets.push({
       label: sessionShortLabel(s, props.sessions),
-      data: points,
+      data: minMaxDecimate(points),
+      normalized: !!sorted,
       borderColor: sColor,
       backgroundColor: sColor,
       tension: 0.2,
@@ -76,9 +81,15 @@ const chartData = computed(() => {
       pointStyle: sMarker,
       borderWidth: userWidth,
     })
+    fulls.push(sorted)
   }
-  return { datasets }
+  return { datasets, fulls }
 })
+
+const chartData = computed(() => ({ datasets: built.value.datasets }))
+
+// LOD-обработчики зума/панорамы (rAF-гейт внутри)
+const lod = makeLodHandlers(() => built.value.fulls)
 
 const chartOptions = computed(() => ({
   responsive: true,
@@ -109,8 +120,8 @@ const chartOptions = computed(() => ({
     // Drag = панорама, колесо = зум у курсора. Y min=0: ΔV̄ ≥ 0 у здоровых
     // ячеек по определению гистерезиса.
     zoom: {
-      pan:  { enabled: true, mode: axisLock.value },
-      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value },
+      pan:  { enabled: true, mode: axisLock.value, onPanComplete: lod.onPanComplete },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value, onZoomComplete: lod.onZoomComplete },
       limits: {
         x: { min: 'original', max: 'original', minRange: 1 },
         y: { min: 0, max: 'original' },

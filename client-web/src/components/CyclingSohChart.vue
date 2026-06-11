@@ -26,6 +26,7 @@ import {
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { cellSohSeries, protocolMeanStd, cyclesToThreshold } from '@/utils/cyclingSoh'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
 
 // Idempotent — CyclingCharts registers the same set; registering twice is a
 // no-op, but we register here too so this component stands on its own.
@@ -185,8 +186,13 @@ function decimateXY(points) {
   return out
 }
 
-const chartData = computed(() => {
+// Датасеты + ПОЛНЫЕ серии ячеек (LOD): обзор — min-max децимация, зум —
+// пересэмплинг видимого окна из полного разрешения. Полоса mean±σ остаётся на
+// согласованной стрид-децимации (fill '-1' требует одинаковых x у трёх серий)
+// и в LOD не участвует (fulls = null).
+const built = computed(() => {
   const datasets = []
+  const fulls = []
   let lineIdx = 0          // global line counter → distinct shape per line
   for (const [proto, sessions] of protocolGroups.value) {
     if (hiddenProtocols.value.has(proto)) continue   // legend toggle
@@ -197,9 +203,11 @@ const chartData = computed(() => {
         if (!data.length) return
         // light alpha spread so overlapping cells of one protocol differ
         const alpha = sessions.length > 1 ? 0.55 + 0.4 * (i / (sessions.length - 1)) : 0.8
+        const sorted = ensureSortedByX(data)
         datasets.push({
           label: `${proto} · ${shortLabel(s)}`,
-          data: decimateXY(data),
+          data: minMaxDecimate(data),
+          normalized: !!sorted,
           borderColor: hexToRgba(color, alpha),
           backgroundColor: hexToRgba(color, alpha),
           borderWidth: 1.4,
@@ -209,6 +217,7 @@ const chartData = computed(() => {
           _proto: proto,
           ...markerProps(lineIdx++),
         })
+        fulls.push(sorted)
       })
     } else {
       const { mean, upper, lower } = statsByProto.value.get(proto)
@@ -226,16 +235,19 @@ const chartData = computed(() => {
         _proto: proto,
         ...markerProps(lineIdx++),
       })
+      fulls.push(null)
       datasets.push({
         label: `${proto} +σ`, data: decimateXY(upper), borderColor: 'transparent',
         backgroundColor: 'transparent', pointRadius: 0, fill: false, tension: 0.2,
         _band: true,
       })
+      fulls.push(null)
       datasets.push({
         label: `${proto} −σ`, data: decimateXY(lower), borderColor: 'transparent',
         backgroundColor: hexToRgba(color, 0.13), pointRadius: 0, fill: '-1', tension: 0.2,
         _band: true,
       })
+      fulls.push(null)
     }
   }
   if (isSoh.value && showEol.value && datasets.length) {
@@ -248,9 +260,15 @@ const chartData = computed(() => {
       pointRadius: 0,
       fill: false,
     })
+    fulls.push(null)
   }
-  return { datasets }
+  return { datasets, fulls }
 })
+
+const chartData = computed(() => ({ datasets: built.value.datasets }))
+
+// LOD-обработчики зума/панорамы (rAF-гейт внутри)
+const lod = makeLodHandlers(() => built.value.fulls)
 
 const yAxisLabel = computed(() => (isSoh.value ? 'SOH, %' : 'DCh ёмкость, Ah'))
 const chartTitle = computed(() => (isSoh.value
@@ -288,8 +306,8 @@ const chartOptions = computed(() => ({
       filter: (ctx) => !ctx.dataset._band,
     },
     zoom: {
-      pan: { enabled: true, mode: axisLock.value },
-      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value },
+      pan: { enabled: true, mode: axisLock.value, onPanComplete: lod.onPanComplete },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value, onZoomComplete: lod.onZoomComplete },
       // Keep pan/zoom inside the data range — can't drift off into empty space.
       limits: { x: { min: 'original', max: 'original' }, y: { min: 'original', max: 'original' } },
     },
