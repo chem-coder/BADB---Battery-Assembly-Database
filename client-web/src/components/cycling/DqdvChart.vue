@@ -13,10 +13,11 @@ import '@/utils/cyclingChartSetup'
 import { useCyclingStyles } from '@/composables/useCyclingStyles'
 import { dqdvSavGol, dvdqSavGol, findPeaks } from '@/utils/savitzkyGolay'
 import {
-  sessionShortLabel, fillColor, cycleAlpha, viridisAt, decimate,
+  sessionShortLabel, fillColor, cycleAlpha, viridisAt,
   chartAnimFor, sessionDashFor, dedupeLegend, legendToggleAll,
   applyChartStyle, exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -106,12 +107,14 @@ function dominantStepPairs(steps) {
   return best
 }
 
+// Возвращают ПОЛНУЮ сетку (4000 точек): обзорную децимацию и зум-детализацию
+// делает LOD-слой при построении датасетов.
 function computeDQDVSavGol(points, preset = 'standard') {
   const charge = points.filter(d => d.step_type === 'charge' || d.step_type === 'cccv')
   const discharge = points.filter(d => d.step_type === 'discharge')
   return {
-    charge: decimate(dqdvSavGol(dominantStepPairs(charge), { preset })),
-    discharge: decimate(dqdvSavGol(dominantStepPairs(discharge), { preset })),
+    charge: dqdvSavGol(dominantStepPairs(charge), { preset }),
+    discharge: dqdvSavGol(dominantStepPairs(discharge), { preset }),
   }
 }
 
@@ -122,15 +125,25 @@ function computeDVDQSavGol(points, preset = 'standard') {
   const discharge = points.filter(d => d.step_type === 'discharge')
   const toMah = (arr) => arr.map(p => ({ x: p.x * 1000, y: p.y / 1000 }))
   return {
-    charge: decimate(toMah(dvdqSavGol(dominantStepPairs(charge), { preset }))),
-    discharge: decimate(toMah(dvdqSavGol(dominantStepPairs(discharge), { preset }))),
+    charge: toMah(dvdqSavGol(dominantStepPairs(charge), { preset })),
+    discharge: toMah(dvdqSavGol(dominantStepPairs(discharge), { preset })),
   }
 }
 
-// Датасеты + пики одним проходом (одни входы) — пики читает плагин аннотаций.
+// Датасеты + пики + ПОЛНЫЕ серии (LOD-источник) одним проходом.
+// Пики ищутся на полной сетке (точнее позиции, чем на прореженной).
 const dqdvComputed = computed(() => {
   const datasets = []
   const peaks = []
+  const fulls = []   // 1:1 с datasets — для зум-пересэмплинга
+
+  function pushDs(ds, full) {
+    const sorted = ensureSortedByX(full)
+    ds.data = minMaxDecimate(full)
+    if (sorted) ds.normalized = true
+    datasets.push(ds)
+    fulls.push(sorted)
+  }
   const isDvdq = props.dqdvView === 'dvdq'
   const useSavgol = props.dqdvMethod === 'savgol' || isDvdq   // dV/dQ — только SG
   const sortedCycles = [...props.selectedCycles].sort((a, b) => a - b)
@@ -167,9 +180,8 @@ const dqdvComputed = computed(() => {
 
       if (showCharge && charge.length) {
         if (annotate) peaks.push(...findPeaks(charge).map(p => ({ ...p, color: cycleColor, label: fmt(p) })))
-        datasets.push(applyChartStyle({
+        pushDs(applyChartStyle({
           label: `Ц${cycleNum}_${sessionShortLabel(s, props.sessions)} · заряд`,
-          data: charge,
           borderColor: cycleColor,
           backgroundColor: cycleColor,
           pointBackgroundColor: cycleColor,
@@ -178,13 +190,12 @@ const dqdvComputed = computed(() => {
           borderWidth: thickness,
           borderDash: sessionDash || [4, 2],
           showLine: true,
-        }, dStyle))
+        }, dStyle), charge)
       }
       if (showDischarge && discharge.length) {
         if (annotate) peaks.push(...findPeaks(discharge).map(p => ({ ...p, color: cycleColor, label: fmt(p) })))
-        datasets.push(applyChartStyle({
+        pushDs(applyChartStyle({
           label: `Ц${cycleNum}_${sessionShortLabel(s, props.sessions)} · разряд`,
-          data: discharge,
           borderColor: cycleColor,
           backgroundColor: cycleColor,
           pointBackgroundColor: cycleColor,
@@ -193,13 +204,16 @@ const dqdvComputed = computed(() => {
           borderWidth: thickness,
           borderDash: sessionDash || undefined,
           showLine: true,
-        }, dStyle))
+        }, dStyle), discharge)
       }
     })
   }
 
-  return { datasets, peaks }
+  return { datasets, peaks, fulls }
 })
+
+// LOD-обработчики зума/панорамы (rAF-гейт внутри)
+const lod = makeLodHandlers(() => dqdvComputed.value.fulls)
 
 const chartData = computed(() => ({ datasets: dqdvComputed.value.datasets }))
 
@@ -257,8 +271,8 @@ const chartOptions = computed(() => ({
     },
     // Drag = панорама, колесо = зум у курсора. Y min=0: |d·/d·| ≥ 0.
     zoom: {
-      pan:  { enabled: true, mode: axisLock.value },
-      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value },
+      pan:  { enabled: true, mode: axisLock.value, onPanComplete: lod.onPanComplete },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value, onZoomComplete: lod.onZoomComplete },
       limits: {
         x: { min: 'original', max: 'original' },
         y: { min: 0, max: 'original' },

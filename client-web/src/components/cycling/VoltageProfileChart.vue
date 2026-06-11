@@ -12,11 +12,12 @@ import { Scatter } from 'vue-chartjs'
 import '@/utils/cyclingChartSetup'
 import { useCyclingStyles } from '@/composables/useCyclingStyles'
 import {
-  sessionShortLabel, fillColor, cycleAlpha, viridisAt, decimate,
+  sessionShortLabel, fillColor, cycleAlpha, viridisAt,
   chartAnimFor, sessionDashFor, dedupeLegend, legendToggleAll,
   convertCapacity, capacityAxisLabel, applyChartStyle,
   exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -53,12 +54,26 @@ const hasCapacity = computed(() => {
   return false
 })
 
-const chartData = computed(() => {
+// Датасеты + параллельный массив ПОЛНЫХ серий (LOD-источник): при зуме
+// onZoomComplete пересэмплирует видимое окно из полного разрешения — детали
+// проявляются по мере приближения, на экране всегда ~500 точек.
+const built = computed(() => {
   const datasets = []
+  const fulls = []        // 1:1 с datasets; null = серия не для LOD (несортирована)
   const sortedCycles = [...props.selectedCycles].sort((a, b) => a - b)
   const useCapacity = hasCapacity.value
   const nCycles = sortedCycles.length
   const vStyle = voltageStyle.value
+
+  // Полная серия {x,y} → датасет с min-max обзорной децимацией; сортированные
+  // серии получают normalized-подсказку Chart.js и попадают в LOD-список.
+  function pushDs(ds, mapped) {
+    const full = ensureSortedByX(mapped)
+    ds.data = minMaxDecimate(mapped)
+    if (full) ds.normalized = true
+    datasets.push(ds)
+    fulls.push(full)
+  }
 
   for (const s of props.sessions) {
     const colorBase = sessionColorFor(s)
@@ -69,10 +84,10 @@ const chartData = computed(() => {
       const points = s.cycleDataMap?.[cycleNum] || []
       if (!points.length) return
 
-      // Децимация только для рендера — сырые точки остаются в cycleDataMap
-      // для dQ/dV (ему нужно полное разрешение пиков).
-      const charge = decimate(points.filter(d => d.step_type === 'charge' || d.step_type === 'cccv'))
-      const discharge = decimate(points.filter(d => d.step_type === 'discharge'))
+      // ПОЛНЫЕ полуциклы (без статической децимации — она теперь обзорный
+      // уровень LOD внутри pushDs, а зум достаёт полное разрешение).
+      const charge = points.filter(d => d.step_type === 'charge' || d.step_type === 'cccv')
+      const discharge = points.filter(d => d.step_type === 'discharge')
 
       // Публикация: плоская толщина (как Excel коллеги). Интерактив: ±30%
       // модуляция по индексу цикла — деградация читается без легенды.
@@ -108,43 +123,40 @@ const chartData = computed(() => {
       if (props.ghostTrace && cycleNum > 1) {
         const ghostPoints = s.cycleDataMap?.[cycleNum - 1] || []
         if (ghostPoints.length) {
-          const ghostCharge = decimate(ghostPoints.filter(d => d.step_type === 'charge' || d.step_type === 'cccv'))
-          const ghostDischarge = decimate(ghostPoints.filter(d => d.step_type === 'discharge'))
+          const ghostCharge = ghostPoints.filter(d => d.step_type === 'charge' || d.step_type === 'cccv')
+          const ghostDischarge = ghostPoints.filter(d => d.step_type === 'discharge')
           const ghostColor = fillColor(colorBase, 0.15)
           const ghostWidth = Math.max(0.6, thickness * 0.55)
           if (showCharge && ghostCharge.length) {
-            datasets.push({
+            pushDs({
               label: `ghost_Ц${cycleNum - 1}_${sessionShortLabel(s, props.sessions)}_charge`,
               isGhost: true,
-              data: ghostCharge.map(p => ({ x: xOf(p), y: p.voltage_v })),
               borderColor: ghostColor,
               backgroundColor: ghostColor,
               pointRadius: 0,
               borderWidth: ghostWidth,
               borderDash: chargeDash,
               showLine: true,
-            })
+            }, ghostCharge.map(p => ({ x: xOf(p), y: p.voltage_v })))
           }
           if (showDischarge && ghostDischarge.length) {
-            datasets.push({
+            pushDs({
               label: `ghost_Ц${cycleNum - 1}_${sessionShortLabel(s, props.sessions)}_discharge`,
               isGhost: true,
-              data: ghostDischarge.map(p => ({ x: xOf(p), y: p.voltage_v })),
               borderColor: ghostColor,
               backgroundColor: ghostColor,
               pointRadius: 0,
               borderWidth: ghostWidth,
               borderDash: dischargeDash,
               showLine: true,
-            })
+            }, ghostDischarge.map(p => ({ x: xOf(p), y: p.voltage_v })))
           }
         }
       }
 
       if (showCharge && charge.length) {
-        datasets.push(applyChartStyle({
+        pushDs(applyChartStyle({
           label: `Ц${cycleNum}_${sessionShortLabel(s, props.sessions)} · заряд`,
-          data: charge.map(p => ({ x: xOf(p), y: p.voltage_v })),
           borderColor: chargeColor,
           backgroundColor: chargeColor,
           pointBackgroundColor: chargeColor,
@@ -153,12 +165,11 @@ const chartData = computed(() => {
           borderWidth: chargeWidth,
           borderDash: sessionDash || chargeDash,
           showLine: true,
-        }, vStyle))
+        }, vStyle), charge.map(p => ({ x: xOf(p), y: p.voltage_v })))
       }
       if (showDischarge && discharge.length) {
-        datasets.push(applyChartStyle({
+        pushDs(applyChartStyle({
           label: `Ц${cycleNum}_${sessionShortLabel(s, props.sessions)} · разряд`,
-          data: discharge.map(p => ({ x: xOf(p), y: p.voltage_v })),
           borderColor: cycleColor,
           backgroundColor: cycleColor,
           pointBackgroundColor: cycleColor,
@@ -167,13 +178,18 @@ const chartData = computed(() => {
           borderWidth: thickness,
           borderDash: sessionDash || dischargeDash,
           showLine: true,
-        }, vStyle))
+        }, vStyle), discharge.map(p => ({ x: xOf(p), y: p.voltage_v })))
       }
     })
   }
 
-  return { datasets }
+  return { datasets, fulls }
 })
+
+const chartData = computed(() => ({ datasets: built.value.datasets }))
+
+// LOD-обработчики зума/панорамы (rAF-гейт внутри): пересэмплинг видимого окна
+const lod = makeLodHandlers(() => built.value.fulls)
 
 const chartOptions = computed(() => ({
   responsive: true,
@@ -201,8 +217,8 @@ const chartOptions = computed(() => ({
     // Drag = панорама, колесо = зум у курсора; границы держат в реальных
     // диапазонах ёмкости/напряжения.
     zoom: {
-      pan:  { enabled: true, mode: axisLock.value },
-      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value },
+      pan:  { enabled: true, mode: axisLock.value, onPanComplete: lod.onPanComplete },
+      zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: axisLock.value, onZoomComplete: lod.onZoomComplete },
       limits: {
         x: { min: 'original', max: 'original' },
         y: { min: 'original', max: 'original' },
