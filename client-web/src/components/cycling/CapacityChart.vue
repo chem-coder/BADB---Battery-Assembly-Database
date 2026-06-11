@@ -180,7 +180,9 @@ const paintPlugins = [makePaintPlugin('capacity')]
 const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: chartAnimFor(props.sessions.length),
+  // порог по max(сессии, датасеты): на плотных наложениях (сессии × циклы ×
+  // полуциклы) анимация каждой перекраски — чистый джанк
+  animation: chartAnimFor(Math.max(props.sessions.length, built.value.datasets.length)),
   onClick: (evt, elements, chart) => {
     // Клик → toggle цикла из первой кликнутой точки; клики по CE — шум.
     if (elements.length > 0) {

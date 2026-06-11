@@ -200,7 +200,9 @@ const paintPlugins = [makePaintPlugin('voltage')]
 const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
-  animation: chartAnimFor(props.sessions.length),
+  // порог по max(сессии, датасеты): на плотных наложениях (сессии × циклы ×
+  // полуциклы) анимация каждой перекраски — чистый джанк
+  animation: chartAnimFor(Math.max(props.sessions.length, built.value.datasets.length)),
   plugins: {
     legend: {
       display: !props.publicationMode,  // публикационные фигуры без легенд

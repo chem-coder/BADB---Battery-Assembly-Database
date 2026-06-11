@@ -56,6 +56,20 @@ let rr = 0
 let seq = 0
 const inFlight = new Map()   // id → { key, bucket }
 
+// Батчинг бампов версии: 30 готовых кривых подряд без батчинга = 30 полных
+// перестроек+перекрасок графика (прогрессивное мигание, «строится хуже»).
+// Копим завершения и бампаем версию ОДИН раз на кадр.
+let bumpScheduled = false
+export function scheduleVersionBump() {
+  if (bumpScheduled) return
+  bumpScheduled = true
+  const raf = globalThis.requestAnimationFrame || ((cb) => setTimeout(cb, 16))
+  raf(() => {
+    bumpScheduled = false
+    savgolCacheVersion.value++
+  })
+}
+
 function getPool() {
   if (pool) return pool
   const size = Math.max(1, Math.min(4, (globalThis.navigator?.hardwareConcurrency || 4) - 1))
@@ -67,7 +81,7 @@ function getPool() {
       if (!job) return
       inFlight.delete(id)
       job.bucket.set(job.key, { state: 'ready', curve })
-      savgolCacheVersion.value++          // граффики перечитают кэш
+      scheduleVersionBump()               // один бамп на кадр, не на кривую
     }
     return w
   })

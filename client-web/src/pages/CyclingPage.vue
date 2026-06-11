@@ -3,7 +3,7 @@
  * CyclingPage — Battery cycling test results.
  * Upload cycling data files → view sessions → interactive charts.
  */
-import { ref, computed, watch, onMounted, defineAsyncComponent } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
@@ -130,6 +130,23 @@ const capacityUnit = ref('Ah')
 // higher (otherwise peaks get buried in measurement jitter). The slider
 // is the fastest way to A/B compare in the UI without reloading.
 const smoothingWindow = ref(5)
+
+// Скролл-щит: при прокрутке курсор едет над канвасами → шторм mousemove →
+// hit-test по тысячам точек + перекраска на каждое событие = лагающий скролл.
+// На время скролла гасим pointer-events канвасов (классика тяжёлых дашбордов);
+// возвращаем через 160 мс после остановки.
+const isScrolling = ref(false)
+let scrollShieldT = null
+function onAnyScroll() {
+  isScrolling.value = true
+  clearTimeout(scrollShieldT)
+  scrollShieldT = setTimeout(() => { isScrolling.value = false }, 160)
+}
+onMounted(() => window.addEventListener('scroll', onAnyScroll, { passive: true, capture: true }))
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onAnyScroll, { capture: true })
+  clearTimeout(scrollShieldT)
+})
 
 // dQ/dV smoothing method: 'savgol' (navani-style Savitzky–Golay on a uniform
 // V-grid — publication-grade peaks, default) vs 'ma' (legacy moving average).
@@ -1011,7 +1028,7 @@ const batteryOptions = computed(() =>
 </script>
 
 <template>
-  <div class="cycling-page">
+  <div class="cycling-page" :class="{ 'is-scrolling': isScrolling }">
     <PageHeader title="Циклирование" icon="pi pi-sync" />
 
     <!-- Measurements list (master). Selecting cells reveals the charts below. -->
@@ -2187,4 +2204,6 @@ const batteryOptions = computed(() =>
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* Скролл-щит: канвасы не ловят мышь во время прокрутки */
+.cycling-page.is-scrolling :deep(canvas) { pointer-events: none; }
 </style>
