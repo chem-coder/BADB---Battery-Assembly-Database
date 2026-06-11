@@ -16,6 +16,9 @@ build/
 __pycache__/
 *.pyc
 uploads/
+# Generated SQL from the cycling import scripts — regenerate via the .py tools,
+# never commit (1.2 MB dump of the colleague Excel data).
+scripts/cycling-ref-import/combined_import.sql
 mempalace.yaml
 mempalace.yaml.old
 entities.json
