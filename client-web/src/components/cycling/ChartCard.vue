@@ -4,10 +4,13 @@
  * осей (XY/X/Y), кнопки ⚙/сброс-зума/PNG (появляются на ховере), даблклик
  * по полю = сброс зума. Сам график — в слоте.
  *
- * Извлечено из CyclingCharts.vue (механический рефакторинг): раньше эта
- * разметка и CSS дублировались на каждую из 4 карточек.
+ * При включённом ⏱ (chartPerf) показывает бейдж «сборка · отрисовка · точки»
+ * — цифры лагов из реального браузера, а не из синтетики.
  */
-defineProps({
+import { computed } from 'vue'
+import { perfEnabled, chartPerf } from '@/utils/chartPerf'
+
+const props = defineProps({
   // какие режимы фиксации осей предлагает график (Ёмкость: без 'y' —
   // двойная ось Y, независимая панорама Y рассинхронизировала бы КЭ)
   axisModes: { type: Array, default: () => ['xy', 'x', 'y'] },
@@ -17,9 +20,13 @@ defineProps({
     default: 'Фиксация оси при зуме/панораме · XY — обе · X — только X (Y зафиксирован) · Y — только Y',
   },
   tall: { type: Boolean, default: true },
+  // id для перф-бейджа (chartPerf); null = без бейджа
+  perfId: { type: String, default: null },
 })
 
 defineEmits(['update:axisLock', 'style-click', 'reset', 'export'])
+
+const perf = computed(() => (perfEnabled.value && props.perfId ? chartPerf[props.perfId] : null))
 </script>
 
 <template>
@@ -43,6 +50,9 @@ defineEmits(['update:axisLock', 'style-click', 'reset', 'export'])
     </button>
     <div class="chart-wrap" :class="{ 'chart-wrap--tall': tall }" @dblclick="$emit('reset')">
       <slot />
+    </div>
+    <div v-if="perf" class="chart-perf-badge" title="сборка датасетов · отрисовка канваса · точек после LOD">
+      ⏱ {{ perf.build ?? '—' }}мс · 🎨 {{ perf.paint ?? '—' }}мс · {{ perf.points != null ? (perf.points > 999 ? (perf.points/1000).toFixed(1) + 'к' : perf.points) : '—' }} тчк
     </div>
   </div>
 </template>
@@ -126,4 +136,19 @@ defineEmits(['update:axisLock', 'style-click', 'reset', 'export'])
 }
 .chart-axis-lock button:last-child { border-right: none; }
 .chart-axis-lock button.is-active { background: #003274; color: #fff; }
+
+.chart-perf-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  z-index: 2;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(0, 50, 116, 0.65);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 50, 116, 0.1);
+  border-radius: 5px;
+  padding: 1px 6px;
+  pointer-events: none;
+}
 </style>

@@ -18,6 +18,7 @@ import {
   exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
 import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
+import { timeBuild, makePaintPlugin } from '@/utils/chartPerf'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -57,7 +58,7 @@ const hasCapacity = computed(() => {
 // Датасеты + параллельный массив ПОЛНЫХ серий (LOD-источник): при зуме
 // onZoomComplete пересэмплирует видимое окно из полного разрешения — детали
 // проявляются по мере приближения, на экране всегда ~500 точек.
-const built = computed(() => {
+const built = computed(() => timeBuild('voltage', () => {
   const datasets = []
   const fulls = []        // 1:1 с datasets; null = серия не для LOD (несортирована)
   const sortedCycles = [...props.selectedCycles].sort((a, b) => a - b)
@@ -184,7 +185,7 @@ const built = computed(() => {
   }
 
   return { datasets, fulls }
-})
+}))
 
 const chartData = computed(() => ({ datasets: built.value.datasets }))
 
@@ -193,6 +194,8 @@ const renderData = useFrameCoalesced(chartData)
 
 // LOD-обработчики зума/панорамы (rAF-гейт внутри): пересэмплинг видимого окна
 const lod = makeLodHandlers(() => built.value.fulls)
+
+const paintPlugins = [makePaintPlugin('voltage')]
 
 const chartOptions = computed(() => ({
   responsive: true,
@@ -255,10 +258,11 @@ function onExport() {
   <ChartCard
     v-model:axisLock="axisLock"
     :axisModes="['xy', 'x', 'y']"
+    perfId="voltage"
     @style-click="emit('style-click', $event)"
     @reset="resetZoom(chartRef)"
     @export="onExport"
   >
-    <Scatter ref="chartRef" :data="renderData" :options="chartOptions" />
+    <Scatter ref="chartRef" :data="renderData" :options="chartOptions" :plugins="paintPlugins" />
   </ChartCard>
 </template>

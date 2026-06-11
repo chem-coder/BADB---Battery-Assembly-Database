@@ -18,6 +18,7 @@ import {
   exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
 import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
+import { timeBuild, makePaintPlugin } from '@/utils/chartPerf'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -47,12 +48,14 @@ const hasHysteresisData = computed(() => {
 })
 
 // Датасеты + ПОЛНЫЕ серии (LOD): обзор — min-max, зум — пересэмплинг окна.
-const built = computed(() => {
+const built = computed(() => timeBuild('hysteresis', () => {
   const datasets = []
   const fulls = []
   const hStyle = hysteresisStyle.value
   const userWidth = Number(hStyle.borderWidth) || 1.8
   const baseRadius = Number(hStyle.pointRadius) || 3
+  // Плотностное гашение маркеров (та же логика, что у Ёмкости)
+  const dense = props.sessions.reduce((n, s) => n + Math.min(s.summary?.length || 0, 500), 0) > 1500
   for (const s of props.sessions) {
     if (!s.summary?.length) continue
     const sColor = sessionColorFor(s)
@@ -77,7 +80,8 @@ const built = computed(() => {
       borderColor: sColor,
       backgroundColor: sColor,
       tension: 0,
-      pointRadius: baseRadius,
+      pointRadius: dense ? 0 : baseRadius,
+      pointHitRadius: 6,
       pointHoverRadius: baseRadius + 2,
       pointStyle: sMarker,
       borderWidth: userWidth,
@@ -85,7 +89,7 @@ const built = computed(() => {
     fulls.push(sorted)
   }
   return { datasets, fulls }
-})
+}))
 
 const chartData = computed(() => ({ datasets: built.value.datasets }))
 
@@ -94,6 +98,8 @@ const renderData = useFrameCoalesced(chartData)
 
 // LOD-обработчики зума/панорамы (rAF-гейт внутри)
 const lod = makeLodHandlers(() => built.value.fulls)
+
+const paintPlugins = [makePaintPlugin('hysteresis')]
 
 const chartOptions = computed(() => ({
   responsive: true,
@@ -161,10 +167,11 @@ function onExport() {
     v-if="hasHysteresisData"
     v-model:axisLock="axisLock"
     :axisModes="['xy', 'x', 'y']"
+    perfId="hysteresis"
     @style-click="emit('style-click', $event)"
     @reset="resetZoom(chartRef)"
     @export="onExport"
   >
-    <Line ref="chartRef" :data="renderData" :options="chartOptions" />
+    <Line ref="chartRef" :data="renderData" :options="chartOptions" :plugins="paintPlugins" />
   </ChartCard>
 </template>

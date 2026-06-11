@@ -19,6 +19,7 @@ import {
   applyChartStyle, exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
 import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
+import { timeBuild, makePaintPlugin } from '@/utils/chartPerf'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -97,7 +98,7 @@ function computeDQDV(points, smoothingWindow = 5) {
 
 // Датасеты + пики + ПОЛНЫЕ серии (LOD-источник) одним проходом.
 // Пики ищутся на полной сетке (точнее позиции, чем на прореженной).
-const dqdvComputed = computed(() => {
+const dqdvComputed = computed(() => timeBuild('dqdv', () => {
   const datasets = []
   const peaks = []
   const fulls = []   // 1:1 с datasets — для зум-пересэмплинга
@@ -180,7 +181,7 @@ const dqdvComputed = computed(() => {
   }
 
   return { datasets, peaks, fulls }
-})
+}))
 
 const chartData = computed(() => ({ datasets: dqdvComputed.value.datasets }))
 
@@ -215,6 +216,8 @@ const dqdvPeaksPlugin = {
     ctx.restore()
   },
 }
+
+const dqdvPlugins = [dqdvPeaksPlugin, makePaintPlugin('dqdv')]
 
 const chartOptions = computed(() => ({
   responsive: true,
@@ -287,10 +290,11 @@ function onExport() {
   <ChartCard
     v-model:axisLock="axisLock"
     :axisModes="['xy', 'x', 'y']"
+    perfId="dqdv"
     @style-click="emit('style-click', $event)"
     @reset="resetZoom(chartRef)"
     @export="onExport"
   >
-    <Scatter ref="chartRef" :data="renderData" :options="chartOptions" :plugins="[dqdvPeaksPlugin]" />
+    <Scatter ref="chartRef" :data="renderData" :options="chartOptions" :plugins="dqdvPlugins" />
   </ChartCard>
 </template>

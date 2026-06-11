@@ -10,6 +10,7 @@
  */
 import { ref, computed, watch } from 'vue'
 import { METRICS } from '@/utils/metricsEngine'
+import { perfEnabled, togglePerf } from '@/utils/chartPerf'
 import { sessionShortLabel as shortLabelOf, convertCapacity as convertCap, formatPct, formatVolt } from '@/utils/cyclingChartShared'
 import ProvenancePopover from '@/components/ProvenancePopover.vue'
 import HysteresisChart from '@/components/cycling/HysteresisChart.vue'
@@ -228,6 +229,22 @@ function requestRawCycle(cycleNumber) {
 
 // Panel "📐 Как считаем" — collapsed by default
 const formulasOpen = ref(false)
+
+// Таблицы циклов без виртуализации — 5 сессий × 1000 циклов дали бы 5000
+// DOM-строк (главный источник лага на длинных реф-сессиях). Рендерим первые
+// TABLE_ROW_CAP, остальное — по кнопке «показать все».
+const TABLE_ROW_CAP = 100
+const expandedTables = ref(new Set())
+function tableRows(s) {
+  if (!s.summary) return []
+  if (s.summary.length <= TABLE_ROW_CAP || expandedTables.value.has(s.session_id)) return s.summary
+  return s.summary.slice(0, TABLE_ROW_CAP)
+}
+function expandTable(sid) {
+  const next = new Set(expandedTables.value)
+  next.add(sid)
+  expandedTables.value = next
+}
 
 // toggle-cycle — add/remove one cycle (across all active sessions)
 // replace-cycles — swap the whole selection (used by quick filters)
@@ -509,7 +526,7 @@ const formulaEntries = FORMULA_PANEL_IDS
             </thead>
             <tbody>
               <tr
-                v-for="row in s.summary"
+                v-for="row in tableRows(s)"
                 :key="row.cycle_number"
                 class="summary-row"
                 :class="{ 'summary-row--active': rawAutoSession?.session_id === s.session_id && rawAutoCycle === row.cycle_number }"
@@ -527,10 +544,20 @@ const formulaEntries = FORMULA_PANEL_IDS
             </tbody>
           </table>
         </div>
+        <button
+          v-if="(s.summary?.length || 0) > TABLE_ROW_CAP && !expandedTables.has(s.session_id)"
+          class="table-expand-btn"
+          @click="expandTable(s.session_id)"
+        >
+          показать все {{ s.summary.length }} циклов (сейчас первые {{ TABLE_ROW_CAP }})
+        </button>
       </div>
       <div class="prov-hint-line">
         <i class="pi pi-info-circle"></i>
         Правый клик по значению — происхождение: формула, источник, пересчёт
+        <button class="perf-toggle-btn" :class="{ 'is-on': perfEnabled }" title="Перф-метрики на графиках: сборка · отрисовка · точки" @click="togglePerf">
+          ⏱ перф
+        </button>
       </div>
     </div>
 
@@ -1075,6 +1102,18 @@ const formulaEntries = FORMULA_PANEL_IDS
   font-size: 11px; color: rgba(0, 50, 116, 0.5);
 }
 .formulas-contract-note code { font-size: 10.5px; }
+.table-expand-btn {
+  margin-top: 4px; border: 1px dashed rgba(0, 50, 116, 0.25);
+  background: transparent; color: #003274; border-radius: 6px;
+  padding: 3px 10px; font-size: 11px; font-family: inherit; cursor: pointer;
+}
+.table-expand-btn:hover { background: rgba(0, 50, 116, 0.05); }
+.perf-toggle-btn {
+  margin-left: auto; border: 1px solid rgba(0, 50, 116, 0.2);
+  background: white; color: rgba(0, 50, 116, 0.6); border-radius: 5px;
+  padding: 1px 8px; font-size: 10.5px; font-family: inherit; cursor: pointer;
+}
+.perf-toggle-btn.is-on { background: #003274; color: white; }
 
 .formulas-panel {
   border: 1px solid rgba(0, 50, 116, 0.08);

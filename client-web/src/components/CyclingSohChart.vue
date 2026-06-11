@@ -27,6 +27,7 @@ import {
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { cellSohSeries, protocolMeanStd, cyclesToThreshold } from '@/utils/cyclingSoh'
 import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
+import { timeBuild, makePaintPlugin, perfEnabled, chartPerf } from '@/utils/chartPerf'
 
 // Idempotent — CyclingCharts registers the same set; registering twice is a
 // no-op, but we register here too so this component stands on its own.
@@ -190,7 +191,7 @@ function decimateXY(points) {
 // пересэмплинг видимого окна из полного разрешения. Полоса mean±σ остаётся на
 // согласованной стрид-децимации (fill '-1' требует одинаковых x у трёх серий)
 // и в LOD не участвует (fulls = null).
-const built = computed(() => {
+const built = computed(() => timeBuild('soh', () => {
   const datasets = []
   const fulls = []
   let lineIdx = 0          // global line counter → distinct shape per line
@@ -264,7 +265,7 @@ const built = computed(() => {
     fulls.push(null)
   }
   return { datasets, fulls }
-})
+}))
 
 const chartData = computed(() => ({ datasets: built.value.datasets }))
 
@@ -273,6 +274,9 @@ const renderData = useFrameCoalesced(chartData)
 
 // LOD-обработчики зума/панорамы (rAF-гейт внутри)
 const lod = makeLodHandlers(() => built.value.fulls)
+
+const paintPlugins = [makePaintPlugin('soh')]
+const sohPerf = computed(() => (perfEnabled.value ? chartPerf.soh : null))
 
 const yAxisLabel = computed(() => (isSoh.value ? 'SOH, %' : 'DCh ёмкость, Ah'))
 const chartTitle = computed(() => (isSoh.value
@@ -449,7 +453,10 @@ function resetZoom() {
     </div>
 
     <div class="soh-wrap" @dblclick="resetZoom">
-      <Line v-if="protocolGroups.length" ref="sohChartRef" :data="renderData" :options="chartOptions" />
+      <div v-if="sohPerf" class="soh-perf-badge">
+        ⏱ {{ sohPerf.build ?? '—' }}мс · 🎨 {{ sohPerf.paint ?? '—' }}мс · {{ sohPerf.points != null ? (sohPerf.points > 999 ? (sohPerf.points/1000).toFixed(1) + 'к' : sohPerf.points) : '—' }} тчк
+      </div>
+      <Line v-if="protocolGroups.length" ref="sohChartRef" :data="renderData" :options="chartOptions" :plugins="paintPlugins" />
       <div v-else class="soh-empty">Нет активных измерений с данными циклирования.</div>
     </div>
 
@@ -561,6 +568,13 @@ function resetZoom() {
 .soh-field--eol { gap: 4px; text-transform: none; }
 /* Keeps EOL in the layout but inert in capacity mode — no button jitter. */
 .soh-field--off { opacity: 0.3; pointer-events: none; }
+.soh-perf-badge {
+  position: absolute; left: 8px; bottom: 6px; z-index: 2;
+  font-size: 10px; font-variant-numeric: tabular-nums;
+  color: rgba(0, 50, 116, 0.65); background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 50, 116, 0.1); border-radius: 5px;
+  padding: 1px 6px; pointer-events: none;
+}
 .soh-input {
   width: 48px;
   padding: 3px 6px;

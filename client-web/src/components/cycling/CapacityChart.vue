@@ -18,6 +18,7 @@ import {
   capacityAxisLabel, exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
 import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
+import { timeBuild, makePaintPlugin } from '@/utils/chartPerf'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -50,7 +51,7 @@ const hasSummary = computed(() => props.sessions.some(s => s.summary?.length))
 // Датасеты + ПОЛНЫЕ серии (LOD): обзор — min-max децимация, зум — пересэмплинг
 // окна из полного разрешения. Выбранные циклы доливаются в обзорный уровень,
 // чтобы их +2px маркер «что отрисовано ниже» не пропадал после прореживания.
-const built = computed(() => {
+const built = computed(() => timeBuild('capacity', () => {
   const datasets = []
   const fulls = []
   const selectedSet = new Set(props.selectedCycles)
@@ -59,6 +60,12 @@ const built = computed(() => {
   const showCharge = props.stepFilter === 'charge' || props.stepFilter === 'both'
   const cStyle = capacityStyle.value
   const userWidth = Number(cStyle.borderWidth) || 1.8
+  // Маркер на каждой из тысяч точек — дорогая краска канваса. При суммарной
+  // плотности >1500 точек маркеры гасим (выбранные циклы остаются видимыми),
+  // pointHitRadius оставляет тултипы рабочими.
+  const totalRows = props.sessions.reduce((n, s) => n + Math.min(s.summary?.length || 0, 500), 0)
+  const seriesPerSession = (showDischarge ? 1 : 0) + (showCharge ? 1 : 0) + 1
+  const dense = totalRows * seriesPerSession > 1500
 
   function withSelected(dec, full) {
     if (!selectedSet.size || dec === full) return dec
@@ -100,7 +107,10 @@ const built = computed(() => {
         tension: 0,
         // scriptable вместо параллельного массива: радиус по точке, остаётся
         // верным при любой LOD-подмене data (массив бы рассинхронизировался)
-        pointRadius: (ctx) => (selectedSet.has(ctx.raw?.x) ? baseRadius + 2 : baseRadius),
+        pointRadius: dense
+          ? (ctx) => (selectedSet.has(ctx.raw?.x) ? baseRadius + 2 : 0)
+          : (ctx) => (selectedSet.has(ctx.raw?.x) ? baseRadius + 2 : baseRadius),
+        pointHitRadius: 6,
         pointBackgroundColor: sColor,
         pointBorderColor: sColor,
         pointStyle: markerStyle || 'circle',
@@ -121,7 +131,8 @@ const built = computed(() => {
         backgroundColor: '#ffffff',     // полый центр
         borderDash: [4, 2],
         tension: 0,
-        pointRadius: baseRadius,
+        pointRadius: dense ? 0 : baseRadius,
+        pointHitRadius: 6,
         pointBackgroundColor: '#ffffff',
         pointBorderColor: sColor,
         pointStyle: markerStyle || 'circle',
@@ -141,7 +152,8 @@ const built = computed(() => {
       borderColor: ceColor,
       backgroundColor: ceColor,
       tension: 0,
-      pointRadius: 2.2,
+      pointRadius: dense ? 0 : 2.2,
+      pointHitRadius: 6,
       pointBackgroundColor: ceColor,
       pointBorderColor: ceColor,
       pointStyle: 'circle',
@@ -153,7 +165,7 @@ const built = computed(() => {
   }
 
   return { datasets, fulls }
-})
+}))
 
 const chartData = computed(() => ({ datasets: built.value.datasets }))
 
@@ -162,6 +174,8 @@ const renderData = useFrameCoalesced(chartData)
 
 // LOD-обработчики зума/панорамы (rAF-гейт внутри)
 const lod = makeLodHandlers(() => built.value.fulls)
+
+const paintPlugins = [makePaintPlugin('capacity')]
 
 const chartOptions = computed(() => ({
   responsive: true,
@@ -265,10 +279,11 @@ function onExport() {
     v-model:axisLock="axisLock"
     :axisModes="['xy', 'x']"
     axisTitle="Фиксация оси при зуме/панораме · XY — обе · X — только X. Ось Y двойная (Ёмкость + КЭ) — отдельный зум Y недоступен."
+    perfId="capacity"
     @style-click="emit('style-click', $event)"
     @reset="resetZoom(chartRef)"
     @export="onExport"
   >
-    <Line v-if="hasSummary" ref="chartRef" :data="renderData" :options="chartOptions" />
+    <Line v-if="hasSummary" ref="chartRef" :data="renderData" :options="chartOptions" :plugins="paintPlugins" />
   </ChartCard>
 </template>
