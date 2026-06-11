@@ -128,8 +128,8 @@ shortcut before the normal stack save.
 Every selected stack electrode must belong to the saved source cut batch for
 its role:
 
-- a cathode stack row must come from the saved cathode cut batch;
-- an anode stack row must come from the saved anode cut batch.
+- a cathode stack row must come from one of the saved cathode source batches;
+- an anode stack row must come from one of the saved anode source batches.
 
 The backend is authoritative if the UI is bypassed.
 

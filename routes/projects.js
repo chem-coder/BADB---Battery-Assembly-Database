@@ -17,7 +17,15 @@ router.get('/test', async (req, res) => {
 
 // -------- PROJECTS --------
 
-const VALID_CONFIDENTIALITY = ['public', 'department', 'confidential'];
+const VALID_CONFIDENTIALITY = ['public', 'confidential'];
+
+function normalizeConfidentialityLevel(value) {
+  if (value === 'secret') return 'confidential';
+  if (value === 'department') return 'confidential';
+  if (value === 'public') return 'public';
+  if (value === 'confidential') return 'confidential';
+  return null;
+}
 
 function normalizeOptionalInteger(value) {
   if (value === '' || value == null) return null;
@@ -37,6 +45,26 @@ async function setProjectUserAccess(db, projectId, userId, accessLevel, changedB
        granted_at   = now(),
        expires_at   = NULL`,
     [Number(userId), projectId, changedBy, accessLevel]
+  );
+}
+
+async function ensureParticipantViewAccess(db, projectId, userId, changedBy) {
+  if (!Number.isInteger(Number(userId))) return;
+
+  await db.query(
+    `INSERT INTO user_project_access (user_id, project_id, granted_by, access_level, expires_at)
+     VALUES ($1, $2, $3, 'view', NULL)
+     ON CONFLICT (user_id, project_id) DO UPDATE SET
+       access_level = CASE
+         WHEN user_project_access.access_level IN ('edit', 'admin')
+          AND (user_project_access.expires_at IS NULL OR user_project_access.expires_at > now())
+           THEN user_project_access.access_level
+         ELSE 'view'
+       END,
+       granted_by = EXCLUDED.granted_by,
+       granted_at = now(),
+       expires_at = NULL`,
+    [Number(userId), projectId, changedBy]
   );
 }
 
@@ -61,10 +89,168 @@ async function syncProjectLeadAccess(db, projectId, previousLeadId, nextLeadId, 
   }
 }
 
+async function ensureProjectLeadParticipant(db, projectId, leadId, changedBy) {
+  const normalizedLeadId = normalizeOptionalInteger(leadId);
+  if (!normalizedLeadId) return;
+
+  const displayOrder = await getNextParticipantDisplayOrder(db, projectId);
+
+  await db.query(
+    `
+    INSERT INTO project_participants
+      (project_id, user_id, display_order, role_in_team, notes, created_by, updated_by)
+    VALUES
+      ($1, $2, $3, 'Руководитель проекта', NULL, $4, $4)
+    ON CONFLICT (project_id, user_id) DO NOTHING
+    `,
+    [projectId, normalizedLeadId, displayOrder, changedBy]
+  );
+}
+
+async function clearPreviousProjectLeadParticipantRole(db, projectId, previousLeadId, nextLeadId) {
+  const previousLead = normalizeOptionalInteger(previousLeadId);
+  const nextLead = normalizeOptionalInteger(nextLeadId);
+
+  if (!previousLead || previousLead === nextLead) return;
+
+  await db.query(
+    `
+    UPDATE project_participants
+    SET role_in_team = '',
+        updated_at = now()
+    WHERE project_id = $1
+      AND user_id = $2
+      AND role_in_team = 'Руководитель проекта'
+    `,
+    [projectId, previousLead]
+  );
+}
+
+function normalizeParticipantText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeOptionalParticipantText(value) {
+  const text = normalizeParticipantText(value);
+  return text || null;
+}
+
+function normalizeDisplayOrder(value, fallback = 0) {
+  if (value === '' || value == null) return fallback;
+  const num = Number(value);
+  return Number.isInteger(num) ? num : fallback;
+}
+
+async function validateActiveParticipantUser(db, userId) {
+  if (!Number.isInteger(userId)) {
+    const err = new Error('Некорректный пользователь');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const result = await db.query(
+    'SELECT user_id FROM users WHERE user_id = $1 AND COALESCE(active, true) = true',
+    [userId]
+  );
+
+  if (result.rowCount === 0) {
+    const err = new Error('Пользователь не найден или неактивен');
+    err.statusCode = 400;
+    throw err;
+  }
+}
+
+async function getNextParticipantDisplayOrder(db, projectId) {
+  const result = await db.query(
+    'SELECT COALESCE(MAX(display_order), 0) + 1 AS next_order FROM project_participants WHERE project_id = $1',
+    [projectId]
+  );
+
+  return Number(result.rows[0]?.next_order || 1);
+}
+
+async function getProjectParticipantRow(db, projectId, participantId) {
+  const result = await db.query(
+    `
+    SELECT
+      pp.participant_id,
+      pp.project_id,
+      pp.user_id,
+      u.name AS user_name,
+      u.position AS user_position,
+      u.department_id,
+      d.name AS department_name,
+      pp.display_order,
+      pp.role_in_team,
+      pp.notes,
+      pp.created_by,
+      pp.created_at,
+      pp.updated_by,
+      pp.updated_at,
+      creator.name AS created_by_name,
+      updater.name AS updated_by_name
+    FROM project_participants pp
+    JOIN users u
+      ON u.user_id = pp.user_id
+    LEFT JOIN departments d
+      ON d.department_id = u.department_id
+    LEFT JOIN users creator
+      ON creator.user_id = pp.created_by
+    LEFT JOIN users updater
+      ON updater.user_id = pp.updated_by
+    WHERE pp.project_id = $1
+      AND pp.participant_id = $2
+    `,
+    [projectId, participantId]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function getProjectParticipants(db, projectId) {
+  const result = await db.query(
+    `
+    SELECT
+      pp.participant_id,
+      pp.project_id,
+      pp.user_id,
+      u.name AS user_name,
+      u.position AS user_position,
+      u.department_id,
+      d.name AS department_name,
+      pp.display_order,
+      pp.role_in_team,
+      pp.notes,
+      pp.created_by,
+      pp.created_at,
+      pp.updated_by,
+      pp.updated_at,
+      creator.name AS created_by_name,
+      updater.name AS updated_by_name
+    FROM project_participants pp
+    JOIN users u
+      ON u.user_id = pp.user_id
+    LEFT JOIN departments d
+      ON d.department_id = u.department_id
+    LEFT JOIN users creator
+      ON creator.user_id = pp.created_by
+    LEFT JOIN users updater
+      ON updater.user_id = pp.updated_by
+    WHERE pp.project_id = $1
+    ORDER BY pp.display_order, pp.participant_id
+    `,
+    [projectId]
+  );
+
+  return result.rows;
+}
+
 // ── Authorization helpers ─────────────────────────────────────────────
-// Determines who can MODIFY a project (edit, delete, manage access).
-// Returns: { exists: boolean, level: 'admin'|'director'|'owner'|'project-lead'|'project-admin'|null }
-async function checkModifyPermission(db, projectId, user) {
+// Determines who can MODIFY a project.
+// With allowEdit=false, requires project-admin/manage access.
+// With allowEdit=true, explicit edit access may modify ordinary project fields.
+// Returns: { exists: boolean, level: 'admin'|'director'|'owner'|'project-lead'|'project-admin'|'project-edit'|null }
+async function checkModifyPermission(db, projectId, user, options = {}) {
   // First verify the project exists (needed even for admins so we return 404 not 500)
   const projCheck = await db.query('SELECT created_by, lead_id FROM projects WHERE project_id = $1', [projectId]);
   if (projCheck.rowCount === 0) {
@@ -82,7 +268,8 @@ async function checkModifyPermission(db, projectId, user) {
   const r = await db.query(`
     SELECT u.position AS user_position,
            (SELECT access_level FROM user_project_access
-            WHERE project_id = $1 AND user_id = $2) AS explicit_level
+            WHERE project_id = $1 AND user_id = $2
+              AND (expires_at IS NULL OR expires_at > now())) AS explicit_level
     FROM users u WHERE u.user_id = $2
   `, [projectId, user.userId]);
 
@@ -95,6 +282,10 @@ async function checkModifyPermission(db, projectId, user) {
   if (projCreatedBy === user.userId) return { exists: true, level: 'owner' };
   // User with 'admin' access_level on this project can modify
   if (row.explicit_level === 'admin') return { exists: true, level: 'project-admin' };
+  // User with 'edit' access can edit ordinary project fields, but cannot manage access.
+  if (options.allowEdit && row.explicit_level === 'edit') {
+    return { exists: true, level: 'project-edit' };
+  }
 
   return { exists: true, level: null };
 }
@@ -113,23 +304,17 @@ async function checkViewPermission(db, projectId, user) {
   const r = await db.query(`
     SELECT
       p.confidentiality_level,
-      p.department_id AS project_dept,
       p.created_by,
       p.lead_id,
-      u.department_id AS user_dept,
       u.position,
       (SELECT 1 FROM user_project_access upa
        WHERE upa.project_id = p.project_id AND upa.user_id = $2
          AND (upa.expires_at IS NULL OR upa.expires_at > now())
        LIMIT 1) AS has_user_grant,
-      (SELECT 1 FROM project_department_access pda
-       WHERE pda.project_id = p.project_id AND pda.department_id = u.department_id
-         AND (pda.expires_at IS NULL OR pda.expires_at > now())
-       LIMIT 1) AS has_dept_grant,
-      (SELECT 1 FROM users creator
-       JOIN departments d ON d.department_id = creator.department_id
-       WHERE creator.user_id = p.created_by
-         AND d.head_user_id = $2) AS is_head_of_creators_dept
+      (SELECT 1 FROM project_participants pp
+       WHERE pp.project_id = p.project_id AND pp.user_id = $2
+       LIMIT 1) AS has_participant_access,
+      (p.created_by = $2) AS is_creator
     FROM projects p, users u
     WHERE p.project_id = $1 AND u.user_id = $2
   `, [projectId, user.userId]);
@@ -141,18 +326,14 @@ async function checkViewPermission(db, projectId, user) {
   if ((row.position || '').toLowerCase().includes('директор')) return { exists: true, allowed: true };
   // Project lead has project-admin privileges
   if (Number(row.lead_id) === Number(user.userId)) return { exists: true, allowed: true };
+  // Project creator can view the project they created.
+  if (row.is_creator) return { exists: true, allowed: true };
   // Public project
   if (row.confidentiality_level === 'public') return { exists: true, allowed: true };
-  // Department project matching user's dept
-  if (row.confidentiality_level === 'department' && row.project_dept === row.user_dept) {
-    return { exists: true, allowed: true };
-  }
   // Explicit user grant (not expired)
   if (row.has_user_grant) return { exists: true, allowed: true };
-  // Department grant (not expired)
-  if (row.has_dept_grant) return { exists: true, allowed: true };
-  // Department head seeing projects by department members
-  if (row.is_head_of_creators_dept) return { exists: true, allowed: true };
+  // Project participant
+  if (row.has_participant_access) return { exists: true, allowed: true };
 
   return { exists: true, allowed: false };
 }
@@ -164,6 +345,24 @@ function requireModify(req, res, next) {
     return res.status(400).json({ error: 'Некорректный ID проекта' });
   }
   checkModifyPermission(pool, projectId, req.user)
+    .then(({ exists, level }) => {
+      if (!exists) return res.status(404).json({ error: 'Проект не найден' });
+      if (!level) return res.status(403).json({ error: 'Недостаточно прав для изменения проекта' });
+      req.projectPermission = level;
+      next();
+    })
+    .catch(err => {
+      console.error(err);
+      res.status(500).json({ error: 'Ошибка сервера' });
+    });
+}
+
+function requireEdit(req, res, next) {
+  const projectId = Number(req.params.id);
+  if (!Number.isInteger(projectId)) {
+    return res.status(400).json({ error: 'Некорректный ID проекта' });
+  }
+  checkModifyPermission(pool, projectId, req.user, { allowEdit: true })
     .then(({ exists, level }) => {
       if (!exists) return res.status(404).json({ error: 'Проект не найден' });
       if (!level) return res.status(403).json({ error: 'Недостаточно прав для изменения проекта' });
@@ -197,6 +396,7 @@ function requireView(req, res, next) {
 async function getProjectReport(db, projectId) {
   const [
     projectResult,
+    participantsResult,
     departmentAccessResult,
     userAccessResult,
     effectiveUsersResult,
@@ -220,6 +420,7 @@ async function getProjectReport(db, projectId) {
       LEFT JOIN users updater ON updater.user_id = p.updated_by
       WHERE p.project_id = $1
     `, [projectId]),
+    getProjectParticipants(db, projectId),
     db.query(`
       SELECT pda.department_id, d.name AS department_name,
              pda.access_level, pda.granted_at, pda.expires_at,
@@ -272,14 +473,13 @@ async function getProjectReport(db, projectId) {
                u.department_id,
                d.name AS department_name,
                1 AS level_rank,
-               'отдел проекта' AS source_label
-        FROM project_row p
+               'участник проекта' AS source_label
+        FROM project_participants pp
         JOIN users u
-          ON u.department_id = p.department_id
+          ON u.user_id = pp.user_id
         LEFT JOIN departments d
           ON d.department_id = u.department_id
-        WHERE p.confidentiality_level = 'department'
-          AND p.department_id IS NOT NULL
+        WHERE pp.project_id = $1
           AND COALESCE(u.active, true) = true
 
         UNION ALL
@@ -288,23 +488,15 @@ async function getProjectReport(db, projectId) {
                u.name AS user_name,
                u.position,
                u.department_id,
-               user_department.name AS department_name,
-               CASE pda.access_level
-                 WHEN 'admin' THEN 3
-                 WHEN 'edit' THEN 2
-                 ELSE 1
-               END AS level_rank,
-               'отдел: ' || grant_department.name AS source_label
-        FROM project_department_access pda
-        JOIN departments grant_department
-          ON grant_department.department_id = pda.department_id
+               d.name AS department_name,
+               1 AS level_rank,
+               'открытый проект' AS source_label
+        FROM project_row p
         JOIN users u
-          ON u.department_id = pda.department_id
-        LEFT JOIN departments user_department
-          ON user_department.department_id = u.department_id
-        WHERE pda.project_id = $1
-          AND (pda.expires_at IS NULL OR pda.expires_at > now())
-          AND COALESCE(u.active, true) = true
+          ON COALESCE(u.active, true) = true
+        LEFT JOIN departments d
+          ON d.department_id = u.department_id
+        WHERE p.confidentiality_level = 'public'
 
         UNION ALL
 
@@ -440,6 +632,7 @@ async function getProjectReport(db, projectId) {
 
   return {
     project: projectResult.rows[0],
+    participants: participantsResult,
     access: {
       departments: departmentAccessResult.rows,
       users: userAccessResult.rows,
@@ -467,16 +660,14 @@ router.post('/', auth, async (req, res) => {
     due_date,
     status = 'active',
     description,
-    confidentiality_level,
-    department_id
+    confidentiality_level
   } = req.body;
 
   // SECURITY: created_by is always the current authenticated user.
   // Ignore any created_by in req.body to prevent impersonation.
   const createdBy = req.user.userId;
   const leadId = lead_id ? Number(lead_id) : null;
-  const deptId = department_id ? Number(department_id) : null;
-  const confLevel = confidentiality_level || 'public';
+  const confLevel = normalizeConfidentialityLevel(confidentiality_level || 'public');
   const startDate = start_date || null;
 
   // 1. validate required strings
@@ -494,22 +685,10 @@ router.post('/', auth, async (req, res) => {
     return res.status(400).json({ error: 'Некорректный руководитель' });
   }
 
-  if (deptId !== null && !Number.isInteger(deptId)) {
-    return res.status(400).json({ error: 'Некорректный отдел' });
-  }
-
   // 4. validate confidentiality level
-  if (!VALID_CONFIDENTIALITY.includes(confLevel)) {
+  if (!confLevel || !VALID_CONFIDENTIALITY.includes(confLevel)) {
     return res.status(400).json({ error: 'Некорректный уровень доступа' });
   }
-
-  // 5. department_id required when level === 'department'
-  if (confLevel === 'department' && !deptId) {
-    return res.status(400).json({ error: 'Укажите отдел для уровня «Отдел»' });
-  }
-
-  // Enforce: department_id only meaningful for 'department' level
-  const finalDeptId = confLevel === 'department' ? deptId : null;
 
   const client = await pool.connect();
   try {
@@ -542,11 +721,12 @@ router.post('/', auth, async (req, res) => {
         status || null,
         description || null,
         confLevel,
-        finalDeptId
+        null
       ]
     );
 
     await syncProjectLeadAccess(client, result.rows[0].project_id, null, leadId, req.user.userId);
+    await ensureProjectLeadParticipant(client, result.rows[0].project_id, leadId, req.user.userId);
 
     await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
@@ -562,12 +742,10 @@ router.post('/', auth, async (req, res) => {
 // READ — filtered by user access + confidentiality
 router.get('/', auth, async (req, res) => {
   try {
-    // Get user's department
+    // Get user context
     const userRow = await pool.query(
-      `SELECT u.department_id, u.role, u.position,
-              (d.head_user_id = u.user_id) AS is_department_head
+      `SELECT u.department_id, u.role, u.position
        FROM users u
-       LEFT JOIN departments d ON d.department_id = u.department_id
        WHERE u.user_id = $1`,
       [req.user.userId]
     );
@@ -583,6 +761,7 @@ router.get('/', auth, async (req, res) => {
                p.status, p.description, p.confidentiality_level, p.department_id,
                d.name AS department_name,
                u_created.name AS created_by_name,
+               p.created_at,
                p.updated_by,
                p.updated_at,
                u_updated.name AS updated_by_name
@@ -596,11 +775,9 @@ router.get('/', auth, async (req, res) => {
       return res.json(result.rows);
     }
 
-    // Everyone else: public + own department + explicit access (user or department)
-    // Department heads additionally see ALL projects created by members of their department
-    // (prevents subordinates from hiding confidential projects from their lead)
-    // Expired grants are filtered out.
-    const isDeptHead = me.is_department_head === true;
+    // Everyone else: public projects + owned/led projects + participant membership
+    // + active explicit user access. Limited/confidential projects are invisible
+    // unless one of those project-specific relationships exists.
 
     const result = await pool.query(`
       SELECT DISTINCT p.project_id, p.name, p.created_by, p.lead_id,
@@ -608,6 +785,7 @@ router.get('/', auth, async (req, res) => {
              p.status, p.description, p.confidentiality_level, p.department_id,
              d.name AS department_name,
              u_created.name AS created_by_name,
+             p.created_at,
              p.updated_by,
              p.updated_at,
              u_updated.name AS updated_by_name
@@ -618,31 +796,21 @@ router.get('/', auth, async (req, res) => {
       LEFT JOIN users u_updated ON u_updated.user_id = p.updated_by
       WHERE
         p.confidentiality_level = 'public'
-        OR p.lead_id = $2
-        OR (p.confidentiality_level = 'department' AND p.department_id = $1)
+        OR p.lead_id = $1
+        OR p.created_by = $1
         OR EXISTS (
           SELECT 1 FROM user_project_access upa
           WHERE upa.project_id = p.project_id
-            AND upa.user_id = $2
+            AND upa.user_id = $1
             AND (upa.expires_at IS NULL OR upa.expires_at > now())
         )
-        OR ($1::integer IS NOT NULL AND EXISTS (
-          SELECT 1 FROM project_department_access pda
-          WHERE pda.project_id = p.project_id
-            AND pda.department_id = $1
-            AND (pda.expires_at IS NULL OR pda.expires_at > now())
-        ))
-        OR (
-          $3::boolean = true
-          AND $1::integer IS NOT NULL
-          AND EXISTS (
-            SELECT 1 FROM users creator
-            WHERE creator.user_id = p.created_by
-            AND creator.department_id = $1
-          )
+        OR EXISTS (
+          SELECT 1 FROM project_participants pp
+          WHERE pp.project_id = p.project_id
+            AND pp.user_id = $1
         )
       ORDER BY p.name
-    `, [me.department_id, req.user.userId, isDeptHead]);
+    `, [req.user.userId]);
 
     res.json(result.rows);
   } catch (err) {
@@ -670,8 +838,226 @@ router.get('/:id/report', auth, requireView, async (req, res) => {
   }
 });
 
+// -------- PROJECT PARTICIPANTS --------
+
+router.get('/:id/participants', auth, requireView, async (req, res) => {
+  const projectId = Number(req.params.id);
+
+  if (!Number.isInteger(projectId)) {
+    return res.status(400).json({ error: 'Некорректный ID проекта' });
+  }
+
+  try {
+    res.json(await getProjectParticipants(pool, projectId));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки участников проекта' });
+  }
+});
+
+router.post('/:id/participants', auth, requireModify, async (req, res) => {
+  const projectId = Number(req.params.id);
+  const userId = Number(req.body?.user_id);
+
+  if (!Number.isInteger(projectId)) {
+    return res.status(400).json({ error: 'Некорректный ID проекта' });
+  }
+
+  const roleInTeam = normalizeParticipantText(req.body?.role_in_team);
+  const notes = normalizeOptionalParticipantText(req.body?.notes);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await validateActiveParticipantUser(client, userId);
+
+    const displayOrder = normalizeDisplayOrder(
+      req.body?.display_order,
+      await getNextParticipantDisplayOrder(client, projectId)
+    );
+
+    const result = await client.query(
+      `
+      INSERT INTO project_participants
+        (project_id, user_id, display_order, role_in_team, notes, created_by, updated_by)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $6)
+      RETURNING participant_id
+      `,
+      [projectId, userId, displayOrder, roleInTeam, notes, req.user.userId]
+    );
+
+    await ensureParticipantViewAccess(client, projectId, userId, req.user.userId);
+
+    const participant = await getProjectParticipantRow(client, projectId, result.rows[0].participant_id);
+
+    await client.query('COMMIT');
+    res.status(201).json(participant);
+  } catch (err) {
+    await client.query('ROLLBACK');
+
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Пользователь уже добавлен в участники проекта' });
+    }
+
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка добавления участника проекта' });
+  } finally {
+    client.release();
+  }
+});
+
+router.put('/:id/participants/:participantId', auth, requireModify, async (req, res) => {
+  const projectId = Number(req.params.id);
+  const participantId = Number(req.params.participantId);
+
+  if (!Number.isInteger(projectId) || !Number.isInteger(participantId)) {
+    return res.status(400).json({ error: 'Некорректный ID участника проекта' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const current = await client.query(
+      'SELECT participant_id, project_id, user_id, display_order, role_in_team, notes FROM project_participants WHERE project_id = $1 AND participant_id = $2',
+      [projectId, participantId]
+    );
+
+    if (current.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Участник проекта не найден' });
+    }
+
+    const oldValues = current.rows[0];
+    const newVals = {
+      display_order: normalizeDisplayOrder(req.body?.display_order, oldValues.display_order),
+      role_in_team: Object.prototype.hasOwnProperty.call(req.body || {}, 'role_in_team')
+        ? normalizeParticipantText(req.body.role_in_team)
+        : oldValues.role_in_team,
+      notes: Object.prototype.hasOwnProperty.call(req.body || {}, 'notes')
+        ? normalizeOptionalParticipantText(req.body.notes)
+        : oldValues.notes
+    };
+
+    const result = await client.query(
+      `
+      UPDATE project_participants
+      SET display_order = $1,
+          role_in_team = $2,
+          notes = $3,
+          updated_by = $4,
+          updated_at = now()
+      WHERE project_id = $5
+        AND participant_id = $6
+      RETURNING participant_id
+      `,
+      [
+        newVals.display_order,
+        newVals.role_in_team,
+        newVals.notes,
+        req.user.userId,
+        projectId,
+        participantId
+      ]
+    );
+
+    await trackChanges(
+      client,
+      'project_participant',
+      'project_participants',
+      'participant_id',
+      participantId,
+      oldValues,
+      newVals,
+      req.user.userId,
+      ['display_order', 'role_in_team', 'notes'],
+      false
+    );
+
+    const participant = await getProjectParticipantRow(client, projectId, result.rows[0].participant_id);
+
+    await client.query('COMMIT');
+    res.json(participant);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка обновления участника проекта' });
+  } finally {
+    client.release();
+  }
+});
+
+router.delete('/:id/participants/:participantId', auth, requireModify, async (req, res) => {
+  const projectId = Number(req.params.id);
+  const participantId = Number(req.params.participantId);
+
+  if (!Number.isInteger(projectId) || !Number.isInteger(participantId)) {
+    return res.status(400).json({ error: 'Некорректный ID участника проекта' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const current = await client.query(
+      `
+      SELECT pp.user_id, pp.role_in_team, p.lead_id
+      FROM project_participants pp
+      JOIN projects p ON p.project_id = pp.project_id
+      WHERE pp.project_id = $1
+        AND pp.participant_id = $2
+      `,
+      [projectId, participantId]
+    );
+
+    if (current.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Участник проекта не найден' });
+    }
+
+    if (Number(current.rows[0].user_id) === Number(current.rows[0].lead_id)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: 'Руководителя нельзя убрать из команды; сначала измените руководителя проекта'
+      });
+    }
+
+    await client.query(
+      'DELETE FROM project_participants WHERE project_id = $1 AND participant_id = $2',
+      [projectId, participantId]
+    );
+
+    await client.query(
+      `DELETE FROM user_project_access
+       WHERE project_id = $1
+         AND user_id = $2`,
+      [projectId, current.rows[0].user_id]
+    );
+
+    await logAccessChanges(client, projectId, req.user.userId, 'participant_remove', {
+      participant_id: participantId,
+      user_id: current.rows[0].user_id,
+      role_in_team: current.rows[0].role_in_team
+    });
+
+    await client.query('COMMIT');
+    res.status(204).end();
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка удаления участника проекта' });
+  } finally {
+    client.release();
+  }
+});
+
 // UPDATE
-router.put('/:id', auth, requireModify, async (req, res) => {
+router.put('/:id', auth, requireEdit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Некорректный ID' });
   const {
@@ -681,22 +1067,18 @@ router.put('/:id', auth, requireModify, async (req, res) => {
     due_date,
     status,
     description,
-    confidentiality_level,
-    department_id
+    confidentiality_level
   } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Название проекта обязательно' });
   }
 
-  // Validate confidentiality level if provided
-  if (confidentiality_level !== undefined && !VALID_CONFIDENTIALITY.includes(confidentiality_level)) {
+  const requestedConfLevel = confidentiality_level !== undefined
+    ? normalizeConfidentialityLevel(confidentiality_level)
+    : undefined;
+  if (confidentiality_level !== undefined && !requestedConfLevel) {
     return res.status(400).json({ error: 'Некорректный уровень доступа' });
-  }
-
-  // department_id required when level === 'department'
-  if (confidentiality_level === 'department' && !department_id) {
-    return res.status(400).json({ error: 'Укажите отдел для уровня «Отдел»' });
   }
 
   const normalizedLeadId = normalizeOptionalInteger(lead_id);
@@ -717,16 +1099,22 @@ router.put('/:id', auth, requireModify, async (req, res) => {
       return res.status(404).json({ error: 'Проект не найден' });
     }
 
-    const finalConfLevel = confidentiality_level !== undefined ? confidentiality_level : current.rows[0].confidentiality_level;
-    let finalDeptId;
-    if (department_id !== undefined) {
-      finalDeptId = department_id ? Number(department_id) : null;
-    } else {
-      finalDeptId = current.rows[0].department_id;
-    }
-    // Enforce: department_id only meaningful for 'department' level
-    if (finalConfLevel !== 'department') {
-      finalDeptId = null;
+    const finalConfLevel = requestedConfLevel !== undefined
+      ? requestedConfLevel
+      : normalizeConfidentialityLevel(current.rows[0].confidentiality_level) || 'confidential';
+
+    if (req.projectPermission === 'project-edit') {
+      const leadChanged = Number(current.rows[0].lead_id || 0) !== Number(normalizedLeadId || 0);
+      const visibilityChanged = finalConfLevel !== (
+        normalizeConfidentialityLevel(current.rows[0].confidentiality_level) || 'confidential'
+      );
+
+      if (leadChanged || visibilityChanged) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          error: 'Редактор проекта не может менять руководителя или тип доступа'
+        });
+      }
     }
 
     const newVals = {
@@ -737,7 +1125,7 @@ router.put('/:id', auth, requireModify, async (req, res) => {
       status: status || 'active',
       description: description || null,
       confidentiality_level: finalConfLevel,
-      department_id: finalDeptId,
+      department_id: null,
     };
 
     const result = await client.query(
@@ -777,6 +1165,8 @@ router.put('/:id', auth, requireModify, async (req, res) => {
     }
 
     await syncProjectLeadAccess(client, id, current.rows[0].lead_id, newVals.lead_id, req.user.userId);
+    await clearPreviousProjectLeadParticipantRole(client, id, current.rows[0].lead_id, newVals.lead_id);
+    await ensureProjectLeadParticipant(client, id, newVals.lead_id, req.user.userId);
     await trackChanges(client, 'project', 'projects', 'project_id', Number(id), current.rows[0], newVals, req.user.userId);
 
     await client.query('COMMIT');
@@ -883,7 +1273,7 @@ router.delete('/:id', auth, requireModify, async (req, res) => {
 
 // -------- PROJECT ACCESS MANAGEMENT --------
 
-// GET /api/projects/:id/access — list users with access to project
+// GET /api/projects/:id/access — list project access sources/grants
 router.get('/:id/access', auth, requireView, async (req, res) => {
   const projectId = Number(req.params.id);
   if (!Number.isInteger(projectId)) return res.status(400).json({ error: 'Некорректный ID' });
@@ -907,6 +1297,25 @@ router.get('/:id/access', auth, requireView, async (req, res) => {
         LEFT JOIN departments d ON d.department_id = u.department_id
         LEFT JOIN users g ON g.user_id = upa.granted_by
         WHERE upa.project_id = $1
+
+        UNION ALL
+
+        SELECT 'participant' AS grantee_type,
+               u.user_id AS grantee_id,
+               u.name AS grantee_name,
+               u.position AS grantee_position,
+               u.department_id,
+               d.name AS department_name,
+               'view'::text AS access_level,
+               pp.created_at AS granted_at,
+               NULL::timestamptz AS expires_at,
+               false AS is_expired,
+               creator.name AS granted_by_name
+        FROM project_participants pp
+        JOIN users u ON u.user_id = pp.user_id
+        LEFT JOIN departments d ON d.department_id = u.department_id
+        LEFT JOIN users creator ON creator.user_id = pp.created_by
+        WHERE pp.project_id = $1
 
         UNION ALL
 
@@ -950,7 +1359,7 @@ async function logAccessChanges(db, projectId, userId, action, payload) {
   }
 }
 
-// POST /api/projects/:id/access — grant access (users and/or departments)
+// POST /api/projects/:id/access — grant explicit user access from the current UI.
 // Accepts: { user_id, user_ids[], department_id, department_ids[], access_level, expires_at, expires_in_days }
 // Legacy { user_id } payload still works (single element).
 // Requires modify permission (admin | director | owner | project-admin).
@@ -969,7 +1378,8 @@ router.post('/:id/access', auth, requireModify, async (req, res) => {
     return res.status(400).json({ error: 'Некорректный уровень доступа' });
   }
 
-  // Normalize targets
+  // Normalize targets. User grants are current; department grants are kept only
+  // for compatibility with legacy data/tooling.
   const userIds = Array.isArray(user_ids)
     ? user_ids.map(Number).filter(Number.isInteger)
     : (user_id != null ? [Number(user_id)].filter(Number.isInteger) : []);

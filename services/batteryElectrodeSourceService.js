@@ -1,14 +1,16 @@
 const { trackChanges } = require('../middleware/trackChanges');
 
+const ELECTRODE_SOURCE_ROLES = ['cathode', 'anode'];
+
 class BatteryElectrodeSourceValidationError extends Error {
   // statusCode default 400 (validation). Pass 404 for "row not found"
   // shape errors so the route returns the right status. Optional `details`
   // object exposes richer fields on the JSON response.
   //
-  // Allowlist explicit keys instead of Object.assign(this, details) — that
+  // Allowlist explicit keys instead of Object.assign(this, details) - that
   // would let a caller overwrite this.message / this.statusCode / this.name
   // by passing them in details. Only callers in this service file build
-  // details, so the risk is internal — but the explicit form is clearer
+  // details, so the risk is internal - but the explicit form is clearer
   // about the contract and avoids silent surprises if more details fields
   // are added later.
   constructor(message, statusCode = 400, details = null) {
@@ -22,11 +24,239 @@ class BatteryElectrodeSourceValidationError extends Error {
   }
 }
 
-async function assertCompatibleSidedness(queryable, cathodeCutBatchId, anodeCutBatchId) {
-  const hasCathode = !!cathodeCutBatchId;
-  const hasAnode = !!anodeCutBatchId;
+function hasOwn(payload, key) {
+  return Object.prototype.hasOwnProperty.call(payload || {}, key);
+}
 
-  if (!hasCathode || !hasAnode) return;
+function hasMeaningfulValue(value) {
+  return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function normalizeOptionalInteger(value, fieldName) {
+  if (!hasMeaningfulValue(value)) return null;
+
+  const number = Number(value);
+  if (!Number.isInteger(number)) {
+    throw new BatteryElectrodeSourceValidationError(`Некорректное значение ${fieldName}`);
+  }
+
+  return number;
+}
+
+function normalizeSourceRole(role) {
+  const value = String(role || '').trim().toLowerCase();
+
+  if (value === 'cathode' || value === 'anode') return value;
+
+  throw new BatteryElectrodeSourceValidationError('Некорректная роль источника электродов');
+}
+
+function normalizeSortOrder(value, fallback) {
+  if (!hasMeaningfulValue(value)) return fallback;
+
+  const number = Number(value);
+  return Number.isInteger(number) ? number : fallback;
+}
+
+function normalizeBoolean(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+
+  const text = String(value).trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(text)) return true;
+  if (['false', '0', 'no', 'off'].includes(text)) return false;
+
+  return fallback;
+}
+
+function normalizeSourceRow(raw, fallbackRole, fallbackSortOrder) {
+  const role = normalizeSourceRole(raw.role || fallbackRole);
+  const tapeId = normalizeOptionalInteger(raw.tape_id, 'tape_id');
+  const cutBatchId = normalizeOptionalInteger(raw.cut_batch_id, 'cut_batch_id');
+  const sourceNotes = hasMeaningfulValue(raw.source_notes)
+    ? String(raw.source_notes).trim()
+    : null;
+  const rowHasAnyValue =
+    tapeId !== null ||
+    cutBatchId !== null ||
+    sourceNotes !== null;
+
+  if (!rowHasAnyValue) return null;
+
+  if (!cutBatchId) {
+    throw new BatteryElectrodeSourceValidationError(
+      'Для источника электродов должна быть выбрана партия вырезанных электродов'
+    );
+  }
+
+  return {
+    role,
+    tape_id: tapeId,
+    cut_batch_id: cutBatchId,
+    source_notes: sourceNotes,
+    sort_order: normalizeSortOrder(raw.sort_order, fallbackSortOrder),
+    is_primary: normalizeBoolean(raw.is_primary, fallbackSortOrder === 0)
+  };
+}
+
+async function hydrateSourceRowsWithCutBatchTapes(queryable, rows) {
+  const cutBatchIds = [...new Set(
+    rows
+      .filter((row) => row.cut_batch_id)
+      .map((row) => row.cut_batch_id)
+  )];
+
+  if (!cutBatchIds.length) return rows;
+
+  const result = await queryable.query(
+    `
+    SELECT cut_batch_id, tape_id
+    FROM electrode_cut_batches
+    WHERE cut_batch_id = ANY($1::int[])
+    `,
+    [cutBatchIds]
+  );
+  const tapeByBatch = result.rows.reduce((acc, row) => {
+    acc[Number(row.cut_batch_id)] = Number(row.tape_id);
+    return acc;
+  }, {});
+  const missingBatchIds = cutBatchIds.filter((cutBatchId) => !tapeByBatch[cutBatchId]);
+
+  if (missingBatchIds.length) {
+    throw new BatteryElectrodeSourceValidationError('Выбранная партия вырезанных электродов не найдена');
+  }
+
+  return rows.map((row) => {
+    const cutBatchTapeId = tapeByBatch[row.cut_batch_id] || null;
+
+    if (row.tape_id && cutBatchTapeId && row.tape_id !== cutBatchTapeId) {
+      throw new BatteryElectrodeSourceValidationError(
+        'Выбранная партия вырезанных электродов не относится к выбранной ленте'
+      );
+    }
+
+    return {
+      ...row,
+      tape_id: row.tape_id || cutBatchTapeId
+    };
+  });
+}
+
+function normalizePrimaryRows(rows) {
+  const byRole = new Map();
+
+  rows.forEach((row) => {
+    if (!byRole.has(row.role)) byRole.set(row.role, []);
+    byRole.get(row.role).push(row);
+  });
+
+  byRole.forEach((roleRows) => {
+    const sortedRows = roleRows.sort((a, b) => a.sort_order - b.sort_order);
+    const explicitPrimaryRows = sortedRows.filter((row) => row.is_primary);
+
+    sortedRows.forEach((row) => {
+      row.is_primary = false;
+    });
+
+    (explicitPrimaryRows[0] || sortedRows[0]).is_primary = true;
+  });
+
+  return rows;
+}
+
+function assertNoDuplicateRoleBatches(rows) {
+  const keys = new Set();
+
+  rows.forEach((row) => {
+    const key = `${row.role}:${row.cut_batch_id}`;
+    if (keys.has(key)) {
+      throw new BatteryElectrodeSourceValidationError(
+        'Одна и та же партия не может быть выбрана дважды для одной роли'
+      );
+    }
+    keys.add(key);
+  });
+}
+
+function getArrayPayload(payload = {}) {
+  if (Array.isArray(payload.sources)) return payload.sources;
+  if (Array.isArray(payload.electrode_sources)) return payload.electrode_sources;
+  return null;
+}
+
+function getLegacyRolePayload(payload, role) {
+  return {
+    role,
+    tape_id: payload[`${role}_tape_id`],
+    cut_batch_id: payload[`${role}_cut_batch_id`],
+    source_notes: payload[`${role}_source_notes`],
+    sort_order: 0,
+    is_primary: true
+  };
+}
+
+function roleWasRequestedInLegacyPayload(payload, role) {
+  return [
+    `${role}_tape_id`,
+    `${role}_cut_batch_id`,
+    `${role}_source_notes`
+  ].some((fieldName) => hasOwn(payload, fieldName));
+}
+
+function normalizeBatteryElectrodeSourcePayload(payload = {}) {
+  const arrayPayload = getArrayPayload(payload);
+
+  if (arrayPayload) {
+    const rows = arrayPayload
+      .map((source, index) => normalizeSourceRow(source || {}, null, index))
+      .filter(Boolean);
+
+    assertNoDuplicateRoleBatches(rows);
+
+    return {
+      mode: 'array',
+      rows: normalizePrimaryRows(rows),
+      requestedRoles: ELECTRODE_SOURCE_ROLES
+    };
+  }
+
+  const rows = [];
+  const requestedRoles = [];
+
+  ELECTRODE_SOURCE_ROLES.forEach((role) => {
+    if (roleWasRequestedInLegacyPayload(payload, role)) {
+      requestedRoles.push(role);
+      const row = normalizeSourceRow(getLegacyRolePayload(payload, role), role, 0);
+      if (row) rows.push(row);
+    }
+  });
+
+  assertNoDuplicateRoleBatches(rows);
+
+  return {
+    mode: 'legacy',
+    rows: normalizePrimaryRows(rows),
+    requestedRoles
+  };
+}
+
+function getRowsByRole(rows) {
+  return rows.reduce((acc, row) => {
+    if (!acc[row.role]) acc[row.role] = [];
+    acc[row.role].push(row);
+    return acc;
+  }, {});
+}
+
+async function assertCompatibleSidedness(queryable, cutBatchIds) {
+  const uniqueCutBatchIds = [...new Set(
+    (Array.isArray(cutBatchIds) ? cutBatchIds : Array.from(arguments).slice(1))
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value))
+  )];
+
+  if (uniqueCutBatchIds.length < 2) return;
 
   const sidednessResult = await queryable.query(
     `
@@ -46,7 +276,7 @@ async function assertCompatibleSidedness(queryable, cathodeCutBatchId, anodeCutB
     FROM electrode_cut_batches cb
     WHERE cb.cut_batch_id = ANY($1::int[])
     `,
-    [[Number(cathodeCutBatchId), Number(anodeCutBatchId)]]
+    [uniqueCutBatchIds]
   );
 
   const sidednessValues = [...new Set(
@@ -72,11 +302,12 @@ async function getBatteryFormAndCoinMode(queryable, batteryId) {
 
   const form = batteryResult.rows[0].form_factor;
   let coinMode = null;
+  let halfCellType = null;
 
   if (form === 'coin') {
     const modeResult = await queryable.query(
       `
-      SELECT coin_cell_mode
+      SELECT coin_cell_mode, half_cell_type
       FROM battery_coin_config
       WHERE battery_id = $1
       `,
@@ -88,17 +319,46 @@ async function getBatteryFormAndCoinMode(queryable, batteryId) {
     }
 
     coinMode = modeResult.rows[0].coin_cell_mode;
+    halfCellType = modeResult.rows[0].half_cell_type;
   }
 
-  return { form, coinMode };
+  return { form, coinMode, halfCellType };
 }
 
-function assertSourceCompleteness(form, coinMode, hasCathode, hasAnode) {
+function assertSourceCompleteness(form, coinMode, halfCellType, rows) {
+  const byRole = getRowsByRole(rows);
+  const cathodeCount = byRole.cathode?.length || 0;
+  const anodeCount = byRole.anode?.length || 0;
+
   if (form === 'coin' && coinMode === 'half_cell') {
-    if ((hasCathode ? 1 : 0) + (hasAnode ? 1 : 0) !== 1) {
+    if (halfCellType === 'cathode_vs_li') {
+      if (cathodeCount !== 1 || anodeCount !== 0) {
+        throw new BatteryElectrodeSourceValidationError('Для катодной монеточной полуячейки должен быть выбран ровно один катодный источник');
+      }
+      return;
+    }
+
+    if (halfCellType === 'anode_vs_li') {
+      if (anodeCount !== 1 || cathodeCount !== 0) {
+        throw new BatteryElectrodeSourceValidationError('Для анодной монеточной полуячейки должен быть выбран ровно один анодный источник');
+      }
+      return;
+    }
+
+    if (cathodeCount + anodeCount !== 1) {
       throw new BatteryElectrodeSourceValidationError('Для монеточной полуячейки должен быть выбран ровно один источник электродов');
     }
-  } else if (!hasCathode || !hasAnode) {
+    return;
+  }
+
+  if (form === 'coin') {
+    if (cathodeCount !== 1 || anodeCount !== 1) {
+      throw new BatteryElectrodeSourceValidationError('Для полного монеточного элемента должен быть выбран ровно один катодный и один анодный источник');
+    }
+    return;
+  }
+
+  if (!cathodeCount || !anodeCount) {
     throw new BatteryElectrodeSourceValidationError('Для данного элемента должны быть выбраны и катодный, и анодный источники');
   }
 }
@@ -107,11 +367,14 @@ async function fetchBatteryElectrodeSources(queryable, batteryId) {
   const result = await queryable.query(
     `
     SELECT
+      battery_electrode_source_id,
       battery_id,
       role,
       tape_id,
       cut_batch_id,
       source_notes,
+      sort_order,
+      is_primary,
       (
         SELECT c.coating_sidedness
         FROM electrode_cut_batches cb
@@ -127,7 +390,7 @@ async function fetchBatteryElectrodeSources(queryable, batteryId) {
       ) AS coating_sidedness
     FROM battery_electrode_sources
     WHERE battery_id = $1
-    ORDER BY role;
+    ORDER BY role, is_primary DESC, sort_order, battery_electrode_source_id;
     `,
     [batteryId]
   );
@@ -135,97 +398,64 @@ async function fetchBatteryElectrodeSources(queryable, batteryId) {
   return result.rows.length === 0 ? null : result.rows;
 }
 
+async function replaceSourceRows(queryable, batteryId, rows, rolesToReplace = ELECTRODE_SOURCE_ROLES) {
+  await queryable.query(
+    `
+    DELETE FROM battery_electrode_sources
+    WHERE battery_id = $1
+      AND role::text = ANY($2::text[])
+    `,
+    [batteryId, rolesToReplace]
+  );
+
+  for (const row of rows.filter((source) => rolesToReplace.includes(source.role))) {
+    await queryable.query(
+      `
+      INSERT INTO battery_electrode_sources
+        (battery_id, role, tape_id, cut_batch_id, source_notes, sort_order, is_primary)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7)
+      `,
+      [
+        batteryId,
+        row.role,
+        row.tape_id,
+        row.cut_batch_id,
+        row.source_notes,
+        row.sort_order,
+        row.is_primary
+      ]
+    );
+  }
+}
+
 async function saveBatteryElectrodeSourcesInTransaction(queryable, batteryId, payload) {
-  const {
-    cathode_tape_id,
-    cathode_cut_batch_id,
-    cathode_source_notes,
-    anode_tape_id,
-    anode_cut_batch_id,
-    anode_source_notes
-  } = payload;
+  const normalized = normalizeBatteryElectrodeSourcePayload(payload);
+  normalized.rows = await hydrateSourceRowsWithCutBatchTapes(queryable, normalized.rows);
+  const { form, coinMode, halfCellType } = await getBatteryFormAndCoinMode(queryable, batteryId);
 
-  const { form, coinMode } = await getBatteryFormAndCoinMode(queryable, batteryId);
+  assertSourceCompleteness(form, coinMode, halfCellType, normalized.rows);
+  await assertCompatibleSidedness(
+    queryable,
+    normalized.rows.map((row) => row.cut_batch_id)
+  );
 
-  const hasCathode = !!cathode_tape_id && !!cathode_cut_batch_id;
-  const hasAnode = !!anode_tape_id && !!anode_cut_batch_id;
-
-  if (hasCathode && hasAnode) {
-    await assertCompatibleSidedness(queryable, cathode_cut_batch_id, anode_cut_batch_id);
-  }
-  assertSourceCompleteness(form, coinMode, hasCathode, hasAnode);
-
-  if (hasCathode) {
-    await queryable.query(
-      `
-      INSERT INTO battery_electrode_sources
-        (battery_id, role, tape_id, cut_batch_id, source_notes)
-      VALUES
-        ($1, 'cathode', $2, $3, $4)
-      ON CONFLICT (battery_id, role)
-      DO UPDATE SET
-        tape_id = EXCLUDED.tape_id,
-        cut_batch_id = EXCLUDED.cut_batch_id,
-        source_notes = EXCLUDED.source_notes
-      `,
-      [
-        batteryId,
-        Number(cathode_tape_id),
-        Number(cathode_cut_batch_id),
-        cathode_source_notes || null
-      ]
-    );
-  } else {
-    await queryable.query(
-      `
-      DELETE FROM battery_electrode_sources
-      WHERE battery_id = $1 AND role = 'cathode'
-      `,
-      [batteryId]
-    );
-  }
-
-  if (hasAnode) {
-    await queryable.query(
-      `
-      INSERT INTO battery_electrode_sources
-        (battery_id, role, tape_id, cut_batch_id, source_notes)
-      VALUES
-        ($1, 'anode', $2, $3, $4)
-      ON CONFLICT (battery_id, role)
-      DO UPDATE SET
-        tape_id = EXCLUDED.tape_id,
-        cut_batch_id = EXCLUDED.cut_batch_id,
-        source_notes = EXCLUDED.source_notes
-      `,
-      [
-        batteryId,
-        Number(anode_tape_id),
-        Number(anode_cut_batch_id),
-        anode_source_notes || null
-      ]
-    );
-  } else {
-    await queryable.query(
-      `
-      DELETE FROM battery_electrode_sources
-      WHERE battery_id = $1 AND role = 'anode'
-      `,
-      [batteryId]
-    );
-  }
+  await replaceSourceRows(queryable, batteryId, normalized.rows);
 
   const result = await queryable.query(
     `
     SELECT
+      battery_electrode_source_id,
       battery_id,
       role,
       tape_id,
       cut_batch_id,
-      source_notes
+      source_notes,
+      sort_order,
+      is_primary
     FROM battery_electrode_sources
     WHERE battery_id = $1
-    ORDER BY role
+    ORDER BY role, is_primary DESC, sort_order, battery_electrode_source_id
     `,
     [batteryId]
   );
@@ -249,95 +479,107 @@ async function saveBatteryElectrodeSources(pool, batteryId, payload) {
   }
 }
 
-async function updateBatteryElectrodeSources(pool, batteryId, payload, userId) {
-  const {
-    cathode_tape_id,
-    cathode_cut_batch_id,
-    cathode_source_notes,
-    anode_tape_id,
-    anode_cut_batch_id,
-    anode_source_notes
-  } = payload;
-
-  const hasCathode = !!cathode_tape_id && !!cathode_cut_batch_id;
-  const hasAnode = !!anode_tape_id && !!anode_cut_batch_id;
-
-  if (hasCathode && hasAnode) {
-    await assertCompatibleSidedness(pool, cathode_cut_batch_id, anode_cut_batch_id);
-  }
-
-  const currentSources = await pool.query(
-    'SELECT role, tape_id, cut_batch_id, source_notes FROM battery_electrode_sources WHERE battery_id = $1',
+async function fetchExistingSourceRows(queryable, batteryId) {
+  const result = await queryable.query(
+    `
+    SELECT
+      battery_electrode_source_id,
+      role,
+      tape_id,
+      cut_batch_id,
+      source_notes,
+      sort_order,
+      is_primary
+    FROM battery_electrode_sources
+    WHERE battery_id = $1
+    ORDER BY role, is_primary DESC, sort_order, battery_electrode_source_id
+    `,
     [batteryId]
   );
-  const oldCathode = currentSources.rows.find((row) => row.role === 'cathode') || {};
-  const oldAnode = currentSources.rows.find((row) => row.role === 'anode') || {};
 
-  // rowCount-aware UPDATEs: if the role row doesn't exist yet, the UPDATE
-  // affects 0 rows. Previously the service silently returned success — the
-  // UI thought the source was saved but nothing was persisted. Now we
-  // explicitly report which roles were missing so the caller can fall back
-  // to POST or inform the user.
-  const cathodeUpd = await pool.query(
-    `
-    UPDATE battery_electrode_sources
-    SET
-      tape_id = $2,
-      cut_batch_id = $3,
-      source_notes = $4
-    WHERE battery_id = $1
-      AND role = 'cathode'
-    `,
-    [
-      batteryId,
-      cathode_tape_id || null,
-      cathode_cut_batch_id || null,
-      cathode_source_notes || null
-    ]
-  );
+  return result.rows;
+}
 
-  const anodeUpd = await pool.query(
-    `
-    UPDATE battery_electrode_sources
-    SET
-      tape_id = $2,
-      cut_batch_id = $3,
-      source_notes = $4
-    WHERE battery_id = $1
-      AND role = 'anode'
-    `,
-    [
-      batteryId,
-      anode_tape_id || null,
-      anode_cut_batch_id || null,
-      anode_source_notes || null
-    ]
-  );
+function serializeRowsByRole(rows) {
+  return ELECTRODE_SOURCE_ROLES.reduce((acc, role) => {
+    acc[role] = rows
+      .filter((row) => row.role === role)
+      .map((row) => ({
+        tape_id: row.tape_id || null,
+        cut_batch_id: row.cut_batch_id || null,
+        source_notes: row.source_notes || null,
+        sort_order: row.sort_order || 0,
+        is_primary: Boolean(row.is_primary)
+      }));
+    return acc;
+  }, {});
+}
 
-  const cathodeNew = { tape_id: cathode_tape_id || null, cut_batch_id: cathode_cut_batch_id || null, source_notes: cathode_source_notes || null };
-  const anodeNew = { tape_id: anode_tape_id || null, cut_batch_id: anode_cut_batch_id || null, source_notes: anode_source_notes || null };
-
-  if (oldCathode.role) {
-    await trackChanges(pool, 'battery_electrode_source_cathode', 'battery_electrode_sources', 'battery_id', batteryId, oldCathode, cathodeNew, userId, null, false);
-  }
-  if (oldAnode.role) {
-    await trackChanges(pool, 'battery_electrode_source_anode', 'battery_electrode_sources', 'battery_id', batteryId, oldAnode, anodeNew, userId, null, false);
-  }
-
-  const hasMeaningfulRoleValue = (...values) => values.some(
-    (value) => value !== undefined && value !== null && String(value).trim() !== ''
-  );
-
-  // If the caller sent cathode fields but no cathode row exists (likewise
-  // for anode), and the payload is trying to set real source data, the PATCH
-  // is a no-op for that role. Surface it as 404 so the UI can recover (e.g.
-  // POST first) instead of being told success. Clearing an already-missing
-  // role is a valid no-op.
+async function applyLegacySourcePatch(queryable, batteryId, normalized, existingRows) {
+  const existingByRole = getRowsByRole(existingRows);
+  const rowsByRole = getRowsByRole(normalized.rows);
   const missingRoles = [];
-  const cathodeRequested = hasMeaningfulRoleValue(cathode_tape_id, cathode_cut_batch_id, cathode_source_notes);
-  const anodeRequested = hasMeaningfulRoleValue(anode_tape_id, anode_cut_batch_id, anode_source_notes);
-  if (cathodeRequested && cathodeUpd.rowCount === 0) missingRoles.push('cathode');
-  if (anodeRequested && anodeUpd.rowCount === 0) missingRoles.push('anode');
+  const updated = { cathode: 0, anode: 0 };
+
+  for (const role of normalized.requestedRoles) {
+    const requestedRow = rowsByRole[role]?.[0] || null;
+
+    if (!requestedRow) {
+      const deleteResult = await queryable.query(
+      `
+      DELETE FROM battery_electrode_sources
+      WHERE battery_id = $1
+        AND role::text = $2
+      `,
+      [batteryId, role]
+      );
+      updated[role] = deleteResult.rowCount;
+      continue;
+    }
+
+    if (!existingByRole[role]?.length) {
+      missingRoles.push(role);
+      continue;
+    }
+
+    await queryable.query(
+      `
+      UPDATE battery_electrode_sources
+      SET is_primary = false
+      WHERE battery_id = $1
+        AND role::text = $2
+      `,
+      [batteryId, role]
+    );
+
+    await queryable.query(
+      `
+      DELETE FROM battery_electrode_sources
+      WHERE battery_id = $1
+        AND role::text = $2
+        AND cut_batch_id = $3
+      `,
+      [batteryId, role, requestedRow.cut_batch_id]
+    );
+
+    const insertResult = await queryable.query(
+      `
+      INSERT INTO battery_electrode_sources
+        (battery_id, role, tape_id, cut_batch_id, source_notes, sort_order, is_primary)
+      VALUES
+        ($1, $2, $3, $4, $5, 0, true)
+      `,
+      [
+        batteryId,
+        role,
+        requestedRow.tape_id,
+        requestedRow.cut_batch_id,
+        requestedRow.source_notes
+      ]
+    );
+
+    updated[role] = insertResult.rowCount;
+  }
 
   if (missingRoles.length > 0) {
     throw new BatteryElectrodeSourceValidationError(
@@ -345,20 +587,80 @@ async function updateBatteryElectrodeSources(pool, batteryId, payload, userId) {
       404,
       {
         missing_roles: missingRoles,
-        updated: { cathode: cathodeUpd.rowCount, anode: anodeUpd.rowCount },
+        updated
       }
     );
   }
 
-  return {
-    success: true,
-    updated: { cathode: cathodeUpd.rowCount, anode: anodeUpd.rowCount },
-  };
+  return updated;
+}
+
+async function updateBatteryElectrodeSources(pool, batteryId, payload, userId) {
+  const normalized = normalizeBatteryElectrodeSourcePayload(payload);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const oldRows = await fetchExistingSourceRows(client, batteryId);
+    normalized.rows = await hydrateSourceRowsWithCutBatchTapes(client, normalized.rows);
+
+    await assertCompatibleSidedness(
+      client,
+      normalized.rows.map((row) => row.cut_batch_id)
+    );
+
+    let updated = { cathode: 0, anode: 0 };
+
+    if (normalized.mode === 'array') {
+      await replaceSourceRows(client, batteryId, normalized.rows, normalized.requestedRoles);
+      updated = {
+        cathode: normalized.rows.filter((row) => row.role === 'cathode').length,
+        anode: normalized.rows.filter((row) => row.role === 'anode').length
+      };
+    } else {
+      updated = await applyLegacySourcePatch(client, batteryId, normalized, oldRows);
+    }
+
+    const newRows = await fetchExistingSourceRows(client, batteryId);
+    const oldByRole = serializeRowsByRole(oldRows);
+    const newByRole = serializeRowsByRole(newRows);
+
+    for (const role of ELECTRODE_SOURCE_ROLES) {
+      if (JSON.stringify(oldByRole[role]) !== JSON.stringify(newByRole[role])) {
+        await trackChanges(
+          client,
+          `battery_electrode_source_${role}`,
+          'battery_electrode_sources',
+          'battery_id',
+          batteryId,
+          { sources: JSON.stringify(oldByRole[role]) },
+          { sources: JSON.stringify(newByRole[role]) },
+          userId,
+          null,
+          false
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    return {
+      success: true,
+      updated
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = {
   BatteryElectrodeSourceValidationError,
   fetchBatteryElectrodeSources,
+  normalizeBatteryElectrodeSourcePayload,
   saveBatteryElectrodeSourcesInTransaction,
   saveBatteryElectrodeSources,
   updateBatteryElectrodeSources

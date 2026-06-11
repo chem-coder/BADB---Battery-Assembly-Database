@@ -6,7 +6,8 @@ const saveBtn = document.getElementById('saveBtn');
 const exitBtn = document.getElementById('exitBtn');
 const printProjectBtn = document.getElementById('printProjectBtn');
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
-const createdBySelect = document.getElementById('project-created-by');
+const createdByInput = document.getElementById('project-created-by');
+const createdAtInput = document.getElementById('project-created-at');
 
 const projectsList = document.getElementById('projectsList');
 const statusSelect = form.querySelector('select[name="status"]');
@@ -14,15 +15,12 @@ const leadSelect = document.getElementById('project-lead-id');
 const confidentialitySelect = document.getElementById('project-confidentiality-level');
 const departmentBlock = document.getElementById('project-department-block');
 const departmentSelect = document.getElementById('project-department-id');
-const projectDepartmentAccessSection = document.getElementById('project-department-access-section');
-const projectAccessDepartmentSelect = document.getElementById('project-access-department-id');
-const projectAccessExpiresAt = document.getElementById('project-access-expires-at');
-const grantDepartmentAccessBtn = document.getElementById('grantDepartmentAccessBtn');
-const projectDepartmentAccessBody = document.getElementById('projectDepartmentAccessBody');
-const projectUserAccessBody = document.getElementById('projectUserAccessBody');
-const projectAccessUserSelect = document.getElementById('project-access-user-id');
-const projectUserAccessLevel = document.getElementById('project-user-access-level');
-const grantUserAccessBtn = document.getElementById('grantUserAccessBtn');
+const projectParticipantsSection = document.getElementById('project-participants-section');
+const projectParticipantUserSelect = document.getElementById('project-participant-user-id');
+const projectParticipantRoleInput = document.getElementById('project-participant-role');
+const projectParticipantAccessLevel = document.getElementById('project-participant-access-level');
+const addProjectParticipantBtn = document.getElementById('addProjectParticipantBtn');
+const projectParticipantsBody = document.getElementById('projectParticipantsBody');
 const stickyHeader = document.getElementById('project_sticky_header');
 const stickyTitle = document.getElementById('project_sticky_title');
 const stickyMeta = document.getElementById('project_sticky_meta');
@@ -44,8 +42,8 @@ let initialFormState = null;
 let currentUsers = [];
 let currentDepartments = [];
 let currentAccessGrants = [];
-let currentDepartmentAccess = [];
 let currentUserAccess = [];
+let currentParticipants = [];
 let allProjects = [];
 
 const PROJECT_STATUS_LABELS = {
@@ -56,10 +54,14 @@ const PROJECT_STATUS_LABELS = {
 };
 
 const PROJECT_VISIBILITY_LABELS = {
-  public: 'для всех',
-  department: 'для отдела',
-  confidential: 'выборочный доступ'
+  public: 'открытый',
+  department: 'ограниченный',
+  confidential: 'ограниченный'
 };
+
+function normalizeProjectVisibility(value) {
+  return value === 'public' ? 'public' : 'confidential';
+}
 
 function getProjectNameValue() {
   const source = nameInput.hidden ? title.textContent : nameInput.value;
@@ -122,6 +124,8 @@ function resetForm() {
   currentProjectLeadId = null;
   initialFormState = null;
   clearRecordStatuses();
+  resetProjectParticipantsSection();
+  setProjectAuditFields(null);
   hideForm();
 }
 
@@ -131,13 +135,8 @@ function formDataToObject(form) {
 
 function normalizeProjectPayload(data) {
   const next = { ...data };
-  next.confidentiality_level = next.confidentiality_level || 'public';
-
-  if (next.confidentiality_level !== 'department') {
-    next.department_id = null;
-  } else {
-    next.department_id = next.department_id || null;
-  }
+  next.confidentiality_level = normalizeProjectVisibility(next.confidentiality_level || 'public');
+  next.department_id = null;
 
   return next;
 }
@@ -150,22 +149,6 @@ function confidentialityLabel(level) {
   return PROJECT_VISIBILITY_LABELS[level] || level || '—';
 }
 
-function accessLevelLabel(level) {
-  return level === 'admin' ? 'администратор' :
-    level === 'edit' ? 'редактирование' :
-    'просмотр';
-}
-
-function accessLevelRank(level) {
-  return level === 'admin' ? 3 :
-    level === 'edit' ? 2 :
-    1;
-}
-
-function strongerAccessLevel(a, b) {
-  return accessLevelRank(a) >= accessLevelRank(b) ? a : b;
-}
-
 function formatDate(value) {
   if (!value) return '';
 
@@ -175,8 +158,17 @@ function formatDate(value) {
   return date.toLocaleDateString('ru-RU');
 }
 
-function formatDateTime(value) {
-  return value ? formatDate(value) || String(value) : '—';
+function setProjectAuditFields(project = null) {
+  if (!createdByInput || !createdAtInput) return;
+
+  const currentUser = window.BADB_AUTH?.getCurrentUser?.();
+  const isCreate = mode === 'create' && !project?.created_by;
+  const createdById = project?.created_by || (isCreate ? currentUser?.userId : '');
+  const createdByName = project?.created_by_name || (isCreate ? window.BADB_AUTH?.getCurrentUserLabel?.() : '');
+
+  createdByInput.value = createdByName || '—';
+  createdByInput.dataset.userId = createdById ? String(createdById) : '';
+  createdAtInput.value = project?.created_at ? formatDate(project.created_at) : '';
 }
 
 function normalizeFilterText(value) {
@@ -218,7 +210,7 @@ function getProjectSearchText(project) {
 
 function matchesProjectFilters(project, filters = getProjectFilterState()) {
   if (filters.status && project.status !== filters.status) return false;
-  if (filters.visibility && project.confidentiality_level !== filters.visibility) return false;
+  if (filters.visibility && normalizeProjectVisibility(project.confidentiality_level) !== filters.visibility) return false;
   if (filters.department && String(project.department_id || '') !== filters.department) return false;
   if (filters.lead && String(project.lead_id || '') !== filters.lead) return false;
   if (filters.text && !getProjectSearchText(project).includes(filters.text)) return false;
@@ -272,7 +264,6 @@ function getProjectMetaText() {
 
   const status = statusLabel(form.elements['status'].value);
   const visibility = confidentialityLabel(form.elements['confidentiality_level'].value);
-  const department = getSelectedOptionText(departmentSelect) || currentProject?.department_name || '';
   const lead = getSelectedOptionText(leadSelect) || currentProject?.lead_name || '';
   const createdBy = currentProject?.created_by_name || '';
   const startDate = formatDate(form.elements['start_date'].value || currentProject?.start_date);
@@ -280,8 +271,7 @@ function getProjectMetaText() {
 
   return [
     status && `статус: ${status}`,
-    visibility && `доступ: ${visibility}`,
-    department && `отдел: ${department}`,
+    visibility && `тип проекта: ${visibility}`,
     lead && `руководитель: ${lead}`,
     startDate && `начало: ${startDate}`,
     dueDate && `план: ${dueDate}`,
@@ -333,14 +323,11 @@ function confirmDiscardUnsavedChanges() {
 }
 
 function updateDepartmentVisibility() {
-  const requiresDepartment = confidentialitySelect.value === 'department';
-  departmentBlock.hidden = !requiresDepartment;
-  departmentSelect.disabled = !requiresDepartment;
-  departmentSelect.required = requiresDepartment;
-
-  if (!requiresDepartment) {
-    departmentSelect.value = '';
-  }
+  if (!departmentBlock || !departmentSelect) return;
+  departmentBlock.hidden = true;
+  departmentSelect.disabled = true;
+  departmentSelect.required = false;
+  departmentSelect.value = '';
 }
 
 
@@ -443,40 +430,6 @@ async function fetchProjectAccess(projectId) {
   return res.json();
 }
 
-async function grantDepartmentAccess(projectId, departmentId, expiresAt) {
-  const payload = {
-    department_id: departmentId,
-    access_level: 'view',
-    expires_at: expiresAt || null
-  };
-
-  const res = await fetch(`/api/projects/${projectId}/access`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Ошибка добавления доступа');
-  }
-
-  return res.json();
-}
-
-async function revokeDepartmentAccess(projectId, departmentId) {
-  const res = await fetch(`/api/projects/${projectId}/access/department/${departmentId}`, {
-    method: 'DELETE'
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Ошибка удаления доступа');
-  }
-
-  return res.json();
-}
-
 async function grantUserAccess(projectId, userId, accessLevel) {
   const res = await fetch(`/api/projects/${projectId}/access`, {
     method: 'POST',
@@ -495,199 +448,132 @@ async function grantUserAccess(projectId, userId, accessLevel) {
   return res.json();
 }
 
-async function revokeUserAccess(projectId, userId) {
-  const res = await fetch(`/api/projects/${projectId}/access/user/${userId}`, {
-    method: 'DELETE'
+async function fetchProjectParticipants(projectId) {
+  const res = await fetch(`/api/projects/${projectId}/participants`);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка загрузки участников проекта');
+  }
+
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function addProjectParticipant(projectId, payload) {
+  const res = await fetch(`/api/projects/${projectId}/participants`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Ошибка удаления доступа пользователя');
+    throw new Error(err.error || 'Ошибка добавления участника проекта');
   }
 
   return res.json();
 }
 
-function resetProjectAccessSection() {
-  projectDepartmentAccessSection.hidden = true;
-  currentAccessGrants = [];
-  currentDepartmentAccess = [];
-  currentUserAccess = [];
-  projectDepartmentAccessBody.innerHTML = '';
-  projectUserAccessBody.innerHTML = '';
-  projectAccessDepartmentSelect.value = '';
-  projectAccessExpiresAt.value = '';
-  projectAccessUserSelect.value = '';
-  projectUserAccessLevel.value = 'view';
-}
-
-function populateAccessDepartmentSelect() {
-  const prevAccessDepartment = projectAccessDepartmentSelect.value;
-
-  projectAccessDepartmentSelect.replaceChildren(new Option('— выбрать отдел —', ''));
-  currentDepartments.forEach(department => {
-    projectAccessDepartmentSelect.add(new Option(department.name, department.department_id));
+async function updateProjectParticipant(projectId, participantId, payload) {
+  const res = await fetch(`/api/projects/${projectId}/participants/${participantId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
   });
 
-  projectAccessDepartmentSelect.value = prevAccessDepartment;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка обновления участника проекта');
+  }
+
+  return res.json();
 }
 
-function populateAccessUserSelect(visibleUserIds = new Set()) {
-  const prevAccessUser = projectAccessUserSelect.value;
+async function deleteProjectParticipant(projectId, participantId) {
+  const res = await fetch(`/api/projects/${projectId}/participants/${participantId}`, {
+    method: 'DELETE'
+  });
 
-  projectAccessUserSelect.replaceChildren(new Option('— выбрать пользователя —', ''));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка удаления участника проекта');
+  }
+}
+
+function resetProjectAccessSection() {
+  currentAccessGrants = [];
+  currentUserAccess = [];
+}
+
+function resetProjectParticipantsSection() {
+  if (!projectParticipantsSection) return;
+
+  projectParticipantsSection.hidden = true;
+  currentParticipants = [];
+  projectParticipantsBody.innerHTML = '';
+  projectParticipantUserSelect.value = '';
+  projectParticipantRoleInput.value = '';
+  if (projectParticipantAccessLevel) projectParticipantAccessLevel.value = 'view';
+}
+
+function populateParticipantUserSelect() {
+  if (!projectParticipantUserSelect) return;
+
+  const prevParticipantUser = projectParticipantUserSelect.value;
+  const participantUserIds = new Set(
+    currentParticipants.map(participant => Number(participant.user_id))
+  );
+
+  projectParticipantUserSelect.replaceChildren(new Option('— выбрать пользователя —', ''));
   currentUsers
-    .filter(user => user.active && !visibleUserIds.has(Number(user.user_id)))
+    .filter(user => user.active && !participantUserIds.has(Number(user.user_id)))
     .forEach(user => {
       const departmentText = user.department_name ? ` — ${user.department_name}` : '';
-      projectAccessUserSelect.add(new Option(`${user.name}${departmentText}`, user.user_id));
+      projectParticipantUserSelect.add(new Option(`${user.name}${departmentText}`, user.user_id));
     });
 
-  projectAccessUserSelect.value = prevAccessUser;
+  projectParticipantUserSelect.value = [...projectParticipantUserSelect.options]
+    .some(option => option.value === prevParticipantUser)
+    ? prevParticipantUser
+    : '';
 }
 
-function renderProjectDepartmentAccess() {
-  projectDepartmentAccessBody.innerHTML = '';
+function getParticipantAccessLevel(participant) {
+  const userId = Number(participant?.user_id);
+  const explicit = currentUserAccess.find(grant => Number(grant.grantee_id) === userId);
+  const isProjectLead = Number(currentProjectLeadId || form.elements['lead_id'].value) === userId;
+  const isProjectOwner = Number(currentProject?.created_by || createdByInput?.dataset.userId) === userId;
 
-  if (currentDepartmentAccess.length === 0) {
-    const row = document.createElement('tr');
-    const cell = document.createElement('td');
-    cell.colSpan = 5;
-    cell.className = 'empty-table-message';
-    cell.textContent = 'Отделы не добавлены';
-    row.appendChild(cell);
-    projectDepartmentAccessBody.appendChild(row);
-    return;
-  }
-
-  currentDepartmentAccess.forEach(grant => {
-    const row = document.createElement('tr');
-    if (grant.is_expired) row.className = 'access-expired';
-
-    const departmentCell = document.createElement('td');
-    departmentCell.textContent = grant.grantee_name || grant.department_name || `Отдел #${grant.grantee_id}`;
-
-    const levelCell = document.createElement('td');
-    levelCell.textContent = accessLevelLabel(grant.access_level);
-
-    const expiresCell = document.createElement('td');
-    expiresCell.textContent = grant.expires_at ? formatDateTime(grant.expires_at) : 'без срока';
-
-    const grantedByCell = document.createElement('td');
-    grantedByCell.textContent = grant.granted_by_name || '—';
-
-    const actionsCell = document.createElement('td');
-    actionsCell.className = 'actions';
-
-    const revokeBtn = document.createElement('button');
-    revokeBtn.type = 'button';
-    revokeBtn.textContent = 'Убрать';
-    revokeBtn.title = 'Убрать доступ отдела';
-    revokeBtn.addEventListener('click', async () => {
-      if (!confirm(`Убрать доступ отдела "${departmentCell.textContent}"?`)) return;
-
-      try {
-        await revokeDepartmentAccess(currentId, grant.grantee_id);
-        showStatus('Доступ отдела убран');
-        await loadProjectAccess();
-      } catch (err) {
-        showStatus(err.message, true);
-      }
-    });
-
-    actionsCell.appendChild(revokeBtn);
-    row.append(departmentCell, levelCell, expiresCell, grantedByCell, actionsCell);
-    projectDepartmentAccessBody.appendChild(row);
-  });
+  if (isProjectLead || isProjectOwner) return 'admin';
+  return explicit?.access_level || 'view';
 }
 
-function getDepartmentName(departmentId) {
-  const department = currentDepartments.find(item => Number(item.department_id) === Number(departmentId));
-  return department?.name || '';
-}
-
-function getInheritedProjectAccessByUser() {
-  const inherited = new Map();
-  const baseDepartmentId = form.elements['confidentiality_level'].value === 'department'
-    ? Number(form.elements['department_id'].value)
-    : null;
-
-  function addInheritedUsers(departmentId, level, sourceLabel) {
-    if (!Number.isInteger(Number(departmentId))) return;
-
-    currentUsers
-      .filter(user => user.active && Number(user.department_id) === Number(departmentId))
-      .forEach(user => {
-        const userId = Number(user.user_id);
-        const existing = inherited.get(userId);
-        inherited.set(userId, {
-          level: existing ? strongerAccessLevel(existing.level, level) : level,
-          sources: existing ? [...existing.sources, sourceLabel] : [sourceLabel]
-        });
-      });
-  }
-
-  const leadUserId = Number(currentProjectLeadId || form.elements['lead_id'].value);
-  if (Number.isInteger(leadUserId)) {
-    const leadUser = currentUsers.find(user => Number(user.user_id) === leadUserId);
-    if (leadUser) {
-      inherited.set(leadUserId, {
-        level: 'admin',
-        sources: ['руководитель проекта (администратор проекта)']
-      });
-    }
-  }
-
-  if (baseDepartmentId) {
-    addInheritedUsers(baseDepartmentId, 'view', 'отдел проекта (просмотр)');
-  }
-
-  currentDepartmentAccess
-    .filter(grant => !grant.is_expired)
-    .forEach(grant => {
-      const departmentName = grant.grantee_name || grant.department_name || getDepartmentName(grant.grantee_id);
-      const inheritedLevel = grant.access_level || 'view';
-      addInheritedUsers(
-        grant.grantee_id,
-        inheritedLevel,
-        `отдел: ${departmentName || `#${grant.grantee_id}`} (${accessLevelLabel(inheritedLevel)})`
-      );
-    });
-
-  return inherited;
-}
-
-function buildAccessLevelSelect(userRow) {
+function buildParticipantAccessLevelSelect(participant) {
+  const userId = Number(participant?.user_id);
   const select = document.createElement('select');
-  select.name = 'access_level';
+  select.name = 'participant_access_level';
 
-  if (userRow.isProjectLead) {
+  const isProjectLead = Number(currentProjectLeadId || form.elements['lead_id'].value) === userId;
+  const isProjectOwner = Number(currentProject?.created_by || createdByInput?.dataset.userId) === userId;
+
+  if (isProjectLead || isProjectOwner) {
     select.add(new Option('администратор проекта', 'admin'));
     select.value = 'admin';
     select.disabled = true;
-    select.title = 'Доступ задан ролью руководителя проекта';
+    select.title = 'Доступ задан руководителем проекта и администраторами';
     return select;
-  }
-
-  if (userRow.inherited) {
-    select.add(new Option('по отделу', 'department'));
   }
 
   select.add(new Option('просмотр', 'view'));
   select.add(new Option('редактирование', 'edit'));
   select.add(new Option('администратор проекта', 'admin'));
-  select.value = userRow.personalLevel || (userRow.inherited ? 'department' : userRow.effectiveLevel);
+  select.value = getParticipantAccessLevel(participant);
 
   select.addEventListener('change', async () => {
     try {
-      if (select.value === 'department') {
-        await revokeUserAccess(currentId, userRow.user.user_id);
-        showStatus('Личный доступ убран, действует доступ отдела');
-      } else {
-        await grantUserAccess(currentId, userRow.user.user_id, select.value);
-        showStatus('Доступ пользователя обновлён');
-      }
-
+      await grantUserAccess(currentId, userId, select.value);
+      showStatus('Доступ участника обновлён');
       await loadProjectAccess();
     } catch (err) {
       showStatus(err.message, true);
@@ -698,107 +584,108 @@ function buildAccessLevelSelect(userRow) {
   return select;
 }
 
-function renderProjectUserAccess() {
-  projectUserAccessBody.innerHTML = '';
+function renderProjectParticipants() {
+  if (!projectParticipantsBody) return;
 
-  const inheritedByUser = getInheritedProjectAccessByUser();
-  const personalByUser = new Map(
-    currentUserAccess.map(grant => [Number(grant.grantee_id), grant])
-  );
-  const visibleUserIds = new Set([...inheritedByUser.keys(), ...personalByUser.keys()]);
-  const userRows = [...visibleUserIds]
-    .map(userId => {
-      const user = currentUsers.find(item => Number(item.user_id) === userId);
-      if (!user) return null;
+  projectParticipantsBody.innerHTML = '';
 
-      const inherited = inheritedByUser.get(userId);
-      const personal = personalByUser.get(userId);
-      const inheritedLevel = inherited?.level || null;
-      const personalLevel = personal?.access_level || null;
-      const isProjectLead = Number(currentProjectLeadId || form.elements['lead_id'].value) === userId;
-      const effectiveLevel = isProjectLead ? 'admin' : (personalLevel || inheritedLevel || 'view');
-
-      return {
-        user,
-        inherited,
-        personal,
-        inheritedLevel,
-        personalLevel,
-        effectiveLevel,
-        isProjectLead
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => {
-      const departmentCompare = (a.user.department_name || '').localeCompare(b.user.department_name || '', 'ru');
-      if (departmentCompare !== 0) return departmentCompare;
-      return (a.user.name || '').localeCompare(b.user.name || '', 'ru');
-    });
-
-  if (userRows.length === 0) {
+  if (currentParticipants.length === 0) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
     cell.colSpan = 5;
     cell.className = 'empty-table-message';
-    cell.textContent = 'Пользователи не добавлены';
+    cell.textContent = 'Участники не добавлены';
     row.appendChild(cell);
-    projectUserAccessBody.appendChild(row);
+    projectParticipantsBody.appendChild(row);
+    populateParticipantUserSelect();
+    return;
   }
 
-  userRows.forEach(userRow => {
+  currentParticipants.forEach((participant, index) => {
     const row = document.createElement('tr');
 
+    const orderCell = document.createElement('td');
+    orderCell.className = 'project-participant-order';
+    orderCell.textContent = String(index + 1);
+
     const userCell = document.createElement('td');
-    userCell.textContent = userRow.user.name || `Пользователь #${userRow.user.user_id}`;
+    userCell.textContent = participant.user_name || `Пользователь #${participant.user_id}`;
 
-    const departmentCell = document.createElement('td');
-    departmentCell.textContent = userRow.user.department_name || '—';
+    const roleCell = document.createElement('td');
+    const roleInput = document.createElement('input');
+    roleInput.type = 'text';
+    roleInput.className = 'project-participant-role-input';
+    roleInput.value = participant.role_in_team || '';
+    roleInput.addEventListener('change', async () => {
+      const nextRole = roleInput.value.trim();
+      if (nextRole === (participant.role_in_team || '')) return;
 
-    const sourceCell = document.createElement('td');
-    if (userRow.isProjectLead) {
-      sourceCell.textContent = 'руководитель проекта';
-    } else {
-      const sourceParts = [];
-      if (userRow.inherited) sourceParts.push(...userRow.inherited.sources);
-      if (userRow.personal) sourceParts.push('личный доступ');
-      sourceCell.textContent = sourceParts.join(', ') || 'личный доступ';
-    }
+      try {
+        await updateProjectParticipant(currentId, participant.participant_id, {
+          role_in_team: nextRole
+        });
+        showStatus('Роль участника обновлена');
+        await loadProjectParticipants();
+      } catch (err) {
+        showStatus(err.message, true);
+        roleInput.value = participant.role_in_team || '';
+      }
+    });
+    roleInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        roleInput.blur();
+      }
+    });
+    roleCell.appendChild(roleInput);
 
-    const levelCell = document.createElement('td');
-    levelCell.appendChild(buildAccessLevelSelect(userRow));
+    const accessCell = document.createElement('td');
+    accessCell.appendChild(buildParticipantAccessLevelSelect(participant));
 
     const actionsCell = document.createElement('td');
-    actionsCell.className = 'actions';
+    actionsCell.className = 'actions project-participant-actions';
 
-    if (userRow.personal && !userRow.isProjectLead) {
-      const revokeBtn = document.createElement('button');
-      revokeBtn.type = 'button';
-      revokeBtn.textContent = userRow.inherited ? 'Убрать личный' : 'Убрать';
-      revokeBtn.title = userRow.inherited ? 'Убрать личный доступ' : 'Убрать доступ пользователя';
-      revokeBtn.addEventListener('click', async () => {
-        const message = userRow.inherited
-          ? `Убрать личный доступ пользователя "${userCell.textContent}"? Доступ отдела останется.`
-          : `Убрать доступ пользователя "${userCell.textContent}"?`;
-        if (!confirm(message)) return;
+    const isProjectLead = Number(currentProjectLeadId || form.elements['lead_id'].value) === Number(participant.user_id);
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.textContent = 'Убрать';
+    deleteBtn.disabled = isProjectLead;
+    deleteBtn.title = isProjectLead
+      ? 'Руководителя нельзя убрать из команды; сначала измените руководителя проекта'
+      : 'Убрать участника проекта';
+    deleteBtn.addEventListener('click', async () => {
+      if (deleteBtn.disabled) return;
+      if (!confirm(`Убрать участника "${userCell.textContent}" из проекта?`)) return;
 
-        try {
-          await revokeUserAccess(currentId, userRow.user.user_id);
-          showStatus(userRow.inherited ? 'Личный доступ убран' : 'Доступ пользователя убран');
-          await loadProjectAccess();
-        } catch (err) {
-          showStatus(err.message, true);
-        }
-      });
-      actionsCell.appendChild(revokeBtn);
-    } else {
-      actionsCell.textContent = '—';
-    }
+      try {
+        await deleteProjectParticipant(currentId, participant.participant_id);
+        showStatus('Участник проекта убран');
+        await loadProjectParticipants();
+        await loadProjectAccess();
+      } catch (err) {
+        showStatus(err.message, true);
+      }
+    });
 
-    row.append(userCell, departmentCell, sourceCell, levelCell, actionsCell);
-    projectUserAccessBody.appendChild(row);
+    actionsCell.append(deleteBtn);
+    row.append(orderCell, userCell, roleCell, accessCell, actionsCell);
+    projectParticipantsBody.appendChild(row);
   });
 
-  populateAccessUserSelect(visibleUserIds);
+  populateParticipantUserSelect();
+}
+
+async function loadProjectParticipants() {
+  if (!currentId) {
+    resetProjectParticipantsSection();
+    return;
+  }
+
+  projectParticipantsSection.hidden = false;
+  if (currentUsers.length === 0) await loadUsers();
+
+  currentParticipants = await fetchProjectParticipants(currentId);
+  renderProjectParticipants();
 }
 
 async function loadProjectAccess() {
@@ -807,15 +694,13 @@ async function loadProjectAccess() {
     return;
   }
 
-  projectDepartmentAccessSection.hidden = false;
   if (currentUsers.length === 0) await loadUsers();
-  if (currentDepartments.length === 0) await loadDepartments();
 
   currentAccessGrants = await fetchProjectAccess(currentId);
-  currentDepartmentAccess = currentAccessGrants.filter(grant => grant.grantee_type === 'department');
-  currentUserAccess = currentAccessGrants.filter(grant => grant.grantee_type === 'user');
-  renderProjectDepartmentAccess();
-  renderProjectUserAccess();
+  currentUserAccess = currentAccessGrants.filter(grant => (
+    grant.grantee_type === 'user' && !grant.is_expired
+  ));
+  renderProjectParticipants();
 }
 
 
@@ -829,15 +714,10 @@ function populateProjectForm(proj) {
   form.elements['due_date'].value = proj.due_date ? proj.due_date.slice(0, 10) : '';
   form.elements['description'].value = proj.description || '';
   form.elements['status'].value = proj.status || 'active';
-  form.elements['confidentiality_level'].value = proj.confidentiality_level || 'public';
+  form.elements['confidentiality_level'].value = normalizeProjectVisibility(proj.confidentiality_level || 'public');
   form.elements['department_id'].value = proj.department_id || '';
   updateDepartmentVisibility();
-
-  if (proj.created_by) {
-    createdBySelect.value = proj.created_by;
-  } else {
-    createdBySelect.value = '';
-  }
+  setProjectAuditFields(proj);
 }
 
 function getProjectSnapshotFromForm() {
@@ -849,12 +729,13 @@ function getProjectSnapshotFromForm() {
     due_date: form.elements['due_date'].value || null,
     description: form.elements['description'].value || '',
     status: form.elements['status'].value || 'active',
-    confidentiality_level: form.elements['confidentiality_level'].value || 'public',
+    confidentiality_level: normalizeProjectVisibility(form.elements['confidentiality_level'].value || 'public'),
     department_id: form.elements['department_id'].value || null,
     department_name: getSelectedOptionText(departmentSelect),
     lead_name: getSelectedOptionText(leadSelect),
-    created_by: createdBySelect.value || null,
-    created_by_name: currentProject?.created_by_name || ''
+    created_by: currentProject?.created_by || createdByInput?.dataset.userId || null,
+    created_by_name: createdByInput?.value || currentProject?.created_by_name || '',
+    created_at: currentProject?.created_at || null
   };
 }
 
@@ -895,9 +776,6 @@ function renderProjects(projects, options = {}) {
     const meta = document.createElement('div');
     meta.className = 'record-list-meta project-list-meta';
     const accessText = confidentialityLabel(proj.confidentiality_level);
-    const departmentText = proj.confidentiality_level === 'department' && proj.department_name
-      ? ` · ${proj.department_name}`
-      : '';
     const leadText = proj.lead_name ? `Руководитель: ${proj.lead_name}` : '';
     const dateParts = [
       formatDate(proj.start_date) ? `начало: ${formatDate(proj.start_date)}` : '',
@@ -905,7 +783,7 @@ function renderProjects(projects, options = {}) {
     ].filter(Boolean).join(' · ');
     const createdText = proj.created_by_name ? `создал: ${proj.created_by_name}` : '';
     meta.textContent = [
-      `доступ: ${accessText}${departmentText}`,
+      `тип проекта: ${accessText}`,
       leadText,
       dateParts,
       createdText
@@ -976,6 +854,7 @@ async function openProjectRecord(proj) {
   showForm();
 
   try {
+    await loadProjectParticipants();
     await loadProjectAccess();
   } catch (err) {
     showStatus(err.message, true, { clearAfterMs: 9000 });
@@ -1003,10 +882,11 @@ function duplicateProject(proj) {
     created_by: null
   });
   resetProjectAccessSection();
+  resetProjectParticipantsSection();
 
-  createdBySelect.value = '';
   leadSelect.value = '';
   currentProjectLeadId = null;
+  setProjectAuditFields(null);
 
   showForm();
   renderProjectStickyHeader();
@@ -1086,7 +966,6 @@ function populateProjectDepartmentFilter() {
 
 // Refresh user options without losing current selections
 async function loadUsers() {
-  const prevCreated = createdBySelect.value;
   const prevLead = leadSelect.value;
   
   const res = await fetch('/api/users');
@@ -1098,24 +977,16 @@ async function loadUsers() {
 
   currentUsers = await res.json();
   
-  createdBySelect.replaceChildren(new Option(
-    window.BADB_AUTH?.getAuditUserPlaceholder?.() || '— автоматически —',
-    ''
-  ));
   leadSelect.innerHTML = '<option value="">— выбрать пользователя —</option>';
-  
-  currentUsers.forEach(u => {
-    createdBySelect.add(new Option(u.name, u.user_id));
-  });
 
   currentUsers.filter(u => u.active).forEach(u => {
     leadSelect.add(new Option(u.name, u.user_id));
   });
   
-  createdBySelect.value = prevCreated;
   leadSelect.value = prevLead;
   populateProjectLeadFilter();
-  populateAccessUserSelect();
+  populateParticipantUserSelect();
+  setProjectAuditFields(currentProject);
   if (allProjects.length) renderFilteredProjects();
   renderProjectStickyHeader();
 }
@@ -1139,7 +1010,6 @@ async function loadDepartments() {
 
   departmentSelect.value = prevDepartment;
   populateProjectDepartmentFilter();
-  populateAccessDepartmentSelect();
   updateDepartmentVisibility();
   if (allProjects.length) renderFilteredProjects();
   renderProjectStickyHeader();
@@ -1150,28 +1020,17 @@ leadSelect.addEventListener('focus', () => {
   loadUsers().catch(err => showStatus(err.message, true, { target: 'page' }));
 });
 leadSelect.addEventListener('change', () => {
-  if (!projectDepartmentAccessSection.hidden) {
-    renderProjectUserAccess();
-  }
+  renderProjectParticipants();
   renderProjectStickyHeader();
-});
-createdBySelect.addEventListener('focus', () => {
-  loadUsers().catch(err => showStatus(err.message, true, { target: 'page' }));
 });
 departmentSelect.addEventListener('focus', () => {
   loadDepartments().catch(err => showStatus(err.message, true, { target: 'page' }));
 });
 confidentialitySelect.addEventListener('change', () => {
   updateDepartmentVisibility();
-  if (!projectDepartmentAccessSection.hidden) {
-    renderProjectUserAccess();
-  }
   renderProjectStickyHeader();
 });
 departmentSelect.addEventListener('change', () => {
-  if (!projectDepartmentAccessSection.hidden) {
-    renderProjectUserAccess();
-  }
   renderProjectStickyHeader();
 });
 
@@ -1200,6 +1059,8 @@ addInput.addEventListener('keydown', (e) => {
   form.elements['confidentiality_level'].value = 'public';
   updateDepartmentVisibility();
   resetProjectAccessSection();
+  resetProjectParticipantsSection();
+  setProjectAuditFields(null);
   
   showForm();
   
@@ -1213,16 +1074,10 @@ function validateRequiredFields() {
   const name = getProjectNameValue();
 
   nameInput.classList.remove('required-missing');
-  departmentSelect.classList.remove('required-missing');
 
   if (!name) {
     missing.push('Название');
     nameInput.classList.add('required-missing');
-  }
-
-  if (form.elements['confidentiality_level'].value === 'department' && !form.elements['department_id'].value) {
-    missing.push('Отдел');
-    departmentSelect.classList.add('required-missing');
   }
 
   if (missing.length) {
@@ -1280,6 +1135,7 @@ saveBtn.addEventListener('click', async () => {
       project_id: currentId
     };
     populateProjectForm(currentProject);
+    await loadProjectParticipants();
     await loadProjectAccess();
     markFormPristine();
 
@@ -1335,45 +1191,43 @@ if (deleteProjectBtn) {
   deleteProjectBtn.addEventListener('click', deleteCurrentProject);
 }
 
-grantDepartmentAccessBtn.addEventListener('click', async () => {
+async function handleAddProjectParticipant() {
   if (!currentId) return;
 
-  const departmentId = projectAccessDepartmentSelect.value;
-  if (!departmentId) {
-    showStatus('Выберите отдел', true);
-    return;
-  }
-
-  try {
-    await grantDepartmentAccess(currentId, Number(departmentId), projectAccessExpiresAt.value);
-    projectAccessDepartmentSelect.value = '';
-    projectAccessExpiresAt.value = '';
-    showStatus('Доступ отдела добавлен');
-    await loadProjectAccess();
-  } catch (err) {
-    showStatus(err.message, true);
-  }
-});
-
-grantUserAccessBtn.addEventListener('click', async () => {
-  if (!currentId) return;
-
-  const userId = projectAccessUserSelect.value;
+  const userId = projectParticipantUserSelect.value;
   if (!userId) {
-    showStatus('Выберите пользователя', true);
+    showStatus('Выберите участника', true);
     return;
   }
 
   try {
-    await grantUserAccess(currentId, Number(userId), projectUserAccessLevel.value);
-    projectAccessUserSelect.value = '';
-    projectUserAccessLevel.value = 'view';
-    showStatus('Доступ пользователя добавлен');
+    await addProjectParticipant(currentId, {
+      user_id: Number(userId),
+      role_in_team: projectParticipantRoleInput.value.trim()
+    });
+    await grantUserAccess(currentId, Number(userId), projectParticipantAccessLevel?.value || 'view');
+    projectParticipantUserSelect.value = '';
+    projectParticipantRoleInput.value = '';
+    if (projectParticipantAccessLevel) projectParticipantAccessLevel.value = 'view';
+    showStatus('Участник проекта добавлен');
+    await loadProjectParticipants();
     await loadProjectAccess();
   } catch (err) {
     showStatus(err.message, true);
   }
-});
+}
+
+if (addProjectParticipantBtn) {
+  addProjectParticipantBtn.addEventListener('click', handleAddProjectParticipant);
+}
+
+if (projectParticipantRoleInput) {
+  projectParticipantRoleInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    handleAddProjectParticipant();
+  });
+}
 
 /* ------ name: editable ------ */
 

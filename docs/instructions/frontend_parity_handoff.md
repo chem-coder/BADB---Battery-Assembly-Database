@@ -159,23 +159,21 @@ Expected Vue behavior:
 
 Status: pending
 Priority: normal
-Vue evidence: `client-web/src/pages/reference/ProjectsPage.vue` still maps
-project access to stale labels such as `Открытый`, `Отдельский`, and
-`Конфиденциальный`.
+Vue evidence: `client-web/src/pages/reference/ProjectsPage.vue` may still map
+project access to stale labels such as `Отдельский`, `Конфиденциальный`, or
+`публичный`.
 Expected Vue behavior:
 
 - field/filter label: `Доступ`;
-- all-filter option: `Все уровни доступа`;
-- `public`: `для всех`;
-- `department`: `для отдела`;
-- `confidential`: `выборочный доступ`;
-- list metadata should read like `доступ: для всех`, `доступ: для отдела`, or
-  `доступ: выборочный доступ`.
+- all-filter option: `Все типы доступа`;
+- `public`: `открытый`;
+- `confidential`: `секретный`;
+- list metadata should read like `доступ: открытый` or `доступ: секретный`.
 
-Do not show stale project access labels such as `Открытый`,
-`Конфиденциальный`, `Видимость`, or `публичный` where vanilla now uses the
-approved Russian labels. Internal API values may remain `public`, `department`,
-and `confidential`.
+Do not show stale project access labels such as `Конфиденциальный`,
+`Видимость`, or `публичный` where vanilla now uses the approved Russian labels.
+Internal API values may remain `public` and `confidential`; legacy `department`
+data is treated as secret.
 
 ### Recipes And Users Page Pattern
 

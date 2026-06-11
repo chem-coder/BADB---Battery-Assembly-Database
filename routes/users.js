@@ -94,6 +94,81 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// READ projects where a user is an actual project participant.
+// Admins may inspect anyone; ordinary users may inspect only themselves.
+router.get('/:id/projects', auth, async (req, res) => {
+  const userId = Number(req.params.id);
+
+  if (!Number.isInteger(userId)) {
+    return res.status(400).json({ error: 'Некорректный user_id' });
+  }
+
+  const isAdmin = req.user.role === 'admin';
+  const isSelf = Number(req.user.userId) === userId;
+
+  if (!isAdmin && !isSelf) {
+    return res.status(403).json({ error: 'Недостаточно прав для просмотра проектов пользователя' });
+  }
+
+  try {
+    const result = await pool.query(`
+      SELECT
+        pp.participant_id,
+        pp.project_id,
+        pp.display_order,
+        pp.role_in_team,
+        pp.notes,
+        p.name AS project_name,
+        p.status,
+        p.start_date,
+        p.due_date,
+        p.lead_id,
+        lead.name AS lead_name,
+        CASE
+          WHEN p.lead_id = $1 THEN 'admin'
+          ELSE COALESCE((
+            SELECT upa.access_level
+            FROM user_project_access upa
+            WHERE upa.user_id = $1
+              AND upa.project_id = p.project_id
+              AND (upa.expires_at IS NULL OR upa.expires_at > now())
+            ORDER BY
+              CASE upa.access_level
+                WHEN 'admin' THEN 3
+                WHEN 'edit' THEN 2
+                WHEN 'view' THEN 1
+                ELSE 0
+              END DESC,
+              upa.granted_at DESC NULLS LAST
+            LIMIT 1
+          ), 'view')
+        END AS access_level
+      FROM project_participants pp
+      JOIN projects p
+        ON p.project_id = pp.project_id
+      LEFT JOIN users lead
+        ON lead.user_id = p.lead_id
+      WHERE pp.user_id = $1
+      ORDER BY
+        CASE p.status
+          WHEN 'active' THEN 0
+          WHEN 'paused' THEN 1
+          WHEN 'completed' THEN 2
+          WHEN 'archived' THEN 3
+          ELSE 4
+        END,
+        p.name,
+        pp.display_order,
+        pp.participant_id
+    `, [userId]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки проектов пользователя' });
+  }
+});
+
 // UPDATE — admin can edit anyone; non-admin users can edit only themselves.
 router.put('/:id', auth, async (req, res) => {
   const { id } = req.params;
@@ -234,6 +309,19 @@ router.delete('/:id', auth, async (req, res) => {
           FROM projects
           WHERE lead_id = $1 OR created_by = $1 OR updated_by = $1
           ORDER BY project_id
+          LIMIT 25
+        `,
+        params: [id]
+      },
+      {
+        key: 'project_participants',
+        label: 'проекты, где пользователь указан участником',
+        query: `
+          SELECT p.project_id AS id, p.name
+          FROM project_participants pp
+          JOIN projects p ON p.project_id = pp.project_id
+          WHERE pp.user_id = $1
+          ORDER BY p.project_id
           LIMIT 25
         `,
         params: [id]

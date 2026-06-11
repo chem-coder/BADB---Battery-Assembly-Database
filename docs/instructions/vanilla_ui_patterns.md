@@ -127,34 +127,34 @@ Open print/report pages with the shared auth helper:
 window.BADB_AUTH.openAuthenticatedWindow(reportUrl);
 ```
 
-Do not use raw `window.open(reportUrl, '_blank', 'noopener')` for authenticated
-vanilla report pages. The app stores the active token in `sessionStorage` so
-logout can fully clear browser-held session state. New windows opened with
-`noopener` do not receive that session token and will ask for a fresh login.
+The app stores the active session token in `localStorage`, which is shared
+across all normal tabs/windows of one browser profile (see
+`docs/rules/auth_policy.md`). The helper opens a same-origin window that inherits
+that shared session automatically, so report windows stay authenticated without
+putting tokens in URLs and without a fresh login. Print/report pages read the
+token from `localStorage` first (falling back to `sessionStorage`).
 
-The helper opens a new same-origin window, copies the current session token into
-that window's `sessionStorage`, then detaches the opener before navigating to
-the report URL. This keeps report windows authenticated without putting tokens
-in URLs and without returning to persistent `localStorage`.
+Do not have the helper clear the opened window's `localStorage`: it is the
+shared session store, so clearing it would log every tab in the profile out.
 
 ## Access Terminology
 
 For project access/confidentiality UI, do not use `Видимость` as the visible
 field/filter label and do not use `публичный` as the visible value.
 
-The database/API value names may remain `public`, `department`, and
-`confidential`. These are internal values, not Russian UI labels.
+The database/API value names may remain `public` and `confidential`. Legacy
+`department` data is treated as secret. These are internal values, not Russian
+UI labels.
 
 Use this visible vocabulary:
 
 - field/filter label: `Доступ`
-- all-filter option: `Все уровни доступа`
-- `public`: `для всех`
-- `department`: `для отдела`
-- `confidential`: `выборочный доступ`
+- all-filter option: `Все типы доступа`
+- `public`: `открытый`
+- `confidential`: `секретный`
 
-For list metadata, prefer phrases such as `доступ: для всех`,
-`доступ: для отдела`, or `доступ: выборочный доступ`.
+For list metadata, prefer phrases such as `доступ: открытый` or
+`доступ: секретный`.
 
 ## Filter Layout
 
@@ -214,6 +214,35 @@ the `Текущий пользователь` button wrap under the role select 
 global auth enhancer can insert that button directly after select elements, so
 Users page CSS must keep the role select and injected button on the same filter
 row.
+
+## Date-Only Fields
+
+Date-only fields (such as a tape/electrode-batch/battery creation date,
+`item_created_at`) must be treated as date-only values end to end, never as
+timezone-sensitive timestamps:
+
+- keep the value as a normalized `YYYY-MM-DD` string in form state and in the
+  request body; do not convert it to an ISO timestamp;
+- never round-trip a date-only string through `new Date(value)` and then read
+  back local `getFullYear/getMonth/getDate`. Parsing `YYYY-MM-DD` yields UTC
+  midnight, so the local getters can shift it a day on some devices/timezones
+  (this caused "today" to be rejected as a future date on a Windows lab PC while
+  the same date saved from a Mac). Take the leading `YYYY-MM-DD` portion verbatim
+  instead;
+- build "today" from local calendar components directly
+  (`getFullYear()/getMonth()+1/getDate()`), the same way the backend computes its
+  `getTodayDateString()`;
+- future-date blocking stays in the UI (the date input `max` is local today), but
+  the backend remains authoritative: it accepts only `^\d{4}-\d{2}-\d{2}$` and
+  compares that string to server-local today as `YYYY-MM-DD`. Do not validate
+  date-only fields with `new Date(input) > new Date()`.
+
+This rule applies to every vanilla page with a date-only creation field. The tape
+page (`public/js/1-tapes.js`, `formatDateInputValue` / `getTodayDateInputValue`)
+is the reference implementation, and `public/js/2-electrodes.js` and
+`public/js/3-batteries.js` use the same corrected helpers. The backend rule lives
+in the `normalizeOptional*Date` helpers in `services/tapeCatalogService.js`,
+`services/electrodeCutBatchService.js`, and `services/batteryCatalogService.js`.
 
 ## Verification
 

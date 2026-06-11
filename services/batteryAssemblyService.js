@@ -214,7 +214,7 @@ async function fetchBatteryAssembly(queryable, batteryId) {
       'electrode_sources',
       (
         SELECT COALESCE(
-          jsonb_agg(to_jsonb(es)),
+          jsonb_agg(to_jsonb(es) ORDER BY es.role, es.is_primary DESC, es.sort_order, es.battery_electrode_source_id),
           '[]'::jsonb
         )
         FROM battery_electrode_sources es
@@ -391,16 +391,19 @@ async function fetchBatteryReport(queryable, batteryId) {
       'electrode_sources',
       (
         SELECT COALESCE(
-          jsonb_agg(to_jsonb(esx) ORDER BY esx.role),
+          jsonb_agg(to_jsonb(esx) ORDER BY esx.role, esx.is_primary DESC, esx.sort_order, esx.battery_electrode_source_id),
           '[]'::jsonb
         )
         FROM (
           SELECT
+            es.battery_electrode_source_id,
             es.battery_id,
             es.role,
             es.tape_id,
             es.cut_batch_id,
             es.source_notes,
+            es.sort_order,
+            es.is_primary,
             t.name AS tape_name,
             p.name AS tape_project_name,
             tr.name AS tape_recipe_name,

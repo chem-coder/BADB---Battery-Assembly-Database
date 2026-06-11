@@ -162,12 +162,22 @@ async function listTapesForElectrodes(pool) {
     ) coating_step ON TRUE
 
     WHERE t.availability_status IS DISTINCT FROM 'depleted'
+       OR EXISTS (
+         SELECT 1
+         FROM electrode_cut_batches cb
+         WHERE cb.tape_id = t.tape_id
+       )
 
-    ORDER BY coating_step.started_at DESC NULLS LAST, t.tape_id DESC;
+    ORDER BY
+      CASE WHEN t.availability_status IS DISTINCT FROM 'depleted' THEN 0 ELSE 1 END,
+      coating_step.started_at DESC NULLS LAST,
+      t.tape_id DESC;
   `);
 
   return attachTapeProjects(pool, result.rows);
 }
+
+const { ELECTRODE_CUT_BATCH_ORDER_BY_SQL } = require('../utils/electrodeCutBatchSort');
 
 async function listElectrodeCutBatchesByTape(pool, tapeId) {
   const result = await pool.query(
@@ -206,7 +216,7 @@ async function listElectrodeCutBatchesByTape(pool, tapeId) {
     ) ec
       ON ec.cut_batch_id = b.cut_batch_id
     WHERE b.tape_id = $1
-    ORDER BY b.item_created_at DESC, b.created_at DESC, b.cut_batch_id DESC
+    ORDER BY ${ELECTRODE_CUT_BATCH_ORDER_BY_SQL}
     `,
     [tapeId]
   );

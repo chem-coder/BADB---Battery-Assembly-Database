@@ -7,7 +7,7 @@ Dima contributes via feature branches → Pull Requests into Dalia's main.
 
 ## Stack
 
-- **Server:** Node.js + Express 5 (modular), PostgreSQL 16 (`badb_app_v1`, 65 public tables)
+- **Server:** Node.js + Express 5 (modular), PostgreSQL 16 (`badb_app_v1`, 66 public tables)
 - **Client (VBA):** dormant legacy Excel VBA material in `client/` (DatabaseUI.xlam context, not the current v1 operating surface)
 - **Client (Web):** current vanilla v1 UI in `public/`; Vue 3 + PrimeVue 4 + Vite in `client-web/` for assigned parity/SPA work
 - **Contracts:** JSON Schema draft-07 (contracts/)

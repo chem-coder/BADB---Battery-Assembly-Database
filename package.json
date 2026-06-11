@@ -15,7 +15,9 @@
     "backup:verify": "node scripts/backup.js --verify latest",
     "restore": "node scripts/backup.js --restore latest",
     "contract:vanilla": "node scripts/check_vanilla_api_contract.js",
-    "smoke:vanilla": "node scripts/smoke_vanilla_api.js"
+    "smoke:vanilla": "node scripts/smoke_vanilla_api.js",
+    "e2e:login": "node scripts/e2e_login.js",
+    "e2e:tape-duplicate": "node scripts/e2e_tape_duplicate.js"
   },
   "keywords": [],
   "author": "",

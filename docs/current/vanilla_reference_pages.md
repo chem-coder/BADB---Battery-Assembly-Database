@@ -1,9 +1,9 @@
 # Vanilla Reference Pages
 
 Created: 2026-05-09
-Edited: 2026-05-09
+Edited: 2026-06-10
 Status: current
-Verified against code: 2026-05-09
+Verified against code: 2026-06-10
 
 Source paths:
 
@@ -76,12 +76,13 @@ print icon is `🖨️`; the current common duplicate icon is `📑`.
 | Page | Row Opens | Sticky Header | Filters | Print | Duplicate | Delete | Delete Check | Files |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Tapes | yes | yes | text, status, project, role, sidedness | yes | list client starter | opened record, admin/lead, typed phrase | yes | no |
-| Projects | yes | yes | text, status, access, department, lead | yes | list client starter | opened record, backend dependency errors | no standalone route | no |
+| Projects | yes | yes | text, status, access, lead | yes | list client starter | opened record, backend dependency errors | no standalone route | no |
 | Recipes | yes | yes | text, role | yes | list client copy; backend route also exists | opened record, typed phrase | yes | no |
 | Users | yes | yes | text, role, department, active | no | no | opened record when allowed | no standalone route | no |
 | Departments | yes | yes | text, head | no | no | no | no | no |
 | Electrolytes | yes | yes | text, status, type | yes | list action | opened record, typed phrase | yes | DB-backed |
 | Separators | yes | yes | text, status, structure | yes | list action | opened record, typed phrase | yes | DB-backed |
+| Batteries | yes | yes | text, status, form factor | yes | list client starter | opened record, guided flow | yes | electrochem files |
 
 Materials and older/smaller reference pages may still use older page-specific
 UI patterns. Do not infer this matrix for pages not listed here without checking
@@ -107,13 +108,21 @@ Duplicate is implemented only where the page exposes it.
 
 Current behavior:
 
-- Tapes duplicate is a client-side unsaved starter copy; it copies name, notes,
-  and project links only.
+- Tapes duplicate is a client-side unsaved create-mode draft. It restores useful
+  source tape setup/workflow fields into the draft, but does not create a record
+  or copy downstream/depleted/dry-box status until the user explicitly saves the
+  appropriate sections.
 - Projects duplicate is a client-side unsaved copy without access grants.
 - Recipes duplicate is a client-side unsaved copy of the recipe form and lines;
   `POST /api/recipes/:id/duplicate` also exists but is not used by the current
   vanilla list button.
 - Electrolytes and Separators have list-level duplicate actions.
+- Batteries duplicate is a client-side unsaved create-mode draft. It restores
+  useful source setup fields (projects, form-factor config, electrode sources,
+  separator, electrolyte) but does not create a record or copy stack, QC,
+  electrochemistry, or identity/audit metadata until the user explicitly saves.
+  Copied separator/electrolyte/volume auto-save right after Create when present;
+  stack still requires a separate explicit save.
 - Users and Departments have no duplicate action.
 
 Do not add duplicate buttons to pages where they are not implemented.
@@ -146,3 +155,11 @@ Batteries have electrochemistry files documented in `docs/current/batteries.md`.
 
 Tapes, Projects, Recipes, Users, and Departments currently do not have file
 attachments.
+
+## Batteries Source Filters
+
+The Batteries electrode source section treats project and tape dropdowns as
+optional narrowing filters. A user may choose a compatible electrode cut batch
+first without selecting a tape. Depleted or written-off tapes that still have
+existing cut batches remain visible for this workflow, listed after available
+tapes under `--- Списанные / израсходованные ---` and labeled with their status.

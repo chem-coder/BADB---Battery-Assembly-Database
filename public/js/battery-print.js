@@ -505,7 +505,7 @@ function renderReport(report) {
 // config.authBypass disabled.
 function getAuthHeader() {
   try {
-    const token = sessionStorage.getItem('badb_auth_token');
+    const token = localStorage.getItem('badb_auth_token') || sessionStorage.getItem('badb_auth_token');
     return token && token !== 'bypass' ? { Authorization: `Bearer ${token}` } : {};
   } catch {
     return {};

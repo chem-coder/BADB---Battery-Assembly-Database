@@ -1,9 +1,9 @@
 # Electrodes
 
 Created: 2026-05-06
-Edited: 2026-05-19
+Edited: 2026-06-09
 Status: current
-Verified against code: 2026-05-19
+Verified against code: 2026-06-09
 
 Source paths:
 
@@ -26,6 +26,18 @@ Batteries workflow. Stack-specific hard rules live in
 
 Electrode cut batches are created from tapes and define the pool of individual
 electrodes available for later battery assembly.
+
+List and dropdown ordering is deterministic and shared across the Electrodes
+page, Batteries source-batch selectors, and list APIs:
+
+1. available/active batches first when drying status exists:
+   `drying_end` set, then `drying_start` without `drying_end`, then in-work;
+2. newest physical `item_created_at` first, then record `created_at`;
+3. highest `cut_batch_id` as the final tie-breaker.
+
+Battery-compatible batch dropdowns may still pin the currently selected saved
+batch at the top during refresh; the selected value is preserved when option
+lists are rebuilt.
 
 Battery compatibility uses cut batch attributes including:
 
@@ -124,18 +136,23 @@ individual stack rows are selected.
 
 Important fields:
 
+- `battery_electrode_source_id`;
 - `battery_id`;
 - `role`;
 - `tape_id`;
 - `cut_batch_id`;
+- `sort_order`;
+- `is_primary`;
 - `source_notes`.
 
 The source role must be `cathode` or `anode`.
 
-The source row defines which cut batch is valid for stack electrodes in that
-role. A selected cathode stack electrode must come from the saved cathode cut
-batch; a selected anode stack electrode must come from the saved anode cut
-batch.
+Source rows define which cut batches are valid for stack electrodes in that
+role. Pouch, prism, and cylindrical batteries may have multiple selected source
+batches per role; coin cells stay single-source per role. Exactly one row per
+role is primary for legacy labels and list/detail joins. A selected cathode
+stack electrode must come from one of the saved cathode cut batches; a selected
+anode stack electrode must come from one of the saved anode cut batches.
 
 ## Battery Stack Links
 

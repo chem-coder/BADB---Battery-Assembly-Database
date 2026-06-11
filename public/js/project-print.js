@@ -47,28 +47,12 @@ function formatProjectStatus(value) {
 
 function formatVisibility(value) {
   const map = {
-    public: 'для всех',
-    department: 'для отдела',
-    confidential: 'выборочный доступ'
+    public: 'открытый',
+    department: 'ограниченный',
+    confidential: 'ограниченный'
   };
 
   return map[value] || value || '—';
-}
-
-function formatAccessLevel(value) {
-  const map = {
-    view: 'просмотр',
-    edit: 'редактирование',
-    admin: 'администратор'
-  };
-
-  return map[value] || value || '—';
-}
-
-function formatGrantExpiry(row) {
-  if (!row?.expires_at) return 'без срока';
-  const suffix = row.is_expired ? ' (истёк)' : '';
-  return `${formatDate(row.expires_at)}${suffix}`;
 }
 
 function formatTapeRole(value) {
@@ -141,6 +125,16 @@ function formatBatteryStatus(value) {
   return map[value] || value || '—';
 }
 
+function formatProjectAccess(value) {
+  const map = {
+    view: 'просмотр',
+    edit: 'редактирование',
+    admin: 'администратор проекта'
+  };
+
+  return map[value] || value || 'просмотр';
+}
+
 function renderRow(label, value, options = {}) {
   const fieldClass = options.wide ? ' report_field_wide' : '';
   const valueClass = [
@@ -161,95 +155,59 @@ function renderFieldGrid(rows) {
   return `<div class="report_field_grid">${rows.join('')}</div>`;
 }
 
-function renderDepartmentAccessSection(rows) {
-  const grants = Array.isArray(rows) ? rows : [];
-
-  return `
-    <section class="report_section">
-      <h2>Доступ отделов</h2>
-      ${grants.length === 0 ? '<p class="muted">Отделы не добавлены.</p>' : `
-        <table class="report_table">
-          <thead>
-            <tr>
-              <th>Отдел</th>
-              <th>Уровень</th>
-              <th>Доступ до</th>
-              <th>Выдал</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${grants.map(row => `
-              <tr>
-                <td>${escapeHtml(row.department_name || `#${row.department_id}`)}</td>
-                <td>${escapeHtml(formatAccessLevel(row.access_level))}</td>
-                <td>${escapeHtml(formatGrantExpiry(row))}</td>
-                <td>${escapeHtml(row.granted_by_name || '—')}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `}
-    </section>
-  `;
-}
-
-function renderUserAccessSection(rows) {
-  const grants = Array.isArray(rows) ? rows : [];
-
-  return `
-    <section class="report_section">
-      <h2>Личные гранты пользователей</h2>
-      ${grants.length === 0 ? '<p class="muted">Личные гранты не добавлены.</p>' : `
-        <table class="report_table">
-          <thead>
-            <tr>
-              <th>Пользователь</th>
-              <th>Отдел</th>
-              <th>Уровень</th>
-              <th>Доступ до</th>
-              <th>Выдал</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${grants.map(row => `
-              <tr>
-                <td>${escapeHtml(row.user_name || `#${row.user_id}`)}</td>
-                <td>${escapeHtml(row.department_name || '—')}</td>
-                <td>${escapeHtml(formatAccessLevel(row.access_level))}</td>
-                <td>${escapeHtml(formatGrantExpiry(row))}</td>
-                <td>${escapeHtml(row.granted_by_name || '—')}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `}
-    </section>
-  `;
-}
-
-function renderEffectiveUsersSection(rows) {
+function renderEffectiveAccessSection(rows) {
   const users = Array.isArray(rows) ? rows : [];
 
   return `
     <section class="report_section">
-      <h2>Пользователи с доступом</h2>
-      ${users.length === 0 ? '<p class="muted">Пользователи с прямым или наследуемым доступом не найдены.</p>' : `
+      <h2>Доступ к проекту</h2>
+      ${users.length === 0 ? '<p class="muted">Пользователи с доступом не найдены.</p>' : `
         <table class="report_table">
           <thead>
             <tr>
-              <th>Пользователь</th>
+              <th>ФИО</th>
               <th>Отдел</th>
-              <th>Уровень</th>
+              <th>Уровень доступа</th>
               <th>Источник</th>
             </tr>
           </thead>
           <tbody>
-            ${users.map(row => `
+            ${users.map((row) => `
               <tr>
                 <td>${escapeHtml(row.user_name || `#${row.user_id}`)}</td>
                 <td>${escapeHtml(row.department_name || '—')}</td>
-                <td>${escapeHtml(formatAccessLevel(row.access_level))}</td>
+                <td>${escapeHtml(formatProjectAccess(row.access_level))}</td>
                 <td>${escapeHtml(row.access_sources || '—')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+    </section>
+  `;
+}
+
+function renderParticipantsSection(rows) {
+  const participants = Array.isArray(rows) ? rows : [];
+
+  return `
+    <section class="report_section">
+      <h2>Участники проекта</h2>
+      ${participants.length === 0 ? '<p class="muted">Участники не добавлены.</p>' : `
+        <table class="report_table">
+          <thead>
+            <tr>
+              <th class="report_number">№</th>
+              <th>ФИО</th>
+              <th>Роль в команде (функционал)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${participants.map((row, index) => `
+              <tr>
+                <td class="report_number">${escapeHtml(index + 1)}</td>
+                <td>${escapeHtml(row.user_name || `#${row.user_id}`)}</td>
+                <td>${escapeHtml(row.role_in_team || '—')}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -386,15 +344,12 @@ function renderConnectedBatteriesSection(rows) {
 
 function renderReport(report) {
   const project = report?.project || {};
-  const access = report?.access || {};
+  const participants = report?.participants || [];
+  const effectiveUsers = report?.access?.effective_users || [];
   const downstream = report?.downstream || {};
   const counts = report?.downstream_counts || {};
   const root = document.getElementById('reportRoot');
   const title = project.name || 'Проект';
-  const department = project.confidentiality_level === 'department'
-    ? project.department_name || '—'
-    : '—';
-
   document.title = `Печатный отчёт по проекту #${project.project_id || ''}`.trim();
 
   root.innerHTML = `
@@ -411,11 +366,10 @@ function renderReport(report) {
 
     <div class="report_meta">
       ${renderRow('ID', project.project_id ?? '—', { numeric: true })}
-      ${renderRow('Доступ', formatVisibility(project.confidentiality_level))}
-      ${renderRow('Отдел', department)}
+      ${renderRow('Тип проекта', formatVisibility(project.confidentiality_level))}
       ${renderRow('Руководитель', project.lead_name || '—')}
       ${renderRow('Создал', project.created_by_name || '—')}
-      ${renderRow('Создан', formatDateTime(project.created_at), { numeric: true })}
+      ${renderRow('Создан', formatDateTime(project.created_at))}
     </div>
 
     <section class="report_section">
@@ -423,8 +377,8 @@ function renderReport(report) {
       ${renderFieldGrid([
         renderRow('Название', project.name || '—'),
         renderRow('Статус', formatProjectStatus(project.status)),
-        renderRow('Дата начала', formatDate(project.start_date), { numeric: true }),
-        renderRow('Плановая дата', formatDate(project.due_date), { numeric: true }),
+        renderRow('Дата начала', formatDate(project.start_date)),
+        renderRow('Плановая дата', formatDate(project.due_date)),
         renderRow(
           'Описание',
           hasMeaningfulText(project.description) ? project.description : '—',
@@ -433,9 +387,8 @@ function renderReport(report) {
       ])}
     </section>
 
-    ${renderDepartmentAccessSection(access.departments)}
-    ${renderEffectiveUsersSection(access.effective_users)}
-    ${renderUserAccessSection(access.users)}
+    ${renderParticipantsSection(participants)}
+    ${renderEffectiveAccessSection(effectiveUsers)}
     ${renderDownstreamSummarySection(counts)}
     ${renderConnectedTapesSection(downstream.tapes)}
     ${renderConnectedElectrodeBatchesSection(downstream.electrode_batches)}
@@ -445,7 +398,7 @@ function renderReport(report) {
 
 function getAuthHeader() {
   try {
-    const token = sessionStorage.getItem('badb_auth_token');
+    const token = localStorage.getItem('badb_auth_token') || sessionStorage.getItem('badb_auth_token');
     return token && token !== 'bypass' ? { Authorization: `Bearer ${token}` } : {};
   } catch {
     return {};

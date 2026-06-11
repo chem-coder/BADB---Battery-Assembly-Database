@@ -1,6 +1,24 @@
 const { attachElectrodeBatchProjects } = require('./electrodeBatchProjectService');
+const { ELECTRODE_CUT_BATCH_ORDER_BY_SQL } = require('../utils/electrodeCutBatchSort');
 
-async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selectedBatchId) {
+function normalizeSelectedBatchIds(selectedBatchIds) {
+  const source = Array.isArray(selectedBatchIds) ? selectedBatchIds : [selectedBatchIds];
+  const normalized = [];
+
+  source.forEach((value) => {
+    if (value === null || value === undefined || value === '') return;
+    const id = Number(value);
+    if (Number.isInteger(id) && !normalized.includes(id)) {
+      normalized.push(id);
+    }
+  });
+
+  return normalized;
+}
+
+async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selectedBatchIds = []) {
+  const pinnedBatchIds = normalizeSelectedBatchIds(selectedBatchIds);
+
   const result = await pool.query(
     `
     WITH battery_context AS (
@@ -29,6 +47,9 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
     )
     SELECT
       b.*,
+      t.name AS tape_name,
+      t.availability_status AS tape_availability_status,
+      r.role AS tape_role,
       u.name AS created_by_name,
       (
         SELECT c.coating_sidedness
@@ -65,6 +86,10 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
       COALESCE(ec.electrode_count, 0) AS electrode_count
     FROM electrode_cut_batches b
     CROSS JOIN battery_context ctx
+    JOIN tapes t
+      ON t.tape_id = b.tape_id
+    LEFT JOIN tape_recipes r
+      ON r.tape_recipe_id = t.tape_recipe_id
     LEFT JOIN users u
       ON u.user_id = b.created_by
     LEFT JOIN electrode_drying d
@@ -77,7 +102,7 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
       GROUP BY cut_batch_id
     ) ec
       ON ec.cut_batch_id = b.cut_batch_id
-    WHERE b.tape_id = $2
+    WHERE ($2::integer IS NULL OR b.tape_id = $2)
       AND (
         (
           ctx.expected_shape IS NOT NULL
@@ -99,16 +124,15 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
           )
         )
         OR (
-          $3::integer IS NOT NULL
-          AND b.cut_batch_id = $3
+          CARDINALITY($3::int[]) > 0
+          AND b.cut_batch_id = ANY($3::int[])
         )
       )
     ORDER BY
-      CASE WHEN $3::integer IS NOT NULL AND b.cut_batch_id = $3 THEN 0 ELSE 1 END,
-      b.created_at DESC,
-      b.cut_batch_id DESC
+      CASE WHEN b.cut_batch_id = ANY($3::int[]) THEN 0 ELSE 1 END,
+      ${ELECTRODE_CUT_BATCH_ORDER_BY_SQL}
     `,
-    [batteryId, tapeId, selectedBatchId]
+    [batteryId, tapeId, pinnedBatchIds]
   );
 
   return attachElectrodeBatchProjects(pool, result.rows);

@@ -41,7 +41,10 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd037_add_viscosity_conditions.sql'),
   path.join(ROOT, 'migrations', 'd038_add_electrode_capacity_average_flag.sql'),
   path.join(ROOT, 'migrations', 'd039_add_electrode_test_batch_flag.sql'),
-  path.join(ROOT, 'migrations', 'd040_add_coated_thickness_fields.sql')
+  path.join(ROOT, 'migrations', 'd040_add_coated_thickness_fields.sql'),
+  path.join(ROOT, 'migrations', 'd041_project_participants.sql'),
+  path.join(ROOT, 'migrations', 'd042_project_leads_as_team_members.sql'),
+  path.join(ROOT, 'migrations', 'd043_enable_multi_battery_electrode_sources.sql')
 ];
 
 function parseArgs(argv) {
@@ -392,7 +395,14 @@ async function runGetSmoke(client) {
   }
 
   const project = first(seed.projects);
-  if (project) await client.get(`/api/projects/${project.project_id}/access`, [200, 403]);
+  if (project) {
+    await client.get(`/api/projects/${project.project_id}/access`, [200, 403]);
+    await client.get(`/api/projects/${project.project_id}/participants`, [200, 403]);
+    await client.get(`/api/projects/${project.project_id}/report`, [200, 403]);
+  }
+
+  const user = first(seed.users);
+  if (user) await client.get(`/api/users/${user.user_id}/projects`, [200, 403]);
 
   const material = first(seed.materials);
   if (material) await client.get(`/api/materials/${material.material_id}/instances`);
@@ -540,6 +550,106 @@ async function runWriteSmoke(client, seed, context) {
       description: 'smoke update',
       confidentiality_level: 'public'
     });
+    const leadParticipants = await client.get(`/api/projects/${made.projectId}/participants`);
+    client.assertEqual(
+      leadParticipants.some((row) => Number(row.user_id) === Number(userId)),
+      true,
+      'project lead is added to project participants'
+    );
+    const leadAccessRows = await client.get(`/api/projects/${made.projectId}/access`);
+    client.assertEqual(
+      leadAccessRows.some((row) => (
+        row.grantee_type === 'user' &&
+        Number(row.grantee_id) === Number(userId) &&
+        row.access_level === 'admin'
+      )),
+      true,
+      'project lead receives admin access'
+    );
+    const participant = await client.post(`/api/projects/${made.projectId}/participants`, {
+      user_id: made.userId,
+      role_in_team: 'Smoke analyst'
+    });
+    made.projectParticipantId = participant.participant_id;
+    client.assertEqual(participant.role_in_team, 'Smoke analyst', 'project participant role is saved');
+    await client.put(`/api/projects/${made.projectId}/participants/${made.projectParticipantId}`, {
+      role_in_team: 'Smoke lead analyst'
+    });
+    const participantRows = await client.get(`/api/projects/${made.projectId}/participants`);
+    client.assertEqual(
+      participantRows.some(row => row.participant_id === made.projectParticipantId && row.role_in_team === 'Smoke lead analyst'),
+      true,
+      'project participant role is updated'
+    );
+    const participantAccessRows = await client.get(`/api/projects/${made.projectId}/access`);
+    client.assertEqual(
+      participantAccessRows.some(row => row.grantee_type === 'participant' && row.grantee_id === made.userId),
+      true,
+      'project participant appears as a project access source'
+    );
+    client.assertEqual(
+      participantAccessRows.some(row => (
+        row.grantee_type === 'user' &&
+        row.grantee_id === made.userId &&
+        row.access_level === 'view'
+      )),
+      true,
+      'project participant receives direct view access'
+    );
+    await client.post(`/api/projects/${made.projectId}/access`, {
+      user_id: made.userId,
+      access_level: 'edit'
+    });
+    const editAccessRows = await client.get(`/api/projects/${made.projectId}/access`);
+    client.assertEqual(
+      editAccessRows.some(row => (
+        row.grantee_type === 'user' &&
+        row.grantee_id === made.userId &&
+        row.access_level === 'edit'
+      )),
+      true,
+      'project participant access can be changed to edit'
+    );
+    const userProjectRows = await client.get(`/api/users/${made.userId}/projects`);
+    client.assertEqual(
+      userProjectRows.some((row) => (
+        Number(row.project_id) === Number(made.projectId) &&
+        row.role_in_team === 'Smoke lead analyst' &&
+        row.access_level === 'edit'
+      )),
+      true,
+      'user projects endpoint lists participant role and access level'
+    );
+    const projectReport = await client.get(`/api/projects/${made.projectId}/report`);
+    client.assertEqual(
+      Array.isArray(projectReport.participants) &&
+      projectReport.participants.some((row) => row.participant_id === made.projectParticipantId),
+      true,
+      'project report includes participants'
+    );
+    client.assertEqual(
+      Array.isArray(projectReport.access?.effective_users) &&
+      projectReport.access.effective_users.some((row) => (
+        Number(row.user_id) === Number(made.userId) &&
+        row.access_level === 'edit'
+      )),
+      true,
+      'project report includes effective participant access'
+    );
+    await client.del(`/api/projects/${made.projectId}/participants/${made.projectParticipantId}`, [204]);
+    const participantsAfterDelete = await client.get(`/api/projects/${made.projectId}/participants`);
+    client.assertEqual(
+      participantsAfterDelete.some((row) => row.participant_id === made.projectParticipantId),
+      false,
+      'participant removal deletes team membership'
+    );
+    const accessAfterDelete = await client.get(`/api/projects/${made.projectId}/access`);
+    client.assertEqual(
+      accessAfterDelete.some((row) => row.grantee_type === 'user' && Number(row.grantee_id) === Number(made.userId)),
+      false,
+      'participant removal revokes direct user access grant'
+    );
+    made.projectParticipantId = null;
 
     made.structureId = (await client.post('/api/structures', {
       name: `Codex Smoke Structure ${suffix}`,
@@ -1179,6 +1289,12 @@ async function runWriteSmoke(client, seed, context) {
       true,
       'prism battery sees prism rectangular electrode cut batches as compatible'
     );
+    const prismCompatibleBatchesWithoutTape = await client.get(`/api/batteries/${made.prismBatteryId}/electrode-cut-batches`);
+    client.assertEqual(
+      prismCompatibleBatchesWithoutTape.some((batch) => Number(batch.cut_batch_id) === Number(made.prismCutBatchId)),
+      true,
+      'battery compatible cut batch lookup works without a tape filter'
+    );
     made.cylBatteryId = (await client.post('/api/batteries', {
       project_id: projectId,
       form_factor: 'cylindrical',
@@ -1233,6 +1349,69 @@ async function runWriteSmoke(client, seed, context) {
         anode_source_notes: null
       });
     }
+
+    const multiSourceBatteryId = (await client.post('/api/batteries', {
+      project_id: projectId,
+      project_ids: [projectId],
+      form_factor: 'pouch',
+      battery_notes: `Codex Smoke Battery ${suffix} Multi Source`
+    })).battery_id;
+    await client.post('/api/batteries/battery_pouch_config', {
+      battery_id: multiSourceBatteryId,
+      pouch_case_size_code: '103x83',
+      pouch_case_size_other: null,
+      pouch_notes: 'smoke multi-source pouch config'
+    });
+    const multiSourceRows = await client.post('/api/batteries/battery_electrode_sources', {
+      battery_id: multiSourceBatteryId,
+      sources: [
+        { role: 'cathode', cut_batch_id: made.cutBatchId, sort_order: 0, is_primary: true },
+        { role: 'cathode', cut_batch_id: made.prismCutBatchId, sort_order: 1, is_primary: false },
+        { role: 'anode', cut_batch_id: made.cutBatchId, sort_order: 0, is_primary: true },
+        { role: 'anode', cut_batch_id: made.prismCutBatchId, sort_order: 1, is_primary: false }
+      ]
+    });
+    client.assertEqual(multiSourceRows.length, 4, 'multi-source save persists all selected source rows');
+    await client.put(`/api/batteries/battery_electrodes/${multiSourceBatteryId}`, [
+      {
+        electrode_id: made.electrodeId,
+        role: 'cathode',
+        position_index: 1
+      },
+      {
+        electrode_id: made.prismAnodeElectrodeId,
+        role: 'anode',
+        position_index: 2
+      }
+    ]);
+    const multiAssembly = await client.get(`/api/batteries/${multiSourceBatteryId}/assembly`);
+    client.assertEqual(
+      Array.isArray(multiAssembly.electrode_sources) && multiAssembly.electrode_sources.length,
+      4,
+      'assembly returns every multi-source electrode batch row'
+    );
+    client.assertEqual(
+      multiAssembly.electrode_sources.filter(row => row.role === 'cathode' && row.is_primary).length,
+      1,
+      'multi-source cathode rows expose exactly one primary'
+    );
+    client.assertEqual(
+      multiAssembly.electrodes.some(row => Number(row.electrode_id) === Number(made.prismAnodeElectrodeId)),
+      true,
+      'stack accepts an electrode from a secondary selected source batch'
+    );
+    await client.put(`/api/batteries/battery_electrodes/${multiSourceBatteryId}`, []);
+    await client.patch(`/api/batteries/battery_electrode_sources/${multiSourceBatteryId}`, {
+      cathode_tape_id: null,
+      cathode_cut_batch_id: null,
+      cathode_source_notes: null,
+      anode_tape_id: null,
+      anode_cut_batch_id: null,
+      anode_source_notes: null
+    });
+    await client.request('DELETE', `/api/batteries/${multiSourceBatteryId}`, {
+      confirmation: `DELETE BATTERY ${multiSourceBatteryId}`
+    });
 
     const lifecycleBattery = await client.post('/api/batteries', {
       project_id: projectId,

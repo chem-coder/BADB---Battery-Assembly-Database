@@ -83,8 +83,58 @@ function hasSourcePayload(payload = {}) {
     'cathode_tape_id',
     'cathode_cut_batch_id',
     'anode_tape_id',
-    'anode_cut_batch_id'
+    'anode_cut_batch_id',
+    'sources',
+    'electrode_sources'
   ].some((key) => hasOwn(payload, key));
+}
+
+function normalizeCutBatchIds(values) {
+  const source = Array.isArray(values) ? values : [values];
+  const cutBatchIds = [];
+
+  source.forEach((value) => {
+    if (value === null || value === undefined || value === '') return;
+    const cutBatchId = Number(value);
+    if (Number.isInteger(cutBatchId) && !cutBatchIds.includes(cutBatchId)) {
+      cutBatchIds.push(cutBatchId);
+    }
+  });
+
+  return cutBatchIds;
+}
+
+function getArraySourcePayload(payload = {}) {
+  if (Array.isArray(payload.sources)) return payload.sources;
+  if (Array.isArray(payload.electrode_sources)) return payload.electrode_sources;
+  return null;
+}
+
+function getPayloadSourceCutBatchIds(payload = {}, role) {
+  const arraySources = getArraySourcePayload(payload);
+
+  if (arraySources) {
+    return normalizeCutBatchIds(
+      arraySources
+        .filter((source) => source?.role === role)
+        .map((source) => source.cut_batch_id)
+    );
+  }
+
+  if (hasOwn(payload, `${role}_cut_batch_id`)) {
+    return normalizeCutBatchIds(payload[`${role}_cut_batch_id`]);
+  }
+
+  return null;
+}
+
+function getContextSourceCutBatchIds(payload, currentSources, role) {
+  const payloadIds = getPayloadSourceCutBatchIds(payload, role);
+  if (payloadIds) return payloadIds;
+
+  return normalizeCutBatchIds(
+    currentSources[`${role}_cut_batch_ids`] || currentSources[`${role}_cut_batch_id`]
+  );
 }
 
 function getCoinCellMode(payload = {}, currentCoinConfig = {}) {
@@ -102,16 +152,17 @@ function getHalfCellType(payload = {}, currentCoinConfig = {}) {
 function getBatteryProjectContext(payload, formFactor, current = {}) {
   const currentSources = current.sources || {};
   const currentCoinConfig = current.coinConfig || {};
+  const cathodeCutBatchIds = getContextSourceCutBatchIds(payload, currentSources, 'cathode');
+  const anodeCutBatchIds = getContextSourceCutBatchIds(payload, currentSources, 'anode');
+
   return {
     formFactor,
     coinCellMode: getCoinCellMode(payload, currentCoinConfig),
     halfCellType: getHalfCellType(payload, currentCoinConfig),
-    cathodeCutBatchId: hasOwn(payload, 'cathode_cut_batch_id')
-      ? payload.cathode_cut_batch_id || null
-      : currentSources.cathode_cut_batch_id || null,
-    anodeCutBatchId: hasOwn(payload, 'anode_cut_batch_id')
-      ? payload.anode_cut_batch_id || null
-      : currentSources.anode_cut_batch_id || null
+    cathodeCutBatchId: cathodeCutBatchIds[0] || null,
+    cathodeCutBatchIds,
+    anodeCutBatchId: anodeCutBatchIds[0] || null,
+    anodeCutBatchIds
   };
 }
 
@@ -193,7 +244,18 @@ async function fetchCurrentIdentityContext(queryable, batteryId) {
       [batteryId]
     ),
     queryable.query(
-      'SELECT role, tape_id, cut_batch_id, source_notes FROM battery_electrode_sources WHERE battery_id = $1',
+      `
+      SELECT
+        role,
+        tape_id,
+        cut_batch_id,
+        source_notes,
+        sort_order,
+        is_primary
+      FROM battery_electrode_sources
+      WHERE battery_id = $1
+      ORDER BY role, is_primary DESC, sort_order, battery_electrode_source_id
+      `,
       [batteryId]
     ),
     attachBatteryProjects(queryable, [{ battery_id: batteryId }])
@@ -203,17 +265,30 @@ async function fetchCurrentIdentityContext(queryable, batteryId) {
     throw statusError('Батарея не найдена', 404);
   }
 
-  const sources = {};
+  const sources = {
+    source_rows: sourcesRes.rows,
+    cathode_cut_batch_ids: [],
+    anode_cut_batch_ids: []
+  };
   sourcesRes.rows.forEach((row) => {
+    const roleKey = row.role === 'cathode' ? 'cathode' : row.role === 'anode' ? 'anode' : null;
+    if (roleKey && row.cut_batch_id) {
+      sources[`${roleKey}_cut_batch_ids`].push(row.cut_batch_id);
+    }
+
     if (row.role === 'cathode') {
-      sources.cathode_tape_id = row.tape_id;
-      sources.cathode_cut_batch_id = row.cut_batch_id;
-      sources.cathode_source_notes = row.source_notes;
+      if (row.is_primary || !sources.cathode_cut_batch_id) {
+        sources.cathode_tape_id = row.tape_id;
+        sources.cathode_cut_batch_id = row.cut_batch_id;
+        sources.cathode_source_notes = row.source_notes;
+      }
     }
     if (row.role === 'anode') {
-      sources.anode_tape_id = row.tape_id;
-      sources.anode_cut_batch_id = row.cut_batch_id;
-      sources.anode_source_notes = row.source_notes;
+      if (row.is_primary || !sources.anode_cut_batch_id) {
+        sources.anode_tape_id = row.tape_id;
+        sources.anode_cut_batch_id = row.cut_batch_id;
+        sources.anode_source_notes = row.source_notes;
+      }
     }
   });
 
@@ -338,6 +413,7 @@ async function listBatteries(pool) {
     LEFT JOIN battery_electrode_sources cathode_src
       ON cathode_src.battery_id = b.battery_id
      AND cathode_src.role = 'cathode'
+     AND cathode_src.is_primary
     LEFT JOIN tapes cathode_tape
       ON cathode_tape.tape_id = cathode_src.tape_id
     LEFT JOIN LATERAL (
@@ -354,6 +430,7 @@ async function listBatteries(pool) {
     LEFT JOIN battery_electrode_sources anode_src
       ON anode_src.battery_id = b.battery_id
      AND anode_src.role = 'anode'
+     AND anode_src.is_primary
     LEFT JOIN tapes anode_tape
       ON anode_tape.tape_id = anode_src.tape_id
     LEFT JOIN LATERAL (
@@ -410,6 +487,7 @@ async function getBattery(pool, batteryId) {
     LEFT JOIN battery_electrode_sources cathode_src
       ON cathode_src.battery_id = b.battery_id
      AND cathode_src.role = 'cathode'
+     AND cathode_src.is_primary
     LEFT JOIN tapes cathode_tape
       ON cathode_tape.tape_id = cathode_src.tape_id
     LEFT JOIN LATERAL (
@@ -426,6 +504,7 @@ async function getBattery(pool, batteryId) {
     LEFT JOIN battery_electrode_sources anode_src
       ON anode_src.battery_id = b.battery_id
      AND anode_src.role = 'anode'
+     AND anode_src.is_primary
     LEFT JOIN tapes anode_tape
       ON anode_tape.tape_id = anode_src.tape_id
     LEFT JOIN LATERAL (
