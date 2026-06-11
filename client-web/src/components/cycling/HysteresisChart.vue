@@ -17,7 +17,7 @@ import {
   sessionShortLabel, chartAnimFor, dedupeLegend, legendToggleAll,
   exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
-import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -73,9 +73,10 @@ const built = computed(() => {
       label: sessionShortLabel(s, props.sessions),
       data: minMaxDecimate(points),
       normalized: !!sorted,
+      ...(sorted ? { parsing: false } : {}),
       borderColor: sColor,
       backgroundColor: sColor,
-      tension: 0.2,
+      tension: 0,
       pointRadius: baseRadius,
       pointHoverRadius: baseRadius + 2,
       pointStyle: sMarker,
@@ -87,6 +88,9 @@ const built = computed(() => {
 })
 
 const chartData = computed(() => ({ datasets: built.value.datasets }))
+
+// Репейнт не чаще кадра: шквал реактивных перестроек схлопывается в один
+const renderData = useFrameCoalesced(chartData)
 
 // LOD-обработчики зума/панорамы (rAF-гейт внутри)
 const lod = makeLodHandlers(() => built.value.fulls)
@@ -161,6 +165,6 @@ function onExport() {
     @reset="resetZoom(chartRef)"
     @export="onExport"
   >
-    <Line ref="chartRef" :data="chartData" :options="chartOptions" />
+    <Line ref="chartRef" :data="renderData" :options="chartOptions" />
   </ChartCard>
 </template>

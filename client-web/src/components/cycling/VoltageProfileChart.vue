@@ -17,7 +17,7 @@ import {
   convertCapacity, capacityAxisLabel, applyChartStyle,
   exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
-import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -70,7 +70,7 @@ const built = computed(() => {
   function pushDs(ds, mapped) {
     const full = ensureSortedByX(mapped)
     ds.data = minMaxDecimate(mapped)
-    if (full) ds.normalized = true
+    if (full) { ds.normalized = true; ds.parsing = false }
     datasets.push(ds)
     fulls.push(full)
   }
@@ -188,6 +188,9 @@ const built = computed(() => {
 
 const chartData = computed(() => ({ datasets: built.value.datasets }))
 
+// Репейнт не чаще кадра: шквал реактивных перестроек схлопывается в один
+const renderData = useFrameCoalesced(chartData)
+
 // LOD-обработчики зума/панорамы (rAF-гейт внутри): пересэмплинг видимого окна
 const lod = makeLodHandlers(() => built.value.fulls)
 
@@ -256,6 +259,6 @@ function onExport() {
     @reset="resetZoom(chartRef)"
     @export="onExport"
   >
-    <Scatter ref="chartRef" :data="chartData" :options="chartOptions" />
+    <Scatter ref="chartRef" :data="renderData" :options="chartOptions" />
   </ChartCard>
 </template>

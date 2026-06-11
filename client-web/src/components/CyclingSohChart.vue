@@ -26,7 +26,7 @@ import {
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { cellSohSeries, protocolMeanStd, cyclesToThreshold } from '@/utils/cyclingSoh'
-import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
 
 // Idempotent — CyclingCharts registers the same set; registering twice is a
 // no-op, but we register here too so this component stands on its own.
@@ -208,11 +208,12 @@ const built = computed(() => {
           label: `${proto} · ${shortLabel(s)}`,
           data: minMaxDecimate(data),
           normalized: !!sorted,
+          ...(sorted ? { parsing: false } : {}),
           borderColor: hexToRgba(color, alpha),
           backgroundColor: hexToRgba(color, alpha),
           borderWidth: 1.4,
           pointHoverRadius: 4,
-          tension: 0.2,
+          tension: 0,
           fill: false,
           _proto: proto,
           ...markerProps(lineIdx++),
@@ -230,7 +231,7 @@ const built = computed(() => {
         backgroundColor: color,
         borderWidth: 2.6,
         pointHoverRadius: 4,
-        tension: 0.2,
+        tension: 0,
         fill: false,
         _proto: proto,
         ...markerProps(lineIdx++),
@@ -238,13 +239,13 @@ const built = computed(() => {
       fulls.push(null)
       datasets.push({
         label: `${proto} +σ`, data: decimateXY(upper), borderColor: 'transparent',
-        backgroundColor: 'transparent', pointRadius: 0, fill: false, tension: 0.2,
+        backgroundColor: 'transparent', pointRadius: 0, fill: false, tension: 0,
         _band: true,
       })
       fulls.push(null)
       datasets.push({
         label: `${proto} −σ`, data: decimateXY(lower), borderColor: 'transparent',
-        backgroundColor: hexToRgba(color, 0.13), pointRadius: 0, fill: '-1', tension: 0.2,
+        backgroundColor: hexToRgba(color, 0.13), pointRadius: 0, fill: '-1', tension: 0,
         _band: true,
       })
       fulls.push(null)
@@ -266,6 +267,9 @@ const built = computed(() => {
 })
 
 const chartData = computed(() => ({ datasets: built.value.datasets }))
+
+// Репейнт не чаще кадра (шквал перестроек → один)
+const renderData = useFrameCoalesced(chartData)
 
 // LOD-обработчики зума/панорамы (rAF-гейт внутри)
 const lod = makeLodHandlers(() => built.value.fulls)
@@ -445,7 +449,7 @@ function resetZoom() {
     </div>
 
     <div class="soh-wrap" @dblclick="resetZoom">
-      <Line v-if="protocolGroups.length" ref="sohChartRef" :data="chartData" :options="chartOptions" />
+      <Line v-if="protocolGroups.length" ref="sohChartRef" :data="renderData" :options="chartOptions" />
       <div v-else class="soh-empty">Нет активных измерений с данными циклирования.</div>
     </div>
 

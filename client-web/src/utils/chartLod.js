@@ -113,6 +113,33 @@ export function applyViewportLod(chart, fullSeries, cap = LOD_POINT_CAP) {
 }
 
 /**
+ * useFrameCoalesced — схлопывает шквал реактивных перестроек в одну на кадр.
+ *
+ * Источник лага: догрузка циклов/тогглы порождают НЕСКОЛЬКО обновлений
+ * activeSessionViews подряд — каждое тащит полный rebuild датасетов и полный
+ * repaint каждого графика. Канвас-репейнт (а не математика: 30 SavGol-кривых
+ * = 39 мс, замерено) — самое дорогое; рисовать его чаще кадра бессмысленно.
+ *
+ * Возвращает shallowRef, который догоняет source не чаще requestAnimationFrame.
+ * Первое значение — синхронно (без пустого первого кадра).
+ */
+import { watch, shallowRef } from 'vue'
+
+export function useFrameCoalesced(source) {
+  const out = shallowRef(source.value)
+  let scheduled = false
+  watch(source, () => {
+    if (scheduled) return
+    scheduled = true
+    requestAnimationFrame(() => {
+      scheduled = false
+      out.value = source.value
+    })
+  })
+  return out
+}
+
+/**
  * Фабрика обработчиков для опций зум-плагина: один rAF-гейт на график, чтобы
  * непрерывная панорама не пересэмплировала чаще кадра.
  */

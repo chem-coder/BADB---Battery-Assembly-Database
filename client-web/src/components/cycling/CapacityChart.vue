@@ -17,7 +17,7 @@ import {
   dedupeLegend, legendToggleAll, firstValidDischargeCap, projectCapacity,
   capacityAxisLabel, exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
-import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -97,7 +97,7 @@ const built = computed(() => {
         borderColor: sColor,
         backgroundColor: sColor,       // залитый маркер
         fill: false,
-        tension: 0.2,
+        tension: 0,
         // scriptable вместо параллельного массива: радиус по точке, остаётся
         // верным при любой LOD-подмене data (массив бы рассинхронизировался)
         pointRadius: (ctx) => (selectedSet.has(ctx.raw?.x) ? baseRadius + 2 : baseRadius),
@@ -120,7 +120,7 @@ const built = computed(() => {
         borderColor: sColor,
         backgroundColor: '#ffffff',     // полый центр
         borderDash: [4, 2],
-        tension: 0.2,
+        tension: 0,
         pointRadius: baseRadius,
         pointBackgroundColor: '#ffffff',
         pointBorderColor: sColor,
@@ -140,7 +140,7 @@ const built = computed(() => {
       yAxisID: 'y1',
       borderColor: ceColor,
       backgroundColor: ceColor,
-      tension: 0.2,
+      tension: 0,
       pointRadius: 2.2,
       pointBackgroundColor: ceColor,
       pointBorderColor: ceColor,
@@ -156,6 +156,9 @@ const built = computed(() => {
 })
 
 const chartData = computed(() => ({ datasets: built.value.datasets }))
+
+// Репейнт не чаще кадра: шквал реактивных перестроек схлопывается в один
+const renderData = useFrameCoalesced(chartData)
 
 // LOD-обработчики зума/панорамы (rAF-гейт внутри)
 const lod = makeLodHandlers(() => built.value.fulls)
@@ -266,6 +269,6 @@ function onExport() {
     @reset="resetZoom(chartRef)"
     @export="onExport"
   >
-    <Line v-if="hasSummary" ref="chartRef" :data="chartData" :options="chartOptions" />
+    <Line v-if="hasSummary" ref="chartRef" :data="renderData" :options="chartOptions" />
   </ChartCard>
 </template>

@@ -79,6 +79,22 @@ describe('ensureSortedByX', () => {
   })
 })
 
+describe('useFrameCoalesced', () => {
+  it('N синхронных обновлений за кадр → одно распространение (последнее значение)', async () => {
+    const { ref, nextTick } = await import('vue')
+    const { useFrameCoalesced } = await import('@/utils/chartLod')
+    const src = ref(1)
+    const out = useFrameCoalesced(src)
+    expect(out.value).toBe(1)            //начальное — синхронно
+    src.value = 2; await nextTick()
+    src.value = 3; await nextTick()
+    src.value = 4; await nextTick()
+    expect(out.value).toBe(1)            // до кадра — не дёргался
+    await new Promise(requestAnimationFrame)
+    expect(out.value).toBe(4)            // один прыжок к последнему
+  })
+})
+
 describe('applyViewportLod (fake chart)', () => {
   it('подменяет data датасетов срезом окна и перерисовывает без анимации', () => {
     const full = makeSeries()

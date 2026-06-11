@@ -17,7 +17,7 @@ import {
   chartAnimFor, sessionDashFor, dedupeLegend, legendToggleAll,
   applyChartStyle, exportChartPNG, resetZoom,
 } from '@/utils/cyclingChartShared'
-import { minMaxDecimate, ensureSortedByX, makeLodHandlers } from '@/utils/chartLod'
+import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
 const props = defineProps({
@@ -140,7 +140,7 @@ const dqdvComputed = computed(() => {
   function pushDs(ds, full) {
     const sorted = ensureSortedByX(full)
     ds.data = minMaxDecimate(full)
-    if (sorted) ds.normalized = true
+    if (sorted) { ds.normalized = true; ds.parsing = false }
     datasets.push(ds)
     fulls.push(sorted)
   }
@@ -212,10 +212,13 @@ const dqdvComputed = computed(() => {
   return { datasets, peaks, fulls }
 })
 
+const chartData = computed(() => ({ datasets: dqdvComputed.value.datasets }))
+
+// Репейнт не чаще кадра: шквал реактивных перестроек схлопывается в один
+const renderData = useFrameCoalesced(chartData)
+
 // LOD-обработчики зума/панорамы (rAF-гейт внутри)
 const lod = makeLodHandlers(() => dqdvComputed.value.fulls)
-
-const chartData = computed(() => ({ datasets: dqdvComputed.value.datasets }))
 
 // Inline-плагин: точка + подпись позиции над каждым найденным пиком.
 // Данные — из options.plugins.dqdvPeaks (реактивно с опциями).
@@ -318,6 +321,6 @@ function onExport() {
     @reset="resetZoom(chartRef)"
     @export="onExport"
   >
-    <Scatter ref="chartRef" :data="chartData" :options="chartOptions" :plugins="[dqdvPeaksPlugin]" />
+    <Scatter ref="chartRef" :data="renderData" :options="chartOptions" :plugins="[dqdvPeaksPlugin]" />
   </ChartCard>
 </template>

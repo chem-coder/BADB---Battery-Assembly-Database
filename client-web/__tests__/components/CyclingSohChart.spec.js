@@ -76,6 +76,9 @@ describe('CyclingSohChart', () => {
     await capBtn.trigger('click');
     const opts = w.findComponent('.line-stub').props('options');
     expect(opts.scales.y.title.text).toBe('DCh ёмкость, Ah');
+    // данные догоняют опции через кадр (useFrameCoalesced схлопывает
+    // перестройки в один репейнт) — ждём rAF
+    await new Promise(requestAnimationFrame);
     // in Ah mode the first NCA-C A1 point is the raw 1.5 Ah, not 100 %
     const data = w.findComponent('.line-stub').props('data');
     const a1 = data.datasets.find(d => /A1/.test(d.label));
@@ -86,6 +89,7 @@ describe('CyclingSohChart', () => {
     const w = mountChart();
     const ncaChip = w.findAll('.soh-legend-item').find(n => n.text() === 'NMC-C');
     await ncaChip.trigger('click');
+    await new Promise(requestAnimationFrame);   // данные догоняют через кадр (коалесцер)
     const data = w.findComponent('.line-stub').props('data');
     expect(data.datasets.some(d => /NMC-C/.test(d.label))).toBe(false);
     expect(data.datasets.some(d => /NCA-C/.test(d.label))).toBe(true);
