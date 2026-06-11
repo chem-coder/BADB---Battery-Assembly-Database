@@ -61,12 +61,11 @@ const hasCapacity = computed(() => {
 const built = computed(() => timeBuild('voltage', () => {
   const datasets = []
   const fulls = []        // 1:1 с datasets; null = серия не для LOD (несортирована)
-  // Выбор циклов безлимитный; РЕНДЕРИМ равномерную подвыборку ≤24 кривых —
-  // больше наложений нечитаемо и убивает канвас. Заголовок честно говорит
-  // «показано N из M».
-  const sortedCycles = pickEvenly([...props.selectedCycles].sort((a, b) => a - b), 24)
+  // Выбор циклов безлимитный; рендерим ≤24 кривых НА СЕССИЮ, равномерно из
+  // циклов, которые у сессии РЕАЛЬНО загружены: глобальная сетка 1..500
+  // морила голодом короткие сессии (ELITECH с 10 циклами попадал только Ц1).
+  const globalSorted = [...props.selectedCycles].sort((a, b) => a - b)
   const useCapacity = hasCapacity.value
-  const nCycles = sortedCycles.length
   const vStyle = voltageStyle.value
 
   // Полная серия {x,y} → датасет с min-max обзорной децимацией; сортированные
@@ -84,9 +83,11 @@ const built = computed(() => timeBuild('voltage', () => {
     // Штриховка по сессии (null при одной сессии → семантика заряд/разряд)
     const sessionDash = sessionDashFor(props.sessions.indexOf(s), props.sessions.length)
 
-    sortedCycles.forEach((cycleNum, cIdx) => {
-      const points = s.cycleDataMap?.[cycleNum] || []
-      if (!points.length) return
+    // ≤24 цикла этой сессии, равномерно из реально загруженных
+    const sessionCycles = pickEvenly(globalSorted.filter(c => s.cycleDataMap?.[c]?.length), 24)
+    const nCycles = sessionCycles.length
+    sessionCycles.forEach((cycleNum, cIdx) => {
+      const points = s.cycleDataMap[cycleNum]
 
       // ПОЛНЫЕ полуциклы (без статической децимации — она теперь обзорный
       // уровень LOD внутри pushDs, а зум достаёт полное разрешение).
@@ -215,8 +216,7 @@ const chartOptions = computed(() => ({
     title: {
       display: true,
       text: (() => {
-        const shown = Math.min(props.selectedCycles.length, 24)
-        const thinned = props.selectedCycles.length > 24 ? ` (показано ${shown} из ${props.selectedCycles.length}, равномерно)` : ''
+        const thinned = props.selectedCycles.length > 24 ? ` (≤24 цикла на измерение из ${props.selectedCycles.length}, равномерно)` : ''
         if (props.experimentLabel) return `${props.experimentLabel} — профиль V${thinned}`
         if (!props.selectedCycles.length) return 'Профиль напряжения'
         const cLabel = `${props.selectedCycles.length} ${props.selectedCycles.length === 1 ? 'цикл' : 'циклов'}${thinned}`

@@ -19,6 +19,7 @@ import {
   applyChartStyle, exportChartPNG, resetZoom, pickEvenly,
 } from '@/utils/cyclingChartShared'
 import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
+import { decimate } from '@/utils/cyclingChartShared'
 import { timeBuild, makePaintPlugin } from '@/utils/chartPerf'
 import ChartCard from '@/components/cycling/ChartCard.vue'
 
@@ -103,20 +104,21 @@ const dqdvComputed = computed(() => timeBuild('dqdv', () => {
   const peaks = []
   const fulls = []   // 1:1 с datasets — для зум-пересэмплинга
 
-  function pushDs(ds, full) {
+  function pushDs(ds, full, smoothCurve) {
     const sorted = ensureSortedByX(full)
-    ds.data = minMaxDecimate(full)
+    // min-max сохраняет огибающую ГЛАДКОЙ кривой; на шумном облаке (метод
+    // «скольз. среднее») он берёт min+max бакета → вертикальные штрихи.
+    // Для облака — строй-через-N.
+    ds.data = smoothCurve ? minMaxDecimate(full) : decimate(full)
     if (sorted) { ds.normalized = true; ds.parsing = false }
     datasets.push(ds)
     fulls.push(sorted)
   }
   const isDvdq = props.dqdvView === 'dvdq'
   const useSavgol = props.dqdvMethod === 'savgol' || isDvdq   // dV/dQ — только SG
-  // Выбор циклов безлимитный; РЕНДЕРИМ равномерную подвыборку ≤24 кривых —
-  // больше наложений нечитаемо и убивает канвас. Заголовок честно говорит
-  // «показано N из M».
-  const sortedCycles = pickEvenly([...props.selectedCycles].sort((a, b) => a - b), 24)
-  const nCycles = sortedCycles.length
+  // Выбор циклов безлимитный; рендерим ≤24 кривых НА СЕССИЮ из реально
+  // загруженных циклов (глобальная сетка морила голодом короткие сессии).
+  const globalSorted = [...props.selectedCycles].sort((a, b) => a - b)
   const dStyle = dqdvStyle.value
   // реактивная зависимость: готовность кривых из пула воркеров
   void savgolCacheVersion.value
@@ -124,9 +126,10 @@ const dqdvComputed = computed(() => timeBuild('dqdv', () => {
   for (const s of props.sessions) {
     const colorBase = sessionColorFor(s)
     const sessionDash = sessionDashFor(props.sessions.indexOf(s), props.sessions.length)
-    sortedCycles.forEach((cycleNum, cIdx) => {
-      const points = s.cycleDataMap?.[cycleNum] || []
-      if (!points.length) return
+    const sessionCycles = pickEvenly(globalSorted.filter(c => s.cycleDataMap?.[c]?.length), 24)
+    const nCycles = sessionCycles.length
+    sessionCycles.forEach((cycleNum, cIdx) => {
+      const points = s.cycleDataMap[cycleNum]
 
       let charge, discharge
       if (useSavgol) {
@@ -164,7 +167,7 @@ const dqdvComputed = computed(() => timeBuild('dqdv', () => {
           borderWidth: thickness,
           borderDash: sessionDash || [4, 2],
           showLine: true,
-        }, dStyle), charge)
+        }, dStyle), charge, useSavgol)
       }
       if (showDischarge && discharge.length) {
         if (annotate) peaks.push(...findPeaks(discharge).map(p => ({ ...p, color: cycleColor, label: fmt(p) })))
@@ -178,7 +181,7 @@ const dqdvComputed = computed(() => timeBuild('dqdv', () => {
           borderWidth: thickness,
           borderDash: sessionDash || undefined,
           showLine: true,
-        }, dStyle), discharge)
+        }, dStyle), discharge, useSavgol)
       }
     })
   }
@@ -238,7 +241,7 @@ const chartOptions = computed(() => ({
       display: true,
       text: (() => {
         const thinned = props.selectedCycles.length > 24
-          ? ` (показано ${Math.min(props.selectedCycles.length, 24)} из ${props.selectedCycles.length}, равномерно)` : ''
+          ? ` (≤24 цикла на измерение из ${props.selectedCycles.length}, равномерно)` : ''
         const base = props.experimentLabel
           ? `${props.experimentLabel} — ${props.dqdvView === 'dvdq' ? 'dV/dQ' : 'dQ/dV'}`
           : (props.dqdvView === 'dvdq'

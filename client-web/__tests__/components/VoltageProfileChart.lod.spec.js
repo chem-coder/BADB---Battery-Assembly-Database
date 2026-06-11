@@ -57,3 +57,26 @@ describe('VoltageProfileChart — LOD', () => {
     expect(typeof zoomOpts.pan.onPanComplete).toBe('function')
   })
 })
+
+describe('VoltageProfileChart — по-сессионное прореживание циклов', () => {
+  it('короткая сессия (10 циклов) при выборе 1..500 рисует СВОИ 10, а не только Ц1', () => {
+    const mkCycle = (c) => Array.from({ length: 40 }, (_, i) => ({
+      cycle_number: c, step_number: 1,
+      step_type: i < 20 ? 'charge' : 'discharge',
+      time_s: i * 10, voltage_v: 3 + 0.01 * i, capacity_ah: (i % 20) * 1e-5,
+    }))
+    const cycleDataMap = Object.fromEntries(Array.from({ length: 10 }, (_, k) => [k + 1, mkCycle(k + 1)]))
+    const session = { session_id: 9, battery_id: 3, color: '#003274', summary: [], cycleDataMap }
+    const selected = Array.from({ length: 500 }, (_, i) => i + 1)   // 1..500
+    const w = mount(VoltageProfileChart, {
+      props: { sessions: [session], selectedCycles: selected, stepFilter: 'discharge', capacityUnit: 'Ah' },
+    })
+    const labels = w.findComponent({ name: 'ScatterStub' }).props('data').datasets.map(d => d.label)
+    // глобальная сетка 1..500 дала бы только Ц1; по-сессионная — все 10
+    expect(labels.some(l => l.startsWith('Ц10_'))).toBe(true)
+    expect(labels.length).toBe(10)
+    // заголовок честен про прореживание выбора
+    const title = w.findComponent({ name: 'ScatterStub' }).props('options').plugins.title.text
+    expect(title).toContain('из 500')
+  })
+})
