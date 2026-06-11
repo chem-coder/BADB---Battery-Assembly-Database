@@ -272,3 +272,35 @@ export function resetZoom(chartRef) {
   const inst = chartRef?.value?.chart
   if (inst && typeof inst.resetZoom === 'function') inst.resetZoom()
 }
+
+// ── Равномерная выборка циклов для рендера ──────────────────────────────
+// Выбор циклов БЕЗ лимита, но рисовать 1000 × 2 полуцикла × сессии кривых
+// бессмысленно (нечитаемо) и смертельно для канваса. Для профиля V и dQ/dV
+// рендерится равномерная подвыборка ≤cap (первый и последний всегда внутри),
+// заголовок честно говорит «показаны N из M». Ёмкость/SOH не зависят от
+// выбора циклов — рисуют всё.
+export function pickEvenly(list, cap) {
+  const n = list?.length || 0
+  if (n <= cap) return list || []
+  const out = []
+  const step = (n - 1) / (cap - 1)
+  let prev = -1
+  for (let i = 0; i < cap; i++) {
+    const idx = Math.round(i * step)
+    if (idx !== prev) { out.push(list[idx]); prev = idx }
+  }
+  return out
+}
+
+// Группировка строк range-эндпоинта точек по циклам (cycleDataMap-формат).
+// Строки приходят упорядоченными по (cycle_number, time_s) — порядок внутри
+// цикла сохраняется.
+export function groupRowsByCycle(rows) {
+  const map = {}
+  for (const r of rows || []) {
+    const c = r.cycle_number
+    if (c == null) continue
+    ;(map[c] || (map[c] = [])).push(r)
+  }
+  return map
+}

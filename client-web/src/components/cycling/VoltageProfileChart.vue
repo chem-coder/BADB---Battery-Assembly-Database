@@ -15,7 +15,7 @@ import {
   sessionShortLabel, fillColor, cycleAlpha, viridisAt,
   chartAnimFor, sessionDashFor, dedupeLegend, legendToggleAll,
   convertCapacity, capacityAxisLabel, applyChartStyle,
-  exportChartPNG, resetZoom,
+  exportChartPNG, resetZoom, pickEvenly,
 } from '@/utils/cyclingChartShared'
 import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
 import { timeBuild, makePaintPlugin } from '@/utils/chartPerf'
@@ -61,7 +61,10 @@ const hasCapacity = computed(() => {
 const built = computed(() => timeBuild('voltage', () => {
   const datasets = []
   const fulls = []        // 1:1 с datasets; null = серия не для LOD (несортирована)
-  const sortedCycles = [...props.selectedCycles].sort((a, b) => a - b)
+  // Выбор циклов безлимитный; РЕНДЕРИМ равномерную подвыборку ≤24 кривых —
+  // больше наложений нечитаемо и убивает канвас. Заголовок честно говорит
+  // «показано N из M».
+  const sortedCycles = pickEvenly([...props.selectedCycles].sort((a, b) => a - b), 24)
   const useCapacity = hasCapacity.value
   const nCycles = sortedCycles.length
   const vStyle = voltageStyle.value
@@ -212,9 +215,11 @@ const chartOptions = computed(() => ({
     title: {
       display: true,
       text: (() => {
-        if (props.experimentLabel) return `${props.experimentLabel} — профиль V`
+        const shown = Math.min(props.selectedCycles.length, 24)
+        const thinned = props.selectedCycles.length > 24 ? ` (показано ${shown} из ${props.selectedCycles.length}, равномерно)` : ''
+        if (props.experimentLabel) return `${props.experimentLabel} — профиль V${thinned}`
         if (!props.selectedCycles.length) return 'Профиль напряжения'
-        const cLabel = `${props.selectedCycles.length} ${props.selectedCycles.length === 1 ? 'цикл' : 'циклов'}`
+        const cLabel = `${props.selectedCycles.length} ${props.selectedCycles.length === 1 ? 'цикл' : 'циклов'}${thinned}`
         if (props.sessions.length <= 1) return `Профиль напряжения — ${cLabel}`
         return `Профиль напряжения — ${props.sessions.length} измерений × ${cLabel}`
       })(),

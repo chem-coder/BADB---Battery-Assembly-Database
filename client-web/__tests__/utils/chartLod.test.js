@@ -118,3 +118,30 @@ describe('applyViewportLod (fake chart)', () => {
     applyViewportLod(chart, [makeSeries()], 500)
   })
 })
+
+describe('pickEvenly / groupRowsByCycle (без лимита выбора, прореженный рендер)', () => {
+  it('pickEvenly: ≤cap → как есть; >cap → равномерно, с первым и последним', async () => {
+    const { pickEvenly } = await import('@/utils/cyclingChartShared')
+    const small = [1, 2, 3]
+    expect(pickEvenly(small, 24)).toBe(small)
+    const big = Array.from({ length: 1000 }, (_, i) => i + 1)
+    const out = pickEvenly(big, 24)
+    expect(out.length).toBe(24)
+    expect(out[0]).toBe(1)
+    expect(out[out.length - 1]).toBe(1000)
+    const gaps = out.slice(1).map((v, i) => v - out[i])
+    expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThanOrEqual(2)  // равномерность
+  })
+
+  it('groupRowsByCycle: режет range-ответ на cycleDataMap, порядок сохраняется', async () => {
+    const { groupRowsByCycle } = await import('@/utils/cyclingChartShared')
+    const rows = [
+      { cycle_number: 1, time_s: 0 }, { cycle_number: 1, time_s: 10 },
+      { cycle_number: 2, time_s: 0 }, { cycle_number: 2, time_s: 5 },
+    ]
+    const map = groupRowsByCycle(rows)
+    expect(Object.keys(map)).toEqual(['1', '2'])
+    expect(map[1].map(r => r.time_s)).toEqual([0, 10])
+    expect(map[2].length).toBe(2)
+  })
+})

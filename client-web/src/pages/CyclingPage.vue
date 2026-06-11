@@ -4,6 +4,7 @@
  * Upload cycling data files → view sessions → interactive charts.
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
+import { groupRowsByCycle } from '@/utils/cyclingChartShared'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
@@ -436,7 +437,11 @@ watch(specificAvailable, (has) => {
 // real cycling runs can be 500-10000 cycles, and 100 is the visual
 // ceiling where individual voltage-profile lines still tell a story.
 // For bigger studies, decimate ("каждый 50-й") rather than chart all.
-const MAX_SELECTED_CYCLES = 100
+// Жёсткого продуктового лимита нет: выбор любых N циклов. Профиль V и dQ/dV
+// рендерят равномерную подвыборку ≤24 кривых (см. pickEvenly) — рисовать
+// тысячи наложенных кривых бессмысленно и смертельно для канваса; Ёмкость и
+// SOH от выбора не зависят. 10000 — санитарный потолок против патологий.
+const MAX_SELECTED_CYCLES = 10000
 const FETCH_CONCURRENCY = 4
 
 // Stable color palette — first 8 sessions get a curated color from the
@@ -752,7 +757,7 @@ async function toggleCycle(cycleNum) {
     toast.add({
       severity: 'warn',
       summary: 'Лимит циклов',
-      detail: `Можно сравнивать до ${MAX_SELECTED_CYCLES} циклов одновременно`,
+      detail: `Санитарный потолок: ${MAX_SELECTED_CYCLES} циклов одновременно`,
       life: 3000,
     })
     return
@@ -821,6 +826,39 @@ async function fetchCyclesBatched(sid, cycleNums) {
     ...loadingCyclesBy.value,
     [sid]: [...new Set([...(loadingCyclesBy.value[sid] || []), ...cycleNums])],
   }
+
+  // Range-путь: МНОГО циклов одним запросом (раньше «Все 100» = 100 HTTP-
+  // запросов на сессию — главное «крайне долго»). Эндпоинт сам прореживает
+  // до бюджета ~60к точек на запрос; разрезаем ответ по циклам. Бонус: соседние
+  // циклы диапазона тоже падают в кэш — дальнейшие тоглы бесплатны.
+  const minC = Math.min(...cycleNums)
+  const maxC = Math.max(...cycleNums)
+  const span = maxC - minC + 1
+  const sparse = cycleNums.length <= 12 && cycleNums.length / span < 0.3
+  if (!sparse) {
+    try {
+      const downsample = Math.max(100, Math.min(2000, Math.ceil(60000 / span)))
+      const { data } = await api.get(
+        `/api/cycling/sessions/${sid}/datapoints?from_cycle=${minC}&to_cycle=${maxC}&downsample=${downsample}`
+      )
+      if (!activeSessionIds.value.includes(sid)) return
+      const grouped = groupRowsByCycle(data)
+      cycleDataBySession.value = {
+        ...cycleDataBySession.value,
+        [sid]: { ...(cycleDataBySession.value[sid] || {}), ...grouped },
+      }
+      return
+    } catch {
+      /* падаем на поцикловый путь ниже */
+    } finally {
+      const wanted = new Set(cycleNums)
+      loadingCyclesBy.value = {
+        ...loadingCyclesBy.value,
+        [sid]: (loadingCyclesBy.value[sid] || []).filter(x => !wanted.has(x)),
+      }
+    }
+  }
+
   const queue = [...cycleNums]
   const workers = Array.from(
     { length: Math.min(FETCH_CONCURRENCY, queue.length) },

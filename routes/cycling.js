@@ -603,7 +603,7 @@ router.get('/sessions/:id/datapoints', auth, async (req, res) => {
     // recompute (per-step max aggregation mirrors parse_cycling.py).
     if (total <= downsample * (toCycle - fromCycle + 1)) {
       const result = await pool.query(`
-        SELECT cycle_number, step_number, time_s, voltage_v, current_a, capacity_ah, energy_wh, step_type
+        SELECT cycle_number, step_number, time_s, voltage_v, current_a, capacity_ah, energy_wh, temperature_c, step_type
         FROM cycling_datapoints
         WHERE session_id = $1 AND cycle_number >= $2 AND cycle_number <= $3
         ORDER BY cycle_number, time_s
@@ -614,7 +614,7 @@ router.get('/sessions/:id/datapoints', auth, async (req, res) => {
     // Downsample using nth-row selection
     const nth = Math.ceil(total / (downsample * (toCycle - fromCycle + 1)));
     const result = await pool.query(`
-      SELECT cycle_number, step_number, time_s, voltage_v, current_a, capacity_ah, energy_wh, step_type
+      SELECT cycle_number, step_number, time_s, voltage_v, current_a, capacity_ah, energy_wh, temperature_c, step_type
       FROM (
         SELECT *, row_number() OVER (ORDER BY cycle_number, time_s) AS rn
         FROM cycling_datapoints

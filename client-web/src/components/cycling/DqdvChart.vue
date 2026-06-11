@@ -16,7 +16,7 @@ import { getDifferentialCurve, savgolCacheVersion } from '@/utils/savgolAsync'
 import {
   sessionShortLabel, fillColor, cycleAlpha, viridisAt,
   chartAnimFor, sessionDashFor, dedupeLegend, legendToggleAll,
-  applyChartStyle, exportChartPNG, resetZoom,
+  applyChartStyle, exportChartPNG, resetZoom, pickEvenly,
 } from '@/utils/cyclingChartShared'
 import { minMaxDecimate, ensureSortedByX, makeLodHandlers, useFrameCoalesced } from '@/utils/chartLod'
 import { timeBuild, makePaintPlugin } from '@/utils/chartPerf'
@@ -112,7 +112,10 @@ const dqdvComputed = computed(() => timeBuild('dqdv', () => {
   }
   const isDvdq = props.dqdvView === 'dvdq'
   const useSavgol = props.dqdvMethod === 'savgol' || isDvdq   // dV/dQ — только SG
-  const sortedCycles = [...props.selectedCycles].sort((a, b) => a - b)
+  // Выбор циклов безлимитный; РЕНДЕРИМ равномерную подвыборку ≤24 кривых —
+  // больше наложений нечитаемо и убивает канвас. Заголовок честно говорит
+  // «показано N из M».
+  const sortedCycles = pickEvenly([...props.selectedCycles].sort((a, b) => a - b), 24)
   const nCycles = sortedCycles.length
   const dStyle = dqdvStyle.value
   // реактивная зависимость: готовность кривых из пула воркеров
@@ -233,11 +236,16 @@ const chartOptions = computed(() => ({
     },
     title: {
       display: true,
-      text: props.experimentLabel
-        ? `${props.experimentLabel} — ${props.dqdvView === 'dvdq' ? 'dV/dQ' : 'dQ/dV'}`
-        : (props.dqdvView === 'dvdq'
-            ? 'Дифференциальное напряжение (|dV/dQ|, DVA)'
-            : 'Дифференциальная ёмкость (|dQ/dV|)'),
+      text: (() => {
+        const thinned = props.selectedCycles.length > 24
+          ? ` (показано ${Math.min(props.selectedCycles.length, 24)} из ${props.selectedCycles.length}, равномерно)` : ''
+        const base = props.experimentLabel
+          ? `${props.experimentLabel} — ${props.dqdvView === 'dvdq' ? 'dV/dQ' : 'dQ/dV'}`
+          : (props.dqdvView === 'dvdq'
+              ? 'Дифференциальное напряжение (|dV/dQ|, DVA)'
+              : 'Дифференциальная ёмкость (|dQ/dV|)')
+        return base + thinned
+      })(),
       font: { size: 13, weight: 600 },
       color: '#003274',
       padding: { bottom: 10 },
