@@ -42,9 +42,7 @@ const activeTab = ref('overview') // 'overview' | 'pipeline' | 'graph' | 'analyt
 const kpiData = ref(null)
 const filterOptions = ref({ projects: [], operators: [] })
 const activity = ref([])
-const production = ref([])
 const graphData = ref({ nodes: [], edges: [] })
-const funnelData = ref([])
 const materialsUsage = ref([])
 const allTapes = ref([])
 const allBatches = ref([])
@@ -67,21 +65,26 @@ const periodOptions = [
   { label: 'Интервал', value: 'custom' },
 ]
 
+// Период — чисто клиентский фильтр: все вкладки, кроме графа, считаются
+// из уже загруженных списков, поэтому смена периода не делает ни одного
+// запроса (раньше перекачивала весь дашборд).
 function setPeriod(v) {
   selectedPeriod.value = v
-  onPeriodChange()
 }
 
 const filtersDirty = computed(() =>
   selectedProjects.value.length > 0 || selectedOperators.value.length > 0 || selectedPeriod.value !== '30d'
 )
 function resetFilters() {
+  // Граф был серверно отфильтрован только при ровно одном выбранном
+  // проекте/операторе — лишь тогда сброс требует его перезапроса.
+  const graphWasFiltered = selectedProjects.value.length === 1 || selectedOperators.value.length === 1
   selectedProjects.value = []
   selectedOperators.value = []
   selectedPeriod.value = '30d'
   customDateFrom.value = ''
   customDateTo.value = ''
-  onPeriodChange()
+  if (graphWasFiltered) reloadGraph()
 }
 
 // ── Reference counts ──────────────────────────────────────────────────
@@ -89,21 +92,28 @@ const refCounts = ref({})
 
 
 // ── Fetch ─────────────────────────────────────────────────────────────
+// Граф — единственный серверный запрос, зависящий от фильтров (и только
+// при ровно одном выбранном проекте/операторе: эндпоинт принимает один id).
+function graphQuery() {
+  const projectParam = selectedProjects.value.length === 1 ? `&project_id=${selectedProjects.value[0]}` : ''
+  const operatorParam = selectedOperators.value.length === 1 ? `&operator_id=${selectedOperators.value[0]}` : ''
+  return `/api/dashboard/graph?limit=200${projectParam}${operatorParam}`
+}
+
 async function loadDashboard() {
   loading.value = true
-  const period = selectedPeriod.value
 
   try {
-    const projectParam = selectedProjects.value.length === 1 ? `&project_id=${selectedProjects.value[0]}` : ''
-    const operatorParam = selectedOperators.value.length === 1 ? `&operator_id=${selectedOperators.value[0]}` : ''
-
-    const [kpi, filters, act, prod, graph, funnel, matUsage, tapesRes, batchesRes, batteriesRes] = await Promise.allSettled([
-      api.get(`/api/dashboard/kpi?period=${period}${projectParam}${operatorParam}`),
+    // Воронка и тренд производства считаются на клиенте из tapes/batches/
+    // batteries (см. clientFunnel / clientProduction) — серверные
+    // /dashboard/funnel и /dashboard/production не запрашиваем. KPI нужен
+    // только ради счётчиков материалов/рецептур в refLinks (count(*) без
+    // фильтров), поэтому период/проект/оператор ему не передаём.
+    const [kpi, filters, act, graph, matUsage, tapesRes, batchesRes, batteriesRes] = await Promise.allSettled([
+      api.get('/api/dashboard/kpi?period=all'),
       api.get('/api/dashboard/filter-options'),
       api.get('/api/dashboard/activity?limit=80'),
-      api.get(`/api/dashboard/production?weeks=12`),
-      api.get(`/api/dashboard/graph?limit=200${projectParam}${operatorParam}`),
-      api.get(`/api/dashboard/funnel?period=${period}`),
+      api.get(graphQuery()),
       api.get('/api/dashboard/materials-usage'),
       api.get('/api/tapes'),
       api.get('/api/electrodes/electrode-cut-batches'),
@@ -113,9 +123,7 @@ async function loadDashboard() {
     if (kpi.status === 'fulfilled') kpiData.value = kpi.value.data
     if (filters.status === 'fulfilled') filterOptions.value = filters.value.data
     if (act.status === 'fulfilled') activity.value = act.value.data
-    if (prod.status === 'fulfilled') production.value = prod.value.data
     if (graph.status === 'fulfilled') graphData.value = graph.value.data
-    if (funnel.status === 'fulfilled') funnelData.value = funnel.value.data
     if (matUsage.status === 'fulfilled') materialsUsage.value = matUsage.value.data
     if (tapesRes.status === 'fulfilled') allTapes.value = tapesRes.value.data
     if (batchesRes.status === 'fulfilled') allElectrodeBatches.value = batchesRes.value.data
@@ -139,8 +147,14 @@ async function loadDashboard() {
 
 onMounted(loadDashboard)
 
-// Reload when period changes
-function onPeriodChange() { loadDashboard() }
+// Смена проекта/оператора перезапрашивает ТОЛЬКО граф — остальные вкладки
+// фильтруются на клиенте из уже загруженных списков.
+async function reloadGraph() {
+  try {
+    const res = await api.get(graphQuery())
+    graphData.value = res.data
+  } catch { /* граф остаётся с прежними данными */ }
+}
 
 // ── Computed ──────────────────────────────────────────────────────────
 const kpis = computed(() => {
@@ -325,15 +339,64 @@ const groupedActivity = computed(() => {
   }
   return groups
 })
-const filteredProduction = computed(() => {
-  const { from, to } = getDateRange()
-  if (!from && !to) return production.value
-  return production.value.filter(w => {
-    const d = new Date(w.week_start)
-    if (from && d < from) return false
-    if (to && d > to) return false
-    return true
-  })
+// ── Аналитика: воронка и тренд на клиенте ─────────────────────────────
+// Раньше серверные /dashboard/funnel и /dashboard/production игнорировали
+// проект/оператор (а воронка — ещё и период для рецептур), хотя фильтр-бар
+// выглядел применённым. Считаем из тех же отфильтрованных списков, что и
+// KPI/Pipeline — фильтры честные, смена периода мгновенная.
+const clientFunnel = computed(() => {
+  const ft = filteredTapes.value
+  // «Рецептуры» = уникальные рецептуры, по которым отлиты попавшие в фильтр
+  // ленты (конверсия «рецептура → лента»), а не все рецептуры справочника.
+  const recipesUsed = new Set(ft.map(t => t.tape_recipe_id).filter(id => id != null)).size
+  return [
+    { stage: 'Рецептуры', count: recipesUsed },
+    { stage: 'Ленты', count: ft.length },
+    { stage: 'Электроды', count: filteredElectrodeBatches.value.length },
+    { stage: 'Аккумуляторы', count: filteredBatteries.value.length },
+  ]
+})
+
+// Понедельник недели даты — локальная полночь (как date_trunc('week')).
+function mondayOf(ts) {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return d
+}
+
+const clientProduction = computed(() => {
+  const lists = [
+    ['tapes', filteredTapes.value],
+    ['electrode_batches', filteredElectrodeBatches.value],
+    ['batteries', filteredBatteries.value],
+  ]
+  const weeks = new Map()
+  for (const [field, items] of lists) {
+    for (const it of items) {
+      const t = new Date(it.created_at)
+      if (isNaN(t)) continue
+      const wk = mondayOf(t).getTime()
+      let row = weeks.get(wk)
+      if (!row) {
+        row = { week_start: new Date(wk).toISOString(), tapes: 0, electrode_batches: 0, batteries: 0 }
+        weeks.set(wk, row)
+      }
+      row[field]++
+    }
+  }
+  if (weeks.size === 0) return []
+  // Пустые недели заполняем нулями, иначе линия соединит далёкие недели
+  // как соседние и тренд соврёт.
+  const keys = [...weeks.keys()].sort((a, b) => a - b)
+  const out = []
+  const cursor = new Date(keys[0])
+  while (cursor.getTime() <= keys[keys.length - 1]) {
+    out.push(weeks.get(cursor.getTime())
+      || { week_start: cursor.toISOString(), tapes: 0, electrode_batches: 0, batteries: 0 })
+    cursor.setDate(cursor.getDate() + 7)
+  }
+  return out
 })
 </script>
 
@@ -362,18 +425,26 @@ const filteredProduction = computed(() => {
       <div class="filter-bar-left">
         <!-- Один сегментированный контрол периода (1 клик) — раньше были
              Select + дублирующие его чипы «Неделя/Месяц/Всё» -->
-        <div class="filter-seg" role="group" aria-label="Период">
+        <!-- На вкладке «Граф» период честно отключён — граф показывает
+             структуру связей и по времени не фильтруется -->
+        <div
+          class="filter-seg"
+          role="group"
+          aria-label="Период"
+          :title="activeTab === 'graph' ? 'К графу связей период не применяется' : ''"
+        >
           <button
             v-for="p in periodOptions"
             :key="p.value"
             :class="['filter-seg-btn', { active: selectedPeriod === p.value }]"
+            :disabled="activeTab === 'graph'"
             @click="setPeriod(p.value)"
           >{{ p.label }}</button>
         </div>
         <template v-if="selectedPeriod === 'custom'">
-          <input type="date" v-model="customDateFrom" class="filter-date-input" @change="onPeriodChange" />
+          <input type="date" v-model="customDateFrom" class="filter-date-input" :disabled="activeTab === 'graph'" />
           <span class="filter-date-sep">—</span>
-          <input type="date" v-model="customDateTo" class="filter-date-input" @change="onPeriodChange" />
+          <input type="date" v-model="customDateTo" class="filter-date-input" :disabled="activeTab === 'graph'" />
         </template>
         <MultiSelect
           v-model="selectedProjects"
@@ -385,7 +456,7 @@ const filteredProduction = computed(() => {
           class="filter-project"
           :maxSelectedLabels="2"
           selectedItemsLabel="{0} проектов"
-          @change="loadDashboard()"
+          @change="reloadGraph()"
         />
         <MultiSelect
           v-model="selectedOperators"
@@ -397,11 +468,19 @@ const filteredProduction = computed(() => {
           class="filter-operator"
           :maxSelectedLabels="2"
           selectedItemsLabel="{0} операторов"
-          @change="loadDashboard()"
+          @change="reloadGraph()"
         />
         <button v-if="filtersDirty" class="filter-reset-btn" title="Период 30 дней, проекты и операторы — все" @click="resetFilters">
           <i class="pi pi-times"></i> Сбросить
         </button>
+        <!-- Серверный граф принимает только один id — честно предупреждаем,
+             что мультивыбор к нему не применяется -->
+        <span
+          v-if="activeTab === 'graph' && (selectedProjects.length > 1 || selectedOperators.length > 1)"
+          class="filter-hint"
+        >
+          <i class="pi pi-info-circle"></i> Граф фильтруется только при выборе одного проекта/оператора
+        </span>
       </div>
     </div>
 
@@ -472,7 +551,7 @@ const filteredProduction = computed(() => {
 
     <!-- ════════ ANALYTICS TAB ════════ -->
     <template v-if="activeTab === 'analytics'">
-      <DashboardAnalytics :production="filteredProduction" :funnel="funnelData" :materialsUsage="materialsUsage" />
+      <DashboardAnalytics :production="clientProduction" :funnel="clientFunnel" :materialsUsage="materialsUsage" />
     </template>
 
   </div>
@@ -562,8 +641,18 @@ const filteredProduction = computed(() => {
   white-space: nowrap;
 }
 .filter-seg-btn:last-child { border-right: none; }
-.filter-seg-btn:hover:not(.active) { background: rgba(0, 50, 116, 0.05); }
+.filter-seg-btn:hover:not(.active):not(:disabled) { background: rgba(0, 50, 116, 0.05); }
 .filter-seg-btn.active { background: #003274; color: white; font-weight: 600; }
+.filter-seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.filter-date-input:disabled { opacity: 0.45; cursor: not-allowed; }
+.filter-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: rgba(0, 50, 116, 0.55);
+}
+.filter-hint i { font-size: 11px; }
 .filter-reset-btn {
   display: inline-flex;
   align-items: center;
