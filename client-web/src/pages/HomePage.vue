@@ -3,7 +3,6 @@ import { ref, computed, defineAsyncComponent, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
-import Select from 'primevue/select'
 import MultiSelect from 'primevue/multiselect'
 import PageHeader from '@/components/PageHeader.vue'
 import DashboardPipeline from '@/components/DashboardPipeline.vue'
@@ -59,13 +58,31 @@ const selectedOperators = ref([])
 const customDateFrom = ref('')
 const customDateTo = ref('')
 
+// Подписи коротки намеренно — это сегменты-кнопки, не пункты дропдауна
 const periodOptions = [
-  { label: '7 дней', value: '7d' },
-  { label: '30 дней', value: '30d' },
-  { label: '90 дней', value: '90d' },
-  { label: 'Всё время', value: 'all' },
-  { label: 'Интервал...', value: 'custom' },
+  { label: '7 дн', value: '7d' },
+  { label: '30 дн', value: '30d' },
+  { label: '90 дн', value: '90d' },
+  { label: 'Всё', value: 'all' },
+  { label: 'Интервал', value: 'custom' },
 ]
+
+function setPeriod(v) {
+  selectedPeriod.value = v
+  onPeriodChange()
+}
+
+const filtersDirty = computed(() =>
+  selectedProjects.value.length > 0 || selectedOperators.value.length > 0 || selectedPeriod.value !== '30d'
+)
+function resetFilters() {
+  selectedProjects.value = []
+  selectedOperators.value = []
+  selectedPeriod.value = '30d'
+  customDateFrom.value = ''
+  customDateTo.value = ''
+  onPeriodChange()
+}
 
 // ── Reference counts ──────────────────────────────────────────────────
 const refCounts = ref({})
@@ -343,15 +360,16 @@ const filteredProduction = computed(() => {
     <!-- ── Filter bar ── -->
     <div class="glass-card filter-bar">
       <div class="filter-bar-left">
-        <Select
-          v-model="selectedPeriod"
-          :options="periodOptions"
-          optionLabel="label"
-          optionValue="value"
-          size="small"
-          @change="onPeriodChange"
-          class="filter-period"
-        />
+        <!-- Один сегментированный контрол периода (1 клик) — раньше были
+             Select + дублирующие его чипы «Неделя/Месяц/Всё» -->
+        <div class="filter-seg" role="group" aria-label="Период">
+          <button
+            v-for="p in periodOptions"
+            :key="p.value"
+            :class="['filter-seg-btn', { active: selectedPeriod === p.value }]"
+            @click="setPeriod(p.value)"
+          >{{ p.label }}</button>
+        </div>
         <template v-if="selectedPeriod === 'custom'">
           <input type="date" v-model="customDateFrom" class="filter-date-input" @change="onPeriodChange" />
           <span class="filter-date-sep">—</span>
@@ -381,12 +399,9 @@ const filteredProduction = computed(() => {
           selectedItemsLabel="{0} операторов"
           @change="loadDashboard()"
         />
-      </div>
-      <div class="filter-presets">
-        <button :class="['preset-chip', selectedPeriod === '7d' ? 'active' : '']" @click="selectedPeriod = '7d'; onPeriodChange()">Неделя</button>
-        <button :class="['preset-chip', selectedPeriod === '30d' ? 'active' : '']" @click="selectedPeriod = '30d'; onPeriodChange()">Месяц</button>
-        <button :class="['preset-chip', selectedPeriod === 'all' ? 'active' : '']" @click="selectedPeriod = 'all'; onPeriodChange()">Всё</button>
-        <button v-if="selectedProjects.length || selectedOperators.length || selectedPeriod !== '30d'" class="preset-chip preset-chip--reset" @click="selectedProjects = []; selectedOperators = []; selectedPeriod = '30d'; onPeriodChange()">Сбросить</button>
+        <button v-if="filtersDirty" class="filter-reset-btn" title="Период 30 дней, проекты и операторы — все" @click="resetFilters">
+          <i class="pi pi-times"></i> Сбросить
+        </button>
       </div>
     </div>
 
@@ -527,7 +542,43 @@ const filteredProduction = computed(() => {
   gap: 0.75rem;
   align-items: center;
 }
-.filter-period { width: 140px; }
+.filter-seg {
+  display: inline-flex;
+  border: 1px solid rgba(0, 50, 116, 0.15);
+  border-radius: 7px;
+  overflow: hidden;
+  background: white;
+  flex-shrink: 0;
+}
+.filter-seg-btn {
+  padding: 5px 11px;
+  border: none;
+  border-right: 1px solid rgba(0, 50, 116, 0.1);
+  background: white;
+  color: rgba(0, 50, 116, 0.65);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.filter-seg-btn:last-child { border-right: none; }
+.filter-seg-btn:hover:not(.active) { background: rgba(0, 50, 116, 0.05); }
+.filter-seg-btn.active { background: #003274; color: white; font-weight: 600; }
+.filter-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 7px;
+  background: white;
+  color: #E74C3C;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.filter-reset-btn:hover { background: rgba(231, 76, 60, 0.08); }
+.filter-reset-btn i { font-size: 10px; }
 .filter-project { width: 210px; }
 .filter-operator { width: 210px; }
 .filter-date-input {
@@ -543,24 +594,6 @@ const filteredProduction = computed(() => {
 }
 .filter-date-input:focus { border-color: #003274; outline: none; }
 .filter-date-sep { color: #9CA3AF; font-size: 12px; }
-.filter-presets {
-  display: flex;
-  gap: 0.4rem;
-}
-.preset-chip {
-  padding: 4px 12px;
-  border: 0.5px solid rgba(180, 210, 255, 0.55);
-  border-radius: 20px;
-  font-size: 12px;
-  background: rgba(255, 255, 255, 0.5);
-  color: #6B7280;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.preset-chip:hover { border-color: rgba(82, 201, 166, 0.45); color: #003274; }
-.preset-chip.active { background: rgba(0, 50, 116, 0.08); border-color: #003274; color: #003274; font-weight: 600; }
-.preset-chip--reset { color: #E74C3C !important; border-color: rgba(231, 76, 60, 0.3) !important; }
-.preset-chip--reset:hover { background: rgba(231, 76, 60, 0.08); }
 
 /* ── KPI grid ── */
 .kpi-grid {
@@ -722,6 +755,8 @@ const filteredProduction = computed(() => {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .filter-bar { flex-direction: column; align-items: stretch; }
   .filter-bar-left { flex-wrap: wrap; }
-  .filter-period, .filter-project, .filter-operator { width: 100%; }
+  .filter-project, .filter-operator { width: 100%; }
+  .filter-seg { width: 100%; }
+  .filter-seg-btn { flex: 1; }
 }
 </style>
