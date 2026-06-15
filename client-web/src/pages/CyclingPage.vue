@@ -781,10 +781,18 @@ async function replaceCycles(newList) {
   if (!clamped.length) return
 
   // For each active session, find its missing cycles and fetch them.
+  // Intersect the requested list with the session's OWN cycle numbers first:
+  // a "Все"/range pick spans the longest active session, so for a short
+  // session (e.g. 10-cycle ELITECH cell overlaid on a 253-cycle run) the
+  // out-of-range numbers would otherwise fire a 404 each. If the summary
+  // isn't loaded yet (shouldn't happen for an active session), fall back to
+  // requesting everything so nothing is silently dropped.
   const capturedActiveIds = [...activeSessionIds.value]
   await Promise.all(capturedActiveIds.map(async sid => {
     const have = cycleDataBySession.value[sid] || {}
-    const missing = clamped.filter(c => !have[c])
+    const summary = summaryBySession.value[sid]
+    const own = summary && summary.length ? new Set(summary.map(r => r.cycle_number)) : null
+    const missing = clamped.filter(c => (own ? own.has(c) : true) && !have[c])
     if (!missing.length) return
     await fetchCyclesBatched(sid, missing)
   }))

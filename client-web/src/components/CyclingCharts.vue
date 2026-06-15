@@ -336,19 +336,42 @@ function clampToMax(list) {
   return out.slice(0, props.maxSelected)
 }
 
+// Per-session cycle-number lists (each sorted asc). Quick filters sample
+// EACH session independently and union the result — overlaying a short
+// session (e.g. a 10-cycle ELITECH cell) with a long one (250+ cycles) must
+// never starve the short one. "Каждый N-й" over the global union lands
+// almost no numbers inside the short session's range (every-10th of 1..253
+// hits only cycle 1 of a 1..10 session); per-session it samples each at its
+// own resolution so every session stays visible.
+function perSessionCycleLists() {
+  return props.sessions
+    .map(s => (s.summary || []).map(r => r.cycle_number).filter(n => n != null).sort((a, b) => a - b))
+    .filter(list => list.length)
+}
+
+// One session's own cycles, sampled: first (formation) + every n-th + last.
+function everyNthOf(list, n) {
+  const picked = []
+  for (let i = 0; i < list.length; i += n) picked.push(list[i])
+  if (list.length && picked[picked.length - 1] !== list[list.length - 1]) picked.push(list[list.length - 1])
+  return picked
+}
+
+function unionSorted(lists) {
+  const set = new Set()
+  for (const l of lists) for (const c of l) set.add(c)
+  return [...set].sort((a, b) => a - b)
+}
+
 function selectAll() {
   emit('replace-cycles', clampToMax(allCycleNumbers.value))
 }
 
 function selectEveryNth(n) {
   if (n < 1) return
-  const all = allCycleNumbers.value
-  if (!all.length) return
-  // Include the first cycle (formation) always, then 1+N, 1+2N, ...
-  const picked = []
-  for (let i = 0; i < all.length; i += n) picked.push(all[i])
-  // Also include the last cycle so the end of life is visible
-  if (picked[picked.length - 1] !== all[all.length - 1]) picked.push(all[all.length - 1])
+  const lists = perSessionCycleLists()
+  if (!lists.length) return
+  const picked = unionSorted(lists.map(l => everyNthOf(l, n)))
   emit('replace-cycles', clampToMax(picked))
 }
 
@@ -369,13 +392,13 @@ function clearSelection() {
   emit('replace-cycles', [])
 }
 
-// Dynamic labels: "Каждый 5й (3)" — preview how many the filter would pick
+// Dynamic labels: "Каждый 5й (3)" — preview how many the filter would pick.
+// Mirrors selectEveryNth's per-session sampling so the count is honest.
 function countEveryNth(n) {
-  const all = allCycleNumbers.value
-  if (!all.length || n < 1) return 0
-  const picked = []
-  for (let i = 0; i < all.length; i += n) picked.push(all[i])
-  if (picked[picked.length - 1] !== all[all.length - 1]) picked.push(all[all.length - 1])
+  if (n < 1) return 0
+  const lists = perSessionCycleLists()
+  if (!lists.length) return 0
+  const picked = unionSorted(lists.map(l => everyNthOf(l, n)))
   return Math.min(picked.length, props.maxSelected)
 }
 
