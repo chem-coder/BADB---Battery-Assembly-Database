@@ -13,7 +13,7 @@
  *  - Focus on project subtree
  *  - Type filters + search (Obsidian-style)
  */
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import cytoscape from 'cytoscape'
 import dagre from 'cytoscape-dagre'
@@ -31,6 +31,11 @@ const containerRef = ref(null)
 const minimapRef = ref(null)
 let cy = null
 let _minimapTimer = null
+// Set of node ids that are unconnected (not reachable from the main
+// project→tape→electrode→battery chain). Computed in getLayoutConfig,
+// consumed after layout to tag them `.orphan` for distinct styling.
+let cyOrphanIds = new Set()
+let orphanZoneY = null
 
 // ── State ──
 const spacing = ref(80)
@@ -106,17 +111,56 @@ const DETAIL_LABELS = {
   type: 'Тип',
 }
 
+// ── Происхождение ноды (аудит-поля из /api/dashboard/graph) ──
+function hasProvenance(d) {
+  return !!(d && (d.created_by_name || d.created_at || d.item_created_at || d.updated_by_name || d.updated_at))
+}
+// ISO → 'ДД.ММ.ГГГГ ЧЧ:ММ' (даты приходят строками из API; для дат без
+// времени — только дата)
+function fmtDT(iso) {
+  if (!iso) return '—'
+  const s = String(iso)
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/)
+  if (!m) return s
+  return m[4] ? `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}` : `${m[3]}.${m[2]}.${m[1]}`
+}
+
 // ── Layout ──
 // Strict type-per-layer: each row = one entity type, equal vertical spacing
-const LAYER_ORDER = ['project', 'material', 'recipe', 'tape', 'electrode_batch', 'separator', 'electrolyte', 'battery']
+// All node types, in production-flow order. NOTE: sep_structure was
+// previously missing here even though it has a color/shape/label — those
+// nodes fell through to the layout fallback and stacked on one point
+// (the visible «overlap» bug). Keep this in sync with NODE_COLORS.
+const LAYER_ORDER = ['project', 'material', 'recipe', 'tape', 'electrode_batch', 'separator', 'sep_structure', 'electrolyte', 'battery']
 
 function getLayoutConfig() {
   if (!cy) return { name: 'preset' }
 
   const gap = spacing.value          // vertical gap between layers
-  const nodeGap = 55                 // horizontal gap between nodes in same layer
-  const orphanGap = 40               // horizontal gap for orphans
+  // Horizontal gap must clear the node label, which is capped at
+  // text-max-width 85px (see node style). At the old 55px nodes packed
+  // tighter than their labels, so long names (projects, tapes, recipes)
+  // overlapped into an unreadable smear. 100px clears the 85px label
+  // plus a small margin.
+  const nodeGap = 100
+  const orphanGap = 100              // orphans use the same readable gap
   const padding = 60
+  // Available width of the graph canvas — used to wrap long type-rows
+  // onto sub-rows instead of letting them run off-screen / force fit to
+  // zoom everything tiny. Falls back to a sane default before mount.
+  const canvasW = (cy.width && cy.width()) || containerRef.value?.clientWidth || 1100
+  // How many nodes fit on one readable sub-row. Min 4 so a stray wide
+  // viewport doesn't make 1-per-row; the row is centered regardless.
+  const maxPerRow = Math.max(4, Math.floor((canvasW - 2 * padding) / nodeGap))
+  // Vertical pitch between ANY two node rows. Must clear the tallest node
+  // (project ≈44px) PLUS its wrapped 2-line label (≈28px) PLUS margin — the old
+  // gap*0.62 (≈50px) was exactly the bug: on dense layers (60 batteries → 7
+  // sub-rows) the label of one row smeared onto the node below. Slider raises
+  // it, never below the safe floor.
+  const rowPitch = Math.max(88, gap)
+  // Whole layers / zones separate by MORE than a sub-row, so each type reads as
+  // its own band instead of blurring into the next.
+  const bandGap = rowPitch + Math.round(gap * 0.4)
 
   // Find nodes reachable from production flow (project→tape→electrode→battery chain)
   // A node is "main" if it's reachable from any tape or project via BFS
@@ -147,69 +191,134 @@ function getLayoutConfig() {
   const layers = {}
   const orphans = {}
   for (const t of LAYER_ORDER) { layers[t] = []; orphans[t] = [] }
+  // Nodes whose type is NOT in LAYER_ORDER collect here and get their own lane
+  // later — instead of silently falling onto the single fallback point, which
+  // stacked every such node on top of each other.
+  const unknown = []
 
   cy.nodes().forEach(node => {
     if (node.isParent()) return
     if (node.style('display') === 'none') return
     const type = node.data('type')
-    if (!layers[type]) return
-    if (mainIds.has(node.id())) {
-      layers[type].push(node)
-    } else {
-      orphans[type].push(node)
-    }
+    if (!layers[type]) { unknown.push(node); return }
+    if (mainIds.has(node.id())) layers[type].push(node)
+    else orphans[type].push(node)
   })
+
+  // Deterministic order within each bucket → stable layout across renders, so
+  // nodes don't jump positions when the data list reorders.
+  const byLabel = (a, b) => String(a.data('label') || '').localeCompare(String(b.data('label') || ''), 'ru')
+  for (const t of LAYER_ORDER) { layers[t].sort(byLabel); orphans[t].sort(byLabel) }
+  unknown.sort(byLabel)
 
   const positions = {}
   let currentY = padding
 
-  // Find max connected width to know where orphans start
-  let maxConnectedWidth = 0
-  for (const type of LAYER_ORDER) {
-    const w = layers[type].length * nodeGap
-    if (w > maxConnectedWidth) maxConnectedWidth = w
-  }
-  const orphanStartX = padding + maxConnectedWidth + 100
+  // Width of the centering band = widest sub-row we'll draw (capped at
+  // maxPerRow). Connected rows and the orphan column both center within
+  // this band so the whole graph stays balanced left-to-right.
+  const widestRowCount = Math.min(
+    maxPerRow,
+    Math.max(1, ...LAYER_ORDER.map(t => layers[t].length))
+  )
+  const bandWidth = (widestRowCount - 1) * nodeGap
+  const centerX = padding + bandWidth / 2
 
-  // Find max orphan count per layer for consistent right-side width
-  let maxOrphanCount = 0
-  for (const type of LAYER_ORDER) {
-    if (orphans[type].length > maxOrphanCount) maxOrphanCount = orphans[type].length
+  // Lay a list of nodes as centered, wrapped sub-rows starting at
+  // `startY`. Returns the Y just past the last sub-row used. Each
+  // sub-row holds up to maxPerRow nodes; the last (possibly short) row
+  // is centered too, so wrapped types read as a tidy block.
+  function placeWrapped(nodeList, startY, gapX) {
+    if (nodeList.length === 0) return startY
+    const rows = Math.ceil(nodeList.length / maxPerRow)
+    let y = startY
+    for (let r = 0; r < rows; r++) {
+      const slice = nodeList.slice(r * maxPerRow, (r + 1) * maxPerRow)
+      const startX = centerX - ((slice.length - 1) * gapX) / 2
+      slice.forEach((node, i) => {
+        positions[node.id()] = { x: startX + i * gapX, y }
+      })
+      if (r < rows - 1) y += rowPitch
+    }
+    return y   // Y of the last sub-row
   }
 
+  // ── Connected (main-chain) nodes: one band per type, production flow ──
   for (const type of LAYER_ORDER) {
     const connected = layers[type]
-    const orph = orphans[type]
-    if (connected.length === 0 && orph.length === 0) continue
-
-    // Connected nodes: centered horizontally
-    if (connected.length > 0) {
-      const totalW = (connected.length - 1) * nodeGap
-      const startX = padding + (maxConnectedWidth - totalW) / 2
-      connected.forEach((node, i) => {
-        positions[node.id()] = { x: startX + i * nodeGap, y: currentY }
-      })
-    }
-
-    // Orphans: same Y row, strictly horizontal, right side
-    if (orph.length > 0) {
-      orph.forEach((node, i) => {
-        positions[node.id()] = {
-          x: orphanStartX + i * orphanGap,
-          y: currentY,
-        }
-      })
-    }
-
-    currentY += gap
+    if (connected.length === 0) continue
+    currentY = placeWrapped(connected, currentY, nodeGap) + bandGap
   }
 
+  // ── Unconnected (orphan) nodes: a separate bottom zone, STRICTLY grouped by
+  // type — each type its own centered sub-grid, never interleaved into a row
+  // that spans two types. Tagged `.orphan` so the style layer sets them apart.
+  cyOrphanIds = new Set()
+  const orphanTypes = LAYER_ORDER.filter(t => orphans[t].length > 0)
+  orphanZoneY = null
+  if (orphanTypes.length > 0 || unknown.length > 0) {
+    currentY += bandGap                 // wider divider before the orphan zone
+    orphanZoneY = currentY
+    for (const type of orphanTypes) {
+      for (const n of orphans[type]) cyOrphanIds.add(n.id())
+      currentY = placeWrapped(orphans[type], currentY, orphanGap) + bandGap
+    }
+    // Unknown-type nodes (none today — future-proof): their own lane on the
+    // grid, never the single stack point.
+    if (unknown.length > 0) {
+      for (const n of unknown) cyOrphanIds.add(n.id())
+      currentY = placeWrapped(unknown, currentY, orphanGap) + bandGap
+    }
+  }
+
+  // Safety net: anything we did not explicitly place (e.g. a compound parent)
+  // lands in a spread row BELOW the whole graph — never stacked on one point.
+  let strayN = 0
+  const strayY = currentY + bandGap
   return {
     name: 'preset',
-    positions: (node) => positions[node.id()] || { x: orphanStartX, y: currentY },
+    positions: (node) => positions[node.id()] || { x: padding + (strayN++) * nodeGap, y: strayY },
+    // fit handled manually by fitToWidth() after layout — a full fit of a tall
+    // 130-node graph would shrink nodes to an unreadable smear.
+    fit: false,
+    padding: 40,
     animate: true,
     animationDuration: 400,
   }
+}
+
+// Fit the graph to the viewport WIDTH at a legible zoom (capped), anchored to
+// the top so the production flow reads top→bottom and the user pans down — a
+// full fit of a tall graph would zoom everything to dust.
+function fitToWidth() {
+  if (!cy) return
+  const bb = cy.elements().boundingBox()
+  if (!bb || !bb.w || !bb.h) return
+  const vw = cy.width(), vh = cy.height(), pad = 40
+  const zFitW = (vw - 2 * pad) / bb.w           // zoom that fits the width
+  const zFitAll = Math.min(zFitW, (vh - 2 * pad) / bb.h)
+  // Prefer fit-to-width but never below fit-all (small graphs fit whole), cap
+  // at 0.9 so nodes/labels stay readable, never upscale past 1.
+  const zoom = Math.min(1, Math.max(zFitAll, Math.min(zFitW, 0.9)))
+  cy.zoom(zoom)
+  cy.pan({
+    x: vw / 2 - (bb.x1 + bb.w / 2) * zoom,       // centre horizontally
+    y: pad - bb.y1 * zoom,                        // anchor top
+  })
+}
+
+// Tag unconnected nodes with `.orphan` (styled with a dashed amber ring)
+// so the user can tell at a glance which entities aren't wired into the
+// production chain. Runs after every layout since cyOrphanIds is rebuilt
+// there. Wrapped in cy.batch for a single style pass.
+function applyOrphanClass() {
+  if (!cy) return
+  cy.batch(() => {
+    cy.nodes().forEach(n => {
+      if (cyOrphanIds.has(n.id())) n.addClass('orphan')
+      else n.removeClass('orphan')
+    })
+  })
 }
 
 // ── Init ──
@@ -223,7 +332,14 @@ function initCytoscape() {
   for (const node of props.graphData.nodes) {
     elements.push({
       group: 'nodes',
-      data: { id: node.id, label: node.label, type: node.type, ...node.data },
+      // node.data may carry its OWN `type` key (the backend graph endpoint puts
+      // the electrolyte's chemistry there: { type: el.electrolyte_type }). Spread
+      // node.data FIRST so the structural node `type` ('electrolyte', 'battery',
+      // …) always wins — layout, colour and shape all read data('type'); a
+      // clobbered type drops the node out of LAYER_ORDER and it lands on the
+      // single fallback point, stacking every electrolyte in the centre (the
+      // «1.0M LiFSI EC/DMC» overlap bug).
+      data: { ...node.data, id: node.id, label: node.label, type: node.type },
     })
   }
 
@@ -297,6 +413,11 @@ function initCytoscape() {
       { selector: 'node.path-node', style: { 'border-width': 4, 'border-color': '#E67E22', 'overlay-color': '#E67E22', 'overlay-padding': 6, 'overlay-opacity': 0.1, 'z-index': 20 } },
       { selector: 'edge.path-edge', style: { 'width': 3, 'line-color': '#E67E22', 'target-arrow-color': '#E67E22', 'opacity': 1, 'z-index': 20 } },
       { selector: 'node.selected-node', style: { 'border-width': 3, 'border-color': '#52C9A6', 'overlay-color': '#52C9A6', 'overlay-padding': 5, 'overlay-opacity': 0.08 } },
+      // Unconnected (orphan) nodes — visually set apart: dashed amber
+      // ring + slightly muted so the eye reads them as "not wired into
+      // the production chain" without hiding them.
+      { selector: 'node.orphan', style: { 'border-width': 2, 'border-color': '#E0A23A', 'border-style': 'dashed', 'opacity': 0.78 } },
+      { selector: 'node.orphan[label]', style: { 'color': '#9A7320' } },
     ],
     layout: { name: 'grid' },
     minZoom: 0.15,
@@ -304,8 +425,12 @@ function initCytoscape() {
     wheelSensitivity: 0.25,
   })
 
-  // Apply layout
-  cy.layout(getLayoutConfig()).run()
+  // Apply layout (getLayoutConfig fills cyOrphanIds), tag orphans, then fit to
+  // width once the positions have settled.
+  const initialLayout = cy.layout(getLayoutConfig())
+  initialLayout.one('layoutstop', fitToWidth)
+  initialLayout.run()
+  applyOrphanClass()
 
   // ── Hover → highlight neighborhood ──
   cy.on('mouseover', 'node', (evt) => {
@@ -552,9 +677,46 @@ function toggleType(type) {
   applyFilters()
 }
 
+// ── Type-visibility dropdown ──
+const typeMenuOpen = ref(false)
+
+// How many nodes of each type exist in the current data — shown as a
+// count next to each row so the user knows what they're hiding.
+const nodeCountByType = computed(() => {
+  const counts = {}
+  for (const n of (props.graphData?.nodes || [])) {
+    counts[n.type] = (counts[n.type] || 0) + 1
+  }
+  return counts
+})
+
+const visibleTypeCount = computed(
+  () => Object.keys(NODE_COLORS).filter(t => visibleTypes.value[t] !== false).length
+)
+const totalTypeCount = computed(() => Object.keys(NODE_COLORS).length)
+
+function setAllTypes(on) {
+  for (const t of Object.keys(NODE_COLORS)) visibleTypes.value[t] = on
+  applyFilters()
+}
+
+function onTypeMenuToggle() {
+  typeMenuOpen.value = !typeMenuOpen.value
+  if (typeMenuOpen.value) {
+    // Close on the next outside click (matches the page's other menus).
+    setTimeout(() => document.addEventListener('click', closeTypeMenu, { once: true }), 0)
+  }
+}
+function closeTypeMenu() { typeMenuOpen.value = false }
+
 // ── Layout helpers ──
 function relayout() {
-  if (cy) cy.layout(getLayoutConfig()).run()
+  if (cy) {
+    const lay = cy.layout(getLayoutConfig())
+    lay.one('layoutstop', fitToWidth)
+    lay.run()
+    applyOrphanClass()
+  }
 }
 
 function fitGraph() {
@@ -624,17 +786,41 @@ onUnmounted(() => {
         <input type="range" v-model.number="spacing" min="40" max="160" @change="relayout" />
       </div>
 
-      <div class="graph-type-filters">
+      <!-- Type-visibility dropdown — one tidy control to show/hide each
+           object type on the map (replaced the long inline chip row). -->
+      <div class="graph-type-menu" @click.stop>
         <button
-          v-for="(color, type) in NODE_COLORS"
-          :key="type"
-          :class="['type-toggle', visibleTypes[type] ? '' : 'inactive']"
-          @click="toggleType(type)"
-          :title="(visibleTypes[type] ? 'Скрыть' : 'Показать') + ' ' + (TYPE_LABELS[type] || type)"
+          class="graph-btn graph-type-trigger"
+          :class="{ 'is-open': typeMenuOpen }"
+          @click="onTypeMenuToggle"
+          title="Показать / скрыть типы объектов на карте"
         >
-          <span class="legend-dot" :style="{ background: visibleTypes[type] ? color : '#ccc' }"></span>
-          {{ TYPE_LABELS[type] || type }}
+          <i class="pi pi-eye"></i>
+          Типы
+          <span class="graph-type-count">{{ visibleTypeCount }}/{{ totalTypeCount }}</span>
+          <i class="pi pi-chevron-down graph-type-chevron"></i>
         </button>
+
+        <div v-if="typeMenuOpen" class="graph-type-dropdown">
+          <div class="graph-type-dropdown-head">
+            <button class="graph-type-bulk" @click="setAllTypes(true)">Показать все</button>
+            <button class="graph-type-bulk" @click="setAllTypes(false)">Скрыть все</button>
+          </div>
+          <label
+            v-for="(color, type) in NODE_COLORS"
+            :key="type"
+            class="graph-type-row"
+          >
+            <input
+              type="checkbox"
+              :checked="visibleTypes[type] !== false"
+              @change="toggleType(type)"
+            />
+            <span class="legend-dot" :style="{ background: color }"></span>
+            <span class="graph-type-name">{{ TYPE_LABELS[type] || type }}</span>
+            <span class="graph-type-rowcount">{{ nodeCountByType[type] || 0 }}</span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -669,6 +855,33 @@ onUnmounted(() => {
             <span class="info-detail-value">{{ selectedNode.data[key] }}</span>
           </template>
         </div>
+      </div>
+
+      <!-- Происхождение: кто записал и когда (из аудит-полей БД; терминология
+           «записал в систему», НЕ «выполнил» — оператор появится после колонок
+           operator_user_id/performed_at). Пусто-лучше-выдумки: рендерим только
+           то, что реально есть; у materials нет created_*, у структур сепаратора
+           аудита нет вовсе. -->
+      <div class="info-provenance">
+        <div class="info-section-title">Происхождение</div>
+        <template v-if="hasProvenance(selectedNode.data)">
+          <div v-if="selectedNode.data.created_by_name" class="info-prov-row">
+            <span>Записал в систему</span><b>{{ selectedNode.data.created_by_name }}</b>
+          </div>
+          <div v-if="selectedNode.data.item_created_at" class="info-prov-row">
+            <span>Дата (бизнес)</span><b>{{ fmtDT(selectedNode.data.item_created_at) }}</b>
+          </div>
+          <div v-if="selectedNode.data.created_at" class="info-prov-row">
+            <span>Запись создана</span><b>{{ fmtDT(selectedNode.data.created_at) }}</b>
+          </div>
+          <div v-if="selectedNode.data.updated_by_name" class="info-prov-row">
+            <span>Обновил</span><b>{{ selectedNode.data.updated_by_name }}</b>
+          </div>
+          <div v-if="selectedNode.data.updated_at && !selectedNode.data.created_at" class="info-prov-row">
+            <span>Обновлено</span><b>{{ fmtDT(selectedNode.data.updated_at) }}</b>
+          </div>
+        </template>
+        <div v-else class="info-prov-empty">не зарегистрировано в БД</div>
       </div>
 
       <!-- Actions -->
@@ -780,26 +993,85 @@ onUnmounted(() => {
 }
 .graph-slider input[type="range"] { width: 60px; height: 3px; accent-color: #003274; }
 
-.graph-type-filters { display: flex; gap: 0.25rem; margin-left: auto; flex-wrap: wrap; }
-.type-toggle {
-  display: flex;
+/* ── Type-visibility dropdown ── */
+.graph-type-menu { position: relative; margin-left: auto; }
+.graph-type-trigger {
+  display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 7px;
-  border: 0.5px solid rgba(180, 210, 255, 0.55);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
-  font-size: 10px;
-  color: #333;
-  cursor: pointer;
-  transition: all 0.15s;
+  gap: 5px;
+  width: auto;            /* override .graph-btn's fixed 30px — must fit the label */
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
   font-family: inherit;
   white-space: nowrap;
 }
-.type-toggle:hover { border-color: rgba(0, 50, 116, 0.3); }
-.type-toggle.inactive { opacity: 0.45; background: rgba(200, 200, 200, 0.3); text-decoration: line-through; }
-.legend-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.graph-type-trigger.is-open { border-color: rgba(0, 50, 116, 0.4); background: rgba(0, 50, 116, 0.06); }
+.graph-type-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: #003274;
+  background: rgba(0, 50, 116, 0.08);
+  padding: 0 5px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.graph-type-chevron { font-size: 9px; color: rgba(0, 50, 116, 0.45); }
+.graph-type-trigger.is-open .graph-type-chevron { transform: rotate(180deg); }
+
+.graph-type-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 190px;
+  padding: 5px;
+  background: rgba(248, 252, 255, 0.98);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(180, 210, 255, 0.5);
+  border-radius: 9px;
+  box-shadow: 0 6px 20px rgba(0, 50, 116, 0.14);
+}
+.graph-type-dropdown-head {
+  display: flex;
+  gap: 6px;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.08);
+  margin-bottom: 4px;
+}
+.graph-type-bulk {
+  flex: 1;
+  font-size: 10.5px;
+  padding: 3px 6px;
+  border: none;
+  background: rgba(0, 50, 116, 0.06);
+  color: #003274;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.graph-type-bulk:hover { background: rgba(0, 50, 116, 0.12); }
+.graph-type-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #333;
+  transition: background 0.12s;
+}
+.graph-type-row:hover { background: rgba(0, 50, 116, 0.05); }
+.graph-type-row input { accent-color: #003274; cursor: pointer; margin: 0; }
+.graph-type-name { flex: 1; }
+.graph-type-rowcount {
+  font-size: 10.5px;
+  color: #6B7280;
+  font-variant-numeric: tabular-nums;
+}
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
 /* ── Path hint ── */
 .path-hint {
@@ -901,6 +1173,23 @@ onUnmounted(() => {
 .info-name { font-size: 16px; font-weight: 700; color: #003274; }
 
 .info-details { display: flex; flex-direction: column; gap: 4px; }
+
+/* Происхождение ноды */
+.info-provenance {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 50, 116, 0.08);
+}
+.info-prov-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  padding: 1.5px 0;
+}
+.info-prov-row span { color: rgba(0, 50, 116, 0.55); flex-shrink: 0; }
+.info-prov-row b { font-weight: 600; color: #1f2a3d; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-prov-empty { font-size: 11px; color: #9aa3b2; font-style: italic; }
 .info-detail-label { font-size: 11px; font-weight: 600; color: rgba(0, 50, 116, 0.5); margin-right: 4px; }
 .info-detail-value { font-size: 12px; color: #333; }
 
