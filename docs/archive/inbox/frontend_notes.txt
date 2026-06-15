@@ -1,0 +1,45 @@
+### Overall:
+Why is everything so slow and glitchy? that's very very not good!!!!
+
+### Tapes list view:
+When I click on the Tapes list, the default should be more han 5. I would go with 20. 
+
+### Tapes list view:
+When I click on the column selector, deselecting the columns does not decrease the table width. Effectively, even though only 1-2 columns remain, the program stretches them to unnecessarily wide sizes, instead of resizing the table itself. This is stupid because I have to scroll to the right to see somethingn that would fit on one page if the table autoresized.
+
+### Tapes list view:
+When selecting tapes for the editor, the selected tape/s should maybe (let's discuss) automatically jump to the top? On the one hand, the selected tapes will be all at the top this way. That way, if you selected multiple tapes that were prepared on very different days (which is highly unlikely) you could see them all at once. On the other hand, it IS highly unlikely - this is more so that the same person can add multiple tapes at once if they prepare multiple tapes from different active ingredients at once. 
+
+### Tapes:
+Where in the frontend is the "Delete this tape" feature???? "Print report" feature? Duplicate?? (The "duplicate tape" is handled very cleverly by the vue design Dima added that allows to display multiple tapes at once; not sure how to expand this design further at this point - whether it is necessary etc.)
+
+### Tapes:
+Filters! I do not see any filters allowing to shorten the list down to the ones I actually want to see.
+
+### Electrodes:
+Same as for tapes: delete feature?? filters to narrow the list?? print report?? duplicate??
+
+### Batteries:
+Same as for tapes: delete feature?? filters to narrow the list?? print report?? duplicate??
+
+### Batteries:
+"Схема расположения сепаратора и электролита
+ E-S-E
+ E-S
+ S-E"
+This is clearer than the contents of the dropdown select that is currently in frontend.
+
+### Batteries:
+Need to add the ability to add electrodes from more than one batch... (this is pretty mich done in vanilla, it's not perfect, but it is tehre... 
+
+### Batteries:
+"теор.: 2225.021 мАч
+факт.: 1658.008 мАч"
+I am concerned about the use of the words "theoretical" and "actual" because it is not "actual" actually, it is "theoretical based on actual active material masses"
+On the vanilla side, the wording has been updated.
+
+### Organizational structure has been redone: departments, users, projects, permissions... Make sure the frontend matches the vanilla because it should work the way that Vanilla works.
+
+Always take Vanilla as the source of truth. The Vanilla one was designed with the scientific and labortory processes in mind, but the frontend one was designed by a very motivated, ambitious, and intelligent young man who has not stepped in the lab since college...
+
+the Vanilla was designed by Dalia who followed people around to come up with the initial schema design and has recently been working in the lab, making tapes, electrodes, and batteries, and now is ready to update the app to match the needs of our team more so than the first version of the app does; but for this she needs to get the frontend up to speed first, before changing and messing with it.
