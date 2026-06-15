@@ -126,4 +126,35 @@ describe('CyclingCharts (оркестратор после разбивки)', (
     expect(w.findComponent(VoltageProfileChart).exists()).toBe(false)
     expect(w.find('.chart-placeholder').exists()).toBe(true)
   })
+
+  // Регресс: «каждый N-й» не должен морить короткую сессию при наложении на
+  // длинную. Раньше выбор шёл по ОБЪЕДИНЕНИЮ номеров — every-10th от union
+  // 1..10+101..130 давал [1,101,111,121,130], короткая (1..10) теряла всё
+  // кроме цикла 1. Диапазоны намеренно непересекающиеся: цикл 10 принадлежит
+  // ТОЛЬКО короткой сессии, поэтому его наличие однозначно доказывает
+  // per-session сэмплирование.
+  it('per-session: «каждый N-й» сохраняет короткую сессию при overlay с длинной', async () => {
+    const mkSummary = (start, n) => Array.from({ length: n }, (_, i) => ({
+      cycle_number: start + i,
+      charge_capacity_ah: 0.0014, discharge_capacity_ah: 0.0013,
+      coulombic_efficiency: 92, energy_efficiency: 88,
+      charge_energy_wh: 0.005, discharge_energy_wh: 0.0044,
+      avg_charge_voltage_v: 3.7, avg_discharge_voltage_v: 3.5,
+    }))
+    const shortS = { ...SESSION, session_id: 1, battery_id: 1, file_name: 'ELITECH 10c.txt', summary: mkSummary(1, 10), cycleDataMap: {} }
+    const longS = { ...SESSION, session_id: 2, battery_id: 42, file_name: 'NCA 30c.txt', summary: mkSummary(101, 30), cycleDataMap: {} }
+    const w = mountCharts({ sessions: [shortS, longS], selectedCycles: [1], maxSelected: 10000 })
+
+    const input = w.find('input.filter-input')
+    await input.setValue(10)
+    await input.trigger('change')
+
+    const ev = w.emitted('replace-cycles')
+    expect(ev).toBeTruthy()
+    const picked = ev[ev.length - 1][0]
+    // короткая сессия (1..10) представлена не только циклом 1
+    expect(picked.filter(c => c >= 1 && c <= 10).length).toBeGreaterThan(1)
+    // её последний цикл (10) — уникален для короткой сессии — попал в выборку
+    expect(picked).toContain(10)
+  })
 })
