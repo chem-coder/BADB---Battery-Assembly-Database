@@ -1,0 +1,277 @@
+{
+  "$comment": "BADB metrics registry v1 — ЕДИНЫЙ источник истины о вычисляемых величинах циклирования. Каждая запись: формула, входы, где вычисляется (implementations), происхождение (lineage), шаблон объяснения для подсказок. Потребители: Vue SPA (metricsEngine.js), conformance-тесты клиента (vitest), Python-импортёров и серверного парсера. Правило репо: контракты версионируются — v1 после мерджа не редактируется, изменения формул = metrics.v2.json. Golden-векторы соответствия: contracts/metrics-golden.v1.json.",
+  "version": 1,
+  "since": "2026-06-10",
+  "metrics": {
+    "charge_capacity_ah": {
+      "label_ru": "Ёмкость заряда",
+      "unit": "Ah",
+      "formula": "Q_chg = Σ_steps max_step( ∫|I| dt / 3600 )",
+      "formula_text_ru": "Трапецеидальное интегрирование |тока| по времени внутри каждого шага; максимум по шагу; сумма по шагам типа charge/cccv внутри цикла (корректно для CCCV: CC + CV складываются).",
+      "inputs": [
+        { "key": "current_a", "label_ru": "Ток", "unit": "A" },
+        { "key": "time_s", "label_ru": "Время", "unit": "s" }
+      ],
+      "implementations": [
+        { "site": "server-parser", "path": "scripts/parse_cycling.py", "note": "канон: ёмкость накапливается с нуля на каждом шаге (ELITECH), итог = сумма per-step максимумов" },
+        { "site": "import-navani", "path": "scripts/cycling-file-import/import_cycler_file.py", "note": "navani нормализует Capacity со сбросом на полуцикл — максимум полуцикла эквивалентен сумме шагов" },
+        { "site": "import-excel", "path": "scripts/cycling-ref-import/", "note": "значения взяты из сводных листов коллег как есть (reconcile-гейт против per-cell листов)" }
+      ],
+      "lineage": ["cycling_cycle_summary.charge_capacity_ah", "cycling_datapoints (точки цикла)", "файл прибора (cycling_sessions.file_name)"],
+      "explain_template": "Q_chg = Σ max(∫|I|dt)/3600 = {value} Ah",
+      "stored": true
+    },
+    "discharge_capacity_ah": {
+      "label_ru": "Ёмкость разряда",
+      "unit": "Ah",
+      "formula": "Q_dchg = Σ_steps max_step( ∫|I| dt / 3600 )",
+      "formula_text_ru": "Аналогично ёмкости заряда, по шагам типа discharge.",
+      "inputs": [
+        { "key": "current_a", "label_ru": "Ток", "unit": "A" },
+        { "key": "time_s", "label_ru": "Время", "unit": "s" }
+      ],
+      "implementations": [
+        { "site": "server-parser", "path": "scripts/parse_cycling.py" },
+        { "site": "import-navani", "path": "scripts/cycling-file-import/import_cycler_file.py" },
+        { "site": "import-excel", "path": "scripts/cycling-ref-import/" }
+      ],
+      "lineage": ["cycling_cycle_summary.discharge_capacity_ah", "cycling_datapoints (точки цикла)", "файл прибора (cycling_sessions.file_name)"],
+      "explain_template": "Q_dchg = Σ max(∫|I|dt)/3600 = {value} Ah",
+      "stored": true
+    },
+    "coulombic_efficiency": {
+      "label_ru": "Кулоновская эффективность (CE)",
+      "unit": "%",
+      "formula": "CE = Q_dchg / Q_chg × 100",
+      "formula_text_ru": "Доля заряда, возвращаемого при разряде. Защита: Q_chg должен быть > 0; CE = 0% у мёртвой ячейки — валидный сигнал, не пропуск.",
+      "inputs": [
+        { "key": "discharge_capacity_ah", "label_ru": "Ёмкость разряда", "unit": "Ah" },
+        { "key": "charge_capacity_ah", "label_ru": "Ёмкость заряда", "unit": "Ah" }
+      ],
+      "implementations": [
+        { "site": "server-parser", "path": "scripts/parse_cycling.py", "note": "округляется до 2 знаков при записи в БД" },
+        { "site": "import-navani", "path": "scripts/cycling-file-import/import_cycler_file.py", "note": "без округления; конвенция BADB DChg/Chg (у navani CE перевёрнут — не используется)" },
+        { "site": "import-excel", "path": "scripts/cycling-ref-import/" }
+      ],
+      "lineage": ["cycling_cycle_summary.coulombic_efficiency", "← Q_dchg, Q_chg того же цикла", "← cycling_datapoints", "← файл прибора"],
+      "explain_template": "CE = {discharge_capacity_ah} / {charge_capacity_ah} × 100 = {value} %",
+      "stored": true
+    },
+    "energy_efficiency": {
+      "label_ru": "Энергетическая эффективность (EE)",
+      "unit": "%",
+      "formula": "EE = E_dchg / E_chg × 100",
+      "formula_text_ru": "Round-trip КПД по энергии: учитывает потери на перенапряжение (гистерезис напряжения), которые CE не видит.",
+      "inputs": [
+        { "key": "discharge_energy_wh", "label_ru": "Энергия разряда", "unit": "Wh" },
+        { "key": "charge_energy_wh", "label_ru": "Энергия заряда", "unit": "Wh" }
+      ],
+      "implementations": [
+        { "site": "server-parser", "path": "scripts/parse_cycling.py", "note": "округляется до 2 знаков" },
+        { "site": "import-navani", "path": "scripts/cycling-file-import/import_cycler_file.py" }
+      ],
+      "lineage": ["cycling_cycle_summary.energy_efficiency", "← E_dchg, E_chg того же цикла", "← cycling_datapoints", "← файл прибора"],
+      "explain_template": "EE = {discharge_energy_wh} / {charge_energy_wh} × 100 = {value} %",
+      "stored": true
+    },
+    "charge_energy_wh": {
+      "label_ru": "Энергия заряда",
+      "unit": "Wh",
+      "formula": "E_chg = Σ_steps max_step( ∫|I|·V dt / 3600 )",
+      "formula_text_ru": "Трапецеидальное интегрирование мощности |I|·V по времени (модуль тока: тестеры отчитывают энергии как магнитуды, направление задаёт тип шага).",
+      "inputs": [
+        { "key": "current_a", "label_ru": "Ток", "unit": "A" },
+        { "key": "voltage_v", "label_ru": "Напряжение", "unit": "V" },
+        { "key": "time_s", "label_ru": "Время", "unit": "s" }
+      ],
+      "implementations": [
+        { "site": "server-parser", "path": "scripts/parse_cycling.py" },
+        { "site": "import-navani", "path": "scripts/cycling-file-import/import_cycler_file.py", "note": "пропуск интервалов dt≤0 и dt>3600 с (защита от швов между сегментами)" }
+      ],
+      "lineage": ["cycling_cycle_summary.charge_energy_wh", "cycling_datapoints", "файл прибора"],
+      "explain_template": "E_chg = Σ max(∫|I|·V dt)/3600 = {value} Wh",
+      "stored": true
+    },
+    "discharge_energy_wh": {
+      "label_ru": "Энергия разряда",
+      "unit": "Wh",
+      "formula": "E_dchg = Σ_steps max_step( ∫|I|·V dt / 3600 )",
+      "formula_text_ru": "Аналогично энергии заряда, по шагам разряда.",
+      "inputs": [
+        { "key": "current_a", "label_ru": "Ток", "unit": "A" },
+        { "key": "voltage_v", "label_ru": "Напряжение", "unit": "V" },
+        { "key": "time_s", "label_ru": "Время", "unit": "s" }
+      ],
+      "implementations": [
+        { "site": "server-parser", "path": "scripts/parse_cycling.py" },
+        { "site": "import-navani", "path": "scripts/cycling-file-import/import_cycler_file.py" }
+      ],
+      "lineage": ["cycling_cycle_summary.discharge_energy_wh", "cycling_datapoints", "файл прибора"],
+      "explain_template": "E_dchg = Σ max(∫|I|·V dt)/3600 = {value} Wh",
+      "stored": true
+    },
+    "avg_charge_voltage_v": {
+      "label_ru": "Среднее напряжение заряда",
+      "unit": "V",
+      "formula": "V̄_chg = ΣV_i / N (точки шагов заряда)",
+      "formula_text_ru": "Простое среднее напряжения по точкам полуцикла заряда — публикационная конвенция (НЕ взвешенное по ёмкости). КАНОН зафиксирован этим контрактом: navani-импортёр до 2026-06-10 писал ёмкостно-взвешенное ⟨V⟩=∫V·dQ/Q — выровнен на point-mean.",
+      "inputs": [
+        { "key": "voltage_v", "label_ru": "Напряжение точек заряда", "unit": "V" }
+      ],
+      "implementations": [
+        { "site": "server-parser", "path": "scripts/parse_cycling.py", "note": "округление до 4 знаков" },
+        { "site": "import-navani", "path": "scripts/cycling-file-import/import_cycler_file.py" }
+      ],
+      "lineage": ["cycling_cycle_summary.avg_charge_voltage_v", "cycling_datapoints (V точек заряда)", "файл прибора"],
+      "explain_template": "V̄_chg = ΣV/N по {n} точкам = {value} V",
+      "stored": true
+    },
+    "avg_discharge_voltage_v": {
+      "label_ru": "Среднее напряжение разряда",
+      "unit": "V",
+      "formula": "V̄_dchg = ΣV_i / N (точки шагов разряда)",
+      "formula_text_ru": "Аналогично среднему напряжению заряда.",
+      "inputs": [
+        { "key": "voltage_v", "label_ru": "Напряжение точек разряда", "unit": "V" }
+      ],
+      "implementations": [
+        { "site": "server-parser", "path": "scripts/parse_cycling.py" },
+        { "site": "import-navani", "path": "scripts/cycling-file-import/import_cycler_file.py" }
+      ],
+      "lineage": ["cycling_cycle_summary.avg_discharge_voltage_v", "cycling_datapoints (V точек разряда)", "файл прибора"],
+      "explain_template": "V̄_dchg = ΣV/N по {n} точкам = {value} V",
+      "stored": true
+    },
+    "hysteresis_mv": {
+      "label_ru": "Гистерезис среднего напряжения ΔV̄",
+      "unit": "mV",
+      "formula": "ΔV̄ = (V̄_chg − V̄_dchg) × 1000",
+      "formula_text_ru": "Рост гистерезиса = рост поляризации (кинетические потери: SEI, контакт). Считается на лету из сохранённых средних напряжений.",
+      "inputs": [
+        { "key": "avg_charge_voltage_v", "label_ru": "V̄ заряда", "unit": "V" },
+        { "key": "avg_discharge_voltage_v", "label_ru": "V̄ разряда", "unit": "V" }
+      ],
+      "implementations": [
+        { "site": "client", "path": "client-web/src/components/CyclingCharts.vue" }
+      ],
+      "lineage": ["график «Гистерезис V̄» (на лету)", "← cycling_cycle_summary.avg_*_voltage_v", "← cycling_datapoints", "← файл прибора"],
+      "explain_template": "ΔV̄ = ({avg_charge_voltage_v} − {avg_discharge_voltage_v}) × 1000 = {value} mV",
+      "stored": false
+    },
+    "specific_capacity_mah_g": {
+      "label_ru": "Удельная ёмкость",
+      "unit": "mAh/g",
+      "formula": "Q_spec = Q × 10⁶ / m_AM",
+      "formula_text_ru": "Q в Ah, масса активного материала m_AM в мг (cycling_sessions.active_mass_mg, ручной ввод). 1 Ah = 1000 mAh; m(g) = m(mg)/1000.",
+      "inputs": [
+        { "key": "capacity_ah", "label_ru": "Ёмкость", "unit": "Ah" },
+        { "key": "active_mass_mg", "label_ru": "Масса АМ (ручной ввод)", "unit": "mg" }
+      ],
+      "implementations": [
+        { "site": "client", "path": "client-web/src/pages/CyclingPage.vue" }
+      ],
+      "lineage": ["отображение (на лету)", "← cycling_cycle_summary.*_capacity_ah", "← cycling_sessions.active_mass_mg (ручной ввод)"],
+      "explain_template": "Q_spec = {capacity_ah} × 10⁶ / {active_mass_mg} = {value} mAh/g",
+      "stored": false
+    },
+    "capacity_retention_pct": {
+      "label_ru": "Удержание ёмкости (ретенция)",
+      "unit": "%",
+      "formula": "R(n) = Q_dchg(n) / Q_dchg(first) × 100",
+      "formula_text_ru": "Нормировка на первую валидную ёмкость разряда сессии — каждая сессия стартует со 100%.",
+      "inputs": [
+        { "key": "capacity_ah", "label_ru": "Ёмкость цикла n", "unit": "Ah" },
+        { "key": "ref_capacity_ah", "label_ru": "Базовая ёмкость (первый валидный цикл)", "unit": "Ah" }
+      ],
+      "implementations": [
+        { "site": "client", "path": "client-web/src/pages/CyclingPage.vue" }
+      ],
+      "lineage": ["график «Ёмкость + КЭ» режим «Ретенция» (на лету)", "← cycling_cycle_summary.discharge_capacity_ah", "← cycling_datapoints", "← файл прибора"],
+      "explain_template": "R = {capacity_ah} / {ref_capacity_ah} × 100 = {value} %",
+      "stored": false
+    },
+    "soh_pct": {
+      "label_ru": "Состояние здоровья (SOH)",
+      "unit": "%",
+      "formula": "SOH(n) = Q_dchg(n) / Q_dchg(база) × 100",
+      "formula_text_ru": "База = первый цикл с валидной ёмкостью разряда ПОСЛЕ исключения N формовочных циклов (параметр «Формовка» на графике). Сменишь параметр — база и вся кривая пересчитаются.",
+      "inputs": [
+        { "key": "discharge_capacity_ah", "label_ru": "Ёмкость разряда цикла n", "unit": "Ah" },
+        { "key": "baseline_capacity_ah", "label_ru": "Базовая ёмкость", "unit": "Ah" },
+        { "key": "formation_exclude", "label_ru": "Исключено формовочных циклов", "unit": "" }
+      ],
+      "implementations": [
+        { "site": "client", "path": "client-web/src/utils/cyclingSoh.js" }
+      ],
+      "lineage": ["график «Сравнение по протоколам» (на лету)", "← cycling_cycle_summary.discharge_capacity_ah", "← cycling_datapoints / сводные листы Excel", "← файл прибора / книга коллег"],
+      "explain_template": "SOH = {discharge_capacity_ah} / {baseline_capacity_ah} × 100 = {value} % (формовка: {formation_exclude})",
+      "stored": false
+    },
+    "protocol_mean_std": {
+      "label_ru": "Среднее ± σ по протоколу",
+      "unit": "%",
+      "formula": "mean(n) = Σ SOH_i(n)/k;  σ(n) = √(Σ(SOH_i−mean)²/(k−1));  точка рисуется при k ≥ minCoverage",
+      "formula_text_ru": "Выборочное (n−1) стандартное отклонение по ячейкам протокола на цикле n. minCoverage = ⌈ячеек/2⌉ — защита от survivorship bias: среднее не рисуется там, где дожило меньше половины когорты.",
+      "inputs": [
+        { "key": "soh_series", "label_ru": "SOH-серии ячеек протокола", "unit": "%" },
+        { "key": "min_coverage", "label_ru": "Мин. покрытие (ячеек)", "unit": "" }
+      ],
+      "implementations": [
+        { "site": "client", "path": "client-web/src/utils/cyclingSoh.js" }
+      ],
+      "lineage": ["график «Сравнение по протоколам», режим «Среднее ± σ» (на лету)", "← SOH-серии ячеек", "← cycling_cycle_summary"],
+      "explain_template": "k={k} ячеек; mean={value} %; σ={sigma}; порог покрытия {min_coverage}",
+      "stored": false
+    },
+    "cycles_to_threshold": {
+      "label_ru": "Циклов до порога (EOL)",
+      "unit": "циклы",
+      "formula": "min{ n : mean_SOH(n) ≤ threshold }",
+      "formula_text_ru": "Первый цикл, на котором средний SOH протокола опускается до порога (по умолчанию 80% — индустриальный EOL). Если порог не достигнут — показывается последнее значение.",
+      "inputs": [
+        { "key": "mean_series", "label_ru": "Средняя SOH-серия протокола", "unit": "%" },
+        { "key": "threshold", "label_ru": "Порог EOL", "unit": "%" }
+      ],
+      "implementations": [
+        { "site": "client", "path": "client-web/src/utils/cyclingSoh.js" }
+      ],
+      "lineage": ["плашка EOL под графиком сравнения (на лету)", "← protocol_mean_std", "← SOH-серии"],
+      "explain_template": "первый цикл с mean ≤ {threshold}% → {value}",
+      "stored": false
+    },
+    "dqdv_savgol": {
+      "label_ru": "Дифференциальная ёмкость dQ/dV (Сав.–Голей)",
+      "unit": "Ah/V",
+      "formula": "dedup-mean по V → равномерная сетка V → SG(w₁, p=5) → SG-производная → SG(w₂, p=5) → |dQ/dV|",
+      "formula_text_ru": "Конвейер navani с заменой нестабильного сплайна на SG-производную. Окна — доли сетки: Слабое 0.5%/1%, Стандарт 1%/2% (откалибровано по реальным данным), Сильное 1%/5%. Пики — локальные максимумы с фильтром значимости (prominence ≥ 12% от максимума).",
+      "inputs": [
+        { "key": "voltage_v", "label_ru": "Напряжение точек полуцикла", "unit": "V" },
+        { "key": "capacity_ah", "label_ru": "Ёмкость точек полуцикла", "unit": "Ah" },
+        { "key": "preset", "label_ru": "Интенсивность сглаживания", "unit": "" }
+      ],
+      "implementations": [
+        { "site": "client", "path": "client-web/src/utils/savitzkyGolay.js", "note": "соответствие scipy 1e-9 (юнит-тесты); кросс-проверка против verbatim-navani на реальном цикле" }
+      ],
+      "lineage": ["график dQ/dV (на лету)", "← cycling_datapoints (доминантный шаг полуцикла)", "← файл прибора"],
+      "explain_template": "SG-конвейер, пресет «{preset}» (окна {w1}/{w2} от сетки {grid})",
+      "stored": false
+    },
+    "dvdq_savgol": {
+      "label_ru": "Дифференциальное напряжение dV/dQ (DVA)",
+      "unit": "V/mAh",
+      "formula": "тот же SG-конвейер с осями наоборот: равномерная сетка Q → |dV/dQ|",
+      "formula_text_ru": "Differential Voltage Analysis: положения пиков по Q локализуют механизмы деградации (LAM vs LLI). Отображение: Q в мА·ч, |dV/dQ| в В/мА·ч.",
+      "inputs": [
+        { "key": "voltage_v", "label_ru": "Напряжение точек полуцикла", "unit": "V" },
+        { "key": "capacity_ah", "label_ru": "Ёмкость точек полуцикла", "unit": "Ah" },
+        { "key": "preset", "label_ru": "Интенсивность сглаживания", "unit": "" }
+      ],
+      "implementations": [
+        { "site": "client", "path": "client-web/src/utils/savitzkyGolay.js" }
+      ],
+      "lineage": ["график dV/dQ (на лету)", "← cycling_datapoints (доминантный шаг полуцикла)", "← файл прибора"],
+      "explain_template": "SG-конвейер DVA, пресет «{preset}»",
+      "stored": false
+    }
+  }
+}

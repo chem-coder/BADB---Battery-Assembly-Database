@@ -3,7 +3,8 @@
  * CyclingPage — Battery cycling test results.
  * Upload cycling data files → view sessions → interactive charts.
  */
-import { ref, computed, watch, onMounted, defineAsyncComponent } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
+import { groupRowsByCycle } from '@/utils/cyclingChartShared'
 import { useRouter } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
@@ -22,6 +23,7 @@ import { useCyclingStyles, CHART_LABELS } from '@/composables/useCyclingStyles'
 import { useBackendCache } from '@/composables/useBackendCache'
 
 const CyclingCharts = defineAsyncComponent(() => import('@/components/CyclingCharts.vue'))
+const CyclingSohChart = defineAsyncComponent(() => import('@/components/CyclingSohChart.vue'))
 
 // Per-chart style + preset library for the cycling charts. Each chart
 // carries its own { palette, borderWidth, pointStyle, pointRadius }
@@ -55,6 +57,37 @@ const loading = ref(true)
 // Template ref to CrudTable → lets us read its filteredData (rows visible
 // after the user applies column filters). Used by "График" header click.
 const tableRef = ref(null)
+
+// Reference-import sessions (notes 'REF_IMPORT:%') are colleague data loaded
+// for SOH verification. Hidden from the session list by default so they don't
+// clutter the real cells — toggled on when comparing protocols.
+const showReferenceData = ref(false)
+function isRefSession(s) { return typeof s?.notes === 'string' && s.notes.startsWith('REF_IMPORT') }
+const refSessionCount = computed(() => sessions.value.filter(isRefSession).length)
+// Show all measurements (the «reference» distinction went away once they were
+// migrated to proper batteries under the «Перенос старой базы» project). Sort
+// by the Протокол column to cluster cells by chemistry.
+const displaySessions = computed(() => sessions.value)
+
+// Quick protocol comparison. The SOH chart's value is comparing protocols,
+// but doing so meant hunting "main" cycling blocks out of a paginated table.
+// "Main" = a session that has a protocol and a real long run (≥ MAIN_MIN_CYCLES
+// cycles) — excludes 1-2-cycle formation and 10-15-cycle conditioning steps.
+// The selector below activates them in one click (works even when refs are
+// hidden in the table, since it reads the full session list).
+const MAIN_MIN_CYCLES = 30
+const mainSessions = computed(() => sessions.value.filter(
+  s => s.status === 'ready' && s.protocol && (s.total_cycles ?? 0) >= MAIN_MIN_CYCLES
+))
+const protocolCompareOptions = computed(() => {
+  const byProto = {}
+  for (const s of mainSessions.value) byProto[s.protocol] = (byProto[s.protocol] || 0) + 1
+  const opts = Object.entries(byProto)
+    .sort((a, b) => a[0].localeCompare(b[0], 'ru'))
+    .map(([p, n]) => ({ label: `${p} (${n})`, value: p }))
+  if (opts.length > 1) opts.unshift({ label: `Все протоколы (${mainSessions.value.length})`, value: '__all__' })
+  return opts
+})
 
 // ── Multi-session overlay state ──────────────────────────────────────
 // A session is "active" when it appears on the charts. State is keyed by
@@ -99,6 +132,35 @@ const capacityUnit = ref('Ah')
 // is the fastest way to A/B compare in the UI without reloading.
 const smoothingWindow = ref(5)
 
+// Скролл-щит: при прокрутке курсор едет над канвасами → шторм mousemove →
+// hit-test по тысячам точек + перекраска на каждое событие = лагающий скролл.
+// На время скролла гасим pointer-events канвасов (классика тяжёлых дашбордов);
+// возвращаем через 160 мс после остановки.
+const isScrolling = ref(false)
+let scrollShieldT = null
+function onAnyScroll() {
+  isScrolling.value = true
+  clearTimeout(scrollShieldT)
+  scrollShieldT = setTimeout(() => { isScrolling.value = false }, 160)
+}
+onMounted(() => window.addEventListener('scroll', onAnyScroll, { passive: true, capture: true }))
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onAnyScroll, { capture: true })
+  clearTimeout(scrollShieldT)
+})
+
+// dQ/dV smoothing method: 'savgol' (navani-style Savitzky–Golay on a uniform
+// V-grid — publication-grade peaks, default) vs 'ma' (legacy moving average).
+// Preset = SG strength, calibrated on real ELITECH data (see savitzkyGolay.js).
+const dqdvMethod = ref('savgol')
+const dqdvPreset = ref('standard')
+// Differential chart view: 'dqdv' (peaks vs V) | 'dvdq' (DVA vs Q).
+const dqdvView = ref('dqdv')
+// Auto-annotate detected peaks (last selected cycle per session/step).
+const dqdvPeaks = ref(true)
+// Viridis cycle gradient on voltage profile + differential chart.
+const cycleGradient = ref(false)
+
 // Capacity chart view: 'absolute' (Ah or mAh/g) vs 'retention' (C/C1 × 100%).
 // Retention is the scientific-paper standard for visualising fade — every
 // session starts at 100% and the curve shows % of initial capacity at
@@ -117,6 +179,24 @@ const showHysteresis = ref(false)
 // already loaded into cycleDataMap — we don't auto-fetch it.
 const ghostTrace = ref(false)
 
+// Dedicated SOH (capacity-retention) chart grouped by protocol. Opt-in like
+// hysteresis — a separate analytical view for comparing degradation across
+// protocols/cells. Rendered by <CyclingSohChart> below the main charts.
+const showSoh = ref(false)
+
+// Page split into 3 tabs by data level (Dima 2026-06-09): the page was one
+// infinite scroll mixing session list / cross-protocol charts / per-cycle raw
+// points. Tabs: 'sessions' (manage+select), 'compare' (SOH/capacity across
+// protocols), 'detail' (one selection: V-profile, dQ/dV, raw points).
+const activeTab = ref('sessions')
+
+// Toolbar regrouping (Dima 2026-06-04): the 10 controls were one flat
+// row with no structure. They're now grouped into «Данные» (data
+// selection that affects everything), «Отображение» (per-view display
+// options), and a collapsible «Оформление и экспорт» (presentation +
+// export — the low-frequency noise tucked away by default).
+const showFormatting = ref(false)
+
 // Per-chart style popover state. Controlled by each chart's ⚙ button in
 // <CyclingCharts> — the chart id (capacity/voltage/dqdv/hysteresis) of
 // the clicked one lands here so the shared popover knows which chart's
@@ -134,6 +214,22 @@ const styleCurrentChartLabel = computed(() => {
 const styleActivePresetReadonly = computed(() => !!activePreset.value?.readonly)
 const styleActivePresetName = computed(() => activePreset.value?.name || '')
 
+// Per-chart DISPLAY options (view settings, not preset style). Which one is
+// relevant depends on the chart, so the ⚙ popover picks by chartId:
+// capacity→вид (абсолют/ретенция), voltage→ghost trace, dqdv→сглаживание.
+// These moved out of the global toolbar (Dima 2026-06-05) so each setting
+// lives on the chart it actually affects — «настройка индивидуальная».
+const styleCurrentDisplay = computed(() => ({
+  capacityView: capacityView.value,
+  ghostTrace: ghostTrace.value,
+  smoothingWindow: smoothingWindow.value,
+  dqdvMethod: dqdvMethod.value,
+  dqdvPreset: dqdvPreset.value,
+  dqdvView: dqdvView.value,
+  dqdvPeaks: dqdvPeaks.value,
+  cycleGradient: cycleGradient.value,
+}))
+
 // Event from <CyclingCharts @style-click>. Emitted when the user clicks
 // the ⚙ button on any chart card.
 function onChartStyleClick(chartId, event) {
@@ -143,6 +239,18 @@ function onChartStyleClick(chartId, event) {
 function onStyleUpdate(partial) {
   if (!styleCurrentChartId.value) return
   setChartStyle(styleCurrentChartId.value, partial)
+}
+// Display option changed from inside a chart's ⚙ popover. Unlike style,
+// these are plain view refs (not preset-scoped), so we just set them.
+function onDisplayUpdate({ key, value }) {
+  if (key === 'capacityView') capacityView.value = value
+  else if (key === 'ghostTrace') ghostTrace.value = value
+  else if (key === 'smoothingWindow') smoothingWindow.value = value
+  else if (key === 'dqdvMethod') dqdvMethod.value = value
+  else if (key === 'dqdvPreset') dqdvPreset.value = value
+  else if (key === 'dqdvView') dqdvView.value = value
+  else if (key === 'dqdvPeaks') dqdvPeaks.value = value
+  else if (key === 'cycleGradient') cycleGradient.value = value
 }
 function onStyleReset() {
   if (!styleCurrentChartId.value) return
@@ -329,7 +437,11 @@ watch(specificAvailable, (has) => {
 // real cycling runs can be 500-10000 cycles, and 100 is the visual
 // ceiling where individual voltage-profile lines still tell a story.
 // For bigger studies, decimate ("каждый 50-й") rather than chart all.
-const MAX_SELECTED_CYCLES = 100
+// Жёсткого продуктового лимита нет: выбор любых N циклов. Профиль V и dQ/dV
+// рендерят равномерную подвыборку ≤24 кривых (см. pickEvenly) — рисовать
+// тысячи наложенных кривых бессмысленно и смертельно для канваса; Ёмкость и
+// SOH от выбора не зависят. 10000 — санитарный потолок против патологий.
+const MAX_SELECTED_CYCLES = 10000
 const FETCH_CONCURRENCY = 4
 
 // Stable color palette — first 8 sessions get a curated color from the
@@ -480,6 +592,7 @@ const columns = [
   // the default column filter popover and makes the header itself click-
   // able (emits header-click → onTableHeaderClick toggles all visible).
   { field: 'active', header: 'График', width: 80, sortable: false, filterable: false },
+  { field: 'protocol', header: 'Протокол', width: 110, sortable: true, filterable: true },
   { field: 'battery_id', header: 'Аккумулятор', width: 130, sortable: true },
   { field: 'equipment_type', header: 'Оборудование', width: 130, sortable: true, filterable: true },
   { field: 'total_cycles', header: 'Циклов', width: 80, sortable: true },
@@ -603,6 +716,29 @@ async function onTableHeaderClick(field) {
   }))
 }
 
+// Activate the main blocks of a protocol (or all protocols) and reveal the
+// SOH chart. Additive — builds the comparison up; clear via the «График»
+// header toggle. Fetches summaries for the newly-activated sessions.
+async function compareMainBlocks(proto) {
+  if (!proto) return
+  let mains = mainSessions.value
+  if (proto !== '__all__') mains = mains.filter(s => s.protocol === proto)
+  const toAdd = mains.filter(s => !isSessionActive(s.session_id))
+  if (toAdd.length) {
+    activeSessionIds.value = [...activeSessionIds.value, ...toAdd.map(s => s.session_id)]
+    await Promise.all(toAdd.map(async s => {
+      if (summaryBySession.value[s.session_id]) return
+      try {
+        const { data } = await api.get(`/api/cycling/sessions/${s.session_id}/summary`)
+        summaryBySession.value = { ...summaryBySession.value, [s.session_id]: data }
+      } catch {
+        activeSessionIds.value = activeSessionIds.value.filter(id => id !== s.session_id)
+      }
+    }))
+  }
+  activeTab.value = 'compare'   // jump to the comparison view
+}
+
 
 // Toggle a cycle across ALL active sessions. selectedCycles is a single
 // global list — the user's intent is "show cycle N on every session on the
@@ -621,7 +757,7 @@ async function toggleCycle(cycleNum) {
     toast.add({
       severity: 'warn',
       summary: 'Лимит циклов',
-      detail: `Можно сравнивать до ${MAX_SELECTED_CYCLES} циклов одновременно`,
+      detail: `Санитарный потолок: ${MAX_SELECTED_CYCLES} циклов одновременно`,
       life: 3000,
     })
     return
@@ -690,6 +826,39 @@ async function fetchCyclesBatched(sid, cycleNums) {
     ...loadingCyclesBy.value,
     [sid]: [...new Set([...(loadingCyclesBy.value[sid] || []), ...cycleNums])],
   }
+
+  // Range-путь: МНОГО циклов одним запросом (раньше «Все 100» = 100 HTTP-
+  // запросов на сессию — главное «крайне долго»). Эндпоинт сам прореживает
+  // до бюджета ~60к точек на запрос; разрезаем ответ по циклам. Бонус: соседние
+  // циклы диапазона тоже падают в кэш — дальнейшие тоглы бесплатны.
+  const minC = Math.min(...cycleNums)
+  const maxC = Math.max(...cycleNums)
+  const span = maxC - minC + 1
+  const sparse = cycleNums.length <= 12 && cycleNums.length / span < 0.3
+  if (!sparse) {
+    try {
+      const downsample = Math.max(100, Math.min(2000, Math.ceil(60000 / span)))
+      const { data } = await api.get(
+        `/api/cycling/sessions/${sid}/datapoints?from_cycle=${minC}&to_cycle=${maxC}&downsample=${downsample}`
+      )
+      if (!activeSessionIds.value.includes(sid)) return
+      const grouped = groupRowsByCycle(data)
+      cycleDataBySession.value = {
+        ...cycleDataBySession.value,
+        [sid]: { ...(cycleDataBySession.value[sid] || {}), ...grouped },
+      }
+      return
+    } catch {
+      /* падаем на поцикловый путь ниже */
+    } finally {
+      const wanted = new Set(cycleNums)
+      loadingCyclesBy.value = {
+        ...loadingCyclesBy.value,
+        [sid]: (loadingCyclesBy.value[sid] || []).filter(x => !wanted.has(x)),
+      }
+    }
+  }
+
   const queue = [...cycleNums]
   const workers = Array.from(
     { length: Math.min(FETCH_CONCURRENCY, queue.length) },
@@ -897,14 +1066,16 @@ const batteryOptions = computed(() =>
 </script>
 
 <template>
-  <div class="cycling-page">
+  <div class="cycling-page" :class="{ 'is-scrolling': isScrolling }">
     <PageHeader title="Циклирование" icon="pi pi-sync" />
+
+    <!-- Measurements list (master). Selecting cells reveals the charts below. -->
 
     <!-- Sessions table -->
     <CrudTable
       ref="tableRef"
       :columns="columns"
-      :data="sessions"
+      :data="displaySessions"
       id-field="session_id"
       table-name="Сессии циклирования"
       table-key="cycling"
@@ -913,6 +1084,18 @@ const batteryOptions = computed(() =>
       @header-click="onTableHeaderClick"
     >
       <template #toolbar-end>
+        <Select
+          v-if="protocolCompareOptions.length"
+          :modelValue="null"
+          :options="protocolCompareOptions"
+          optionLabel="label"
+          optionValue="value"
+          placeholder="Сравнить протокол…"
+          size="small"
+          style="width: 210px"
+          title="Активировать основные блоки протокола и показать график SOH"
+          @update:modelValue="compareMainBlocks"
+        />
         <Button label="Загрузить файл" icon="pi pi-upload" size="small" @click="showUpload = true" />
       </template>
       <template #col-active="{ data }">
@@ -962,224 +1145,103 @@ const batteryOptions = computed(() =>
       </template>
     </CrudTable>
 
-    <!-- Charts area (multi-session) -->
+    <!-- Charts (detail) appear below the list once measurements are selected:
+         SOH / protocol comparison on top, then per-cell profile + dQ/dV. -->
     <div v-if="activeSessionViews.length" class="charts-area glass-card">
-      <!-- Toolbar: experiment title + publication-mode toggle -->
+      <CyclingSohChart :sessions="activeSessionViews" />
+      <!-- Toolbar — regrouped into semantic blocks (Dima 2026-06-04):
+           «Данные» (selection affecting everything) · «Отображение»
+           (per-view display options) · «Оформление и экспорт»
+           (presentation + export, collapsed by default to cut noise). -->
       <div class="charts-toolbar">
-        <div class="toolbar-field">
-          <label class="toolbar-label">Название эксперимента</label>
-          <input
-            v-model="experimentLabel"
-            type="text"
-            class="toolbar-input"
-            placeholder="например: NCM (M2C2_RT)_fresh gel"
-            maxlength="120"
-          />
-        </div>
-        <div class="toolbar-pubmode">
-          <label class="toolbar-label" title="Фильтр применяется к профилю напряжения и dQ/dV ниже">Показать ↓</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': stepFilter === 'both' }"
-              @click="stepFilter = 'both'"
-            >
-              Оба
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': stepFilter === 'charge' }"
-              @click="stepFilter = 'charge'"
-              title="Только заряд (пунктир)"
-            >
-              Заряд
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': stepFilter === 'discharge' }"
-              @click="stepFilter = 'discharge'"
-              title="Только разряд (сплошная)"
-            >
-              Разряд
-            </button>
+        <!-- ── Группа: Данные ── -->
+        <div class="tb-group">
+          <span class="tb-group-title">Данные</span>
+          <div class="tb-group-row">
+            <div class="toolbar-pubmode">
+              <label class="toolbar-label" title="Фильтр применяется к профилю напряжения и dQ/dV ниже">Показать ↓</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn" :class="{ 'is-active': stepFilter === 'both' }" @click="stepFilter = 'both'">Оба</button>
+                <button class="pubmode-btn" :class="{ 'is-active': stepFilter === 'charge' }" @click="stepFilter = 'charge'" title="Только заряд (пунктир)">Заряд</button>
+                <button class="pubmode-btn" :class="{ 'is-active': stepFilter === 'discharge' }" @click="stepFilter = 'discharge'" title="Только разряд (сплошная)">Разряд</button>
+              </div>
+            </div>
+            <div class="toolbar-pubmode">
+              <label class="toolbar-label">Единицы ёмкости</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn" :class="{ 'is-active': capacityUnit === 'Ah' }" @click="capacityUnit = 'Ah'">Ah</button>
+                <button
+                  class="pubmode-btn"
+                  :class="{ 'is-active': capacityUnit === 'mAh_per_g' }"
+                  :title="specificAvailable ? 'Удельная ёмкость — нормирована на массу активного материала' : 'Кликните, чтобы ввести массу активного материала'"
+                  @click="specificAvailable ? (capacityUnit = 'mAh_per_g') : openMassEditor()"
+                >
+                  mAh/g
+                  <i v-if="!specificAvailable" class="pi pi-pencil" style="font-size:10px;margin-left:4px"></i>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="toolbar-pubmode">
-          <label class="toolbar-label">Единицы ёмкости</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': capacityUnit === 'Ah' }"
-              @click="capacityUnit = 'Ah'"
-            >
-              Ah
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': capacityUnit === 'mAh_per_g' }"
-              :title="specificAvailable
-                ? 'Удельная ёмкость — нормирована на массу активного материала'
-                : 'Кликните, чтобы ввести массу активного материала'"
-              @click="specificAvailable ? (capacityUnit = 'mAh_per_g') : openMassEditor()"
-            >
-              mAh/g
-              <i v-if="!specificAvailable" class="pi pi-pencil" style="font-size:10px;margin-left:4px"></i>
-            </button>
+
+        <!-- ── Группа: Доп. графики ── (chart-visibility toggles only; the
+             per-chart display options — вид ёмкости, ghost, сглаживание —
+             moved into each chart's own ⚙ popover, Dima 2026-06-05). -->
+        <div class="tb-group">
+          <span class="tb-group-title">Доп. графики</span>
+          <div class="tb-group-row">
+            <div class="toolbar-pubmode" title="Рост ΔV̄ = avg_charge − avg_discharge показывает поляризацию (SEI, контакт, дендриты)">
+              <label class="toolbar-label">Гистерезис V̄</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn" :class="{ 'is-active': !showHysteresis }" @click="showHysteresis = false">Выкл</button>
+                <button class="pubmode-btn" :class="{ 'is-active': showHysteresis }" @click="showHysteresis = true">Вкл</button>
+              </div>
+            </div>
+            <span class="tb-group-hint" title="Вид ёмкости, ghost trace и окно сглаживания dQ/dV теперь настраиваются в ⚙ каждого графика">
+              <i class="pi pi-cog"></i> вид · ghost · сглаживание → в ⚙ графика
+            </span>
           </div>
         </div>
-        <div class="toolbar-pubmode" title="Абсолютная ёмкость ↔ нормированная C/C₁ (scientific standard for fade)">
-          <label class="toolbar-label">Вид графика ёмкости</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': capacityView === 'absolute' }"
-              @click="capacityView = 'absolute'"
-              title="Абсолютная ёмкость (Ah или mAh/g)"
-            >
-              Абсолют
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': capacityView === 'retention' }"
-              @click="capacityView = 'retention'"
-              title="Удержание: C(n)/C(1) × 100% — стандарт для публикаций"
-            >
-              Ретенция, %
-            </button>
-          </div>
-        </div>
-        <div class="toolbar-pubmode" title="Рост ΔV̄ = avg_charge − avg_discharge показывает полиризацию (SEI, контакт, дендриты)">
-          <label class="toolbar-label">Гистерезис V̄</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': !showHysteresis }"
-              @click="showHysteresis = false"
-            >
-              Скрыт
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': showHysteresis }"
-              @click="showHysteresis = true"
-            >
-              Показать
-            </button>
-          </div>
-        </div>
-        <div class="toolbar-pubmode" title="Предыдущий цикл (N-1) в профиле V как призрак — видно fade между соседними циклами">
-          <label class="toolbar-label">Ghost trace</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': !ghostTrace }"
-              @click="ghostTrace = false"
-            >
-              Выкл
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': ghostTrace }"
-              @click="ghostTrace = true"
-            >
-              Вкл
-            </button>
-          </div>
-        </div>
-        <div class="toolbar-pubmode">
-          <label class="toolbar-label">Стиль</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': !publicationMode }"
-              @click="publicationMode = false"
-            >
-              <i class="pi pi-cog"></i> Интерактив
-            </button>
-            <button
-              class="pubmode-btn"
-              :class="{ 'is-active': publicationMode }"
-              @click="publicationMode = true"
-            >
-              <i class="pi pi-file-pdf"></i> Статья
-            </button>
-          </div>
-        </div>
-        <!-- Style preset library (per-user, persisted in localStorage).
-             Dropdown = active preset (Mine, Publication B/W, Colorblind,
-             or any user-saved clone). 💾 saves current settings as a new
-             named preset; ✏️ renames; 🗑 deletes (only for user presets). -->
-        <div class="toolbar-pubmode" title="Библиотека пресетов стилей — по одному на пользователя, сохраняется в браузере">
-          <label class="toolbar-label">Пресет стилей</label>
-          <div class="pubmode-row preset-row">
-            <select
-              class="preset-select"
-              :value="activePreset?.id"
-              @change="onApplyPreset($event.target.value)"
-            >
-              <option
-                v-for="p in styleLibrary.presets"
-                :key="p.id"
-                :value="p.id"
-              >
-                {{ p.name }}{{ p.readonly ? ' 🔒' : '' }}
-              </option>
-            </select>
-            <button
-              class="pubmode-btn preset-icon-btn"
-              title="Сохранить как новый пресет"
-              @click="onPresetSaveAs"
-            ><i class="pi pi-save"></i></button>
-            <button
-              class="pubmode-btn preset-icon-btn"
-              :disabled="!activePreset || activePreset.readonly"
-              :title="activePreset?.readonly ? 'Встроенный пресет нельзя переименовать' : 'Переименовать активный пресет'"
-              @click="onPresetRename"
-            ><i class="pi pi-pencil"></i></button>
-            <button
-              class="pubmode-btn preset-icon-btn preset-icon-btn--danger"
-              :disabled="!activePreset || activePreset.readonly || activePreset.id === 'default'"
-              :title="activePreset?.readonly || activePreset?.id === 'default'
-                ? 'Этот пресет нельзя удалить'
-                : 'Удалить активный пресет'"
-              @click="onPresetDelete"
-            ><i class="pi pi-trash"></i></button>
-          </div>
-        </div>
-        <div class="toolbar-smoothing" title="Окно скользящего среднего для dQ/dV. 1 = без сглаживания, 21 = максимум.">
-          <label class="toolbar-label">
-            Сглаживание dQ/dV
-            <span class="toolbar-smoothing__val">{{ smoothingWindow }}</span>
-          </label>
-          <div class="toolbar-smoothing__row">
-            <span class="toolbar-smoothing__edge">1</span>
-            <input
-              v-model.number="smoothingWindow"
-              type="range"
-              min="1"
-              max="21"
-              step="1"
-              class="toolbar-smoothing__slider"
-              :aria-label="`Окно сглаживания dQ/dV: ${smoothingWindow}`"
-            />
-            <span class="toolbar-smoothing__edge">21</span>
-          </div>
-        </div>
-        <div class="toolbar-pubmode">
-          <label class="toolbar-label">Экспорт</label>
-          <div class="pubmode-row">
-            <button
-              class="pubmode-btn export-xlsx-btn"
-              :disabled="excelDownloading || !activeSessionIds.length"
-              :title="selectedCycles.length
-                ? `Скачать Excel: ${activeSessionIds.length} сессий, ${selectedCycles.length} циклов (с данными)`
-                : `Скачать Excel: ${activeSessionIds.length} сессий (только сводка, без сырых данных)`"
-              @click="downloadExcel"
-            >
-              <i v-if="excelDownloading" class="pi pi-spin pi-spinner"></i>
-              <i v-else class="pi pi-file-excel"></i>
-              Excel
-            </button>
+
+        <!-- ── Группа: Оформление и экспорт (сворачиваемая) ── -->
+        <div class="tb-group tb-group--fold">
+          <button class="tb-group-toggle" @click="showFormatting = !showFormatting" :aria-expanded="showFormatting">
+            Оформление и экспорт
+            <i class="pi" :class="showFormatting ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
+          </button>
+          <div v-show="showFormatting" class="tb-group-row">
+            <div class="toolbar-field">
+              <label class="toolbar-label">Название эксперимента</label>
+              <input v-model="experimentLabel" type="text" class="toolbar-input" placeholder="например: NCM (M2C2_RT)_fresh gel" maxlength="120" />
+            </div>
+            <div class="toolbar-pubmode">
+              <label class="toolbar-label">Стиль</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn" :class="{ 'is-active': !publicationMode }" @click="publicationMode = false"><i class="pi pi-cog"></i> Интерактив</button>
+                <button class="pubmode-btn" :class="{ 'is-active': publicationMode }" @click="publicationMode = true"><i class="pi pi-file-pdf"></i> Статья</button>
+              </div>
+            </div>
+            <div class="toolbar-pubmode" title="Библиотека пресетов стилей — по одному на пользователя, сохраняется в браузере">
+              <label class="toolbar-label">Пресет стилей</label>
+              <div class="pubmode-row preset-row">
+                <select class="preset-select" :value="activePreset?.id" @change="onApplyPreset($event.target.value)">
+                  <option v-for="p in styleLibrary.presets" :key="p.id" :value="p.id">{{ p.name }}{{ p.readonly ? ' 🔒' : '' }}</option>
+                </select>
+                <button class="pubmode-btn preset-icon-btn" title="Сохранить как новый пресет" @click="onPresetSaveAs"><i class="pi pi-save"></i></button>
+                <button class="pubmode-btn preset-icon-btn" :disabled="!activePreset || activePreset.readonly" :title="activePreset?.readonly ? 'Встроенный пресет нельзя переименовать' : 'Переименовать активный пресет'" @click="onPresetRename"><i class="pi pi-pencil"></i></button>
+                <button class="pubmode-btn preset-icon-btn preset-icon-btn--danger" :disabled="!activePreset || activePreset.readonly || activePreset.id === 'default'" :title="activePreset?.readonly || activePreset?.id === 'default' ? 'Этот пресет нельзя удалить' : 'Удалить активный пресет'" @click="onPresetDelete"><i class="pi pi-trash"></i></button>
+              </div>
+            </div>
+            <div class="toolbar-pubmode">
+              <label class="toolbar-label">Экспорт</label>
+              <div class="pubmode-row">
+                <button class="pubmode-btn export-xlsx-btn" :disabled="excelDownloading || !activeSessionIds.length" :title="selectedCycles.length ? `Скачать Excel: ${activeSessionIds.length} сессий, ${selectedCycles.length} циклов (с данными)` : `Скачать Excel: ${activeSessionIds.length} сессий (только сводка, без сырых данных)`" @click="downloadExcel">
+                  <i v-if="excelDownloading" class="pi pi-spin pi-spinner"></i>
+                  <i v-else class="pi pi-file-excel"></i>
+                  Excel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1187,11 +1249,17 @@ const batteryOptions = computed(() =>
         :sessions="activeSessionViews"
         :selectedCycles="selectedCycles"
         :maxSelected="MAX_SELECTED_CYCLES"
+        :showTables="activeSessionViews.length <= 5"
         :experimentLabel="experimentLabel"
         :publicationMode="publicationMode"
         :capacityUnit="capacityUnit"
         :stepFilter="stepFilter"
         :smoothingWindow="smoothingWindow"
+        :dqdvMethod="dqdvMethod"
+        :dqdvPreset="dqdvPreset"
+        :dqdvView="dqdvView"
+        :dqdvPeaks="dqdvPeaks"
+        :cycleGradient="cycleGradient"
         :capacityView="capacityView"
         :showHysteresis="showHysteresis"
         :ghostTrace="ghostTrace"
@@ -1202,7 +1270,7 @@ const batteryOptions = computed(() =>
     </div>
     <div v-else class="charts-placeholder glass-card">
       <i class="pi pi-chart-line" style="font-size:24px;opacity:0.3"></i>
-      <div>Выберите одно или несколько измерений в таблице — графики появятся здесь.</div>
+      <div>Выбери измерения в списке (или «Сравнить протокол») — графики появятся здесь.</div>
     </div>
 
     <!-- Per-chart style popover (shared, positions at clicked ⚙ button) -->
@@ -1211,9 +1279,11 @@ const batteryOptions = computed(() =>
       :chartId="styleCurrentChartId"
       :chartLabel="styleCurrentChartLabel"
       :style="styleCurrentStyle"
+      :display="styleCurrentDisplay"
       :readonly="styleActivePresetReadonly"
       :presetName="styleActivePresetName"
       @update="onStyleUpdate"
+      @update-display="onDisplayUpdate"
       @reset="onStyleReset"
       @clone="onStyleClone"
     />
@@ -1777,15 +1847,113 @@ const batteryOptions = computed(() =>
 /* ── Charts toolbar ── Applies to the charts below (V profile + dQ/dV).
    Keeps all controls on a single row when the viewport allows; the
    title field shrinks first, toggle groups never wrap into columns. */
+/* ── Page tabs (Сессии / Сравнение / Деталь) ── */
+.cyc-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 14px;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.12);
+}
+.cyc-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border: none;
+  background: transparent;
+  color: rgba(0, 50, 116, 0.55);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.12s, border-color 0.12s;
+}
+.cyc-tab-btn:hover { color: #003274; }
+.cyc-tab-btn.is-active { color: #003274; border-bottom-color: #003274; }
+.cyc-tab-btn i { font-size: 13px; }
+.cyc-tab-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: rgba(0, 50, 116, 0.1);
+  color: #003274;
+  font-variant-numeric: tabular-nums;
+}
+.cyc-tab-btn.is-active .cyc-tab-badge { background: #003274; color: white; }
+
 .charts-toolbar {
   display: flex;
-  align-items: flex-end;
-  gap: 16px;
+  align-items: flex-start;
+  gap: 14px;
   padding: 0.4rem 0 0.9rem;
   border-bottom: 1px solid rgba(0, 50, 116, 0.06);
   margin-bottom: 0.9rem;
   flex-wrap: wrap;
 }
+
+/* ── Toolbar semantic groups (Dima 2026-06-04) ──
+   The 10 controls were one flat row with no grouping. They're now boxed
+   into «Данные» / «Отображение» / collapsible «Оформление и экспорт» so
+   related controls read as a unit and the low-frequency ones stay hidden. */
+.tb-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 7px 12px 10px;
+  background: rgba(0, 50, 116, 0.025);
+  border: 1px solid rgba(0, 50, 116, 0.08);
+  border-radius: 10px;
+}
+.tb-group-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(0, 50, 116, 0.45);
+  padding-left: 2px;
+}
+.tb-group-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+/* Collapsible «Оформление и экспорт»: header is the toggle button itself. */
+.tb-group--fold { padding-top: 5px; }
+.tb-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  padding: 2px 2px 0;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(0, 50, 116, 0.5);
+  font-family: inherit;
+  cursor: pointer;
+}
+.tb-group-toggle:hover { color: #003274; }
+.tb-group-toggle i { font-size: 10px; transition: transform 0.15s; }
+.tb-group--fold .tb-group-row { margin-top: 6px; }
+/* Hint pointing users to where the moved per-chart controls now live. */
+.tb-group-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-end;
+  padding-bottom: 6px;
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(0, 50, 116, 0.4);
+}
+.tb-group-hint i { font-size: 11px; }
 .toolbar-field {
   display: flex;
   flex-direction: column;
@@ -1880,69 +2048,8 @@ const batteryOptions = computed(() =>
   color: #E74C3C;
 }
 
-/* ── dQ/dV smoothing slider ──
-   Sits in the charts toolbar next to the style toggles. Same flex-shrink:0
-   rule as .toolbar-pubmode so it never gets stretched or pushed to a new
-   row when the title field steals horizontal space. Width is fixed so the
-   track length is predictable regardless of the slider's current value. */
-.toolbar-smoothing {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
-  min-width: 180px;
-}
-.toolbar-smoothing__val {
-  display: inline-block;
-  min-width: 22px;
-  padding: 0 6px;
-  margin-left: 6px;
-  border-radius: 4px;
-  background: rgba(0, 50, 116, 0.08);
-  color: #003274;
-  font-weight: 600;
-  font-size: 11px;
-  text-align: center;
-  letter-spacing: 0;
-  text-transform: none;
-}
-.toolbar-smoothing__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border: 1px solid rgba(0, 50, 116, 0.15);
-  border-radius: 6px;
-  background: white;
-  height: 24px;
-  box-sizing: border-box;
-}
-.toolbar-smoothing__edge {
-  font-size: 10px;
-  color: rgba(0, 50, 116, 0.45);
-  font-variant-numeric: tabular-nums;
-}
-.toolbar-smoothing__slider {
-  flex: 1;
-  height: 14px;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  accent-color: #003274;  /* native-native — modern browsers honour this */
-  cursor: pointer;
-}
-/* Make the track slightly thicker and more visible than the browser default
-   so the slider reads as a control at a glance, not a stray line. */
-.toolbar-smoothing__slider::-webkit-slider-runnable-track {
-  height: 3px;
-  background: rgba(0, 50, 116, 0.2);
-  border-radius: 2px;
-}
-.toolbar-smoothing__slider::-moz-range-track {
-  height: 3px;
-  background: rgba(0, 50, 116, 0.2);
-  border-radius: 2px;
-}
+/* (dQ/dV smoothing slider styles removed 2026-06-05 — the control moved
+   into the dQ/dV chart's ⚙ popover and reuses .style-radius-slider there.) */
 
 /* ── Charts placeholder ── */
 .charts-placeholder {
@@ -2136,4 +2243,6 @@ const batteryOptions = computed(() =>
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* Скролл-щит: канвасы не ловят мышь во время прокрутки */
+.cycling-page.is-scrolling :deep(canvas) { pointer-events: none; }
 </style>

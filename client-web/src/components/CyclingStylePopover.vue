@@ -24,11 +24,22 @@ const props = defineProps({
   chartId: { type: String, default: '' },
   chartLabel: { type: String, default: '' },
   style: { type: Object, default: () => ({}) },
+  // Per-chart DISPLAY options (view settings, not preset style):
+  // { capacityView, ghostTrace, smoothingWindow }. Which one is shown
+  // depends on chartId. Unlike style, these are NOT preset-scoped and
+  // stay editable even when the active preset is read-only.
+  display: { type: Object, default: () => ({}) },
   readonly: { type: Boolean, default: false },
   presetName: { type: String, default: '' },
 })
 
-const emit = defineEmits(['update', 'reset', 'clone'])
+const emit = defineEmits(['update', 'update-display', 'reset', 'clone'])
+
+// Which charts have a per-chart display option (drives the top section).
+const hasDisplayOption = computed(() =>
+  ['capacity', 'voltage', 'dqdv'].includes(props.chartId)
+)
+function onDisplay(key, value) { emit('update-display', { key, value }) }
 
 const popRef = ref(null)
 
@@ -42,6 +53,7 @@ const thicknessOptions = [1, 1.5, 2, 3, 4]
 function onPalette(p) { if (!props.readonly) emit('update', { palette: p }) }
 function onThickness(t) { if (!props.readonly) emit('update', { borderWidth: t }) }
 function onPointStyle(v) { if (!props.readonly) emit('update', { pointStyle: v }) }
+function onVaryMarkers(v) { if (!props.readonly) emit('update', { varyMarkers: v }) }
 function onPointRadius(e) {
   if (props.readonly) return
   const n = Number(e.target.value)
@@ -63,6 +75,136 @@ const paletteEntries = computed(() => Object.entries(PALETTES).map(([id, p]) => 
           <i class="pi pi-lock"></i> read-only
         </span>
       </div>
+
+      <!-- Per-chart display options (view settings, not style). Always
+           editable, even for read-only presets. Shown only for charts
+           that have one; hysteresis has none (it's a global on/off). -->
+      <template v-if="hasDisplayOption">
+        <div v-if="chartId === 'capacity'" class="style-row">
+          <label class="style-label">Вид графика</label>
+          <div class="style-seg">
+            <button
+              class="style-seg-btn"
+              :class="{ 'is-active': display.capacityView === 'absolute' }"
+              @click="onDisplay('capacityView', 'absolute')"
+              title="Абсолютная ёмкость (Ah или mAh/g)"
+            >Абсолют</button>
+            <button
+              class="style-seg-btn"
+              :class="{ 'is-active': display.capacityView === 'retention' }"
+              @click="onDisplay('capacityView', 'retention')"
+              title="Удержание: C(n)/C(1) × 100% — стандарт для публикаций"
+            >Ретенция, %</button>
+          </div>
+        </div>
+
+        <template v-else-if="chartId === 'voltage'">
+          <div class="style-row">
+            <label class="style-label" title="Цикл N−1 под каждым выбранным циклом — fade между соседними циклами">Ghost trace (цикл N−1)</label>
+            <div class="style-seg">
+              <button class="style-seg-btn" :class="{ 'is-active': !display.ghostTrace }" @click="onDisplay('ghostTrace', false)">Выкл</button>
+              <button class="style-seg-btn" :class="{ 'is-active': display.ghostTrace }" @click="onDisplay('ghostTrace', true)">Вкл</button>
+            </div>
+          </div>
+          <div class="style-row">
+            <label class="style-label" title="Градиент viridis: 1-й цикл фиолетовый → последний жёлтый. Стандарт публикаций для эволюции циклов; сессии различаются штриховкой">Цвет циклов</label>
+            <div class="style-seg">
+              <button class="style-seg-btn" :class="{ 'is-active': !display.cycleGradient }" @click="onDisplay('cycleGradient', false)">Сессия</button>
+              <button class="style-seg-btn" :class="{ 'is-active': display.cycleGradient }" @click="onDisplay('cycleGradient', true)">Градиент</button>
+            </div>
+          </div>
+        </template>
+
+        <template v-else-if="chartId === 'dqdv'">
+          <div class="style-row">
+            <label class="style-label" title="dQ/dV — пики фазовых переходов по напряжению. dV/dQ (DVA) — локализация деградации по ёмкости (LAM vs LLI)">Вид графика</label>
+            <div class="style-seg">
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': (display.dqdvView ?? 'dqdv') === 'dqdv' }"
+                @click="onDisplay('dqdvView', 'dqdv')"
+              >dQ/dV</button>
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': display.dqdvView === 'dvdq' }"
+                @click="onDisplay('dqdvView', 'dvdq')"
+              >dV/dQ (DVA)</button>
+            </div>
+          </div>
+
+          <div v-if="(display.dqdvView ?? 'dqdv') === 'dqdv'" class="style-row">
+            <label class="style-label" title="Савицкий–Голей: сглаживание на равномерной сетке напряжения (как в проф. пакетах анализа) — гладкие пики для фазового анализа. Скользящее среднее — простое сглаживание сырых разностей">Метод сглаживания</label>
+            <div class="style-seg">
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': (display.dqdvMethod ?? 'savgol') === 'savgol' }"
+                @click="onDisplay('dqdvMethod', 'savgol')"
+              >Сав.–Голей</button>
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': display.dqdvMethod === 'ma' }"
+                @click="onDisplay('dqdvMethod', 'ma')"
+              >Скольз. среднее</button>
+            </div>
+          </div>
+
+          <div v-if="(display.dqdvView ?? 'dqdv') === 'dqdv' && display.dqdvMethod === 'ma'" class="style-row">
+            <label class="style-label">Окно среднего
+              <span class="style-radius-val">{{ display.smoothingWindow ?? 5 }}</span>
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="21"
+              step="1"
+              :value="display.smoothingWindow ?? 5"
+              class="style-radius-slider"
+              title="Окно скользящего среднего. 1 = без сглаживания, 21 = максимум"
+              @input="onDisplay('smoothingWindow', Number($event.target.value))"
+            />
+          </div>
+          <div v-else class="style-row">
+            <label class="style-label" title="Слабое — максимум деталей (острые пики), Стандарт — откалибровано по реальным данным, Сильное — для шумных ячеек">Интенсивность</label>
+            <div class="style-seg">
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': display.dqdvPreset === 'light' }"
+                @click="onDisplay('dqdvPreset', 'light')"
+              >Слабое</button>
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': (display.dqdvPreset ?? 'standard') === 'standard' }"
+                @click="onDisplay('dqdvPreset', 'standard')"
+              >Стандарт</button>
+              <button
+                class="style-seg-btn"
+                :class="{ 'is-active': display.dqdvPreset === 'strong' }"
+                @click="onDisplay('dqdvPreset', 'strong')"
+              >Сильное</button>
+            </div>
+          </div>
+
+          <div class="style-row">
+            <label class="style-label" title="Автоопределение пиков (локальные максимумы с фильтром значимости) — подписи позиций у последнего выбранного цикла">Пики</label>
+            <div class="style-seg">
+              <button class="style-seg-btn" :class="{ 'is-active': !(display.dqdvPeaks ?? true) }" @click="onDisplay('dqdvPeaks', false)">Выкл</button>
+              <button class="style-seg-btn" :class="{ 'is-active': display.dqdvPeaks ?? true }" @click="onDisplay('dqdvPeaks', true)">Вкл</button>
+            </div>
+          </div>
+
+          <div class="style-row">
+            <label class="style-label" title="Градиент viridis: 1-й цикл фиолетовый → последний жёлтый. Стандарт публикаций для эволюции пиков; сессии различаются штриховкой">Цвет циклов</label>
+            <div class="style-seg">
+              <button class="style-seg-btn" :class="{ 'is-active': !display.cycleGradient }" @click="onDisplay('cycleGradient', false)">Сессия</button>
+              <button class="style-seg-btn" :class="{ 'is-active': display.cycleGradient }" @click="onDisplay('cycleGradient', true)">Градиент</button>
+            </div>
+          </div>
+        </template>
+
+        <div class="style-section-sep">
+          <span>Стиль линий</span>
+        </div>
+      </template>
 
       <div v-if="readonly" class="style-readonly-hint">
         Пресет <strong>«{{ presetName }}»</strong> защищён. Чтобы изменить стиль,
@@ -109,14 +251,22 @@ const paletteEntries = computed(() => Object.entries(PALETTES).map(([id, p]) => 
       </div>
 
       <div class="style-row">
-        <label class="style-label">Маркер</label>
+        <label class="style-label" title="Разные формы маркеров по линиям — каждая линия своей формой (▲ ● ■ ◆ ★), отличать не только цветом">Формы по линиям</label>
+        <div class="style-seg">
+          <button class="style-seg-btn" :class="{ 'is-active': !style.varyMarkers }" :disabled="readonly" @click="onVaryMarkers(false)">Одинаковые</button>
+          <button class="style-seg-btn" :class="{ 'is-active': !!style.varyMarkers }" :disabled="readonly" @click="onVaryMarkers(true)">Разные</button>
+        </div>
+      </div>
+
+      <div class="style-row">
+        <label class="style-label">{{ style.varyMarkers ? 'Маркер (базовый)' : 'Маркер' }}</label>
         <div class="style-seg">
           <button
             v-for="p in POINT_STYLE_OPTIONS"
             :key="p.key"
             class="style-seg-btn style-seg-btn--marker"
             :class="{ 'is-active': style.pointStyle === p.value }"
-            :disabled="readonly"
+            :disabled="readonly || !!style.varyMarkers"
             @click="onPointStyle(p.value)"
             :title="p.key"
           >{{ p.label }}</button>
@@ -199,6 +349,25 @@ const paletteEntries = computed(() => Object.entries(PALETTES).map(([id, p]) => 
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+/* Divider between per-chart display options and the style controls. */
+.style-section-sep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(0, 50, 116, 0.4);
+}
+.style-section-sep::before,
+.style-section-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 50, 116, 0.1);
 }
 .style-label {
   font-size: 10px;

@@ -5,11 +5,21 @@ import { resolve } from 'path'
 export default defineConfig({
   plugins: [vue()],
   resolve: {
-    alias: { '@': resolve(__dirname, 'src') },
+    alias: {
+      '@': resolve(__dirname, 'src'),
+      // Versioned project contracts (repo root /contracts) — the metrics
+      // registry lives there so server, Python importers and the SPA all
+      // read ONE source of truth (see contracts/metrics.v1.json).
+      '@contracts': resolve(__dirname, '..', 'contracts'),
+    },
     dedupe: ['chart.js', 'vue'],
   },
   server: {
     port: 5173,
+    fs: {
+      // allow importing /contracts/*.json from one level above the Vite root
+      allow: [resolve(__dirname), resolve(__dirname, '..', 'contracts')],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3003',
