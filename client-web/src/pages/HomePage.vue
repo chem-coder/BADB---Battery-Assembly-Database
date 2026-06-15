@@ -9,7 +9,6 @@ import DateInputISO from '@/components/parity/DateInputISO.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import PageHeader from '@/components/PageHeader.vue'
-import StatusBadge from '@/components/StatusBadge.vue'
 import DashboardPipeline from '@/components/DashboardPipeline.vue'
 const DashboardGraph = defineAsyncComponent(() => import('@/components/DashboardGraph.vue'))
 const DashboardAnalytics = defineAsyncComponent(() => import('@/components/DashboardAnalytics.vue'))
@@ -74,9 +73,6 @@ const periodOptions = [
 // ── Reference counts ──────────────────────────────────────────────────
 const refCounts = ref({})
 
-// ── Recent data for tables ────────────────────────────────────────────
-const recentData = ref({})
-const recentErrors = ref({})
 
 // ── Fetch ─────────────────────────────────────────────────────────────
 async function loadDashboard() {
@@ -112,9 +108,10 @@ async function loadDashboard() {
     if (batteriesRes.status === 'fulfilled') allBatches.value = batteriesRes.value.data
   } catch { /* individual errors handled above */ }
 
-  // Reference counts (lightweight)
+  // Счётчики справочников. Материалы/рецептуры уже есть в ответе /kpi
+  // (refLinks предпочитает kpiData) — их полные списки не скачиваем.
   const refFetches = referenceSections
-    .filter(s => s.apiPath)
+    .filter(s => s.apiPath && s.key !== 'materials' && s.key !== 'recipes')
     .map(async s => {
       try {
         const res = await api.get(s.apiPath)
@@ -122,19 +119,7 @@ async function loadDashboard() {
       } catch { /* silent */ }
     })
 
-  // Recent items for workflow sections
-  const workflowFetches = workflowSections
-    .filter(s => s.apiPath)
-    .map(async s => {
-      try {
-        const res = await api.get(s.apiPath)
-        recentData.value = { ...recentData.value, [s.key]: res.data }
-      } catch {
-        recentErrors.value = { ...recentErrors.value, [s.key]: true }
-      }
-    })
-
-  await Promise.allSettled([...refFetches, ...workflowFetches])
+  await Promise.allSettled(refFetches)
   loading.value = false
 }
 
@@ -173,33 +158,9 @@ const refLinks = computed(() =>
   }))
 )
 
-const recentSections = computed(() =>
-  workflowSections.map(s => ({
-    ...s,
-    label: s.shortLabel || s.label,
-    recentLabel: `Последние ${(s.shortLabel || s.label).toLowerCase()}`,
-    hasApi: !!s.apiPath,
-    items: s.apiPath
-      ? [...(recentData.value[s.key] ?? [])]
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-          .slice(0, 3)
-      : [],
-    hasError: !!recentErrors.value[s.key],
-  }))
-)
 
 function goTo(path) { router.push(path) }
 
-function activityIcon(action) {
-  if (action === 'create') return 'pi pi-plus-circle'
-  if (action === 'update') return 'pi pi-pencil'
-  if (action === 'edit') return 'pi pi-pencil'
-  if (action === 'delete') return 'pi pi-trash'
-  if (action === 'login_success') return 'pi pi-sign-in'
-  if (action === 'logout') return 'pi pi-sign-out'
-  if (action === 'register') return 'pi pi-user-plus'
-  return 'pi pi-circle'
-}
 
 function activityColor(action) {
   if (action === 'create' || action === 'register') return '#52C9A6'
@@ -283,16 +244,6 @@ function formatTimeOfDay(ts) {
   return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
 
-function formatTime(ts) {
-  if (!ts) return ''
-  const d = new Date(ts)
-  const now = new Date()
-  const diff = now - d
-  if (diff < 60000) return 'только что'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} мин назад`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)} ч назад`
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
-}
 
 // ── Client-side filtering (all tabs) ─────────────────────────────────
 function getDateRange() {
@@ -772,7 +723,6 @@ const filteredProduction = computed(() => {
 /* ── Mobile ── */
 @media (max-width: 768px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-  .bottom-grid { grid-template-columns: 1fr; }
   .filter-bar { flex-direction: column; align-items: stretch; }
   .filter-bar-left { flex-wrap: wrap; }
   .filter-period, .filter-project, .filter-operator { width: 100%; }
