@@ -18,8 +18,11 @@ import CrudTable from '@/components/CrudTable.vue'
 // StatusBadge removed — status column replaced by project/operator
 import TapeConstructor from '@/components/TapeConstructor.vue'
 import RecipeActualsEditor from '@/components/RecipeActualsEditor.vue'
+import TapeDryBoxPanel from '@/components/TapeDryBoxPanel.vue'
+import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
 import Checkbox from 'primevue/checkbox'
 import { useExportTapes } from '@/composables/useExportTapes'
+import { todayIsoMsk } from '@/utils/dateFormat'
 // Button removed — undo/redo now in TapeConstructor
 
 const router = useRouter()
@@ -94,32 +97,138 @@ onMounted(async () => {
 // tools that read column metadata. `tooltip` is unused for this column
 // since the slot supplies its own tooltip.
 const columns = [
-  { field: '_constructor',  header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false },
+  { field: '_constructor',  header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false, required: true },
   { field: 'name',          header: 'Название',   minWidth: '100px' },
   { field: 'project_name',  header: 'Проект',     minWidth: '80px',  width: '115px' },
   { field: 'role',          header: 'Тип',        minWidth: '80px',  width: '115px' },
   { field: 'recipe_name',   header: 'Рецепт',     minWidth: '80px',  width: '115px' },
+  // d024 — coating sidedness as a list-visible attribute. Filter via the
+  // header overlay (sortable: true keeps the column predictable too).
+  { field: 'coating_sidedness', header: 'Стороны', minWidth: '70px', width: '90px', sortable: true },
+  // d-series — availability lifecycle. Surfaces dry-box status next to
+  // the row so the user can sort/filter "in box" tapes without opening
+  // each constructor.
+  { field: 'availability_status', header: 'Доступность', minWidth: '95px', width: '110px', sortable: true },
   { field: 'progress',      header: 'Прогресс',   minWidth: '80px',  width: '100px', sortable: true },
   { field: 'operators',     header: 'Оператор',   minWidth: '80px',  width: '115px' },
   { field: 'created_at',    header: 'Создана',    minWidth: '80px',  width: '115px' },
 ]
 
 // ── Create new tape ──────────────────────────────────────────────────
-async function createNewTape() {
+// tapes.project_id and tapes.tape_recipe_id are NOT NULL on the DB
+// schema, so the server returns 500 on a bare { name, created_by }
+// POST. Open the create dialog so the user picks both required FKs up
+// front; the dialog emits the validated payload and we forward it to
+// the API. After success the new tape is auto-added to the constructor
+// below so editing continues without an extra click.
+const createDialogVisible = ref(false)
+
+// Schema for the shared EntityCreateDialog. Built as a computed so the
+// Project/Recipe options stay reactive when refData loads asynchronously
+// after page mount.
+const tapeCreateFields = computed(() => [
+  {
+    key: 'name',
+    label: 'Название',
+    type: 'text',
+    defaultValue: `Новая лента ${new Date().toLocaleDateString('ru-RU')}`,
+  },
+  {
+    key: 'project_ids',
+    label: 'Проекты',
+    type: 'multiselect',
+    required: true,
+    options: refData.projects.map(p => ({ value: p.project_id, label: p.name })),
+    placeholder: 'Выберите один или несколько',
+  },
+  {
+    key: 'tape_recipe_id',
+    label: 'Рецепт',
+    type: 'select',
+    required: true,
+    options: refData.recipes.map(r => ({
+      value: r.tape_recipe_id,
+      label: r.role ? `${r.name} · ${r.role}` : r.name,
+    })),
+  },
+  // Business date — separate from audit `created_at`. Backend column
+  // `item_created_at` (d035). Defaults to today (MSK) on create; can be
+  // backdated by the operator. See vue-vs-backend-audit-2026-05.md #4.
+  {
+    key: 'item_created_at',
+    label: 'Дата создания партии',
+    type: 'date',
+    required: false,
+    defaultValue: todayIsoMsk(),
+  },
+])
+
+// Seed values for the create dialog. null → blank create (schema
+// defaults). Set by duplicateTape() to prefill a copy. Cleared on a
+// plain «+ Добавить».
+const createInitialValues = ref(null)
+
+// Dialog chrome changes between create and duplicate so the user knows
+// they're making a copy, not editing the original.
+const isDuplicating = computed(() => createInitialValues.value !== null)
+const dialogEyebrow = computed(() => isDuplicating.value ? 'Ленты · Дублирование' : 'Ленты · Создание')
+const dialogTitle = computed(() => isDuplicating.value ? 'Копия ленты' : 'Новая лента')
+const dialogDescription = computed(() => isDuplicating.value
+  ? 'Проект и рецепт скопированы из исходной ленты. Дата — сегодняшняя, параметры процесса заполняются заново в конструкторе.'
+  : 'Заполните название, проект и рецепт. Лента откроется в конструкторе для редактирования.')
+const dialogSubmitLabel = computed(() => isDuplicating.value ? 'Создать копию' : 'Создать ленту')
+
+function createNewTape() {
+  createInitialValues.value = null
+  createDialogVisible.value = true
+}
+
+// «Дублировать» — open the create dialog pre-filled with a copy of the
+// source tape's reusable fields. We copy the RECIPE-level identity
+// (projects + recipe) but NOT the per-batch facts: name gets a «(копия)»
+// suffix, the business date resets to today, and all process-stage
+// timestamps / actual weighings / dry-box state start empty (they're
+// not part of the create dialog and belong to the new physical batch).
+// Operator/creator come from the JWT on POST, so they're never copied.
+async function duplicateTape(row) {
+  const id = row?.tape_id
+  if (id == null) return
   try {
-    const payload = {
-      name: `Новая лента ${new Date().toLocaleDateString('ru-RU')}`,
-      created_by: String(authStore.user?.userId || ''),
+    // Fetch the full record — the list row doesn't carry project_ids[]
+    // or the recipe FK reliably, but GET /api/tapes/:id does.
+    const { data: t } = await api.get(`/api/tapes/${id}`)
+    const projectIds = Array.isArray(t.project_ids)
+      ? t.project_ids.filter((v) => v != null)
+      : (t.project_id != null ? [t.project_id] : [])
+    createInitialValues.value = {
+      name: `${t.name || 'Лента'} (копия)`,
+      project_ids: projectIds,
+      tape_recipe_id: t.tape_recipe_id || null,
+      // item_created_at intentionally omitted → schema default (today).
     }
+    createDialogVisible.value = true
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить ленту для копирования')
+  }
+}
+
+async function onCreateDialogSubmit(payload) {
+  try {
     const { data: created } = await api.post('/api/tapes', payload)
     await loadTapes()
-    // Auto-add to constructor
     if (created.tape_id) {
       constructorIds.value.push(created.tape_id)
     }
-    toast.add({ severity: 'success', summary: 'Создано', detail: `Лента #${created.tape_id}`, life: 2000 })
+    createDialogVisible.value = false
+    toast.add({
+      severity: 'success',
+      summary: 'Лента создана',
+      detail: `#${created.tape_id} · ${created.name || ''}`.trim(),
+      life: 3000,
+    })
   } catch (err) {
     toastApiError(toast, err, 'Не удалось создать ленту')
+    // Leave the dialog open so the user can adjust and retry.
   }
 }
 
@@ -276,14 +385,15 @@ function formatDate(dt) {
       :loading="loading"
       id-field="tape_id"
       table-name="Ленты"
-      :show-rename="false"
-      :export-end="true"
+      table-key="tapes"
       :export-badge="exportBadge"
       show-add
+      show-duplicate
       row-clickable
       @add="createNewTape"
       @delete="onDelete"
       @export="onExportTapes"
+      @duplicate="duplicateTape"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
       @row-click="(data) => toggleConstructor(data.tape_id)"
     >
@@ -335,6 +445,21 @@ function formatDate(dt) {
         <span>{{ data.recipe_name || '' }}</span>
       </template>
 
+      <!-- Custom cell: coating sidedness (audit #11) -->
+      <template #col-coating_sidedness="{ data }">
+        <span v-if="data.coating_sidedness === 'one_sided'" class="badge badge-5">1-стор.</span>
+        <span v-else-if="data.coating_sidedness === 'two_sided'" class="badge badge-6">2-стор.</span>
+        <span v-else class="ts-cell-empty">—</span>
+      </template>
+
+      <!-- Custom cell: availability status (audit #11, #14) -->
+      <template #col-availability_status="{ data }">
+        <span v-if="data.availability_status === 'in_dry_box'" class="badge badge-4">В шкафу</span>
+        <span v-else-if="data.availability_status === 'out_of_dry_box'" class="badge badge-5">Извлечена</span>
+        <span v-else-if="data.availability_status === 'depleted'" class="badge badge-8">Изр.</span>
+        <span v-else class="ts-cell-empty">—</span>
+      </template>
+
       <!-- Custom cell: Прогресс (8 сегментов = 8 этапов) -->
       <template #col-progress="{ data }">
         <div class="progress-segments">
@@ -379,6 +504,26 @@ function formatDate(dt) {
       <RecipeActualsEditor :tapeState="activeTapeState" />
     </div>
 
+    <!-- Tape dry-box panel — surfaces the 6 backend endpoints
+         (place-now / return-now / remove-now / deplete + GET/PUT
+         /dry-box-state) that previously had no Vue UI. Mirrors the
+         vanilla v1 panel from public/js/1-tapes.js:1793-1855. See
+         vue-vs-backend-audit-2026-05.md #6. Mounted only when a tape
+         is active in the constructor so the panel scopes to one tape
+         at a time. -->
+    <TapeDryBoxPanel :tape-id="activeTapeState?.currentTapeId?.value || null" />
+
+    <EntityCreateDialog
+      v-model:visible="createDialogVisible"
+      :eyebrow="dialogEyebrow"
+      :title="dialogTitle"
+      :description="dialogDescription"
+      :fields="tapeCreateFields"
+      :initial-values="createInitialValues"
+      :submit-label="dialogSubmitLabel"
+      @create="onCreateDialogSubmit"
+    />
+
   </div>
 </template>
 
@@ -391,9 +536,11 @@ function formatDate(dt) {
   flex-direction: column;
   gap: 1.25rem;
 }
+.ts-cell-empty { color: #6B7280; font-size: 12px; }
 .tapes-page :deep(.page-header) {
   margin-bottom: 3px !important;
 }
+
 
 /* ── Page-specific cell styles only ── */
 .type-badge {

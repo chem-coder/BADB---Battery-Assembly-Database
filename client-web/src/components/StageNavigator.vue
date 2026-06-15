@@ -46,17 +46,44 @@ function stageNumber(code) {
 }
 
 // ── Timeline data ──
-// Returns { date, time } for full precision positioning
+// Returns { date, time } or { full } for full precision positioning.
+// Handles both state shapes the navigator is used with:
+//   - tape state: steps[code] = { date, time }
+//   - electrode state: steps[code] = { start_time, end_time } (ISO)
 function getStageDateTime(code) {
   const ts = activeTapeState.value
   if (!ts) return null
+
+  // Tape "general info" — use the operator-set business date
+  // (item_created_at) rather than the audit-only created_at. The
+  // audit timestamp is whenever the row was inserted, which doesn't
+  // reflect when the batch actually started. Item_created_at, set by
+  // the operator in the «Дата создания партии» field, is the
+  // workflow-meaningful anchor.
   if (code === 'general_info') {
-    // createdAt is a full ISO timestamp
-    return ts.general?.createdAt ? { full: ts.general.createdAt } : null
+    const date = ts.general?.itemCreatedAt
+    if (!date) return null
+    const time = ts.general?.itemCreatedTime || '00:00:00'
+    return { date, time }
   }
+
+  // Electrode "cutting" stage stores its fields on `general`, not in
+  // `steps`. The closest meaningful timestamp is the batch's created_at,
+  // which the navigator can use as the cutting marker.
+  if (code === 'cutting' && !ts.steps?.cutting) {
+    const ca = ts.meta?.created_at
+    return ca ? { full: ca } : null
+  }
+
   const step = ts.steps?.[code]
-  if (!step?.date) return null
-  return { date: step.date, time: step.time || '00:00:00' }
+  if (!step) return null
+  // Tape pattern: split date + time fields.
+  if (step.date) return { date: step.date, time: step.time || '00:00:00' }
+  // Electrode pattern: ISO timestamps. Prefer the start_time when both
+  // start_time and end_time are present; fall back to end_time.
+  if (step.start_time) return { full: step.start_time }
+  if (step.end_time) return { full: step.end_time }
+  return null
 }
 
 // For display — just the date part (дд.мм)
@@ -74,6 +101,15 @@ function parseDateTimeFull(dt) {
   return new Date(dt.date + 'T' + dt.time)
 }
 
+// Stage codes that represent pure metadata (no workflow timestamp at all)
+// and should be skipped when computing the timeline range / marker.
+// Previously 'general_info' was here because it pointed at the audit
+// `created_at` (which would always be "today" and skew the range).
+// Since 2026-05-28 general_info uses the operator-set `item_created_at`
+// instead, so it IS a real workflow event and belongs on the timeline
+// (Dima caught this — «общая информация без диаграммы времени»).
+const META_STAGE_CODES = new Set()
+
 // Collect all dates across stages → min/max for shared time axis (full precision)
 const timeRange = computed(() => {
   const ts = activeTapeState.value
@@ -81,6 +117,7 @@ const timeRange = computed(() => {
 
   const dates = []
   for (const stage of props.stages) {
+    if (META_STAGE_CODES.has(stage.code)) continue
     const dt = getStageDateTime(stage.code)
     if (dt) {
       const d = parseDateTimeFull(dt)
@@ -98,16 +135,43 @@ const timeRange = computed(() => {
   return { minDate, maxDate, minMs, maxMs, spanMs }
 })
 
-// Position of a stage's date on the shared timeline (0–100%), precision to seconds
+// Sort all dated stages chronologically. Each stage's marker position
+// is then its slot index in this sorted list, evenly spaced across
+// the bar. Result: earlier date → left, later date → right (no matter
+// in what order the workflow stages are listed in the schema), and
+// stages without a date are simply skipped (no marker rendered).
+const sortedDatedStages = computed(() => {
+  if (!activeTapeState.value) return []
+  const out = []
+  for (const stage of props.stages) {
+    if (META_STAGE_CODES.has(stage.code)) continue
+    const dt = getStageDateTime(stage.code)
+    if (!dt) continue
+    const d = parseDateTimeFull(dt)
+    if (!d || !Number.isFinite(d.getTime())) continue
+    out.push({ code: stage.code, ms: d.getTime() })
+  }
+  out.sort((a, b) => a.ms - b.ms)
+  return out
+})
+
+// Position of a stage marker on the shared timeline (0–100%).
+//
+// Layout: EQUAL SPACING in CHRONOLOGICAL order. Stages without a date
+// have no marker. Stages with a date get a slot whose index reflects
+// where their timestamp falls relative to the others — earlier left,
+// later right. This avoids the «one far-away date compresses everything
+// else» problem of literal time-axis layout, while still showing the
+// real chronological order to the operator (Dima 2026-05-28).
 function barPosition(code) {
-  const tr = timeRange.value
-  if (!tr) return null
-  const dt = getStageDateTime(code)
-  if (!dt) return null
-  const d = parseDateTimeFull(dt)
-  if (!d || !Number.isFinite(d.getTime())) return null
-  if (tr.spanMs === 0) return 5 // single point — left edge
-  return 5 + ((d.getTime() - tr.minMs) / tr.spanMs) * 90
+  if (META_STAGE_CODES.has(code)) return null
+  const sorted = sortedDatedStages.value
+  const idx = sorted.findIndex(s => s.code === code)
+  if (idx < 0) return null
+  const total = sorted.length
+  if (total === 1) return 50
+  // Inset 5% on each side so badges don't clip the card edges.
+  return 5 + (idx / (total - 1)) * 90
 }
 
 function formatDateShort(dateStr) {

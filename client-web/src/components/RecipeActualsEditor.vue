@@ -172,7 +172,7 @@ function onValueBlur(lineId) {
 </script>
 
 <template>
-  <section class="recipe-actuals">
+  <section class="recipe-actuals glass-card">
     <div class="ra-header">
       <span class="ra-title">Фактические навески рецепта</span>
       <span v-if="!statusMessage" class="ra-hint">Сохранение — при потере фокуса</span>
@@ -284,12 +284,14 @@ function onValueBlur(lineId) {
 </template>
 
 <style scoped>
-/* glass-card to match other TapesPage panels */
+/* Card surface — relies on the global .glass-card token (background +
+   border + soft shadow + backdrop blur). The class is added at the
+   <section> root via the template `class="recipe-actuals glass-card"`.
+   Local rule only adds padding rhythm matching ElectrodeBatchPanel and
+   TapeDryBoxPanel so the three panels read as one component family. */
 .recipe-actuals {
-  border: 1px solid rgba(0, 50, 116, 0.12);
-  border-radius: 10px;
-  background: white;
-  padding: 10px 14px;
+  padding: 12px 18px 14px;
+  margin-top: 8px;
 }
 
 .ra-header {
@@ -339,15 +341,24 @@ function onValueBlur(lineId) {
   font-size: 13px;
 }
 
+/* Header rhythm matches CrudTable's .p-datatable-thead — brand-blue
+   tint background, brand-blue text, normal case (not uppercase), thin
+   vertical separators between columns. Same rule lives in
+   ElectrodeBatchPanel.vue so the three table surfaces read identically. */
 .ra-table thead th {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: rgba(0, 50, 116, 0.55);
+  letter-spacing: 0.02em;
+  color: #003274;
+  background: rgba(0, 50, 116, 0.12);
   text-align: left;
-  padding: 4px 10px;
-  border-bottom: 1px solid rgba(0, 50, 116, 0.08);
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(0, 50, 116, 0.18);
+  border-right: 1px solid rgba(0, 50, 116, 0.15);
+  white-space: nowrap;
+}
+.ra-table thead th:last-child {
+  border-right: none;
 }
 
 .col-mat  { min-width: 150px; }
@@ -356,14 +367,23 @@ function onValueBlur(lineId) {
 .col-val  { min-width: 140px; }
 .col-warn { width: 32px; }
 
+.ra-row {
+  transition: background 0.12s;
+  border-bottom: 1px solid rgba(180, 210, 255, 0.18);
+}
+.ra-row:hover {
+  background: rgba(0, 50, 116, 0.04);
+}
+.ra-row:last-child {
+  border-bottom: none;
+}
 .ra-row td {
   padding: 6px 10px;
-  border-bottom: 1px solid rgba(0, 50, 116, 0.05);
+  border-right: 1px solid rgba(0, 50, 116, 0.08);
   vertical-align: middle;
 }
-
-.ra-row:last-child td {
-  border-bottom: none;
+.ra-row td:last-child {
+  border-right: none;
 }
 
 .ra-cell-name {

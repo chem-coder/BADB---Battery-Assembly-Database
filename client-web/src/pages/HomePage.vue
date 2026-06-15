@@ -5,6 +5,7 @@ import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
 import Select from 'primevue/select'
 import MultiSelect from 'primevue/multiselect'
+import DateInputISO from '@/components/parity/DateInputISO.vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import PageHeader from '@/components/PageHeader.vue'
@@ -404,9 +405,9 @@ const filteredProduction = computed(() => {
           class="filter-period"
         />
         <template v-if="selectedPeriod === 'custom'">
-          <input type="date" v-model="customDateFrom" class="filter-date-input" @change="onPeriodChange" />
+          <DateInputISO v-model="customDateFrom" class="filter-date-input" @update:model-value="onPeriodChange" />
           <span class="filter-date-sep">—</span>
-          <input type="date" v-model="customDateTo" class="filter-date-input" @change="onPeriodChange" />
+          <DateInputISO v-model="customDateTo" class="filter-date-input" @update:model-value="onPeriodChange" />
         </template>
         <MultiSelect
           v-model="selectedProjects"

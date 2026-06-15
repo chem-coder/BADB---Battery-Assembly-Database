@@ -14,6 +14,8 @@ import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 import TapeConstructor from '@/components/TapeConstructor.vue'
 import BatteryElectrochemEditor from '@/components/BatteryElectrochemEditor.vue'
+import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
+import { todayIsoMsk } from '@/utils/dateFormat'
 import CapacityHint from '@/components/CapacityHint.vue'
 import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
 import Checkbox from 'primevue/checkbox'
@@ -80,12 +82,9 @@ const statusLabels = { draft: 'Черновик', assembled: 'Собран', tes
 const columns = [
   // Header rendered via `#header-_constructor` slot (master pill with
   // live count). The string here is the accessibility fallback only.
-  { field: '_constructor', header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false },
-  // Synthetic column: "🖨️ Print" opens Dalia's print-friendly report page
-  // (/workflow/battery-print.html?battery_id=X) in a modal Dialog. Header
-  // rendered via `#header-_print` slot (PrimeIcon, centered) — matches the
-  // same pattern used in ElectrodesPage for the electrode-batch print.
-  { field: '_print', header: 'Печать', minWidth: '42px', width: '42px', sortable: false, filterable: false },
+  { field: '_constructor', header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false, required: true },
+  // Печать moved out of a dedicated column into the right-click context
+  // menu (Dima 2026-06-02) — see openBatteryPrint + CrudTable @print.
   // 'Аккум.' not '№' — CrudTable already shows a frozen row-number
   // column with header '№' on the left, two columns named the same
   // would read as duplicate. Cell renders as '#42' so the header
@@ -93,6 +92,12 @@ const columns = [
   { field: 'battery_id', header: 'Аккум.', minWidth: '70px', width: '85px' },
   { field: 'project_name', header: 'Проект', minWidth: '120px' },
   { field: 'form_factor', header: 'Форм-фактор', minWidth: '90px', width: '110px' },
+  // audit #15 — backend returns the joined active-material strings; show
+  // them as compact columns so the user can scan electrochemistry at a
+  // glance without opening the constructor.
+  { field: 'cathode_active_materials', header: 'Катод AM', minWidth: '100px', width: '130px', sortable: true },
+  { field: 'anode_active_materials',   header: 'Анод AM',  minWidth: '100px', width: '130px', sortable: true },
+  { field: 'cathode_batch_shape',      header: 'Форма катода', minWidth: '90px', width: '110px', sortable: true },
   { field: 'status_display', header: 'Статус', minWidth: '80px', width: '100px' },
   { field: 'created_by_name', header: 'Оператор', minWidth: '100px' },
   { field: 'created_at', header: 'Создан', minWidth: '80px', width: '110px' },
@@ -120,18 +125,109 @@ async function loadBatteries() {
   }
 }
 
-async function createBattery() {
+// Previously this POSTed { project_id: 1, form_factor: 'coin' }
+// blindly — project_id=1 might not exist for every user, and the
+// hard-coded form factor pre-committed the user to coin cells before
+// they even saw the form. Open a brand-toned create dialog instead so
+// both required fields come from an explicit user choice.
+const createDialogVisible = ref(false)
+
+// Schema for the shared EntityCreateDialog. Project list comes from
+// refData.projects which is filled by loadRefData on mount.
+const batteryCreateFields = computed(() => [
+  {
+    key: 'project_ids',
+    label: 'Проекты',
+    type: 'multiselect',
+    required: true,
+    options: refData.projects.map(p => ({ value: p.project_id, label: p.name })),
+    placeholder: 'Выберите один или несколько',
+  },
+  {
+    key: 'form_factor',
+    label: 'Форм-фактор',
+    type: 'select',
+    required: true,
+    defaultValue: 'coin',
+    options: [
+      { value: 'coin', label: 'Монеточный' },
+      { value: 'pouch', label: 'Пакетный' },
+      { value: 'cylindrical', label: 'Цилиндрический' },
+    ],
+  },
+  // Business date (vue-vs-backend-audit-2026-05.md #4). Backend column
+  // `item_created_at` (d035) — defaults to today, operator can backdate.
+  {
+    key: 'item_created_at',
+    label: 'Дата создания партии',
+    type: 'date',
+    required: false,
+    defaultValue: todayIsoMsk(),
+  },
+  // audit #13 — battery_notes was only collected later in the general-info
+  // edit. Vanilla collects it up-front; the create dialog now mirrors that.
+  {
+    key: 'battery_notes',
+    label: 'Заметки',
+    type: 'text',
+    required: false,
+    placeholder: 'Краткое описание / цель сборки',
+  },
+])
+
+// Seed values for the create dialog (duplicate flow). null → blank.
+const createInitialValues = ref(null)
+const isDuplicating = computed(() => createInitialValues.value !== null)
+const dialogEyebrow = computed(() => isDuplicating.value ? 'Аккумуляторы · Дублирование' : 'Аккумуляторы · Создание')
+const dialogTitle = computed(() => isDuplicating.value ? 'Копия аккумулятора' : 'Новый аккумулятор')
+const dialogDescription = computed(() => isDuplicating.value
+  ? 'Проект и форм-фактор скопированы из исходной сборки. Дата — сегодняшняя, состав электродов набирается заново в конструкторе.'
+  : 'Выберите проект и форм-фактор. Аккумулятор откроется в конструкторе для редактирования.')
+const dialogSubmitLabel = computed(() => isDuplicating.value ? 'Создать копию' : 'Создать')
+
+function createBattery() {
+  createInitialValues.value = null
+  createDialogVisible.value = true
+}
+
+// «Дублировать» — copy the reusable setup (projects + form factor) of a
+// battery into a fresh create dialog. The electrode stack, assembly
+// timestamps, electrochem data and per-build notes are NOT copied — the
+// copy is a new physical cell sharing only its project + form factor.
+async function duplicateBattery(row) {
+  const id = row?.battery_id
+  if (id == null) return
   try {
-    const { data } = await api.post('/api/batteries', {
-      project_id: 1,
-      created_by: String(authStore.user?.userId || ''),
-      form_factor: 'coin',
-    })
+    const { data: b } = await api.get(`/api/batteries/${id}`)
+    const projectIds = Array.isArray(b.project_ids)
+      ? b.project_ids.filter((v) => v != null)
+      : (b.project_id != null ? [b.project_id] : [])
+    createInitialValues.value = {
+      project_ids: projectIds,
+      form_factor: b.form_factor || 'coin',
+      // item_created_at omitted → today; battery_notes omitted → blank.
+    }
+    createDialogVisible.value = true
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось загрузить аккумулятор для копирования')
+  }
+}
+
+async function onCreateDialogSubmit(payload) {
+  try {
+    const { data } = await api.post('/api/batteries', payload)
     await loadBatteries()
     constructorIds.value = [data.battery_id]
-    toast.add({ severity: 'success', summary: 'Создан', detail: `Аккумулятор #${data.battery_id}`, life: 2000 })
+    createDialogVisible.value = false
+    toast.add({
+      severity: 'success',
+      summary: 'Аккумулятор создан',
+      detail: `#${data.battery_id}`,
+      life: 3000,
+    })
   } catch (err) {
     toastApiError(toast, err, 'Не удалось создать аккумулятор')
+    // Leave the dialog open for retry.
   }
 }
 
@@ -401,10 +497,15 @@ onUnmounted(() => clearTimeout(saveTimer))
       :loading="loading"
       id-field="battery_id"
       table-name="Аккумуляторы"
+      table-key="assembly"
       show-add
+      show-duplicate
+      show-print
       row-clickable
       @add="createBattery"
       @delete="onDelete"
+      @duplicate="duplicateBattery"
+      @print="(item) => openBatteryPrint(item.battery_id)"
       @row-click="(data) => toggleConstructor(data.battery_id)"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
     >
@@ -429,22 +530,6 @@ onUnmounted(() => clearTimeout(saveTimer))
             :binary="true"
             v-tooltip.right="'Добавить/убрать из конструктора'"
           />
-        </div>
-      </template>
-      <template #header-_print>
-        <span class="ct-print-header" title="Печать отчёта">
-          <i class="pi pi-print"></i>
-        </span>
-      </template>
-      <template #col-_print="{ data }">
-        <div class="ct-print-cell">
-          <button
-            class="print-btn"
-            title="Печать отчёта по аккумулятору"
-            @click.stop="openBatteryPrint(data.battery_id)"
-          >
-            <i class="pi pi-print"></i>
-          </button>
         </div>
       </template>
       <template #col-battery_id="{ data }">
@@ -610,6 +695,17 @@ onUnmounted(() => clearTimeout(saveTimer))
       :url="printDialog.url"
       :title="printDialog.title"
     />
+
+    <EntityCreateDialog
+      v-model:visible="createDialogVisible"
+      :eyebrow="dialogEyebrow"
+      :title="dialogTitle"
+      :description="dialogDescription"
+      :fields="batteryCreateFields"
+      :initial-values="createInitialValues"
+      :submit-label="dialogSubmitLabel"
+      @create="onCreateDialogSubmit"
+    />
   </div>
 </template>
 
@@ -658,26 +754,6 @@ onUnmounted(() => clearTimeout(saveTimer))
 .status-badge--failed { background: rgba(231, 76, 60, 0.12); color: #c0392b; }
 .text-muted { color: rgba(0, 50, 116, 0.28); font-size: 13px; }
 .notes-text { font-size: 13px; color: rgba(0, 50, 116, 0.7); }
-
-/* Print button (same visual language as ElectrodesPage equivalent) */
-.print-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: rgba(0, 50, 116, 0.55);
-  cursor: pointer;
-  border-radius: 5px;
-  transition: all 0.15s;
-}
-.print-btn:hover {
-  background: rgba(0, 50, 116, 0.08);
-  color: #003274;
-}
-.print-btn i { font-size: 13px; }
 
 /* Capacity summary panel — one card per battery currently in the
    constructor. Sits between the table and the TapeConstructor. */

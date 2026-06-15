@@ -316,6 +316,7 @@ function onReorder(newOrder) {
             :tabOrder="tabOrder.map(String)"
             :tapeNames="tapeNames"
             :refs="refs"
+            :allStages="stageConfigs"
             @reorder="onReorder"
             @select-tape="selectTape"
             @remove-tape="(tid) => emit('remove-tape', tid)"

@@ -8,9 +8,18 @@
  * Per-field green/grey left border on cells.
  * Copy arrows on source columns — copies current stage only.
  */
-import { ref, reactive, computed, watch, nextTick } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 import AutoComplete from 'primevue/autocomplete'
+import DSMultiSelect from '@/components/ds/DSMultiSelect.vue'
+import Checkbox from 'primevue/checkbox'
 import EntityMeta from '@/components/EntityMeta.vue'
+import DateTimeWithNow from '@/components/parity/DateTimeWithNow.vue'
+import SequentialDateField from '@/components/parity/SequentialDateField.vue'
+import DateInputISO from '@/components/parity/DateInputISO.vue'
+import { useNotify } from '@/composables/useNotify'
+import { useAuthStore } from '@/stores/auth'
+
+const notify = useNotify()
 
 const props = defineProps({
   stageCode: { type: String, required: true },
@@ -21,6 +30,11 @@ const props = defineProps({
   tabOrder: { type: Array, default: () => [] },
   tapeNames: { type: Object, default: () => ({}) },
   refs: { type: Object, default: () => ({}) },
+  // All stage configs (TAPE_STAGES). Used by `sequential-datetime`
+  // fields to look up the label of `field.prevStageCode` for the
+  // validation message — keeps the editor decoupled from the tape-
+  // specific stage list while letting it format human-readable hints.
+  allStages: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['reorder', 'select-tape', 'remove-tape'])
@@ -121,11 +135,150 @@ function leftNeighbor(tid) {
   return idx > 0 ? props.tabOrder[idx - 1] : null
 }
 
+// Find a field config in the active stage by key. Used when copy/has-data
+// helpers need to introspect a composite field's backing keys (e.g.
+// `datetime-with-now` / `sequential-datetime` carry `dateKey` + `timeKey`
+// rather than their own scalar value).
+function findField(fieldKey) {
+  return (props.stageConfig?.fields || []).find(f => f.key === fieldKey)
+}
+
+// ── Sequential-datetime helpers ──
+//
+// `sequential-datetime` fields know the *previous* stage in the workflow
+// via `field.prevStageCode`. The editor reads that stage's date+time
+// from the tape's full state (kept in `tapeStates[tid].steps`) so the
+// underlying SequentialDateField can validate "not earlier than prev"
+// and (optionally) cascade values forward.
+function getPrevDateTime(tapeId, prevStageCode) {
+  if (!prevStageCode) return null
+  const ts = props.tapeStates[String(tapeId)]
+  const step = ts?.steps?.[prevStageCode]
+  if (!step) return null
+  // Empty strings are treated as "no value" by SequentialDateField's
+  // own parser; pass them through faithfully so cascade doesn't fire on
+  // partially-filled prev stages.
+  return { date: step.date || '', time: step.time || '' }
+}
+
+function getPrevStageLabel(prevStageCode) {
+  if (!prevStageCode) return ''
+  return (props.allStages || []).find(s => s.code === prevStageCode)?.label || ''
+}
+
+// ── datetime-iso helpers ──
+//
+// `type: 'datetime-iso'` fields back onto a SINGLE column holding an
+// ISO string like "2026-05-27T14:30:00" (electrode drying start/end).
+// The primitive expects two strings (date + time), so we split on read
+// and combine on write. An empty (or partial) write erases the field.
+function isoToDateStr(iso) {
+  if (!iso) return ''
+  const m = String(iso).match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1] : ''
+}
+function isoToTimeStr(iso) {
+  if (!iso) return ''
+  const m = String(iso).match(/T(\d{2}:\d{2})/)
+  return m ? m[1] : ''
+}
+function combineToIso(date, time) {
+  if (!date) return ''      // time without date is undefined; clear field
+  return `${date}T${time || '00:00'}:00`
+}
+function onIsoDateUpdate(tapeId, fieldKey, newDate) {
+  const cur = getValue(tapeId, fieldKey)
+  setValue(tapeId, fieldKey, combineToIso(newDate, isoToTimeStr(cur)))
+}
+function onIsoTimeUpdate(tapeId, fieldKey, newTime) {
+  const cur = getValue(tapeId, fieldKey)
+  setValue(tapeId, fieldKey, combineToIso(isoToDateStr(cur), newTime))
+}
+
+// ── Collapsible field groups ──
+//
+// Schema entries with `isGroupSeparator: true` introduce a group; all
+// subsequent entries that carry `group: <name>` belong to that group
+// until the next separator. The collapsed state for each group key is
+// persisted per user in a single localStorage entry, mirroring the
+// `useUserPref` pattern but flattened so we don't have to instantiate
+// dozens of refs at setup time (groups can be added schema-side without
+// the editor knowing about them up front).
+const authStore = useAuthStore()
+const groupCollapsed = ref({})
+
+function groupsStorageKey() {
+  const uid = authStore.user?.userId || 'guest'
+  return `badb:pref:stage-groups:${uid}`
+}
+
+function loadGroupStates() {
+  try {
+    const raw = localStorage.getItem(groupsStorageKey())
+    groupCollapsed.value = raw ? JSON.parse(raw) : {}
+  } catch {
+    groupCollapsed.value = {}
+  }
+}
+
+function saveGroupStates() {
+  try {
+    localStorage.setItem(groupsStorageKey(), JSON.stringify(groupCollapsed.value))
+  } catch {
+    // quota / disabled — silent, in-memory state still works for the session
+  }
+}
+
+onMounted(loadGroupStates)
+watch(groupCollapsed, saveGroupStates, { deep: true })
+watch(() => authStore.user?.userId, loadGroupStates)
+
+function isGroupCollapsed(persistKey) {
+  return !!groupCollapsed.value[persistKey]
+}
+
+function toggleGroup(persistKey) {
+  if (!persistKey) return
+  groupCollapsed.value = {
+    ...groupCollapsed.value,
+    [persistKey]: !groupCollapsed.value[persistKey],
+  }
+}
+
+/**
+ * A field belongs to a collapsed group when its `group` matches the
+ * `group` of an upstream separator whose `persistKey` is collapsed.
+ * Returns true when the field should be HIDDEN.
+ */
+function isFieldInCollapsedGroup(field, allFields, idx) {
+  if (field.isGroupSeparator) return false
+  if (!field.group) return false
+  // Find the nearest preceding separator for this group.
+  for (let i = idx - 1; i >= 0; i -= 1) {
+    const f = allFields[i]
+    if (f.isGroupSeparator && f.group === field.group) {
+      return isGroupCollapsed(f.persistKey)
+    }
+  }
+  return false
+}
+
 function copyField(sourceTapeId, fieldKey, destTapeId) {
   const dest = destTapeId || leftNeighbor(sourceTapeId)
   if (!dest) return
-  const val = getValue(sourceTapeId, fieldKey)
-  setValue(dest, fieldKey, val)
+  const field = findField(fieldKey)
+  if (field?.type === 'datetime-with-now' || field?.type === 'sequential-datetime') {
+    // Composite field: copy both backing keys atomically.
+    const dKey = field.dateKey || 'date'
+    const tKey = field.timeKey || 'time'
+    setValue(dest, dKey, getValue(sourceTapeId, dKey))
+    setValue(dest, tKey, getValue(sourceTapeId, tKey))
+  } else {
+    const val = getValue(sourceTapeId, fieldKey)
+    // Deep-copy arrays so the dest tape gets its own multiselect state —
+    // a shared reference would mutate the source on next user edit.
+    setValue(dest, fieldKey, Array.isArray(val) ? [...val] : val)
+  }
   // Sync local AC models for destination tape — re-sync all currently visible
   // select fields because cascades (e.g. form_factor → config_code) may clear
   // other fields. Hidden (form-factor-filtered) fields are not touched — they
@@ -135,14 +288,39 @@ function copyField(sourceTapeId, fieldKey, destTapeId) {
       acModels[acKey(String(dest), f.key)] = resolveAcOption(dest, f)
     }
   }
+  // Move focus to the destination tape so the constructor's undo/redo
+  // arrows (bound to activeTapeId) operate on the entity that was just
+  // modified. Without this the user sees the arrows stay disabled even
+  // though the copy DID push a snapshot onto the destination's
+  // undoStack — that snapshot is on a different tape than the one in
+  // focus, so the visible Undo button has nothing to do.
+  if (String(dest) !== String(props.activeTapeId)) {
+    emit('select-tape', Number(dest))
+  }
 }
 
 // Copy all fields of the CURRENT stage only (not all stages). Only visible
 // fields are copied — a pouch tape should not receive coin_size_code etc.
+//
+// Hard guard: build the allowed keys from props.stageConfig.fields and skip
+// anything not in that set. visibleFields already filters by form factor,
+// but the explicit Set defends against future refactors that might
+// broaden the visible scope or leak fields from other stages.
 function copyAllCurrentStage(sourceTapeId) {
+  const stageKeys = new Set((props.stageConfig?.fields || []).map(f => f.key))
+  let copied = 0
   for (const f of visibleFields.value) {
+    if (!stageKeys.has(f.key)) continue
     copyField(sourceTapeId, f.key)
+    copied += 1
   }
+  const destId = leftNeighbor(sourceTapeId)
+  const destName = destId != null ? (props.tapeNames[String(destId)] || `#${destId}`) : '—'
+  const stageLabel = props.stageConfig?.label || ''
+  notify.success(
+    `Скопировано ${copied} полей этапа «${stageLabel}»`,
+    `→ ${destName}`
+  )
 }
 
 function onSetNow(tapeId) {
@@ -151,7 +329,16 @@ function onSetNow(tapeId) {
 }
 
 function fieldHasData(tapeId, fieldKey) {
+  const field = findField(fieldKey)
+  if (field?.type === 'datetime-with-now' || field?.type === 'sequential-datetime') {
+    // Composite field is "filled" when either backing key has a value.
+    const d = getValue(tapeId, field.dateKey || 'date')
+    const t = getValue(tapeId, field.timeKey || 'time')
+    return (d !== '' && d != null) || (t !== '' && t != null)
+  }
   const v = getValue(tapeId, fieldKey)
+  // Empty array (multiselect with no choice) is "no data".
+  if (Array.isArray(v)) return v.length > 0
   return v !== '' && v !== null && v !== undefined
 }
 
@@ -167,13 +354,22 @@ function copyFieldToAllLeft(sourceTapeId, fieldKey) {
 function copyAllCurrentStageToAllLeft(sourceTapeId) {
   const idx = props.tabOrder.indexOf(String(sourceTapeId))
   if (idx <= 0) return
-  // Only copy currently visible fields — hidden fields belong to a different
-  // form factor and should not leak into tapes that don't use them.
+  // Same hard-scope guard as copyAllCurrentStage — explicit allow-list from
+  // the active stage config so cross-stage leak is structurally impossible.
+  const stageKeys = new Set((props.stageConfig?.fields || []).map(f => f.key))
+  let perTapeCopied = 0
   for (const f of visibleFields.value) {
+    if (!stageKeys.has(f.key)) continue
+    perTapeCopied += 1
     for (let i = 0; i < idx; i++) {
       copyField(sourceTapeId, f.key, props.tabOrder[i])
     }
   }
+  const stageLabel = props.stageConfig?.label || ''
+  notify.success(
+    `Скопировано ${perTapeCopied} полей этапа «${stageLabel}»`,
+    `→ во все ${idx} записей слева`
+  )
 }
 
 // ── Context menu state ──
@@ -371,7 +567,26 @@ function onColDragEnd(e) {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="field in visibleFields" :key="field.key" class="ce-row">
+        <template v-for="(field, fIdx) in visibleFields" :key="field.isGroupSeparator ? `__sep__${field.group}` : field.key">
+          <!-- Collapsible group separator row -->
+          <tr v-if="field.isGroupSeparator" class="ce-group-row">
+            <td :colspan="1 + tabOrder.length" class="ce-group-td">
+              <button
+                type="button"
+                class="ce-group-toggle"
+                :aria-expanded="!isGroupCollapsed(field.persistKey)"
+                @click="toggleGroup(field.persistKey)"
+              >
+                <i
+                  class="ce-group-chevron pi"
+                  :class="isGroupCollapsed(field.persistKey) ? 'pi-chevron-right' : 'pi-chevron-down'"
+                />
+                <span class="ce-group-eyebrow">{{ field.label }}</span>
+              </button>
+            </td>
+          </tr>
+          <!-- Regular field row — skipped when inside a collapsed group -->
+          <tr v-else-if="!isFieldInCollapsedGroup(field, visibleFields, fIdx)" class="ce-row">
           <!-- Row label -->
           <td class="ce-td-label">{{ field.label }}</td>
 
@@ -422,13 +637,64 @@ function onColDragEnd(e) {
                 title="Очистить"
               ><i class="pi pi-times"></i></button>
             </div>
+            <div v-else-if="field.type === 'multiselect'" class="ce-multiselect-wrap">
+              <!-- DSMultiSelect owns the project's MultiSelect behaviour
+                   (no chip, «Выбрано: N» counter, show-clear, auto-filter).
+                   Defaults live in components/ds/DSMultiSelect.vue — no need
+                   to re-declare them here. -->
+              <DSMultiSelect
+                :model-value="Array.isArray(getValue(tid, field.key)) ? getValue(tid, field.key) : []"
+                :options="getRefOptions(field, tid)"
+                placeholder="—"
+                @update:model-value="setValue(tid, field.key, $event)"
+              />
+            </div>
+            <div v-else-if="field.type === 'datetime-with-now'" class="datetime-cell">
+              <DateTimeWithNow
+                :date="getValue(tid, field.dateKey || 'date')"
+                :time="getValue(tid, field.timeKey || 'time')"
+                @update:date="setValue(tid, field.dateKey || 'date', $event)"
+                @update:time="setValue(tid, field.timeKey || 'time', $event)"
+              />
+            </div>
+            <div v-else-if="field.type === 'sequential-datetime'" class="datetime-cell">
+              <SequentialDateField
+                :date="getValue(tid, field.dateKey || 'date')"
+                :time="getValue(tid, field.timeKey || 'time')"
+                :prev="getPrevDateTime(tid, field.prevStageCode)"
+                :prev-label="getPrevStageLabel(field.prevStageCode)"
+                :cascade-from-prev="!!field.cascadeFromPrev"
+                @update:date="setValue(tid, field.dateKey || 'date', $event)"
+                @update:time="setValue(tid, field.timeKey || 'time', $event)"
+              />
+            </div>
+            <div v-else-if="field.type === 'datetime-iso'" class="datetime-cell">
+              <DateTimeWithNow
+                :date="isoToDateStr(getValue(tid, field.key))"
+                :time="isoToTimeStr(getValue(tid, field.key))"
+                @update:date="onIsoDateUpdate(tid, field.key, $event)"
+                @update:time="onIsoTimeUpdate(tid, field.key, $event)"
+              />
+            </div>
             <div v-else-if="field.type === 'time'" class="time-cell">
               <input type="time" :value="getValue(tid, field.key)" @input="setValue(tid, field.key, $event.target.value)" class="ce-input ce-input--time" />
               <button class="now-btn" @click="onSetNow(tid)" title="Сейчас"><i class="pi pi-clock"></i></button>
             </div>
+            <DateInputISO
+              v-else-if="field.type === 'date'"
+              :model-value="getValue(tid, field.key) || ''"
+              @update:model-value="setValue(tid, field.key, $event)"
+            />
+            <div v-else-if="field.type === 'boolean'" class="ce-bool-cell">
+              <Checkbox
+                :model-value="!!getValue(tid, field.key)"
+                :binary="true"
+                @update:model-value="setValue(tid, field.key, $event)"
+              />
+            </div>
             <input
               v-else
-              :type="field.type === 'date' ? 'date' : field.type"
+              :type="field.type"
               :value="getValue(tid, field.key)"
               @input="setValue(tid, field.key, $event.target.value)"
               class="ce-input"
@@ -437,6 +703,7 @@ function onColDragEnd(e) {
             </div><!-- /cell-wrap -->
           </td>
         </tr>
+        </template>
       </tbody>
       <tfoot>
         <tr class="ce-meta-row">
@@ -503,6 +770,13 @@ function onColDragEnd(e) {
   border-right: 1px solid rgba(0, 50, 116, 0.06);
 }
 
+/* Tape columns — ALL variants (default / active / source) use the same
+   hard width. Previously active had only `width: 190px` while source
+   had `width: 211px`; with table-layout: fixed but width: auto on the
+   parent table, long content (like project name «Импортозамещение
+   сепараторов») was still able to stretch active wider than source.
+   Locking width + min-width + max-width to a single value forces the
+   browser to lay them out identically regardless of content. */
 .ce-th-tape {
   padding: 7px 10px;
   text-align: left;
@@ -516,17 +790,36 @@ function onColDragEnd(e) {
   cursor: grab;
   user-select: none;
   white-space: nowrap;
-  width: 190px;
-  min-width: 140px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
   transition: background 0.2s, box-shadow 0.2s;
   position: relative;
+}
+
+/* Data cells under each tape column share the same hard width so the
+   column lays out identically across rows. Combined with overflow:
+   hidden on .cell-wrap below, this forces wide content (MultiSelect
+   selected-label, long select labels) to truncate INSIDE the cell. */
+.ce-td:not(.ce-td-label) {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+}
+.cell-wrap {
+  overflow: hidden;
+  min-width: 0;
 }
 .ce-th-tape:active { cursor: grabbing; }
 .ce-th-tape:last-child { border-right: none; }
 
-/* Source columns wider to fit copy-btn < */
+/* Source columns — same width as active. Earlier they were 211px to
+   fit the copy-< button, but the button sits inside the cell anyway
+   and 220px gives uniform layout. */
 .ce-th-tape--source {
-  width: 211px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
 }
 
 /* Active tape header */
@@ -757,6 +1050,56 @@ function onColDragEnd(e) {
   gap: 3px;
   align-items: center;
 }
+.datetime-cell {
+  /* DateTimeWithNow primitive ships its own DS styling — the wrapper
+     only needs to participate in the flex layout of the cell. */
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Collapsible group separator rows ──────────────────────────────
+   Renders inside <tbody> as a full-width row with an eyebrow + chevron.
+   Brand-blue tinted background distinguishes it from data rows.
+   Per-user collapse state is stored in localStorage by the editor. */
+.ce-group-row { background: rgba(0, 50, 116, 0.025); }
+.ce-group-td {
+  padding: 0;
+  border-top: 1px solid rgba(0, 50, 116, 0.10);
+  border-bottom: 1px solid rgba(0, 50, 116, 0.06);
+}
+.ce-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: background 0.12s;
+}
+.ce-group-toggle:hover { background: rgba(0, 50, 116, 0.05); }
+.ce-group-toggle:focus-visible {
+  outline: 2px solid rgba(0, 50, 116, 0.30);
+  outline-offset: -2px;
+}
+.ce-group-chevron {
+  font-size: 10px;
+  color: rgba(0, 50, 116, 0.50);
+  transition: color 0.15s;
+}
+.ce-group-toggle:hover .ce-group-chevron { color: #003274; }
+.ce-group-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(0, 50, 116, 0.55);
+  line-height: 1.2;
+}
 .ce-input--time {
   flex: 1;
 }
@@ -793,9 +1136,101 @@ function onColDragEnd(e) {
 .cell-wrap > .ce-input,
 .cell-wrap > .ce-textarea,
 .cell-wrap > .ce-select-wrap,
-.cell-wrap > .time-cell {
+.cell-wrap > .ce-multiselect-wrap,
+.cell-wrap > .time-cell,
+.cell-wrap > .datetime-cell,
+.cell-wrap > .ce-bool-cell,
+/* `.dtwn` is the root of DateTimeWithNow / DateInputISO when used
+   directly (no wrapper). Without this it sizes to content (183.5px) and
+   leaves the right side of the cell empty — visual inconsistency vs
+   neighbouring AutoComplete/MultiSelect rows which fill the full
+   265px cell. */
+.cell-wrap > .dtwn {
   flex: 1;
   min-width: 0;
+}
+
+/* Boolean cell — Checkbox left-aligned with a 32px height to match the
+   other inputs in the same column, so a row of mixed types stays
+   vertically aligned. */
+.ce-bool-cell {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 4px;
+}
+
+/* MultiSelect wrapper — matches AutoComplete (.ce-select-wrap) sizing
+   so a `multiselect` cell aligns vertically with select / text rows. */
+.ce-multiselect-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 100%;
+}
+.ce-multiselect-wrap :deep(.p-multiselect) {
+  width: 100%;
+  min-height: 32px !important;
+  height: auto !important;
+  font-size: 12.5px !important;
+}
+/* Label padding: left 8px (normal), right 30px to reserve room for the
+   absolute-positioned clear-icon defined in global.css. Without the
+   right-side reserve, long names like «Импортозамещение сепараторов»
+   render ellipsis that overlaps the × icon visually. */
+.ce-multiselect-wrap :deep(.p-multiselect-label) {
+  padding: 4px 30px 4px 8px !important;
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+}
+.ce-multiselect-wrap :deep(.p-multiselect-chip) {
+  font-size: 11.5px;
+  padding: 1px 6px;
+  margin: 1px 2px;
+  min-width: 0;
+  overflow: hidden;
+  /* The chip itself fills its wrapper span so the ellipsis on the label
+     has the wrapper's width to work with. */
+  width: 100%;
+}
+/* PrimeVue 4 wraps each chip in a `.p-multiselect-chip-item` <span>.
+   THAT span is the direct flex child of `.p-multiselect-label`, not the
+   chip itself. So flex sizing must target the wrapper, not the chip. */
+.ce-multiselect-wrap :deep(.p-multiselect-chip-item) {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+/* PrimeVue 4 renders chip label as `.p-chip-label` (the chip itself
+   is `.p-chip.p-multiselect-chip`). Older docs say `*-token-label` —
+   real DOM uses `p-chip-label`. */
+.ce-multiselect-wrap :deep(.p-chip-label),
+.ce-multiselect-wrap :deep(.p-multiselect-token-label),
+.ce-multiselect-wrap :deep(.p-multiselect-chip-label) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  display: block;
+}
+/* Constrain the label container so chips can't push out the dropdown
+   arrow — keeps field width fixed regardless of selection count.
+   Both modes covered:
+   - non-chip (current default after Dima 2026-05-28 feedback): one
+     selected → name with ellipsis; 2+ → "Выбрано: N" counter via
+     :max-selected-labels="1" + selected-items-label.
+   - chip mode (rare, legacy): chips share-and-truncate via
+     .p-multiselect-chip-item flex rules above. */
+.ce-multiselect-wrap :deep(.p-multiselect-label) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+.ce-multiselect-wrap :deep(.p-multiselect-dropdown) {
+  width: 26px !important;
 }
 
 /* ── Select wrapper (DS select-ac-wrap pattern) ── */

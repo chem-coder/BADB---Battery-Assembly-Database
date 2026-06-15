@@ -39,8 +39,13 @@ export const workflowSections = [
     nameFormat: (row) => `#${row.cut_batch_id} ${row.tape_name || ''}`.trim(),
     icon: 'pi pi-clone',
     listPage: () => import('@/pages/ElectrodesPage.vue'),
-    formPage: () => import('@/pages/ElectrodeFormPage.vue'),
-    formTitles: { new: 'Новая партия', edit: 'Партия' },
+    // formPage removed 2026-05 — constructor is now inline on
+    // ElectrodesPage, with per-batch detail (mass list / foil masses /
+    // capacity summary) rendered by ElectrodeBatchPanel below the
+    // constructor. Legacy /electrodes/:id URLs are still routed to
+    // ElectrodesPage which reads route.params.id on mount.
+    formPage: null,
+    formTitles: null,
   },
   {
     key: 'assembly',
@@ -102,6 +107,7 @@ export const referenceSections = [
   { key: 'separator-structures', label: 'Структуры сепараторов',  path: '/reference/separator-structures', icon: 'pi pi-sitemap',    apiPath: '/api/structures' },
     // ^ У Дали: страница есть (public/reference/separator-structures.html), но нет в index.html меню
   { key: 'projects',             label: 'Проекты',                path: '/reference/projects',             icon: 'pi pi-briefcase',  apiPath: '/api/projects' },
+  { key: 'departments',          label: 'Отделы',                 path: '/reference/departments',          icon: 'pi pi-users',      apiPath: '/api/departments' },
 ]
 
 // --- АДМИНИСТРИРОВАНИЕ (расширение Vue — нет в Далином public/) ---
@@ -123,5 +129,6 @@ export const referencePages = {
   'separators':           () => import('@/pages/reference/SeparatorsPage.vue'),
   'separator-structures': () => import('@/pages/reference/SeparatorStructuresPage.vue'),
   'projects':             () => import('@/pages/reference/ProjectsPage.vue'),
+  'departments':          () => import('@/pages/reference/DepartmentsPage.vue'),
   'users':                () => import('@/pages/reference/UsersPage.vue'),
 }

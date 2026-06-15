@@ -12,6 +12,7 @@
  */
 import { ref, reactive, computed, watch } from 'vue'
 import api from '@/services/api'
+import { isoDateToMskInput } from '@/utils/dateFormat'
 
 // ── helpers ──
 function parseDt(isoStr) {
@@ -44,10 +45,19 @@ function nowParts() {
 export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}) {
 
   // ── General info ──
+  // `projectIds` is an array of project_id values reflecting the M:N
+  // tape_projects table introduced by migration d028. Backend accepts
+  // `project_ids: [...]` on POST/PUT and returns `project_ids` +
+  // `projects[]` on GET (see services/tapeProjectService.js +
+  // docs/instructions/vue-vs-backend-audit-2026-05.md item #1).
   const general = reactive({
     name: '',
     createdBy: '',
-    projectId: '',
+    projectIds: [],
+    // `itemCreatedAt` is the business date the tape was made (operator
+    // can backdate). Distinct from audit `createdAt` (server-set, never
+    // editable). Backend column `item_created_at` (migration d035).
+    itemCreatedAt: '',
     tapeNotes: '',
     tapeType: '',
     tapeRecipeId: '',
@@ -74,6 +84,8 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     drying_am: {
       operator: '', date: '', time: '', notes: '',
       temperature: '', atmosphere: '', targetDuration: '', otherParam: '',
+      // d033 — speed/throughput text (free form, e.g. "1.2 m/min").
+      drying_speed_text: '',
     },
     weighing: {
       operator: '', date: '', time: '', notes: '',
@@ -84,14 +96,21 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       dryStartDate: '', dryStartTime: '', dryDurationMin: '', dryRpm: '',
       wetStartDate: '', wetStartTime: '', wetDurationMin: '', wetRpm: '',
       viscosityCp: '',
+      // d037 — text describing the measurement conditions (e.g. "25°C, ротор 4").
+      viscosity_conditions: '',
     },
     coating: {
       operator: '', date: '', time: '', notes: '',
       foilId: '', coatingId: '', coatingSidedness: '',
+      // d033 + d040 — per-side measurements for double-sided coatings.
+      // gap_um — die-gap setting; coated_thickness_um — measured result.
+      gap_um: '', gap_um_side2: '',
+      coated_thickness_um: '', coated_thickness_um_side2: '',
     },
     drying_tape: {
       operator: '', date: '', time: '', notes: '',
       temperature: '', atmosphere: '', targetDuration: '', otherParam: '',
+      drying_speed_text: '',
     },
     calendering: {
       operator: '', date: '', time: '', notes: '',
@@ -103,6 +122,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     drying_pressed_tape: {
       operator: '', date: '', time: '', notes: '',
       temperature: '', atmosphere: '', targetDuration: '', otherParam: '',
+      drying_speed_text: '',
     },
   })
 
@@ -140,12 +160,19 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
   }
 
   function _applySnapshot(snap) {
+    // try/finally: if Object.assign throws (it shouldn't on plain objects
+    // but defensively) _skipHistory must come back to false, otherwise
+    // history recording is permanently disabled and the user sees the
+    // undo button stop working for the rest of the session.
     _skipHistory = true
-    Object.assign(general, snap.general)
-    for (const code of Object.keys(snap.steps)) {
-      if (steps[code]) Object.assign(steps[code], snap.steps[code])
+    try {
+      Object.assign(general, snap.general)
+      for (const code of Object.keys(snap.steps)) {
+        if (steps[code]) Object.assign(steps[code], snap.steps[code])
+      }
+    } finally {
+      _skipHistory = false
     }
-    _skipHistory = false
   }
 
   function pushHistory() {
@@ -165,6 +192,17 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     }
     clearTimeout(_historyTimer)
     _historyTimer = setTimeout(() => { _historyTimer = null }, 400)
+  }
+
+  // Reset the debounce timer so the very next edit takes a fresh "before"
+  // snapshot. Called from undo/redo: without this, an edit made within
+  // 400ms of an undo would be folded into the previous burst's snapshot,
+  // leaving the user with no way to undo back to the just-restored state.
+  function _resetHistoryDebounce() {
+    if (_historyTimer) {
+      clearTimeout(_historyTimer)
+      _historyTimer = null
+    }
   }
 
   // ── Auto-save (debounced per step) ──
@@ -202,6 +240,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     redoStack.value.push(_takeSnapshot())
     const snap = undoStack.value.pop()
     _applySnapshot(snap)
+    _resetHistoryDebounce()
     _autoSaveAll()
   }
 
@@ -210,6 +249,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     undoStack.value.push(_takeSnapshot())
     const snap = redoStack.value.pop()
     _applySnapshot(snap)
+    _resetHistoryDebounce()
     _autoSaveAll()
   }
 
@@ -322,10 +362,17 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
   // ── Save general info ──
   async function saveGeneral() {
     saving.value = true
+    const projectIds = Array.isArray(general.projectIds) ? general.projectIds.filter(Boolean) : []
     const data = {
       name: general.name,
       created_by: general.createdBy || (authStore?.user?.userId ? String(authStore.user.userId) : ''),
-      project_id: general.projectId || null,
+      // M:N — array preferred; `project_id` echoes the primary (first)
+      // for downward compat with code paths that still read singular.
+      project_ids: projectIds,
+      project_id: projectIds[0] || null,
+      // Business date — null lets the backend default to CURRENT_DATE
+      // (see services/tapeCatalogService.js:73,93 COALESCE expression).
+      item_created_at: general.itemCreatedAt || null,
       notes: general.tapeNotes,
       tape_type: general.tapeType,
       tape_recipe_id: general.tapeRecipeId || null,
@@ -402,6 +449,9 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
 
     await api.post(`/api/tapes/${currentTapeId.value}/actuals`, payload)
     setDirty('recipe_materials', false)
+    // RecipeActualsEditor calls this directly (not via saveStep), so
+    // refresh the meta footer here too — keeps «Изменил» live.
+    await refreshMeta()
   }
 
   // ── Drop cached instances for a specific line (e.g. when material_id changes) ──
@@ -424,6 +474,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       atmosphere: src.atmosphere || null,
       target_duration_min: Number(src.targetDuration) || null,
       other_parameters: src.otherParam || null,
+      drying_speed_text: src.drying_speed_text || null,
     }
     await api.post(`/api/tapes/${currentTapeId.value}/steps/by-code/${code}`, payload)
     setDirty(code, false)
@@ -459,6 +510,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       wet_duration_min: m.wetDurationMin || null,
       wet_rpm: m.wetRpm || null,
       viscosity_cP: m.viscosityCp || null,
+      viscosity_conditions: m.viscosity_conditions || null,
     }
     await api.post(`/api/tapes/${currentTapeId.value}/steps/by-code/mixing`, payload)
     setDirty('mixing', false)
@@ -477,6 +529,11 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       // coating_sidedness — null when blank (DB CHECK constraint accepts
       // NULL + enum values, not empty string). "'' || null" → null.
       coating_sidedness: c.coatingSidedness || null,
+      // d033 + d040 — per-side coating measurements.
+      gap_um: c.gap_um || null,
+      gap_um_side2: c.gap_um_side2 || null,
+      coated_thickness_um: c.coated_thickness_um || null,
+      coated_thickness_um_side2: c.coated_thickness_um_side2 || null,
     }
     await api.post(`/api/tapes/${currentTapeId.value}/steps/by-code/coating`, payload)
     setDirty('coating', false)
@@ -506,19 +563,46 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
 
   // ── Unified step save ──
   async function saveStep(code) {
+    let result
     switch (code) {
       case 'general_info':
       case 'recipe_materials':
-        return saveGeneral()
+        result = await saveGeneral()
+        break
       case 'drying_am':
       case 'drying_tape':
       case 'drying_pressed_tape':
-        return saveDryingStep(code)
-      case 'weighing': return saveWeighing()
-      case 'mixing': return saveMixing()
-      case 'coating': return saveCoating()
-      case 'calendering': return saveCalendering()
+        result = await saveDryingStep(code)
+        break
+      case 'weighing': result = await saveWeighing(); break
+      case 'mixing':   result = await saveMixing(); break
+      case 'coating':  result = await saveCoating(); break
+      case 'calendering': result = await saveCalendering(); break
     }
+    // After every save the audit footer should reflect the new updated_at
+    // and updated_by_name — Dima 2026-05-28 noticed it was frozen until
+    // a full reload. Backend stamps these on every PUT/POST, GET the
+    // tape and patch `meta` so EntityMeta re-renders.
+    await refreshMeta()
+    return result
+  }
+
+  /**
+   * Pull the freshest audit fields (updated_at / updated_by_name +
+   * created_at / created_by_name) from the backend and merge into the
+   * reactive `meta`. Lightweight — used right after any save.
+   */
+  async function refreshMeta() {
+    if (!currentTapeId.value) return
+    try {
+      const { data: t } = await api.get(`/api/tapes/${currentTapeId.value}`)
+      if (t) {
+        meta.created_by_name = t.created_by_name || null
+        meta.created_at = t.created_at || null
+        meta.updated_by_name = t.updated_by_name || null
+        meta.updated_at = t.updated_at || null
+      }
+    } catch {}
   }
 
   // ── Restore tape from API ──
@@ -533,7 +617,22 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
 
       general.name = t.name || ''
       general.createdBy = t.created_by || ''
-      general.projectId = t.project_id || ''
+      // Backend returns `project_ids` (array) from the M:N table and a
+      // legacy `project_id` echo. Prefer the array; fall back to a
+      // single-element array built from `project_id` when the M:N row
+      // is missing (old rows pre-d028 backfill).
+      if (Array.isArray(t.project_ids) && t.project_ids.length > 0) {
+        general.projectIds = t.project_ids.map(Number).filter(Number.isFinite)
+      } else if (t.project_id) {
+        general.projectIds = [Number(t.project_id)]
+      } else {
+        general.projectIds = []
+      }
+      // Backend returns the DATE column as an ISO timestamp at MSK
+      // midnight (e.g. "2026-05-11T21:00:00.000Z" for 2026-05-12).
+      // isoDateToMskInput recovers the Moscow calendar day so the picker
+      // shows the date the operator actually entered. See its header.
+      general.itemCreatedAt = isoDateToMskInput(t.item_created_at)
       general.tapeNotes = t.notes || ''
       general.tapeType = t.role || ''
       general.calcMode = t.calc_mode || ''
@@ -606,6 +705,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
           steps.mixing.wetDurationMin = m.wet_duration_min ?? ''
           steps.mixing.wetRpm = m.wet_rpm ?? ''
           steps.mixing.viscosityCp = m.viscosity_cp ?? ''
+          steps.mixing.viscosity_conditions = m.viscosity_conditions || ''
         }
       } catch {}
 
@@ -620,6 +720,10 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
           steps.coating.foilId = c.foil_id ?? ''
           steps.coating.coatingId = c.coating_id ?? ''
           steps.coating.coatingSidedness = c.coating_sidedness ?? ''
+          steps.coating.gap_um = c.gap_um ?? ''
+          steps.coating.gap_um_side2 = c.gap_um_side2 ?? ''
+          steps.coating.coated_thickness_um = c.coated_thickness_um ?? ''
+          steps.coating.coated_thickness_um_side2 = c.coated_thickness_um_side2 ?? ''
         }
       } catch {}
 
@@ -661,6 +765,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       steps[code].atmosphere = data.atmosphere || ''
       steps[code].targetDuration = data.target_duration_min ?? ''
       steps[code].otherParam = data.other_parameters || ''
+      steps[code].drying_speed_text = data.drying_speed_text || ''
     } catch {}
   }
 

@@ -6,6 +6,7 @@
 import { ref, watch } from 'vue'
 import api from '@/services/api'
 import { fieldLabel } from '@/utils/fieldLabels'
+import { formatDateTimeMsk } from '@/utils/dateFormat'
 
 const props = defineProps({
   entityType: { type: String, required: true },
@@ -37,11 +38,7 @@ async function load() {
 watch(() => [props.entityType, props.entityId], load, { immediate: true })
 
 function formatDt(iso) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
+  return formatDateTimeMsk(iso)
 }
 
 function truncate(val, max = 40) {

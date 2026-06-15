@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
+import UnsavedConfirmDialog from '@/components/parity/UnsavedConfirmDialog.vue'
 
 // Randomise РЭНЕРА pattern vertical position on every page load
 // (pattern is 417px tall relative to 1920px wide; full-screen cover
@@ -13,4 +14,5 @@ onMounted(() => {
 
 <template>
   <RouterView />
+  <UnsavedConfirmDialog />
 </template>

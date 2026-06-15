@@ -12,6 +12,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
+import DateInputISO from '@/components/parity/DateInputISO.vue'
 
 const toast = useToast()
 
@@ -931,11 +932,11 @@ function onEditKeydown(e, saveFn, cancelFn) {
                         </div>
                         <div class="form-field">
                           <label>Дата заказа</label>
-                          <input type="date" v-model="sourceInfoForm[inst.material_instance_id].date_ordered" class="date-input" />
+                          <DateInputISO v-model="sourceInfoForm[inst.material_instance_id].date_ordered" class="date-input" />
                         </div>
                         <div class="form-field">
                           <label>Дата получения</label>
-                          <input type="date" v-model="sourceInfoForm[inst.material_instance_id].date_received" class="date-input" />
+                          <DateInputISO v-model="sourceInfoForm[inst.material_instance_id].date_received" class="date-input" />
                         </div>
                         <div class="form-field">
                           <label>Метка качества</label>
