@@ -174,7 +174,9 @@ const materialsOptions = {
 
     <!-- Materials by role -->
     <div class="glass-card chart-card">
-      <div class="chart-title">Материалы по ролям</div>
+      <!-- /dashboard/materials-usage — глобальная статистика справочника,
+           фильтр-бар к ней не применяется; говорим об этом явно -->
+      <div class="chart-title">Материалы по ролям <span class="chart-title-note">все данные, фильтры не применяются</span></div>
       <div class="chart-wrap chart-wrap--short">
         <Bar v-if="materialsUsage.length" :data="materialsChartData" :options="materialsOptions" />
         <div v-else class="chart-empty">Нет данных</div>
@@ -207,6 +209,14 @@ const materialsOptions = {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: rgba(0, 50, 116, 0.5);
+}
+
+.chart-title-note {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(0, 50, 116, 0.4);
+  margin-left: 4px;
 }
 
 .chart-wrap {
