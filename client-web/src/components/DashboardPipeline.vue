@@ -16,6 +16,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
+import { batteryStatusCode } from '@/utils/batteryStatus'
 
 const props = defineProps({
   tapes: { type: Array, default: () => [] },
@@ -72,7 +73,7 @@ const TRACKS = [
     icon: 'pi pi-box',
     draggable: true,
     stages: [
-      { code: 'draft', label: 'Черновик', color: '#6B7280' },
+      { code: 'open', label: 'Открыт', color: '#6B7280' },
       { code: 'assembled', label: 'Собраны', color: '#025EA1' },
       { code: 'testing', label: 'Тестирование', color: '#D3A754' },
       { code: 'completed', label: 'Завершены', color: '#1d7a5f' },
@@ -221,9 +222,10 @@ function groupBatteries(stages) {
   const grouped = {}
   for (const s of stages) grouped[s.code] = []
   for (const bt of props.batteries) {
-    const code = bt.status || 'draft'
+    // Blank/NULL/`disassembled` → derived «Открыт» (battery_lifecycle_rules.md).
+    const code = batteryStatusCode(bt.status)
     if (grouped[code]) grouped[code].push(bt)
-    else grouped['draft'].push(bt)
+    else grouped['open'].push(bt)
   }
   const FF_LABELS = { coin: 'Монета', pouch: 'Пакет', cylindrical: 'Цилиндр' }
   return stages.map(s => ({
