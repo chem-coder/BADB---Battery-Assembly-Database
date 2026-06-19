@@ -1,7 +1,7 @@
 # Frontend Parity Handoff
 
 Created: 2026-05-07
-Edited: 2026-05-09
+Edited: 2026-06-20
 Status: instruction
 
 This is the handoff for Dima/Claude when the Vue frontend needs to match
@@ -46,6 +46,18 @@ headers, and destructive-flow placement live in
 `docs/instructions/vanilla_ui_patterns.md`.
 
 ## Current Vue Parity Gaps
+
+> **Update 2026-06-20 — most of this section is now DONE; the live tracker is
+> [`PARITY.md`](../../PARITY.md) (repo root), which lists current
+> DONE/PARTIAL/MISSING per page.** Implemented since this doc was written:
+> guided deletes for Batteries, Electrodes, and Tapes (delete-check + typed
+> phrase + correct permission gate); Electrolytes/Separators files + typed
+> delete; Recipes/Users/Departments row-open + delete; Battery status (derived
+> «Открыт», no `draft`). **Still open** (see PARITY.md): Tapes print, Projects
+> access labels (→ `Открытый`/`Ограниченный`), Materials composition validation.
+> Project-wide entity authorization is tracked separately in
+> `docs/future/project_access_control.md`. The per-section "pending" notes below
+> are kept only as the original spec — verify against PARITY.md and the code.
 
 ### Destructive And Safety Flows
 
