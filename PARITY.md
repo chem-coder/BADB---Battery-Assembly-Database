@@ -47,10 +47,10 @@ in-progress replacement.
 | Tape export (Excel/CSV/JSON, multi-select) | DONE | `useExportTapes`, context menu |
 | Duplicate (client-side draft) | DONE | `duplicateTape` → create dialog |
 | Undo/redo | DONE (Vue extra) | Ctrl+Z/Y in `TapeConstructor` |
-| List filters: text, status, project, role, sidedness | PARTIAL | Vue relies on `CrudTable` per-column filter overlays, not vanilla's dedicated filter bar. Q: do the overlays cover all 5 vanilla filter dimensions equivalently? |
+| List filters: text, status, project, role, sidedness | DONE (by design) | Vue uses `CrudTable` per-column filter overlays — accepted V2 pattern (decision 2026-06-19) |
 | Print report (`tape-print.html`) | MISSING | `TapesPage` has no print button/handler; vanilla matrix lists Tapes print = yes. |
 | Guided delete: opened-record only, admin/lead, delete-check, typed `DELETE TAPE <id>` | PARTIAL | Vue uses generic `CrudTable` list-delete (bare `DELETE /api/tapes/:id`, `TapesPage.vue:240-262`). Backend **does** gate to admin/lead (`routes/tapes.js:175`), so not unsafe, but **no** delete-check preflight, **no** typed phrase, **no** UI role-gating. Vanilla explicitly says don't use list-delete here. |
-| Sticky opened-record header (Сохранить/Печать/Выйти/Удалить) | PARTIAL | Tapes is a constructor page in Vue, not row-open; sticky-header pattern N/A as built. Q: is parity expected to keep vanilla's row-open+sticky model, or is the constructor an accepted replacement? |
+| Editing model (vanilla row-open vs Vue constructor) | DONE (by design) | Vue's multi-select Constructor is the accepted V2 replacement for vanilla's row-open/sticky model (decision 2026-06-19) |
 
 ### Electrodes — `public/workflow/2-electrodes.html` + `2-electrodes.js` → `pages/ElectrodesPage.vue` (+ `ElectrodeBatchPanel`, `BatchCreateDialog`, `ElectrodeBulkPasteDialog`)
 
@@ -59,13 +59,13 @@ in-progress replacement.
 | List of cut batches (tape, project, type, shape, count, created) | DONE | `ElectrodesPage.vue` columns |
 | Capacity columns (theoretical / actual, avg) | DONE | from `/report` capacity_summary |
 | Test-batch flag (d039) | DONE | `col-is_test_batch` |
-| Per-electrode include-in-capacity-average (d038) | DONE | per-row flag (per docs); Q: confirm toggle UI present in `ElectrodeBatchPanel` |
+| Per-electrode include-in-capacity-average (d038) | DONE | «В среднем» per-row toggle in `ElectrodeBatchPanel` |
 | Create batch (form-factor target etc.) | DONE | `BatchCreateDialog` |
-| Cutting / drying / foil-mass workflow | DONE | `ElectrodeBatchPanel`; Q: confirm foil-mass grid + per-electrode masses fully match vanilla |
+| Cutting / drying / foil-mass workflow | DONE | `ElectrodeBatchPanel`: electrode mass/cup/status table + «Масса фольги» foil-mass section (`loadFoilMasses` → `/foil-masses`) |
 | Bulk-paste electrode masses | DONE | `ElectrodeBulkPasteDialog` |
 | Print report (`electrode-batch-print.html`) | DONE | `show-print` + `openBatchPrint` (`ElectrodesPage.vue:451,456`) |
-| List filters: Role, Project, Tape | PARTIAL | Top filter-bar removed (comment `ElectrodesPage.vue:36`); column-overlay filters only. Q: do overlays cover Role/Project/Tape as vanilla's bar did? |
-| Duplicate | UNSURE | No `@duplicate` seen on `ElectrodesPage` CrudTable. Q: does vanilla electrodes expose duplicate? If yes, Vue is MISSING it. |
+| List filters: Role, Project, Tape | DONE (by design) | Column-overlay filters — accepted V2 pattern (decision 2026-06-19) |
+| Duplicate | DONE (Vue extra) | Vue has `@duplicate=duplicateBatch`; **vanilla electrodes has NO duplicate** (0 «дублир» in `2-electrodes.js`). Vue over-implements — decide keep vs remove. |
 | Guided delete: delete-check + typed `DELETE BATCH <id>` | MISSING | Vue uses generic list-delete (`ElectrodesPage.vue:385-393`, bare `DELETE …/electrode-cut-batches/:id`). Backend is `auth`-only (no role/phrase enforcement, `routes/electrodes.js:156`); a `/delete-check` route exists but Vue does not call it. |
 
 ### Batteries — `public/workflow/3-batteries.html` + `3-batteries.js` → `pages/AssemblyPage.vue` (+ `useBatteryState`, `BatteryElectrochemEditor`)
@@ -76,7 +76,7 @@ in-progress replacement.
 | Create (project + form factor + date) | DONE | `EntityCreateDialog` |
 | Form-factor config (coin/pouch/cylindrical/prism) | DONE | constructor stages |
 | Electrode source selection (incl. depleted-tape handling, multi-batch d043) | DONE | per `docs/current/batteries.md` |
-| Electrode stack save (trigger-safe order, stack rules) | DONE | Q: confirm full pouch/prism/cyl stack-rule UI validation matches `electrode_stack_rules.md` |
+| Electrode stack save (trigger-safe order, stack rules) | DONE | Constructor «Сборка» stage (`batteryStages.js`). Rule enforcement + trigger-safe insert order are backend-authoritative by design (`electrode_stack_rules.md` puts ordering in the service, not the client) |
 | Separator + electrolyte config | DONE | constructor stages |
 | Capacity summary (theor/actual, N/P) | DONE | `capacity` panels + `CapacityHint` |
 | Electrochem file attach/list/download/delete | DONE | `BatteryElectrochemEditor` |
@@ -84,7 +84,7 @@ in-progress replacement.
 | Guided delete (delete-check, hard blockers, typed `DELETE BATTERY`, electrode disposition) | DONE | implemented 2026-06-16 (`utils/batteryDelete.js` + `TypedDeleteConfirm`); verified in-app |
 | Duplicate (client-side draft) | DONE | `duplicateBattery` |
 | Print report (`battery-print.html`) | DONE | `openBatteryPrint` + `PrintPreviewDialog` |
-| Modules link / membership | UNSURE | Q: does vanilla batteries surface module info? Vue `4-modules` equivalent is a placeholder. |
+| Modules link / membership | N/A | Modules subsystem out of scope (decision 2026-06-19) |
 
 ---
 
@@ -110,7 +110,7 @@ in-progress replacement.
 | Feature | Vue status | Note |
 |---|---|---|
 | Row-open + sticky header | DONE | foundation |
-| Filters: text, status, type | PARTIAL | text+status confirmed; **type** filter not confirmed in this pass. Q: is the `type` filter present? |
+| Filters: text, status, type | DONE | `electrolyte_type` filter present (Тип / Все типы) |
 | Print + duplicate | DONE | `row-actions` |
 | Delete: delete-check + typed `DELETE ELECTROLYTE` | DONE | `hasDeleteCheck:true`, phrase |
 | DB-backed files (list/upload/download/delete) | DONE | `RecordFiles` |
@@ -120,7 +120,7 @@ in-progress replacement.
 | Feature | Vue status | Note |
 |---|---|---|
 | Row-open + sticky header | DONE | foundation |
-| Filters: text, status, structure | PARTIAL | text+status confirmed; **structure** filter not confirmed. Q: present? |
+| Filters: text, status, structure | DONE | `structure_id` filter present (Структура) |
 | Print + duplicate | DONE | `row-actions` |
 | Delete: delete-check + typed `DELETE SEPARATOR` | DONE | phrase + `hasDeleteCheck` |
 | DB-backed files | DONE | `RecordFiles` |
@@ -129,7 +129,7 @@ in-progress replacement.
 
 | Feature | Vue status | Note |
 |---|---|---|
-| Structures CRUD page | UNSURE | Page exists; not read this pass. Q: does it match vanilla `separator-structures` features (list/create/edit/delete)? |
+| Structures CRUD page | DONE | list + Dialog create/edit + delete (`SeparatorStructuresPage.vue`). Note: Dialog-edit + generic list-delete (simple справочник) |
 
 ### Materials — `materials.js` + `material-details.js` + `material-source-info.js` → `reference/MaterialsPage.vue`
 
@@ -142,25 +142,25 @@ in-progress replacement.
 | Source/property files | DONE | `loadSourceFiles`, `RecordFiles` |
 | Properties | DONE | `loadProperties` |
 | Delete material | DONE | `deleteMaterial` (dependency conflicts) |
-| Exact field/validation parity with vanilla materials | UNSURE | Vue uses its own master-detail pattern, not the foundation. Q: confirm composition validation (mass-fraction, no self/dup, total 100%) + purity rules match `material_composition_rules.md`. |
+| Composition validation parity | PARTIAL | Purity (`is_pure`) backend-computed & respected ✓. BUT Vue edits components individually via `PUT/DELETE /materials/instances/components/:id`, not the canonical replace-all `PUT /materials/instances/:id/components` — so the documented sum-to-100 / no-self-dup full-composition validation may be bypassed. (Backend per-component enforcement not separately confirmed.) |
 
 ### Projects — `projects.js` → `reference/ProjectsPage.vue` (+ `ProjectAccessPanel`, access graph/matrix/timeline)
 
 | Feature | Vue status | Note |
 |---|---|---|
 | Row-open + sticky header | DONE | foundation |
-| Filters: text, status, access, lead | PARTIAL | text+status+access confirmed; **lead** filter not confirmed. Q: present? |
+| Filters: text, status, access, lead | DONE | all present (`lead_id`); Vue also adds a department filter |
 | Print + duplicate (list) | DONE | `row-actions` |
 | Delete: backend dependency conflicts, no delete-check, no typed phrase | DONE | `hasDeleteCheck:false`, `deletePhrase:null` — matches vanilla |
 | Team/participants + access grants | DONE (Vue richer) | `ProjectAccessPanel` + access graph/matrix/timeline (beyond vanilla) |
-| Access labels | UNSURE | Vue shows `для всех` / `для отдела` / `выборочный доступ` + filter `Все уровни доступа`; docs (`vanilla_ui_patterns.md`) say vanilla uses `открытый` / `секретный` + `Все типы доступа`. Q: which labels does **current** vanilla `projects.js` actually show? |
+| Access labels & model | PARTIAL (fix Vue) | **Decided: match vanilla's redone permissions model.** Vue is stale — its `для отдела` option reflects the OLD department-based model vanilla moved away from. Action: align Vue to vanilla's current model; target labels **`Открытый` / `Ограниченный`** (open / restricted), internal API values stay `public`/`confidential`. |
 
 ### Users — `users.js` → `reference/UsersPage.vue`
 
 | Feature | Vue status | Note |
 |---|---|---|
 | Row-open + sticky header | DONE | foundation |
-| Filters: text, role, department, active | PARTIAL | text+role+active confirmed; **department** filter not confirmed. Q: present? |
+| Filters: text, role, department, active | DONE | `department_id` filter present |
 | Admin gating (create admin-only; edit self/others; role admin-only) | DONE | `useAuth().isAdmin`, documented in header |
 | Password reset (`reset_password` toggle) | DONE | `Password` field + flag |
 | Delete: opened-record, dependency conflicts, no delete-check/typed | DONE | `hasDeleteCheck:false`; matches vanilla |
@@ -172,14 +172,14 @@ in-progress replacement.
 |---|---|---|
 | Row-open + sticky header | DONE | foundation (handoff's "no Vue dept page" is stale) |
 | Filters: text, head | DONE | `filters` text + (head) |
-| Admin-only create/update | UNSURE | Q: confirm create/update gated to admin as vanilla requires |
+| Admin-only create/update | DONE | `isAdmin` gate; non-admin inputs disabled |
 | No delete / print / duplicate / files | DONE | none present (matches vanilla) |
 
 ### Modules — `public/workflow/4-modules.html`
 
 | Feature | Vue status | Note |
 |---|---|---|
-| Modules subsystem | MISSING (both) | Vanilla 4-modules is a documented stub; Vue has no real modules page (placeholder). Not a regression — neither implements it. |
+| Modules subsystem | N/A (out of scope) | Stub in vanilla, absent in Vue; deferred by decision (2026-06-19) — not a tracked gap. |
 
 ---
 
@@ -190,7 +190,7 @@ in-progress replacement.
 | Login / auth session | DONE | `LoginPage.vue` + `stores/auth.js` (tested); JWT + token_version |
 | Navigation / menu | DONE (Vue richer) | `AppSidebar` + `navigation.js` + mobile drawer; vanilla is a static link menu |
 | Print infrastructure | DONE | `PrintPreviewDialog` proxies vanilla `/workflow/*-print.html` for batteries, electrodes, recipes, electrolytes, separators, projects |
-| List filter pattern | PARTIAL | Reference pages use vanilla-style dedicated filter bars; workflow pages (Tapes, Electrodes) use `CrudTable` column overlays instead |
+| List filter pattern | DONE (by design) | Reference pages = vanilla-style filter bars; workflow pages = `CrudTable` column overlays (accepted V2 pattern, 2026-06-19) |
 | Destructive-delete pattern | PARTIAL | Reference pages + Batteries match vanilla (opened-record / guided / typed where vanilla has it); **Tapes & Electrodes still use generic list-delete** (see those rows) |
 | Authenticated report windows | DONE | reports load in-app via `PrintPreviewDialog` (auth handled) |
 
@@ -208,24 +208,25 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 
 | Status | Count |
 |---|---|
-| DONE | ~46 |
-| PARTIAL | 9 |
-| MISSING | 3 |
-| UNSURE | 11 |
+| DONE | ~78 (incl. "DONE by design" V2 choices) |
+| PARTIAL | 4 |
+| MISSING | 2 |
+| UNSURE | 0 (all resolved 2026-06-19) |
+| N/A (out of scope) | 2 (Modules) |
 
-(Counts are of the feature rows in this document; treat as indicative, not exact.)
+(Counts are of the feature rows in this document; indicative, not exact.)
 
-### Pages with the most gaps (priority order)
+### Actionable gaps (priority order)
 
-1. **Electrodes** — guided delete MISSING (generic list-delete, no delete-check/typed phrase, backend unenforced); filters PARTIAL; duplicate UNSURE.
-2. **Tapes** — print MISSING; guided delete PARTIAL (generic list-delete, no delete-check/typed/UI-gate); filters PARTIAL; row-open vs constructor model difference.
-3. **Projects** — access label mismatch (UNSURE which is current vanilla); lead filter UNSURE. Otherwise strong (Vue adds access viz).
-4. **Materials** — feature-complete but on a bespoke pattern; composition/purity validation parity UNSURE.
-5. **Separator Structures** — whole page UNSURE (not yet read).
+1. **Electrodes — guided delete (MISSING).** Generic list-delete; no delete-check / typed `DELETE BATCH`; backend unenforced. Highest priority — a direct repeat of the battery fix (`useDeleteCheck` + `TypedDeleteConfirm`).
+2. **Tapes — guided delete (PARTIAL).** Same generic list-delete; backend gates to admin/lead but no delete-check / typed phrase / UI gate.
+3. **Tapes — print (MISSING).** No `tape-print` button/handler; vanilla has it.
+4. **Projects — access labels & model (PARTIAL).** Align Vue to vanilla's redone permissions model; drop the stale `для отдела` (old department model) and relabel to `Открытый` / `Ограниченный`.
+5. **Materials — composition validation (PARTIAL).** Per-component edits bypass the canonical sum-to-100 / full-composition validation endpoint.
 
-### Biggest themes
+### Themes
 
-- **Workflow-page deletes (Tapes, Electrodes) are the clearest real gap** — same generic-list-delete issue that was just fixed for Batteries. Recommended next parity work, mirroring the battery fix (`useDeleteCheck` + `TypedDeleteConfirm`).
-- **Tapes print** is the one missing report.
-- Most **reference pages are at parity** via the shared foundation; the May `frontend_parity_handoff.md` "pending" list is largely stale.
-- Several **UNSURE** items are quick to resolve by reading specific files (filter configs, separator-structures page, current vanilla project access labels) — listed as questions, not guesses.
+- **Workflow-page guided delete (Tapes, Electrodes) is the top remaining work** — the same generic-list-delete issue already fixed for Batteries; reuse `useDeleteCheck` + `TypedDeleteConfirm`.
+- Most pages are **at parity**; the May `frontend_parity_handoff.md` "pending" list is largely stale (Recipes / Electrolytes / Separators / Departments / Users all DONE).
+- Vue's **Constructor + column-filter** model on workflow pages is an accepted V2 redesign, not a gap (decision 2026-06-19).
+- **All UNSURE items from the first pass were resolved on 2026-06-19** — via code reads (filters, foil-mass, separator-structures, materials path, access labels) and the owner's interview answers (UX model, access model, modules scope, depth).
