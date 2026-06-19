@@ -1,7 +1,7 @@
 # BADB Release Readiness
 
 Created: 2026-05-06
-Edited: 2026-05-25
+Edited: 2026-06-19
 Status: current
 
 This file tracks only the current release-control state. Do not use it for future ideas, long worklogs, or archived rationale.
@@ -14,10 +14,12 @@ Vanilla v1 release candidate for internal lab pilot.
 
 - Vanilla v1 is a release candidate based on the recorded local automated
   checks and UI spot checks.
-- Windows/lab database proof is still required before pilot use. The target
-  database must show current `public.schema_migrations` counts and the
-  `d031_harden_battery_stack_validate_trigger.sql` trigger behavior on the
-  Windows/lab database itself.
+- Windows/lab database ledger proof: **verified 2026-06-19** — the lab DB shows
+  `public.schema_migrations` counts of `dalia = 28` / `dima = 21` (49 rows,
+  through `d040`), matching the v1 baseline (see "Lab Database Verification"
+  below). The `d031_harden_battery_stack_validate_trigger.sql` trigger-behavior
+  boolean query (per `docs/instructions/apply_migrations.md`) has not yet been
+  run on the lab and remains outstanding.
 - Manual destructive battery flow spot-check is still required before pilot use
   unless a later checkpoint records it as verified.
 
@@ -105,6 +107,28 @@ Latest recorded release checkpoint: verified on 2026-05-25.
 Older smoke counts below are historical only and do not replace the 2026-05-25
 263-check checkpoint above.
 
+## Lab Database Verification
+
+Verified on 2026-06-19 (read-only; the lab database was not modified):
+
+- Target: the Windows production/lab DB at `C:\DB_LabHIT\BADB_v1`.
+- Commands (read-only): `SELECT migration_stream, count(*) FROM schema_migrations
+  GROUP BY 1 ORDER BY 1;` and `SELECT migration_name FROM schema_migrations
+  ORDER BY migration_name;`.
+- Result: `dalia = 28`, `dima = 21` (49 rows). The migration list matches the
+  expected baseline exactly — Dima `001`–`020` (two intentional `008_` files)
+  and Dalia `d013`–`d040`. `d031_harden_battery_stack_validate_trigger.sql` is
+  present in the ledger.
+- Still outstanding: the `d031` trigger-behavior boolean query (the three
+  expected booleans in `docs/instructions/apply_migrations.md`) was not run.
+
+Forward note: as of 2026-06-19 the repo extends to `d043` (52 migration files).
+The lab therefore needs `d041_project_participants.sql`,
+`d042_project_leads_as_team_members.sql`, and
+`d043_enable_multi_battery_electrode_sources.sql` to reach repo parity. These
+three are being verified against a throwaway copy of the `d040` baseline before
+any lab application.
+
 ## Historical Checkpoints
 
 Earlier checkpoints are retained only as release history.
@@ -172,9 +196,10 @@ npm run smoke:vanilla
   database. Local restored-copy smoke passed on 2026-05-25; the smoke harness
   must not be pointed at the live Windows/lab database.
 - Windows/lab database proof: the Windows production/pilot DB has
-  `public.schema_migrations` counts of `dima = 21` and `dalia = 28`; then the
-  `d031` verification query from `docs/instructions/apply_migrations.md`
-  returns the expected values.
+  `public.schema_migrations` counts of `dima = 21` and `dalia = 28` — **ledger
+  counts verified 2026-06-19** (see "Lab Database Verification" above). Still
+  outstanding: the `d031` verification query from
+  `docs/instructions/apply_migrations.md` returning the expected boolean values.
 - Manual destructive battery flow spot-check: guided battery delete is manually
   tested for:
   - hard blocker with cycling data;

@@ -1,7 +1,7 @@
 # Apply Migrations
 
 Created: 2026-05-06
-Edited: 2026-05-25
+Edited: 2026-06-19
 Status: instruction
 Verified against code: 2026-05-25
 Source paths: `migrations/README.md`, `migrations/`, `migrations_ASCII/`, `migrations/migrations_log.txt`, `migrations_ASCII/migrations_log.txt`, `scripts/smoke_vanilla_api.js`
@@ -157,6 +157,17 @@ dima: 21 rows
 
 Rows with `source = 'd032_baseline'` were backfilled because those migrations
 predate the ledger. New migrations should insert their own ledger row.
+
+### Lab Ledger Verified 2026-06-19
+
+The Windows/lab production DB (`C:\DB_LabHIT\BADB_v1`) was checked read-only on
+2026-06-19 and reported `dalia = 28`, `dima = 21` (49 rows, through `d040`) —
+matching the expected `d040` baseline above; `d031` is present in the ledger. As
+of that date the repo extends to `d043` (52 files), so
+`d041_project_participants.sql`, `d042_project_leads_as_team_members.sql`, and
+`d043_enable_multi_battery_electrode_sources.sql` are the migrations not yet
+applied on the lab. They are being verified against a throwaway copy before lab
+application (see `docs/current/release_readiness.md`).
 
 ## Check d031 Battery Stack Trigger
 
