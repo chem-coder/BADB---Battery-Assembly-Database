@@ -53,8 +53,9 @@ headers, and destructive-flow placement live in
 > guided deletes for Batteries, Electrodes, and Tapes (delete-check + typed
 > phrase + correct permission gate); Electrolytes/Separators files + typed
 > delete; Recipes/Users/Departments row-open + delete; Battery status (derived
-> «Открыт», no `draft`). **Still open** (see PARITY.md): Tapes print, Projects
-> access labels (→ `Открытый`/`Ограниченный`), Materials composition validation.
+> «Открыт», no `draft`); plus Tapes print and Projects access labels
+> (→ `открытый`/`ограниченный`), both done 2026-06-20. **Still open** (see
+> PARITY.md): Materials composition validation.
 > Project-wide entity authorization is tracked separately in
 > `docs/future/project_access_control.md`. The per-section "pending" notes below
 > are kept only as the original spec — verify against PARITY.md and the code.

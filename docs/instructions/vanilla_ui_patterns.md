@@ -1,7 +1,7 @@
 # Vanilla UI Patterns
 
 Created: 2026-05-07
-Edited: 2026-05-15
+Edited: 2026-06-20
 Status: instruction
 
 Use this when implementing recurring vanilla-page behavior in `public/`.
@@ -151,10 +151,10 @@ Use this visible vocabulary:
 - field/filter label: `Доступ`
 - all-filter option: `Все типы доступа`
 - `public`: `открытый`
-- `confidential`: `секретный`
+- `confidential`: `ограниченный`
 
 For list metadata, prefer phrases such as `доступ: открытый` or
-`доступ: секретный`.
+`доступ: ограниченный`.
 
 ## Filter Layout
 
