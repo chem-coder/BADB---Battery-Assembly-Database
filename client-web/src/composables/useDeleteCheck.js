@@ -26,7 +26,7 @@
 import api from '@/services/api';
 import { formatDependency } from '@/utils/formatDependency';
 
-export function useDeleteCheck(entityType) {
+export function useDeleteCheck(entityType, opts = {}) {
   async function check(id) {
     if (!entityType) {
       throw new Error('useDeleteCheck: entityType is required');
@@ -35,7 +35,13 @@ export function useDeleteCheck(entityType) {
       throw new Error('useDeleteCheck: id is required');
     }
 
-    const { data } = await api.get(`/api/${entityType}/${id}/delete-check`);
+    // Most surfaces use /api/<entityType>/:id/delete-check. Nested resources
+    // (e.g. electrode cut batches at /api/electrodes/electrode-cut-batches/:id)
+    // pass an explicit `checkUrl(id)` builder.
+    const url = typeof opts.checkUrl === 'function'
+      ? opts.checkUrl(id)
+      : `/api/${entityType}/${id}/delete-check`;
+    const { data } = await api.get(url);
 
     // Backend response shape (verified against routes/recipes.js:430-446):
     //   { can_delete: boolean, message: string, dependencies: [{ records: [...] }] }

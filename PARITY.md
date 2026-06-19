@@ -66,7 +66,7 @@ in-progress replacement.
 | Print report (`electrode-batch-print.html`) | DONE | `show-print` + `openBatchPrint` (`ElectrodesPage.vue:451,456`) |
 | List filters: Role, Project, Tape | DONE (by design) | Column-overlay filters — accepted V2 pattern (decision 2026-06-19) |
 | Duplicate | DONE (Vue extra) | Vue has `@duplicate=duplicateBatch`; **vanilla electrodes has NO duplicate** (0 «дублир» in `2-electrodes.js`). Vue over-implements — decide keep vs remove. |
-| Guided delete: delete-check + typed `DELETE BATCH <id>` | MISSING | Vue uses generic list-delete (`ElectrodesPage.vue:385-393`, bare `DELETE …/electrode-cut-batches/:id`). Backend is `auth`-only (no role/phrase enforcement, `routes/electrodes.js:156`); a `/delete-check` route exists but Vue does not call it. |
+| Guided delete: delete-check + typed `DELETE BATCH <id>` | DONE | Implemented 2026-06-19 (`utils/electrodeDelete.js` + `useDeleteCheck` checkUrl override + `TypedDeleteConfirm`): delete-check preflight → blockers OR typed «DELETE BATCH <id>» → DELETE; per-batch; auth-only (matches vanilla). Backend already enforced dependency blockers (now covered by a test). Project-based access = R1, deferred. |
 
 ### Batteries — `public/workflow/3-batteries.html` + `3-batteries.js` → `pages/AssemblyPage.vue` (+ `useBatteryState`, `BatteryElectrochemEditor`)
 
@@ -208,9 +208,9 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 
 | Status | Count |
 |---|---|
-| DONE | ~78 (incl. "DONE by design" V2 choices) |
+| DONE | ~79 (incl. "DONE by design" V2 choices) |
 | PARTIAL | 4 |
-| MISSING | 2 |
+| MISSING | 1 |
 | UNSURE | 0 (all resolved 2026-06-19) |
 | N/A (out of scope) | 2 (Modules) |
 
@@ -218,15 +218,15 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 
 ### Actionable gaps (priority order)
 
-1. **Electrodes — guided delete (MISSING).** Generic list-delete; no delete-check / typed `DELETE BATCH`; backend unenforced. Highest priority — a direct repeat of the battery fix (`useDeleteCheck` + `TypedDeleteConfirm`).
-2. **Tapes — guided delete (PARTIAL).** Same generic list-delete; backend gates to admin/lead but no delete-check / typed phrase / UI gate.
+1. ~~**Electrodes — guided delete.**~~ **DONE 2026-06-19** — delete-check + typed `DELETE BATCH <id>` (`utils/electrodeDelete.js` + `useDeleteCheck` + `TypedDeleteConfirm`).
+2. **Tapes — guided delete (PARTIAL).** Same generic list-delete; backend gates to admin/lead but no delete-check / typed phrase / UI gate. Next up — same pattern as Electrodes/Batteries.
 3. **Tapes — print (MISSING).** No `tape-print` button/handler; vanilla has it.
 4. **Projects — access labels & model (PARTIAL).** Align Vue to vanilla's redone permissions model; drop the stale `для отдела` (old department model) and relabel to `Открытый` / `Ограниченный`.
 5. **Materials — composition validation (PARTIAL).** Per-component edits bypass the canonical sum-to-100 / full-composition validation endpoint.
 
 ### Themes
 
-- **Workflow-page guided delete (Tapes, Electrodes) is the top remaining work** — the same generic-list-delete issue already fixed for Batteries; reuse `useDeleteCheck` + `TypedDeleteConfirm`.
+- **Tapes guided delete is the top remaining workflow-page gap** — the same generic-list-delete issue already fixed for Batteries and Electrodes (2026-06-19); reuse `useDeleteCheck` + `TypedDeleteConfirm`.
 - Most pages are **at parity**; the May `frontend_parity_handoff.md` "pending" list is largely stale (Recipes / Electrolytes / Separators / Departments / Users all DONE).
 - Vue's **Constructor + column-filter** model on workflow pages is an accepted V2 redesign, not a gap (decision 2026-06-19).
 - **All UNSURE items from the first pass were resolved on 2026-06-19** — via code reads (filters, foil-mass, separator-structures, materials path, access labels) and the owner's interview answers (UX model, access model, modules scope, depth).
