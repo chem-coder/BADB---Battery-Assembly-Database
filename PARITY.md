@@ -49,7 +49,7 @@ in-progress replacement.
 | Undo/redo | DONE (Vue extra) | Ctrl+Z/Y in `TapeConstructor` |
 | List filters: text, status, project, role, sidedness | DONE (by design) | Vue uses `CrudTable` per-column filter overlays — accepted V2 pattern (decision 2026-06-19) |
 | Print report (`tape-print.html`) | MISSING | `TapesPage` has no print button/handler; vanilla matrix lists Tapes print = yes. |
-| Guided delete: opened-record only, admin/lead, delete-check, typed `DELETE TAPE <id>` | PARTIAL | Vue uses generic `CrudTable` list-delete (bare `DELETE /api/tapes/:id`, `TapesPage.vue:240-262`). Backend **does** gate to admin/lead (`routes/tapes.js:175`), so not unsafe, but **no** delete-check preflight, **no** typed phrase, **no** UI role-gating. Vanilla explicitly says don't use list-delete here. |
+| Guided delete: admin/lead, delete-check, typed `DELETE TAPE <id>` | DONE | Implemented 2026-06-20 (`utils/tapeDelete.js` + `useDeleteCheck` + `TypedDeleteConfirm`): `authStore.isLead` UI gate → delete-check preflight → blockers OR typed «DELETE TAPE <id>» → DELETE; per-tape. Backend already gates admin/lead + enforces dependency blockers (now covered by a test). |
 | Editing model (vanilla row-open vs Vue constructor) | DONE (by design) | Vue's multi-select Constructor is the accepted V2 replacement for vanilla's row-open/sticky model (decision 2026-06-19) |
 
 ### Electrodes — `public/workflow/2-electrodes.html` + `2-electrodes.js` → `pages/ElectrodesPage.vue` (+ `ElectrodeBatchPanel`, `BatchCreateDialog`, `ElectrodeBulkPasteDialog`)
@@ -208,8 +208,8 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 
 | Status | Count |
 |---|---|
-| DONE | ~79 (incl. "DONE by design" V2 choices) |
-| PARTIAL | 4 |
+| DONE | ~80 (incl. "DONE by design" V2 choices) |
+| PARTIAL | 3 |
 | MISSING | 1 |
 | UNSURE | 0 (all resolved 2026-06-19) |
 | N/A (out of scope) | 2 (Modules) |
@@ -219,14 +219,14 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 ### Actionable gaps (priority order)
 
 1. ~~**Electrodes — guided delete.**~~ **DONE 2026-06-19** — delete-check + typed `DELETE BATCH <id>` (`utils/electrodeDelete.js` + `useDeleteCheck` + `TypedDeleteConfirm`).
-2. **Tapes — guided delete (PARTIAL).** Same generic list-delete; backend gates to admin/lead but no delete-check / typed phrase / UI gate. Next up — same pattern as Electrodes/Batteries.
+2. ~~**Tapes — guided delete.**~~ **DONE 2026-06-20** — `authStore.isLead` gate + delete-check + typed `DELETE TAPE <id>` (`utils/tapeDelete.js`).
 3. **Tapes — print (MISSING).** No `tape-print` button/handler; vanilla has it.
 4. **Projects — access labels & model (PARTIAL).** Align Vue to vanilla's redone permissions model; drop the stale `для отдела` (old department model) and relabel to `Открытый` / `Ограниченный`.
 5. **Materials — composition validation (PARTIAL).** Per-component edits bypass the canonical sum-to-100 / full-composition validation endpoint.
 
 ### Themes
 
-- **Tapes guided delete is the top remaining workflow-page gap** — the same generic-list-delete issue already fixed for Batteries and Electrodes (2026-06-19); reuse `useDeleteCheck` + `TypedDeleteConfirm`.
+- **All three workflow-page guided deletes (Batteries, Electrodes, Tapes) are now DONE** — same `useDeleteCheck` + `TypedDeleteConfirm` pattern. Remaining gaps: Tapes print, Projects access labels, Materials composition validation.
 - Most pages are **at parity**; the May `frontend_parity_handoff.md` "pending" list is largely stale (Recipes / Electrolytes / Separators / Departments / Users all DONE).
 - Vue's **Constructor + column-filter** model on workflow pages is an accepted V2 redesign, not a gap (decision 2026-06-19).
 - **All UNSURE items from the first pass were resolved on 2026-06-19** — via code reads (filters, foil-mass, separator-structures, materials path, access labels) and the owner's interview answers (UX model, access model, modules scope, depth).

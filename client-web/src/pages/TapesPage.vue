@@ -6,14 +6,13 @@
  * The old TapeFormPage is replaced by the inline Constructor.
  * Table has a checkbox column "В конструктор" to add tapes to the Constructor zone.
  */
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
 import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 // StatusBadge removed — status column replaced by project/operator
 import TapeConstructor from '@/components/TapeConstructor.vue'
@@ -23,6 +22,9 @@ import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
 import Checkbox from 'primevue/checkbox'
 import { useExportTapes } from '@/composables/useExportTapes'
 import { todayIsoMsk } from '@/utils/dateFormat'
+import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue'
+import { useDeleteCheck } from '@/composables/useDeleteCheck'
+import { tapeDeletePhrase, tapeDeleteBlockers } from '@/utils/tapeDelete'
 // Button removed — undo/redo now in TapeConstructor
 
 const router = useRouter()
@@ -232,44 +234,75 @@ async function onCreateDialogSubmit(payload) {
   }
 }
 
-// ── Save indicator (delete flow) ──────────────────────────────────────
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
+// ── Guided delete (mirrors Batteries/Electrodes + vanilla 1-tapes.js) ──
+// admin/lead gate → delete-check preflight → blockers OR typed «DELETE TAPE
+// <id>» → DELETE. Per-tape only. The backend (requireRole admin/lead) is the
+// real gate and enforces the dependency blockers; the UI pre-check just gives
+// a friendly message instead of a raw 403.
+const { check: tapeDeleteCheck } = useDeleteCheck('tapes')
+const deleteFlow = reactive({ visible: false, tape: null, phrase: '', blockers: [], busy: false })
 
-function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
-}
-
-async function confirmSave() {
-  try {
-    // Handle delete flow (the only action requiring explicit confirmation)
-    if (pendingDelete.value.length) {
-      for (const item of pendingDelete.value) {
-        await api.delete(`/api/tapes/${item.tape_id}`)
-      }
-      pendingDelete.value = []
-      crudTable.value?.clearSelection()
-      await loadTapes()
-    }
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось сохранить')
+async function onDelete(items) {
+  if (!items || items.length === 0) return
+  if (!authStore.isLead) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Недостаточно прав',
+      detail: 'Удаление ленты доступно администратору или руководителю.',
+      life: 4000,
+    })
+    crudTable.value?.clearSelection()
+    return
   }
-}
-
-function discardChanges() {
-  if (pendingDelete.value.length) {
-    pendingDelete.value = []
+  if (items.length > 1) {
+    toast.add({
+      severity: 'info',
+      summary: 'Удаляйте ленты по одной',
+      detail: 'Управляемое удаление выполняется для одной ленты за раз.',
+      life: 4000,
+    })
+    crudTable.value?.clearSelection()
+    return
+  }
+  const tape = items[0]
+  const id = tape.tape_id
+  try {
+    const res = await tapeDeleteCheck(id)
+    deleteFlow.tape = tape
+    deleteFlow.phrase = tapeDeletePhrase(id)
+    deleteFlow.blockers = res.canDelete ? [] : tapeDeleteBlockers(res.dependencies)
+    deleteFlow.visible = true
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось проверить удаление ленты')
     crudTable.value?.clearSelection()
   }
-  saveState.value = 'idle'
 }
 
-onUnmounted(() => clearTimeout(saveTimer))
+async function onDeleteConfirmed() {
+  const tape = deleteFlow.tape
+  if (!tape || deleteFlow.busy) return
+  deleteFlow.busy = true
+  const id = tape.tape_id
+  try {
+    await api.delete(`/api/tapes/${id}`)
+    deleteFlow.visible = false
+    const idx = constructorIds.value.indexOf(id)
+    if (idx >= 0) constructorIds.value.splice(idx, 1)
+    crudTable.value?.clearSelection()
+    await loadTapes()
+    toast.add({ severity: 'success', summary: 'Лента удалена', detail: `#${id}`, life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось удалить ленту')
+  } finally {
+    deleteFlow.busy = false
+  }
+}
+
+function onDeleteCancelled() {
+  deleteFlow.visible = false
+  deleteFlow.tape = null
+  crudTable.value?.clearSelection()
+}
 
 // ── Constructor: selected tapes ───────────────────────────────────────
 const constructorIds = ref([])
@@ -366,16 +399,7 @@ function formatDate(dt) {
 <template>
   <div class="tapes-page">
 
-    <PageHeader title="Подготовка лент" icon="pi pi-bars">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
-        />
-      </template>
-    </PageHeader>
+    <PageHeader title="Подготовка лент" icon="pi pi-bars" />
 
     <!-- ── Table (collapsible via max-height) ── -->
     <CrudTable
@@ -522,6 +546,19 @@ function formatDate(dt) {
       :initial-values="createInitialValues"
       :submit-label="dialogSubmitLabel"
       @create="onCreateDialogSubmit"
+    />
+
+    <!-- Guided delete — admin/lead only; delete-check blockers OR typed
+         «DELETE TAPE <id>». Mirrors Electrodes/Batteries. -->
+    <TypedDeleteConfirm
+      :visible="deleteFlow.visible"
+      :phrase="deleteFlow.phrase"
+      :blockers="deleteFlow.blockers"
+      :title="`Удаление ленты #${deleteFlow.tape?.tape_id ?? ''}`"
+      description="Будут удалены данные ленты и связанные шаги процесса. Это действие необратимо."
+      @update:visible="(v) => { if (!v) onDeleteCancelled() }"
+      @confirmed="onDeleteConfirmed"
+      @cancelled="onDeleteCancelled"
     />
 
   </div>
