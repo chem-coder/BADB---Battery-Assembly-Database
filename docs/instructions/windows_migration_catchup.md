@@ -1,7 +1,7 @@
 # Windows Migration Catch-Up
 
 Created: 2026-05-09
-Edited: 2026-05-25
+Edited: 2026-06-19
 Status: instruction
 Source paths: `migrations_ASCII/`, `migrations/README.md`, `docs/instructions/apply_migrations.md`, `/Users/Dalia/Developer/RENERA/BADB_WINDOWS_MIGRATION_CATCHUP_NOTE.md`
 
@@ -9,6 +9,12 @@ This instruction is for bringing the Windows/lab BADB database up to the
 current migration state after pulling the latest `main`.
 
 Run commands from `BADB_main`, not the outer `RENERA` workspace.
+
+> **Update 2026-06-19:** the lab DB is verified at `d040` (the catch-up set below
+> is complete on the lab). The next batch, `d041–d043`, is **deferred** until the
+> app version update — see `docs/instructions/windows_version_cutover.md`. The
+> snapshot below describes the 2026-05-25 state; the repo has since advanced to
+> `d043` (52 files).
 
 ## Current Migration State
 
