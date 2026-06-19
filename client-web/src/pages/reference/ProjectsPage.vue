@@ -14,9 +14,10 @@
  * * 8 user-facing fields: name, lead_id, description, start_date, due_date,
  *   status, confidentiality_level, department_id.
  * * Statuses: active / paused / completed / archived.
- * * Confidentiality (UI label = "Доступ"): public/department/confidential
- *   shown as "для всех" / "для отдела" / "выборочный доступ"
- *   (per vanilla_ui_patterns.md §"Access Terminology").
+ * * Confidentiality (UI label = "Доступ"): public → "открытый",
+ *   confidential → "ограниченный" (the two selectable options). Legacy
+ *   `department` is treated as "ограниченный" and is no longer a choice.
+ *   Vocabulary lives in @/utils/projectAccess (matches vanilla projects.js).
  * * Delete: NO standalone delete-check route, NO typed phrase. Plain
  *   confirmation; backend 409 dependency conflicts surfaced as status.
  * * Print URL: /workflow/project-print.html?project_id=<id>.
@@ -44,6 +45,7 @@ import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import Select from 'primevue/select';
 import DateInputISO from '@/components/parity/DateInputISO.vue';
+import { ACCESS_OPTIONS, accessLabel, normalizeAccess } from '@/utils/projectAccess';
 
 // ── Constants ────────────────────────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -53,14 +55,8 @@ const STATUS_OPTIONS = [
   { value: 'archived',  label: 'архивирован' },
 ];
 
-// Project access (confidentiality) — visible labels per
-// vanilla_ui_patterns.md §"Access Terminology". Internal API values
-// remain public/department/confidential.
-const ACCESS_OPTIONS = [
-  { value: 'public',       label: 'для всех' },
-  { value: 'department',   label: 'для отдела' },
-  { value: 'confidential', label: 'выборочный доступ' },
-];
+// Project access (confidentiality) vocabulary lives in @/utils/projectAccess
+// (открытый / ограниченный; legacy `department` → ограниченный, not selectable).
 
 // ── List + reference data ────────────────────────────────────────────
 const projects = ref([]);
@@ -139,7 +135,7 @@ async function saveOne(form, mode, currentId) {
     due_date: form.due_date || null,
     status: form.status,
     confidentiality_level: form.confidentiality_level,
-    department_id: form.confidentiality_level === 'department' ? form.department_id : null,
+    department_id: null, // project-access model is team-based; department_id is legacy-only
   };
 
   let response;
@@ -153,9 +149,6 @@ async function saveOne(form, mode, currentId) {
 
 function validate(form) {
   if (!form.name?.trim()) return 'Заполните название проекта';
-  if (form.confidentiality_level === 'department' && !form.department_id) {
-    return 'Для уровня «для отдела» укажите отдел';
-  }
   return true;
 }
 
@@ -182,7 +175,7 @@ const ctx = useRowOpenForm({
 // ── Visibility quick selector ────────────────────────────────────────
 function setAccess(level) {
   ctx.form.value.confidentiality_level = level;
-  if (level !== 'department') ctx.form.value.department_id = null;
+  ctx.form.value.department_id = null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -195,13 +188,8 @@ function statusLabel(status) {
   return STATUS_OPTIONS.find((o) => o.value === status)?.label || status || '—';
 }
 
-function accessLabel(level) {
-  return ACCESS_OPTIONS.find((o) => o.value === level)?.label || level || 'для всех';
-}
-
 function accessIcon(level) {
-  if (level === 'department') return 'pi pi-users';
-  if (level === 'confidential') return 'pi pi-lock';
+  if (level === 'confidential' || level === 'department') return 'pi pi-lock';
   return 'pi pi-globe';
 }
 
@@ -217,7 +205,7 @@ const filteredProjects = computed(() => {
 
   return projects.value.filter((p) => {
     if (s.status && p.status !== s.status) return false;
-    if (s.confidentiality_level && p.confidentiality_level !== s.confidentiality_level) return false;
+    if (s.confidentiality_level && normalizeAccess(p.confidentiality_level) !== s.confidentiality_level) return false;
     if (s.department_id && String(p.department_id) !== s.department_id) return false;
     if (s.lead_id && String(p.lead_id) !== s.lead_id) return false;
     if (s.text) {
@@ -420,17 +408,8 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
                 @click="setAccess('public')"
               >
                 <i class="pi pi-globe"></i>
-                <span class="vis-title">для всех</span>
+                <span class="vis-title">открытый</span>
                 <span class="vis-hint">Видят все сотрудники</span>
-              </button>
-              <button
-                type="button"
-                :class="['vis-btn', ctx.form.value.confidentiality_level === 'department' ? 'active' : '']"
-                @click="setAccess('department')"
-              >
-                <i class="pi pi-users"></i>
-                <span class="vis-title">для отдела</span>
-                <span class="vis-hint">Видит только выбранный отдел</span>
               </button>
               <button
                 type="button"
@@ -438,20 +417,10 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
                 @click="setAccess('confidential')"
               >
                 <i class="pi pi-lock"></i>
-                <span class="vis-title">выборочный доступ</span>
+                <span class="vis-title">ограниченный</span>
                 <span class="vis-hint">Только явно допущенные</span>
               </button>
             </div>
-            <Select
-              v-if="ctx.form.value.confidentiality_level === 'department'"
-              v-model="ctx.form.value.department_id"
-              :options="departments"
-              option-label="name"
-              option-value="department_id"
-              placeholder="— выбрать отдел —"
-              class="w-full"
-              style="margin-top: 0.5rem"
-            />
             <div v-if="ctx.form.value.confidentiality_level === 'confidential'" class="vis-note">
               <i class="pi pi-info-circle"></i>
               Руководитель отдела, директор и админ видят проект всегда

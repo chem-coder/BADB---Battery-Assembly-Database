@@ -153,7 +153,7 @@ in-progress replacement.
 | Print + duplicate (list) | DONE | `row-actions` |
 | Delete: backend dependency conflicts, no delete-check, no typed phrase | DONE | `hasDeleteCheck:false`, `deletePhrase:null` — matches vanilla |
 | Team/participants + access grants | DONE (Vue richer) | `ProjectAccessPanel` + access graph/matrix/timeline (beyond vanilla) |
-| Access labels & model | PARTIAL (fix Vue) | **Decided: match vanilla's redone permissions model.** Vue is stale — its `для отдела` option reflects the OLD department-based model vanilla moved away from. Action: align Vue to vanilla's current model; target labels **`Открытый` / `Ограниченный`** (open / restricted), internal API values stay `public`/`confidential`. |
+| Access labels & model | DONE | Done 2026-06-20 (`utils/projectAccess.js`): Vue now uses `открытый` / `ограниченный` (lowercase, matching vanilla + the app's option convention); the `department` access option is dropped (legacy `department` displays + filters as `ограниченный`). Vanilla was already correct — no change. Entity-route authz is the separate R1 item (deferred). |
 
 ### Users — `users.js` → `reference/UsersPage.vue`
 
@@ -191,7 +191,7 @@ in-progress replacement.
 | Navigation / menu | DONE (Vue richer) | `AppSidebar` + `navigation.js` + mobile drawer; vanilla is a static link menu |
 | Print infrastructure | DONE | `PrintPreviewDialog` proxies vanilla `/workflow/*-print.html` for batteries, electrodes, recipes, electrolytes, separators, projects |
 | List filter pattern | DONE (by design) | Reference pages = vanilla-style filter bars; workflow pages = `CrudTable` column overlays (accepted V2 pattern, 2026-06-19) |
-| Destructive-delete pattern | PARTIAL | Reference pages + Batteries match vanilla (opened-record / guided / typed where vanilla has it); **Tapes & Electrodes still use generic list-delete** (see those rows) |
+| Destructive-delete pattern | DONE | All guided deletes match vanilla — reference pages, Batteries, **Electrodes (2026-06-19) and Tapes (2026-06-20)** now use delete-check + typed phrase + correct permission gate. |
 | Authenticated report windows | DONE | reports load in-app via `PrintPreviewDialog` (auth handled) |
 
 ## Vue-only (no vanilla equivalent — nothing to map, listed for completeness)
@@ -208,8 +208,8 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 
 | Status | Count |
 |---|---|
-| DONE | ~81 (incl. "DONE by design" V2 choices) |
-| PARTIAL | 3 |
+| DONE | ~83 (incl. "DONE by design" V2 choices) |
+| PARTIAL | 1 |
 | MISSING | 0 |
 | UNSURE | 0 (all resolved 2026-06-19) |
 | N/A (out of scope) | 2 (Modules) |
@@ -221,12 +221,12 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 1. ~~**Electrodes — guided delete.**~~ **DONE 2026-06-19** — delete-check + typed `DELETE BATCH <id>` (`utils/electrodeDelete.js` + `useDeleteCheck` + `TypedDeleteConfirm`).
 2. ~~**Tapes — guided delete.**~~ **DONE 2026-06-20** — `authStore.isLead` gate + delete-check + typed `DELETE TAPE <id>` (`utils/tapeDelete.js`).
 3. ~~**Tapes — print.**~~ **DONE 2026-06-20** — `show-print` + `PrintPreviewDialog` opens `/workflow/tape-print.html` (`utils/tapePrint.js`).
-4. **Projects — access labels & model (PARTIAL).** Align Vue to vanilla's redone permissions model; drop the stale `для отдела` (old department model) and relabel to `Открытый` / `Ограниченный`.
+4. ~~**Projects — access labels & model.**~~ **DONE 2026-06-20** — Vue uses `открытый`/`ограниченный`, department option dropped (`utils/projectAccess.js`); vanilla already correct.
 5. **Materials — composition validation (PARTIAL).** Per-component edits bypass the canonical sum-to-100 / full-composition validation endpoint.
 
 ### Themes
 
-- **All workflow-page guided deletes (Batteries, Electrodes, Tapes) + Tapes print are now DONE.** Remaining gaps: Projects access labels (`Открытый`/`Ограниченный`), Materials composition validation. (Plus R1 project-based authz — see `docs/future/project_access_control.md`.)
+- **The only remaining parity gap is Materials composition validation (PARTIAL).** All workflow-page guided deletes + Tapes print + Projects access labels are DONE; everything else is DONE/by-design. (Separate from parity: R1 project-based authz — see `docs/future/project_access_control.md`.)
 - Most pages are **at parity**; the May `frontend_parity_handoff.md` "pending" list is largely stale (Recipes / Electrolytes / Separators / Departments / Users all DONE).
 - Vue's **Constructor + column-filter** model on workflow pages is an accepted V2 redesign, not a gap (decision 2026-06-19).
 - **All UNSURE items from the first pass were resolved on 2026-06-19** — via code reads (filters, foil-mass, separator-structures, materials path, access labels) and the owner's interview answers (UX model, access model, modules scope, depth).
