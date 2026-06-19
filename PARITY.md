@@ -48,7 +48,7 @@ in-progress replacement.
 | Duplicate (client-side draft) | DONE | `duplicateTape` → create dialog |
 | Undo/redo | DONE (Vue extra) | Ctrl+Z/Y in `TapeConstructor` |
 | List filters: text, status, project, role, sidedness | DONE (by design) | Vue uses `CrudTable` per-column filter overlays — accepted V2 pattern (decision 2026-06-19) |
-| Print report (`tape-print.html`) | MISSING | `TapesPage` has no print button/handler; vanilla matrix lists Tapes print = yes. |
+| Print report (`tape-print.html`) | DONE | Implemented 2026-06-20 (`utils/tapePrint.js` + `openTapePrint` + `show-print`/`@print` + `PrintPreviewDialog`) — opens `/workflow/tape-print.html?tape_id=<id>` in-app, mirroring Electrodes/Batteries. |
 | Guided delete: admin/lead, delete-check, typed `DELETE TAPE <id>` | DONE | Implemented 2026-06-20 (`utils/tapeDelete.js` + `useDeleteCheck` + `TypedDeleteConfirm`): `authStore.isLead` UI gate → delete-check preflight → blockers OR typed «DELETE TAPE <id>» → DELETE; per-tape. Backend already gates admin/lead + enforces dependency blockers (now covered by a test). |
 | Editing model (vanilla row-open vs Vue constructor) | DONE (by design) | Vue's multi-select Constructor is the accepted V2 replacement for vanilla's row-open/sticky model (decision 2026-06-19) |
 
@@ -208,9 +208,9 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 
 | Status | Count |
 |---|---|
-| DONE | ~80 (incl. "DONE by design" V2 choices) |
+| DONE | ~81 (incl. "DONE by design" V2 choices) |
 | PARTIAL | 3 |
-| MISSING | 1 |
+| MISSING | 0 |
 | UNSURE | 0 (all resolved 2026-06-19) |
 | N/A (out of scope) | 2 (Modules) |
 
@@ -220,13 +220,13 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 
 1. ~~**Electrodes — guided delete.**~~ **DONE 2026-06-19** — delete-check + typed `DELETE BATCH <id>` (`utils/electrodeDelete.js` + `useDeleteCheck` + `TypedDeleteConfirm`).
 2. ~~**Tapes — guided delete.**~~ **DONE 2026-06-20** — `authStore.isLead` gate + delete-check + typed `DELETE TAPE <id>` (`utils/tapeDelete.js`).
-3. **Tapes — print (MISSING).** No `tape-print` button/handler; vanilla has it.
+3. ~~**Tapes — print.**~~ **DONE 2026-06-20** — `show-print` + `PrintPreviewDialog` opens `/workflow/tape-print.html` (`utils/tapePrint.js`).
 4. **Projects — access labels & model (PARTIAL).** Align Vue to vanilla's redone permissions model; drop the stale `для отдела` (old department model) and relabel to `Открытый` / `Ограниченный`.
 5. **Materials — composition validation (PARTIAL).** Per-component edits bypass the canonical sum-to-100 / full-composition validation endpoint.
 
 ### Themes
 
-- **All three workflow-page guided deletes (Batteries, Electrodes, Tapes) are now DONE** — same `useDeleteCheck` + `TypedDeleteConfirm` pattern. Remaining gaps: Tapes print, Projects access labels, Materials composition validation.
+- **All workflow-page guided deletes (Batteries, Electrodes, Tapes) + Tapes print are now DONE.** Remaining gaps: Projects access labels (`Открытый`/`Ограниченный`), Materials composition validation. (Plus R1 project-based authz — see `docs/future/project_access_control.md`.)
 - Most pages are **at parity**; the May `frontend_parity_handoff.md` "pending" list is largely stale (Recipes / Electrolytes / Separators / Departments / Users all DONE).
 - Vue's **Constructor + column-filter** model on workflow pages is an accepted V2 redesign, not a gap (decision 2026-06-19).
 - **All UNSURE items from the first pass were resolved on 2026-06-19** — via code reads (filters, foil-mass, separator-structures, materials path, access labels) and the owner's interview answers (UX model, access model, modules scope, depth).

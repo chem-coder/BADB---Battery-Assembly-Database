@@ -25,6 +25,8 @@ import { todayIsoMsk } from '@/utils/dateFormat'
 import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue'
 import { useDeleteCheck } from '@/composables/useDeleteCheck'
 import { tapeDeletePhrase, tapeDeleteBlockers } from '@/utils/tapeDelete'
+import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
+import { tapePrintUrl } from '@/utils/tapePrint'
 // Button removed — undo/redo now in TapeConstructor
 
 const router = useRouter()
@@ -304,6 +306,18 @@ function onDeleteCancelled() {
   crudTable.value?.clearSelection()
 }
 
+// ── Print report (opens vanilla /workflow/tape-print.html in-app) ──────
+// Mirrors ElectrodesPage.openBatchPrint / AssemblyPage.openBatteryPrint.
+const printDialog = ref({ visible: false, url: '', title: '' })
+function openTapePrint(tapeId) {
+  if (!tapeId) return
+  printDialog.value = {
+    visible: true,
+    url: tapePrintUrl(tapeId),
+    title: `Печать · Лента #${tapeId}`,
+  }
+}
+
 // ── Constructor: selected tapes ───────────────────────────────────────
 const constructorIds = ref([])
 const constructorDirty = ref(false)
@@ -413,11 +427,13 @@ function formatDate(dt) {
       :export-badge="exportBadge"
       show-add
       show-duplicate
+      show-print
       row-clickable
       @add="createNewTape"
       @delete="onDelete"
       @export="onExportTapes"
       @duplicate="duplicateTape"
+      @print="(item) => openTapePrint(item.tape_id)"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
       @row-click="(data) => toggleConstructor(data.tape_id)"
     >
@@ -559,6 +575,13 @@ function formatDate(dt) {
       @update:visible="(v) => { if (!v) onDeleteCancelled() }"
       @confirmed="onDeleteConfirmed"
       @cancelled="onDeleteCancelled"
+    />
+
+    <!-- Tape print report (vanilla /workflow/tape-print.html) opened in-app. -->
+    <PrintPreviewDialog
+      v-model:visible="printDialog.visible"
+      :url="printDialog.url"
+      :title="printDialog.title"
     />
 
   </div>
