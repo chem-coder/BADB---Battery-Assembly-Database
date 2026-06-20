@@ -111,31 +111,41 @@ async function addMaterialInstanceComponent(pool, parentId, componentMaterialIns
     throw new MaterialCompositionValidationError('Экземпляр не может содержать сам себя');
   }
 
-  const result = await pool.query(
-    `
-    WITH ins AS (
-      INSERT INTO material_instance_components
-        (parent_material_instance_id, component_material_instance_id, mass_fraction)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    )
-    SELECT
-      ins.material_instance_component_id,
-      ins.parent_material_instance_id,
-      ins.component_material_instance_id,
-      ins.mass_fraction,
-      mi.name AS component_name,
-      mi.material_id,
-      m.name AS material_name,
-      ins.notes
-    FROM ins
-    JOIN material_instances mi
-      ON ins.component_material_instance_id = mi.material_instance_id
-    JOIN materials m
-      ON mi.material_id = m.material_id;
-    `,
-    [parentId, componentId, normalizedMassFraction]
-  );
+  let result;
+  try {
+    result = await pool.query(
+      `
+      WITH ins AS (
+        INSERT INTO material_instance_components
+          (parent_material_instance_id, component_material_instance_id, mass_fraction)
+        VALUES ($1, $2, $3)
+        RETURNING *
+      )
+      SELECT
+        ins.material_instance_component_id,
+        ins.parent_material_instance_id,
+        ins.component_material_instance_id,
+        ins.mass_fraction,
+        mi.name AS component_name,
+        mi.material_id,
+        m.name AS material_name,
+        ins.notes
+      FROM ins
+      JOIN material_instances mi
+        ON ins.component_material_instance_id = mi.material_instance_id
+      JOIN materials m
+        ON mi.material_id = m.material_id;
+      `,
+      [parentId, componentId, normalizedMassFraction]
+    );
+  } catch (err) {
+    // The DB already enforces UNIQUE(parent, component). Surface that violation as
+    // a clean 400 with the same message the replace-all path uses, not a 500.
+    if (err && err.code === '23505') {
+      throw new MaterialCompositionValidationError('Один и тот же экземпляр нельзя добавить дважды');
+    }
+    throw err;
+  }
 
   return result.rows[0];
 }
