@@ -142,7 +142,7 @@ in-progress replacement.
 | Source/property files | DONE | `loadSourceFiles`, `RecordFiles` |
 | Properties | DONE | `loadProperties` |
 | Delete material | DONE | `deleteMaterial` (dependency conflicts) |
-| Composition validation parity | PARTIAL | Purity (`is_pure`) backend-computed & respected ✓. BUT Vue edits components individually via `PUT/DELETE /materials/instances/components/:id`, not the canonical replace-all `PUT /materials/instances/:id/components` — so the documented sum-to-100 / no-self-dup full-composition validation may be bypassed. (Backend per-component enforcement not separately confirmed.) |
+| Composition validation parity | DONE | Done 2026-06-20 (`utils/materialComposition.js`): Vue now has a vanilla-style **full-composition editor** (multi-row, client-side sum-to-100 ±0.0001 + no-self + no-dup) that saves via the canonical replace-all `PUT /materials/instances/:id/components` (server re-validates). Replaces the old per-component `POST` add, which carried no whole-composition validation. Inline per-component ✏️/🗑 edit/delete kept as-is — **vanilla leaves those un-revalidated too**, so this is exact parity (verified against `public/js/materials.js`). Purity (`is_pure`) still backend-computed & respected. Tests: frontend util (14) + backend contract via mocked pool (10). Note: the per-component `POST` endpoint's missing server-side validation is a pre-existing backend wart, unreachable from either UI after this — flagged as a **separate follow-up**, not a parity gap. |
 
 ### Projects — `projects.js` → `reference/ProjectsPage.vue` (+ `ProjectAccessPanel`, access graph/matrix/timeline)
 
@@ -208,8 +208,8 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 
 | Status | Count |
 |---|---|
-| DONE | ~83 (incl. "DONE by design" V2 choices) |
-| PARTIAL | 1 |
+| DONE | ~84 (incl. "DONE by design" V2 choices) |
+| PARTIAL | 0 |
 | MISSING | 0 |
 | UNSURE | 0 (all resolved 2026-06-19) |
 | N/A (out of scope) | 2 (Modules) |
@@ -222,11 +222,11 @@ Access (`AccessPage`), Activity (`ActivityPage`), Audit (`AuditPage`), Feedback
 2. ~~**Tapes — guided delete.**~~ **DONE 2026-06-20** — `authStore.isLead` gate + delete-check + typed `DELETE TAPE <id>` (`utils/tapeDelete.js`).
 3. ~~**Tapes — print.**~~ **DONE 2026-06-20** — `show-print` + `PrintPreviewDialog` opens `/workflow/tape-print.html` (`utils/tapePrint.js`).
 4. ~~**Projects — access labels & model.**~~ **DONE 2026-06-20** — Vue uses `открытый`/`ограниченный`, department option dropped (`utils/projectAccess.js`); vanilla already correct.
-5. **Materials — composition validation (PARTIAL).** Per-component edits bypass the canonical sum-to-100 / full-composition validation endpoint.
+5. ~~**Materials — composition validation (PARTIAL).**~~ **DONE 2026-06-20** — Vue gained a vanilla-style full-composition editor (sum-to-100 validated) saving via the canonical replace-all PUT (`utils/materialComposition.js`); inline per-component edit/delete kept (vanilla parity). **This closes the last parity gap.**
 
 ### Themes
 
-- **The only remaining parity gap is Materials composition validation (PARTIAL).** All workflow-page guided deletes + Tapes print + Projects access labels are DONE; everything else is DONE/by-design. (Separate from parity: R1 project-based authz — see `docs/future/project_access_control.md`.)
+- **All parity gaps are now closed (2026-06-20).** Materials composition validation was the last one — Vue now matches vanilla's sum-to-100 full-composition editor. All workflow-page guided deletes + Tapes print + Projects access labels + Materials composition are DONE; everything else is DONE/by-design. (Separate from parity: R1 project-based authz — see `docs/future/project_access_control.md`; and a pre-existing backend wart — the unvalidated per-component `POST` endpoint — flagged as a follow-up.)
 - Most pages are **at parity**; the May `frontend_parity_handoff.md` "pending" list is largely stale (Recipes / Electrolytes / Separators / Departments / Users all DONE).
 - Vue's **Constructor + column-filter** model on workflow pages is an accepted V2 redesign, not a gap (decision 2026-06-19).
 - **All UNSURE items from the first pass were resolved on 2026-06-19** — via code reads (filters, foil-mass, separator-structures, materials path, access labels) and the owner's interview answers (UX model, access model, modules scope, depth).
