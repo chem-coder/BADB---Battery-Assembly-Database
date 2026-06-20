@@ -213,4 +213,31 @@ describe('addMaterialInstanceComponent — per-row validation', () => {
     await expect(addMaterialInstanceComponent(pool, PARENT, 7, 0.25)).resolves.toBeDefined();
     expect(pool.query).toHaveBeenCalledTimes(1);
   });
+
+  // The DB enforces UNIQUE(parent, component); the service turns that 23505
+  // violation into a clean 400 instead of letting it surface as a 500.
+  it('maps a DB unique violation (duplicate) to a 400 validation error', async () => {
+    const pool = {
+      query: vi.fn().mockRejectedValue(Object.assign(new Error('dup'), { code: '23505' })),
+    };
+    const err = await addMaterialInstanceComponent(pool, PARENT, 5, 0.5).then(
+      () => null,
+      (e) => e
+    );
+    expect(err).toBeInstanceOf(MaterialCompositionValidationError);
+    expect(err.statusCode).toBe(400);
+    expect(err.message).toMatch(/дважды/);
+  });
+
+  it('rethrows a non-unique DB error unchanged (stays a 500 at the route)', async () => {
+    const pool = {
+      query: vi.fn().mockRejectedValue(Object.assign(new Error('boom'), { code: '42P01' })),
+    };
+    const err = await addMaterialInstanceComponent(pool, PARENT, 5, 0.5).then(
+      () => null,
+      (e) => e
+    );
+    expect(err).not.toBeInstanceOf(MaterialCompositionValidationError);
+    expect(err.message).toMatch(/boom/);
+  });
 });
