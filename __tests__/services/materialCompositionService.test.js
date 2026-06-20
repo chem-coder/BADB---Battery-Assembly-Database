@@ -9,11 +9,16 @@
 //
 // Invalid payloads must be rejected BEFORE any DB work (normalizeCompositionPayload
 // throws synchronously), so those cases assert pool.connect was never called.
-// The per-component add/update/delete endpoints intentionally do NOT carry these
-// whole-composition rules — only this canonical replace-all path does.
+//
+// This file also covers addMaterialInstanceComponent (the incremental "add one
+// component" path). It carries the per-row rules (positive-int id, fraction in
+// (0,1], no self-reference) but deliberately NOT sum-to-100 — only the canonical
+// replace-all path enforces the whole-composition 100% rule, matching the sibling
+// per-component update/delete endpoints which also skip it.
 
 import { describe, it, expect, vi } from 'vitest';
 import {
+  addMaterialInstanceComponent,
   replaceMaterialInstanceComposition,
   MaterialCompositionValidationError,
 } from '../../services/materialCompositionService.js';
@@ -135,5 +140,77 @@ describe('replaceMaterialInstanceComposition — validation contract', () => {
     const sql = client.query.mock.calls.map((c) => String(c[0]));
     expect(sql.some((s) => /ROLLBACK/.test(s))).toBe(true);
     expect(client.release).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('addMaterialInstanceComponent — per-row validation', () => {
+  // A pool whose query() should never be reached (validation rejects first).
+  const rejectingQueryPool = () => ({ query: vi.fn() });
+
+  it.each([0, -3, 1.5, NaN, 'abc', null, undefined])(
+    'rejects a non-positive / non-integer component id (%p) before touching the pool',
+    async (badId) => {
+      const pool = rejectingQueryPool();
+      await expect(
+        addMaterialInstanceComponent(pool, PARENT, badId, 0.5)
+      ).rejects.toBeInstanceOf(MaterialCompositionValidationError);
+      expect(pool.query).not.toHaveBeenCalled();
+    }
+  );
+
+  it('rejects a mass fraction of 0 or below', async () => {
+    const pool = rejectingQueryPool();
+    await expect(addMaterialInstanceComponent(pool, PARENT, 5, 0)).rejects.toThrow(
+      /Некорректные данные состава/
+    );
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  it('rejects a mass fraction above 1', async () => {
+    const pool = rejectingQueryPool();
+    await expect(addMaterialInstanceComponent(pool, PARENT, 5, 1.5)).rejects.toThrow(
+      /Некорректные данные состава/
+    );
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-numeric mass fraction', async () => {
+    const pool = rejectingQueryPool();
+    await expect(addMaterialInstanceComponent(pool, PARENT, 5, 'heavy')).rejects.toThrow(
+      /Некорректные данные состава/
+    );
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  it('rejects a self-referential component', async () => {
+    const pool = rejectingQueryPool();
+    await expect(addMaterialInstanceComponent(pool, PARENT, PARENT, 0.5)).rejects.toThrow(
+      /сам себя/
+    );
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  it('inserts a valid single component and returns the joined row', async () => {
+    const row = {
+      material_instance_component_id: 1,
+      component_material_instance_id: 5,
+      mass_fraction: 0.5,
+    };
+    const pool = { query: vi.fn().mockResolvedValue({ rows: [row] }) };
+
+    const result = await addMaterialInstanceComponent(pool, PARENT, 5, 0.5);
+
+    expect(result).toEqual(row);
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(String(sql)).toMatch(/INSERT INTO material_instance_components/);
+    // stores the validated/normalized values, not the raw input
+    expect(params).toEqual([PARENT, 5, 0.5]);
+  });
+
+  it('does NOT enforce sum-to-100 (a single component below 100% is accepted)', async () => {
+    const pool = { query: vi.fn().mockResolvedValue({ rows: [{ ok: true }] }) };
+    await expect(addMaterialInstanceComponent(pool, PARENT, 7, 0.25)).resolves.toBeDefined();
+    expect(pool.query).toHaveBeenCalledTimes(1);
   });
 });
