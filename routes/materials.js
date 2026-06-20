@@ -523,9 +523,17 @@ router.get('/instances/:id/components', auth, async (req, res) => {
 router.post('/instances/:id/components', auth, async (req, res) => {
   const parentId = Number(req.params.id);
   const { component_material_instance_id, mass_fraction } = req.body;
+
+  if (!Number.isInteger(parentId)) {
+    return res.status(400).json({ error: 'Некорректный material_instance_id' });
+  }
+
   try {
     res.json(await addMaterialInstanceComponent(pool, parentId, component_material_instance_id, mass_fraction));
   } catch (err) {
+    if (err instanceof MaterialCompositionValidationError) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Ошибка добавления компонента' });
   }

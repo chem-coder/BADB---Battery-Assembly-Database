@@ -87,6 +87,30 @@ async function fetchMaterialInstanceComponents(queryable, parentId) {
 }
 
 async function addMaterialInstanceComponent(pool, parentId, componentMaterialInstanceId, massFraction) {
+  // Per-row validation for the incremental "add one component" path. Mirrors the
+  // per-row checks in normalizeCompositionPayload (id / fraction / self-reference),
+  // but deliberately WITHOUT the whole-composition sum-to-100 rule — like the
+  // sibling per-component update/delete endpoints, adding one component must not
+  // require the running total to equal 100%.
+  const componentId = Number(componentMaterialInstanceId);
+  const normalizedMassFraction = normalizeMassFraction(Number(massFraction));
+
+  if (!Number.isInteger(componentId) || componentId <= 0) {
+    throw new MaterialCompositionValidationError('Некорректные данные состава');
+  }
+
+  if (
+    !Number.isFinite(normalizedMassFraction) ||
+    normalizedMassFraction <= 0 ||
+    normalizedMassFraction > 1
+  ) {
+    throw new MaterialCompositionValidationError('Некорректные данные состава');
+  }
+
+  if (componentId === parentId) {
+    throw new MaterialCompositionValidationError('Экземпляр не может содержать сам себя');
+  }
+
   const result = await pool.query(
     `
     WITH ins AS (
@@ -110,7 +134,7 @@ async function addMaterialInstanceComponent(pool, parentId, componentMaterialIns
     JOIN materials m
       ON mi.material_id = m.material_id;
     `,
-    [parentId, componentMaterialInstanceId, massFraction]
+    [parentId, componentId, normalizedMassFraction]
   );
 
   return result.rows[0];
