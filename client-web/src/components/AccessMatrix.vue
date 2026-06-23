@@ -354,6 +354,11 @@ function exportCsv() {
 .matrix-scroll {
   overflow: auto;
   max-height: 700px;
+  /* Isolate this scroll from the page: reaching an edge won't bounce the whole
+     document (that hand-off is a real source of scroll "eye-hurt"). Momentum on
+     touch devices. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .matrix-table {
@@ -362,28 +367,42 @@ function exportCsv() {
   font-size: 12px;
 }
 .matrix-table th, .matrix-table td {
-  border-bottom: 1px solid rgba(0, 50, 116, 0.05);
-  border-right: 1px solid rgba(0, 50, 116, 0.04);
-  padding: 0;
+  /* No per-cell grid lines — thin lines crawl/shimmer during scroll. Rows are
+     separated by zebra striping (opaque fills don't shimmer); columns by cell
+     alignment + the sticky header divider. (No `padding: 0` reset here either —
+     it would out-specify the per-cell padding rules below.) */
 }
+/* Zebra rows: opaque tints, so the frozen column scrolls cleanly and there are
+   no moving lines to shimmer. */
+.matrix-table tbody tr:nth-child(even) td { background: #f6f8fb; }
 
 /* Sticky headers */
 .th-sticky {
   position: sticky;
-  background: rgba(255, 255, 255, 0.98);
+  background: #fff;
   z-index: 3;
-  backdrop-filter: blur(6px);
 }
 /* Sole sticky first column — body cells use 6px 10px horizontal padding, so the
    header must match or header/data misalign (global rule above zeroes padding). */
-.th-user { left: 0; top: 0; min-width: 180px; max-width: 220px; z-index: 4; padding: 0 10px; }
+.th-user {
+  left: 0;
+  top: 0;
+  min-width: 200px;
+  max-width: 240px;
+  z-index: 4;
+  background: #fff;
+  padding: 8px 16px;
+  text-align: left;
+  border-bottom: 2px solid rgba(0, 50, 116, 0.1);
+  box-shadow: 2px 0 5px -2px rgba(0, 50, 116, 0.1);
+}
 .th-proj {
   position: sticky;
   top: 0;
   min-width: 90px;
   max-width: 110px;
-  background: rgba(255, 255, 255, 0.98);
-  z-index: 2;
+  background: #fff;
+  z-index: 3;
   padding: 8px 6px;
   text-align: center;
   font-weight: 600;
@@ -418,11 +437,12 @@ function exportCsv() {
 .td-user {
   position: sticky;
   left: 0;
-  background: white;
-  padding: 6px 10px;
-  min-width: 180px;
-  max-width: 220px;
-  z-index: 1;
+  background: #fff;
+  padding: 8px 16px;
+  min-width: 200px;
+  max-width: 240px;
+  z-index: 2;
+  box-shadow: 2px 0 5px -2px rgba(0, 50, 116, 0.1);
 }
 .user-name { font-weight: 500; color: #003274; line-height: 1.3; }
 .user-pos { font-size: 10px; color: #6B7280; line-height: 1.3; margin-top: 2px; }
