@@ -13,22 +13,21 @@ const { auth, requireRole } = require('../middleware/auth');
 // ─────────────────────────────────────────────────────────────────────
 router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
   try {
-    const [users, projects, userGrants, deptGrants, participants, departments] = await Promise.all([
+    // Project-based access model: departments confer no access. The matrix
+    // computes effective access per cell from project lead/creator, explicit
+    // user grants, participants, and public visibility (see GET /api/access/my).
+    const [users, projects, userGrants, participants] = await Promise.all([
       pool.query(`
-        SELECT u.user_id, u.name, u.login, u.role, u.position,
-               u.department_id, d.name AS department_name, u.active
+        SELECT u.user_id, u.name, u.login, u.role, u.position, u.active
         FROM users u
-        LEFT JOIN departments d ON d.department_id = u.department_id
         WHERE u.active = true
-        ORDER BY d.name NULLS LAST, u.name
+        ORDER BY u.name
       `),
       pool.query(`
         SELECT p.project_id, p.name, p.confidentiality_level,
-               p.department_id, d.name AS project_dept_name,
-               p.created_by, u.name AS created_by_name,
+               p.lead_id, p.created_by, u.name AS created_by_name,
                p.status
         FROM projects p
-        LEFT JOIN departments d ON d.department_id = p.department_id
         LEFT JOIN users u ON u.user_id = p.created_by
         ORDER BY p.name
       `),
@@ -39,22 +38,9 @@ router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
         FROM user_project_access upa
       `),
       pool.query(`
-        SELECT pda.department_id, pda.project_id, pda.access_level,
-               pda.granted_at, pda.expires_at,
-               (pda.expires_at IS NOT NULL AND pda.expires_at <= now()) AS is_expired
-        FROM project_department_access pda
-      `),
-      pool.query(`
         SELECT pp.user_id, pp.project_id, pp.participant_id,
                pp.role_in_team, pp.display_order, pp.created_at
         FROM project_participants pp
-      `),
-      pool.query(`
-        SELECT d.department_id, d.name, d.head_user_id,
-               u.name AS head_name
-        FROM departments d
-        LEFT JOIN users u ON u.user_id = d.head_user_id
-        ORDER BY d.name
       `),
     ]);
 
@@ -62,9 +48,7 @@ router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
       users: users.rows,
       projects: projects.rows,
       user_grants: userGrants.rows,
-      dept_grants: deptGrants.rows,
       participants: participants.rows,
-      departments: departments.rows,
     });
   } catch (err) {
     console.error(err);
