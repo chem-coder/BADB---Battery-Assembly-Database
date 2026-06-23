@@ -42,13 +42,15 @@ onMounted(() => {
   loadMyAccess()
 })
 
-// Group metadata for display
+// Group metadata for display. Keys MUST match the groups returned by
+// GET /api/access/my — which is project-based (no department sources):
+// project_lead / project_owner / direct_grant / project_participant / public.
 const ACCESS_GROUPS = [
-  { key: 'direct_grant',      label: 'Личный доступ',       icon: 'pi pi-key',       color: '#003274' },
-  { key: 'dept_head',         label: 'Как руководитель отдела', icon: 'pi pi-briefcase', color: '#8E44AD' },
-  { key: 'department_grant',  label: 'Доступ отделу',       icon: 'pi pi-users',     color: '#025EA1' },
-  { key: 'own_department',    label: 'Мой отдел',           icon: 'pi pi-building',  color: '#6CACE4' },
-  { key: 'public',            label: 'Открытые',            icon: 'pi pi-globe',     color: '#52C9A6' },
+  { key: 'project_lead',        label: 'Руководитель проекта', icon: 'pi pi-flag',  color: '#003274' },
+  { key: 'project_owner',       label: 'Создатель проекта',    icon: 'pi pi-user',  color: '#025EA1' },
+  { key: 'direct_grant',        label: 'Личный доступ',        icon: 'pi pi-key',   color: '#0476C9' },
+  { key: 'project_participant', label: 'В команде проекта',    icon: 'pi pi-users', color: '#6CACE4' },
+  { key: 'public',              label: 'Открытые',             icon: 'pi pi-globe', color: '#52C9A6' },
 ]
 
 const totalProjects = computed(() => {
@@ -226,7 +228,6 @@ async function onSubmit() {
           <div class="group-projects">
             <div v-for="p in myAccess.grouped[group.key]" :key="p.project_id" class="proj-row">
               <span class="proj-name">{{ p.name }}</span>
-              <span v-if="p.project_dept_name" class="proj-dept">{{ p.project_dept_name }}</span>
               <span v-if="p.direct_level" :class="['access-pill', `access-pill--${p.direct_level}`]">
                 {{ p.direct_level === 'view' ? 'V' : p.direct_level === 'edit' ? 'E' : 'A' }}
               </span>
@@ -566,16 +567,6 @@ details.profile-card[open] > .card-title .chevron {
 .project-row:last-child { border-bottom: none; }
 .project-name { font-weight: 600; color: #003274; flex: 1; }
 .project-status { color: #6B7280; font-size: 12px; }
-.conf-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-}
-.conf-badge--public { background: rgba(82, 201, 166, 0.12); color: #1a8a64; }
-.conf-badge--department { background: rgba(211, 167, 84, 0.12); color: #9a7030; }
-.conf-badge--confidential { background: rgba(176, 0, 32, 0.1); color: #b00020; }
 .empty-text { color: #6B7280; font-size: 13px; }
 
 /* ── My Access section ── */
@@ -680,10 +671,6 @@ details.profile-card[open] > .card-title .chevron {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.proj-dept {
-  font-size: 11px;
-  color: #6B7280;
 }
 .access-pill {
   display: inline-flex;
