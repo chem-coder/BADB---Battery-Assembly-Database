@@ -41,13 +41,11 @@ import Button from 'primevue/button';
 import Select from 'primevue/select';
 import MultiSelect from 'primevue/multiselect';
 import DatePicker from 'primevue/datepicker';
-import SelectButton from 'primevue/selectbutton';
 
 const props = defineProps({
   projectId: { type: [Number, String, null], default: null },
   confidentialityLevel: { type: String, default: 'public' },
   users: { type: Array, required: true },
-  departments: { type: Array, required: true },
   projectsForCopy: { type: Array, required: true },
 });
 
@@ -65,7 +63,8 @@ async function loadAccess(id) {
   accessLoading.value = true;
   try {
     const { data } = await api.get(`/api/projects/${id}/access`);
-    accessList.value = data;
+    // Individual access only — legacy department grants are not shown/managed.
+    accessList.value = data.filter((a) => a.grantee_type !== 'department');
   } catch {
     accessList.value = [];
   } finally {
@@ -99,19 +98,11 @@ watch(
   { immediate: true }
 );
 
-// ── Grant form state ────────────────────────────────────────────────
-const grantTargetType = ref('user');         // 'user' | 'department'
+// ── Grant form state (individual users only) ────────────────────────
 const grantSelectedUsers = ref([]);          // number[]
-const grantSelectedDepts = ref([]);          // number[]
 const grantLevel = ref('view');
 const grantExpiresDate = ref(null);          // Date | null
 const grantExpiresPreset = ref(null);        // null | 7 | 30 | 90
-
-// Clear opposite selection when toggling User/Department
-watch(grantTargetType, (newType) => {
-  if (newType === 'user') grantSelectedDepts.value = [];
-  else grantSelectedUsers.value = [];
-});
 
 // Min date for expiry picker
 const todayMinDate = computed(() => {
@@ -148,9 +139,7 @@ const copyableProjects = computed(() =>
 );
 
 function resetGrantForm() {
-  grantTargetType.value = 'user';
   grantSelectedUsers.value = [];
-  grantSelectedDepts.value = [];
   grantLevel.value = 'view';
   grantExpiresDate.value = null;
   grantExpiresPreset.value = null;
@@ -162,21 +151,15 @@ watch(() => props.projectId, () => resetGrantForm());
 async function grantAccess() {
   if (props.projectId == null) return;
 
-  const body = { access_level: grantLevel.value };
-
-  if (grantTargetType.value === 'user') {
-    if (!grantSelectedUsers.value.length) {
-      toast.add({ severity: 'warn', summary: 'Выберите пользователей', life: 2500 });
-      return;
-    }
-    body.user_ids = grantSelectedUsers.value;
-  } else {
-    if (!grantSelectedDepts.value.length) {
-      toast.add({ severity: 'warn', summary: 'Выберите отделы', life: 2500 });
-      return;
-    }
-    body.department_ids = grantSelectedDepts.value;
+  if (!grantSelectedUsers.value.length) {
+    toast.add({ severity: 'warn', summary: 'Выберите пользователей', life: 2500 });
+    return;
   }
+
+  const body = {
+    access_level: grantLevel.value,
+    user_ids: grantSelectedUsers.value,
+  };
 
   if (grantExpiresDate.value) {
     body.expires_at = grantExpiresDate.value.toISOString();
@@ -191,7 +174,7 @@ async function grantAccess() {
     toast.add({
       severity: 'success',
       summary: 'Доступ выдан',
-      detail: `Пользователей: ${data.granted_users}, отделов: ${data.granted_departments}`,
+      detail: `Пользователей: ${data.granted_users}`,
       life: 2500,
     });
   } catch (err) {
@@ -201,17 +184,10 @@ async function grantAccess() {
 
 async function revokeAccess(entry) {
   if (props.projectId == null) return;
-  const label = entry.grantee_type === 'department'
-    ? `Отозвать доступ у отдела "${entry.grantee_name}"?`
-    : `Отозвать доступ у "${entry.grantee_name}"?`;
-  if (!confirm(label)) return;
-
-  const url = entry.grantee_type === 'department'
-    ? `/api/projects/${props.projectId}/access/department/${entry.grantee_id}`
-    : `/api/projects/${props.projectId}/access/user/${entry.grantee_id}`;
+  if (!confirm(`Отозвать доступ у "${entry.grantee_name}"?`)) return;
 
   try {
-    await api.delete(url);
+    await api.delete(`/api/projects/${props.projectId}/access/user/${entry.grantee_id}`);
     await loadAccess(props.projectId);
     toast.add({ severity: 'success', summary: 'Доступ отозван', life: 2000 });
   } catch (err) {
@@ -229,7 +205,6 @@ function applyPreset(preset) {
     });
     return;
   }
-  grantTargetType.value = 'user';
   grantSelectedUsers.value = [...preset.user_ids];
   toast.add({
     severity: 'info',
@@ -263,7 +238,7 @@ async function copyAccessFromProject() {
     toast.add({
       severity: 'success',
       summary: 'Доступ скопирован',
-      detail: `Пользователей: ${data.copied_users}, отделов: ${data.copied_departments}`,
+      detail: `Пользователей: ${data.copied_users}`,
       life: 3000,
     });
   } catch (err) {
@@ -282,9 +257,6 @@ const accessHintText = computed(() => {
   if (props.confidentialityLevel === 'public') {
     return 'Проект открыт для всех — явный список не обязателен.';
   }
-  if (props.confidentialityLevel === 'department') {
-    return 'Проект виден всему отделу — явный список добавляет доступ вне отдела.';
-  }
   return '';
 });
 </script>
@@ -292,10 +264,10 @@ const accessHintText = computed(() => {
 <template>
   <div v-if="projectId != null" class="project-access-panel">
     <div class="access-header">
-      <span class="section-label">Явно допущенные пользователи и отделы</span>
+      <span class="section-label">Явно допущенные пользователи</span>
     </div>
 
-    <div v-if="confidentialityLevel !== 'confidential'" class="access-hint">
+    <div v-if="confidentialityLevel === 'public'" class="access-hint">
       <i class="pi pi-info-circle"></i>
       {{ accessHintText }}
     </div>
@@ -342,20 +314,7 @@ const accessHintText = computed(() => {
 
     <!-- ─── Grant form ─── -->
     <div class="grant-box">
-      <SelectButton
-        v-model="grantTargetType"
-        :options="[
-          { label: 'Пользователь', value: 'user' },
-          { label: 'Отдел',        value: 'department' },
-        ]"
-        option-label="label"
-        option-value="value"
-        :allow-empty="false"
-        class="grant-target-toggle"
-      />
-
       <MultiSelect
-        v-if="grantTargetType === 'user'"
         v-model="grantSelectedUsers"
         :options="groupedUsers"
         option-label="name"
@@ -377,19 +336,6 @@ const accessHintText = computed(() => {
           </div>
         </template>
       </MultiSelect>
-
-      <MultiSelect
-        v-else
-        v-model="grantSelectedDepts"
-        :options="departments"
-        option-label="name"
-        option-value="department_id"
-        filter
-        placeholder="— выбрать отделы —"
-        :max-selected-labels="2"
-        selected-items-label="Отделов: {0}"
-        class="grant-multiselect"
-      />
 
       <div class="grant-row">
         <Select
@@ -436,7 +382,7 @@ const accessHintText = computed(() => {
           label="Выдать"
           icon="pi pi-plus"
           size="small"
-          :disabled="grantTargetType === 'user' ? !grantSelectedUsers.length : !grantSelectedDepts.length"
+          :disabled="!grantSelectedUsers.length"
           @click="grantAccess"
         />
       </div>
@@ -449,13 +395,9 @@ const accessHintText = computed(() => {
         :key="`${a.grantee_type}-${a.grantee_id}`"
         :class="['access-row', a.is_expired ? 'access-row--expired' : '']"
       >
-        <i
-          :class="a.grantee_type === 'department' ? 'pi pi-users' : 'pi pi-user'"
-          class="access-icon"
-          :title="a.grantee_type === 'department' ? 'Отдел' : 'Пользователь'"
-        ></i>
+        <i class="pi pi-user access-icon" title="Пользователь"></i>
         <span class="access-name">{{ a.grantee_name }}</span>
-        <span class="access-dept">{{ a.grantee_type === 'user' ? (a.department_name || '') : '' }}</span>
+        <span class="access-dept">{{ a.department_name || '' }}</span>
         <span v-if="a.expires_at" class="access-expires" :title="new Date(a.expires_at).toLocaleString('ru-RU')">
           <i class="pi pi-clock"></i>
           {{ a.is_expired ? 'истёк' : `до ${formatDate(a.expires_at)}` }}

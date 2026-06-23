@@ -61,7 +61,6 @@ const STATUS_OPTIONS = [
 // ── List + reference data ────────────────────────────────────────────
 const projects = ref([]);
 const activeUsers = ref([]);
-const departments = ref([]);
 const loading = ref(false);
 
 async function loadList() {
@@ -81,17 +80,9 @@ async function loadUsers() {
   } catch {}
 }
 
-async function loadDepartments() {
-  try {
-    const { data } = await api.get('/api/departments');
-    departments.value = data;
-  } catch {}
-}
-
 onMounted(() => {
   loadList();
   loadUsers();
-  loadDepartments();
 });
 
 // ── Form helpers ─────────────────────────────────────────────────────
@@ -206,22 +197,17 @@ const filteredProjects = computed(() => {
   return projects.value.filter((p) => {
     if (s.status && p.status !== s.status) return false;
     if (s.confidentiality_level && normalizeAccess(p.confidentiality_level) !== s.confidentiality_level) return false;
-    if (s.department_id && String(p.department_id) !== s.department_id) return false;
     if (s.lead_id && String(p.lead_id) !== s.lead_id) return false;
     if (s.text) {
       const needle = String(s.text).toLowerCase();
       const haystack = [
-        p.name, p.description, p.lead_name, p.created_by_name, p.department_name,
+        p.name, p.description, p.lead_name, p.created_by_name,
       ].filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(needle)) return false;
     }
     return true;
   });
 });
-
-const departmentFilterOptions = computed(() =>
-  departments.value.map((d) => ({ value: String(d.department_id), label: d.name }))
-);
 
 const leadFilterOptions = computed(() =>
   activeUsers.value.map((u) => ({ value: String(u.user_id), label: u.name }))
@@ -242,13 +228,6 @@ const filters = computed(() => [
     label: 'Доступ',
     emptyOption: 'Все уровни доступа',
     options: ACCESS_OPTIONS,
-  },
-  {
-    field: 'department_id',
-    type: 'select',
-    label: 'Отдел',
-    emptyOption: 'Все отделы',
-    options: departmentFilterOptions.value,
   },
   {
     field: 'lead_id',
@@ -308,15 +287,9 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
       <span class="desc-text">{{ data.description || '' }}</span>
     </template>
     <template #col-confidentiality_level="{ data }">
-      <span
-        :class="['access-pill', `access-pill--${data.confidentiality_level || 'public'}`]"
-        :title="data.department_name || ''"
-      >
+      <span :class="['access-pill', `access-pill--${normalizeAccess(data.confidentiality_level || 'public')}`]">
         <i :class="accessIcon(data.confidentiality_level)"></i>
         {{ accessLabel(data.confidentiality_level) }}
-        <span v-if="data.confidentiality_level === 'department' && data.department_name" class="access-pill-dept">
-          · {{ data.department_name }}
-        </span>
       </span>
     </template>
     <template #col-start_date="{ data }">{{ formatDate(data.start_date) }}</template>
@@ -423,7 +396,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
             </div>
             <div v-if="ctx.form.value.confidentiality_level === 'confidential'" class="vis-note">
               <i class="pi pi-info-circle"></i>
-              Руководитель отдела, директор и админ видят проект всегда
+              Директор и админ видят проект всегда
             </div>
           </div>
         </div>
@@ -434,7 +407,6 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
           :project-id="ctx.currentId.value"
           :confidentiality-level="ctx.form.value.confidentiality_level"
           :users="activeUsers"
-          :departments="departments"
           :projects-for-copy="projects"
         />
       </div>
@@ -515,14 +487,9 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
   max-width: 100%;
 }
 .access-pill .pi { font-size: 10px; }
-.access-pill-dept { color: rgba(0, 50, 116, 0.5); font-weight: 400; }
 .access-pill--public {
   background: rgba(82, 201, 166, 0.12);
   color: #1a8a64;
-}
-.access-pill--department {
-  background: rgba(0, 50, 116, 0.08);
-  color: #003274;
 }
 .access-pill--confidential {
   background: rgba(176, 0, 32, 0.1);
