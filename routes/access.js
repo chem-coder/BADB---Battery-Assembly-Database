@@ -204,32 +204,22 @@ router.get('/timeline', auth, requireRole('admin', 'lead'), async (req, res) => 
       return { ...r, payload };
     });
 
-    // Enrich user/dept names in payloads (batch query)
+    // Enrich user names in payloads (batch query). Project-based model: the
+    // timeline does not surface departments, so legacy `deptIds` are ignored.
     const userIds = new Set();
-    const deptIds = new Set();
     for (const r of rows) {
       if (r.payload?.userIds) r.payload.userIds.forEach(id => userIds.add(id));
-      if (r.payload?.deptIds) r.payload.deptIds.forEach(id => deptIds.add(id));
     }
 
-    const [usersLookup, deptsLookup] = await Promise.all([
-      userIds.size
-        ? pool.query(`SELECT user_id, name FROM users WHERE user_id = ANY($1::int[])`, [[...userIds]])
-        : Promise.resolve({ rows: [] }),
-      deptIds.size
-        ? pool.query(`SELECT department_id, name FROM departments WHERE department_id = ANY($1::int[])`, [[...deptIds]])
-        : Promise.resolve({ rows: [] }),
-    ]);
+    const usersLookup = userIds.size
+      ? await pool.query(`SELECT user_id, name FROM users WHERE user_id = ANY($1::int[])`, [[...userIds]])
+      : { rows: [] };
 
     const userNames = Object.fromEntries(usersLookup.rows.map(r => [r.user_id, r.name]));
-    const deptNames = Object.fromEntries(deptsLookup.rows.map(r => [r.department_id, r.name]));
 
     for (const r of rows) {
       if (r.payload?.userIds) {
         r.payload.user_names = r.payload.userIds.map(id => userNames[id] || `#${id}`);
-      }
-      if (r.payload?.deptIds) {
-        r.payload.dept_names = r.payload.deptIds.map(id => deptNames[id] || `#${id}`);
       }
     }
 

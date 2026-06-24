@@ -61,8 +61,7 @@ const filteredEvents = computed(() => {
     list = list.filter(e =>
       (e.project_name || '').toLowerCase().includes(q) ||
       (e.changed_by_name || '').toLowerCase().includes(q) ||
-      (e.payload?.user_names || []).some(n => n.toLowerCase().includes(q)) ||
-      (e.payload?.dept_names || []).some(n => n.toLowerCase().includes(q))
+      (e.payload?.user_names || []).some(n => n.toLowerCase().includes(q))
     )
   }
   return list
@@ -85,25 +84,22 @@ function formatTime(iso) {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
+// Project-based access model: the timeline describes user grants only.
+// Departments are no longer an access dimension, so legacy dept payload fields
+// (dept_names, copied_departments) are intentionally not rendered.
 function describeEvent(e) {
   const p = e.payload || {}
   const users = p.user_names?.join(', ') || ''
-  const depts = p.dept_names?.join(', ') || ''
   const level = p.access_level ? ` (${p.access_level})` : ''
 
   if (e.action === 'grant') {
-    const parts = []
-    if (users) parts.push(`пользователям: ${users}`)
-    if (depts) parts.push(`отделам: ${depts}`)
-    return parts.join('; ') + level
+    return users ? `пользователям: ${users}${level}` : ''
   }
   if (e.action === 'revoke') {
-    if (users) return `у ${users}`
-    if (depts) return `у отделов: ${depts}`
-    return ''
+    return users ? `у ${users}` : ''
   }
   if (e.action === 'copy') {
-    return `из проекта #${p.source_project_id || '?'} (${p.copied_users || 0} польз., ${p.copied_departments || 0} отд.)`
+    return `из проекта #${p.source_project_id || '?'} (${p.copied_users || 0} польз.)`
   }
   return ''
 }
