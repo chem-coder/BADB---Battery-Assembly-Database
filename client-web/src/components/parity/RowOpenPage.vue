@@ -49,6 +49,11 @@ const props = defineProps({
   emptyMessage: { type: String, default: 'Список пуст' },
   // Optional: surface-supplied function returning a string for text search.
   textHaystack: { type: Function, default: null },
+  // When true, hide the add-input, filter bar, and list while a record is open
+  // (currentId set or create mode) — so the page focuses on the open record and
+  // nothing distracting sits below it. Opt-in; off by default so other pages are
+  // unchanged. The user returns to the list by exiting the record.
+  focusWhenOpen: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -91,6 +96,11 @@ const filteredList = computed(() => {
   }
   return props.list.filter((row) => rowMatchesFilter(row, filterState.value));
 });
+
+// A record is "open" in edit mode (currentId set) or create mode.
+const recordOpen = computed(() => props.currentId != null || props.mode === 'create');
+// The list/add/filter surfaces are visible unless focus-mode hides them while open.
+const listSurfaceVisible = computed(() => !(props.focusWhenOpen && recordOpen.value));
 
 function onFilterState(s) {
   filterState.value = s;
@@ -163,7 +173,7 @@ function getCellValue(row, column) {
     <PageHeader :title="title" :icon="icon" />
 
     <TopAddInput
-      v-if="addPlaceholder"
+      v-if="addPlaceholder && listSurfaceVisible"
       :placeholder="addPlaceholder"
       @create="onCreate"
     />
@@ -175,16 +185,16 @@ function getCellValue(row, column) {
     </div>
 
     <PageFilterBar
-      v-if="filters.length > 0"
+      v-if="filters.length > 0 && listSurfaceVisible"
       :filters="filters"
       :total="list.length"
       :shown="filteredList.length"
       @update:state="onFilterState"
     />
 
-    <slot name="list-extra" />
+    <slot v-if="listSurfaceVisible" name="list-extra" />
 
-    <div class="list-wrap">
+    <div v-if="listSurfaceVisible" class="list-wrap">
       <table v-if="filteredList.length > 0" class="parity-list-table">
         <thead>
           <tr>

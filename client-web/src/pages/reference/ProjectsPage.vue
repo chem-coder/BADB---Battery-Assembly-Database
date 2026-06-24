@@ -290,6 +290,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
     :mode="ctx.mode.value"
     id-field="project_id"
     :loading="loading"
+    focus-when-open
     @create="(name) => ctx.openCreate(name)"
     @row-click="ctx.openEdit"
     @row-print="onRowPrint"
