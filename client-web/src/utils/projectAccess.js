@@ -61,33 +61,42 @@ export function grantLevelLabel(level) {
 }
 
 /**
- * Resolve a user's effective access to a project (PROJECT-based model — there
- * is no department-based visibility any more).
+ * Resolve a user's effective access to a project — 4-level model
+ * (admin / edit / view / none). Pure function, called once per (user, project)
+ * matrix cell. Strongest-access-first; the FIRST matching rule wins.
  *
- * Pure function so it can be unit-tested in isolation and called once per
- * (user, project) cell. The branch order encodes strongest-access-first: the
- * FIRST matching rule wins.
+ *   0. inactive user → no access (null) — defense beyond the auth login block
+ *   1. admin role        → admin
+ *   2. director (position contains «директор») → admin
+ *   3. project lead      → admin
+ *   4. project owner     (created_by) → admin
+ *   5. usable explicit grant (not expired, or showExpired):
+ *        - 'none' → explicit DENY → no access (null), even on a public project
+ *        - else   → the grant's level (view/edit/admin)
+ *   6. otherwise (no grant, expired grant, or non-member) → project BASELINE:
+ *        - public project    → view
+ *        - restricted project → no access (null)
  *
- *   1. admin role     → admin
- *   2. director (by position, contains «директор») → admin
- *   3. project lead   → admin
- *   4. project owner  (created_by) → admin
- *   5. explicit grant, if usable (not expired, or showExpired) → its level
- *   6. team participant → view
- *   7. public project   → view
- *   8. otherwise → no access (null)
+ * Expiry is an auto-downgrade, not a fall-through to membership: an expired
+ * member on a restricted project drops to NONE (null), on an open project to
+ * VIEW. Membership alone no longer grants access — a member's access IS their
+ * grant. `isParticipant` only tags the baseline-view source as «participant»
+ * (cosmetic, for the matrix legend). See docs/future/project_member_flow.md.
  *
- * An expired grant with showExpired=false does NOT short-circuit: control
- * falls through to the participant / public rules below it.
+ * Returns null for "no access" (incl. explicit `none`) so the matrix renders an
+ * empty cell. A returned object always has level ∈ {view, edit, admin}.
  *
- * @param {object} user        - { user_id, role, position, ... }
+ * @param {object} user        - { user_id, role, position, active?, ... }
  * @param {object} project     - { project_id, confidentiality_level, lead_id, created_by, ... }
- * @param {object|null} grant  - the user's explicit grant for this project, or null
+ * @param {object|null} grant  - the user's explicit grant ({ access_level, is_expired }) or null
  * @param {boolean} isParticipant - whether the user is on the project team
  * @param {boolean} showExpired   - whether expired grants are honoured
- * @returns {{ level: string, source: string, is_expired: boolean }|null}
+ * @returns {{ level: 'view'|'edit'|'admin', source: string, is_expired: boolean }|null}
  */
 export function resolveProjectAccess(user, project, grant, isParticipant, showExpired) {
+  // 0. Inactive user — no access anywhere (login is already blocked at auth).
+  if (user.active === false) return null
+
   // 1. Admin role override
   if (user.role === 'admin') return { level: 'admin', source: 'admin', is_expired: false }
 
@@ -108,17 +117,17 @@ export function resolveProjectAccess(user, project, grant, isParticipant, showEx
 
   // 5. Explicit grant — only if usable (not expired, or expired ones shown)
   if (grant && (!grant.is_expired || showExpired)) {
+    // 'none' is an explicit deny: no access even on a public project.
+    if (grant.access_level === 'none') return null
     return { level: grant.access_level, source: 'direct', is_expired: !!grant.is_expired }
   }
 
-  // 6. Team participant
-  if (isParticipant) return { level: 'view', source: 'participant', is_expired: false }
-
-  // 7. Public project — everyone sees
+  // 6. Baseline — covers non-members AND expired/none members. Expiry downgrades
+  //    to the project type's baseline; membership does NOT grant access by itself.
   if (project.confidentiality_level === 'public') {
-    return { level: 'view', source: 'public', is_expired: false }
+    return { level: 'view', source: isParticipant ? 'participant' : 'public', is_expired: false }
   }
 
-  // 8. No access
+  // Restricted project, no usable grant → no access.
   return null
 }

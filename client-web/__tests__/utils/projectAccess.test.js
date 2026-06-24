@@ -132,8 +132,12 @@ describe('resolveProjectAccess', () => {
     }
   });
 
-  it('team participant → view/participant', () => {
-    expect(resolveProjectAccess(plainUser, confidentialProject, null, true, false)).toEqual({
+  it('team participant on a restricted project (no grant) → null — membership alone grants nothing', () => {
+    expect(resolveProjectAccess(plainUser, confidentialProject, null, true, false)).toBeNull();
+  });
+
+  it('team participant on a public project (no grant) → view/participant', () => {
+    expect(resolveProjectAccess(plainUser, publicProject, null, true, false)).toEqual({
       level: 'view',
       source: 'participant',
       is_expired: false,
@@ -171,25 +175,39 @@ describe('resolveProjectAccess', () => {
     expect(res).toEqual({ level: 'admin', source: 'direct', is_expired: false });
   });
 
-  // --- Expiry fall-through ---
+  // --- Expiry = auto-downgrade to the project baseline (not membership) ---
 
-  it('expired grant + showExpired=false falls through to participant', () => {
+  it('expired grant on a restricted project → null, even for a participant', () => {
     const res = resolveProjectAccess(plainUser, confidentialProject, grant('edit', true), true, false);
-    expect(res).toEqual({ level: 'view', source: 'participant', is_expired: false });
+    expect(res).toBeNull();
   });
 
-  it('expired grant + showExpired=false falls through to public', () => {
+  it('expired grant on a public project → downgraded to view (open baseline)', () => {
     const res = resolveProjectAccess(plainUser, publicProject, grant('edit', true), false, false);
     expect(res).toEqual({ level: 'view', source: 'public', is_expired: false });
-  });
-
-  it('expired grant + showExpired=false with no fallback → null', () => {
-    const res = resolveProjectAccess(plainUser, confidentialProject, grant('edit', true), false, false);
-    expect(res).toBeNull();
   });
 
   it('expired grant + showExpired=true → returns the grant with is_expired:true', () => {
     const res = resolveProjectAccess(plainUser, confidentialProject, grant('edit', true), false, true);
     expect(res).toEqual({ level: 'edit', source: 'direct', is_expired: true });
+  });
+
+  // --- 'none' = explicit deny (4-level model) ---
+
+  it("a 'none' grant denies access — even on a public project", () => {
+    expect(resolveProjectAccess(plainUser, publicProject, grant('none'), true, false)).toBeNull();
+    expect(resolveProjectAccess(plainUser, confidentialProject, grant('none'), false, false)).toBeNull();
+  });
+
+  it('admin role still wins over a none grant (role is checked before the grant)', () => {
+    const adminU = { ...plainUser, role: 'admin' };
+    expect(resolveProjectAccess(adminU, publicProject, grant('none'), false, false).source).toBe('admin');
+  });
+
+  // --- Inactive user ---
+
+  it('inactive user → null, regardless of grant or role', () => {
+    const dead = { ...plainUser, active: false, role: 'admin' };
+    expect(resolveProjectAccess(dead, publicProject, grant('admin'), true, false)).toBeNull();
   });
 });
