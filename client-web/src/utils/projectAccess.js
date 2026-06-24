@@ -33,6 +33,34 @@ export function normalizeAccess(level) {
 }
 
 /**
+ * Per-member GRANT level vocabulary (distinct from project confidentiality
+ * above). The model has two member capabilities; `view` is the auto-filled
+ * baseline for non-members on non-restricted projects, not a chooseable level:
+ *
+ *   обычный → `edit`  — a project member: can CRUD the project's data
+ *   админ   → `admin` — can also edit the project itself (fields, members, access)
+ *
+ * Backend `user_project_access.access_level` enum (view/edit/admin) is unchanged;
+ * the UI just narrows the picker to these two and shows legacy `view` grants as
+ * «просмотр (устар.)». See docs/future/project_member_flow.md.
+ */
+export const GRANT_LEVEL_OPTIONS = [
+  { label: 'обычный', value: 'edit' },
+  { label: 'админ', value: 'admin' },
+]
+
+const GRANT_LEVEL_LABELS = {
+  edit: 'обычный',
+  admin: 'админ',
+  view: 'просмотр (устар.)', // legacy/baseline — no longer offered in the picker
+}
+
+/** Display label for a member's grant level (incl. legacy `view`). */
+export function grantLevelLabel(level) {
+  return GRANT_LEVEL_LABELS[level] || level || 'обычный'
+}
+
+/**
  * Resolve a user's effective access to a project (PROJECT-based model — there
  * is no department-based visibility any more).
  *

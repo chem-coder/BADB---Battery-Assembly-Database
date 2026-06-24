@@ -12,7 +12,31 @@ import {
   accessLabel,
   normalizeAccess,
   resolveProjectAccess,
+  GRANT_LEVEL_OPTIONS,
+  grantLevelLabel,
 } from '@/utils/projectAccess';
+
+describe('GRANT_LEVEL_OPTIONS (per-member access level)', () => {
+  it('offers exactly обычный=edit + админ=admin (no view in the picker)', () => {
+    expect(GRANT_LEVEL_OPTIONS).toEqual([
+      { value: 'edit', label: 'обычный' },
+      { value: 'admin', label: 'админ' },
+    ]);
+    expect(GRANT_LEVEL_OPTIONS.map((o) => o.value)).not.toContain('view');
+  });
+});
+
+describe('grantLevelLabel', () => {
+  it('labels the two member levels', () => {
+    expect(grantLevelLabel('edit')).toBe('обычный');
+    expect(grantLevelLabel('admin')).toBe('админ');
+  });
+  it('marks legacy view as устар. and falls back gracefully', () => {
+    expect(grantLevelLabel('view')).toBe('просмотр (устар.)');
+    expect(grantLevelLabel(undefined)).toBe('обычный');
+    expect(grantLevelLabel('weird')).toBe('weird');
+  });
+});
 
 describe('ACCESS_OPTIONS', () => {
   it('offers exactly public + confidential (department dropped)', () => {

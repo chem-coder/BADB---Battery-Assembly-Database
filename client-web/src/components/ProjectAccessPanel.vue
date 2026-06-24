@@ -36,6 +36,7 @@ import { ref, computed, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import api from '@/services/api';
 import { toastApiError } from '@/utils/errorClassifier';
+import { GRANT_LEVEL_OPTIONS, grantLevelLabel } from '@/utils/projectAccess';
 
 import Button from 'primevue/button';
 import Select from 'primevue/select';
@@ -100,7 +101,7 @@ watch(
 
 // ── Grant form state (individual users only) ────────────────────────
 const grantSelectedUsers = ref([]);          // number[]
-const grantLevel = ref('view');
+const grantLevel = ref('edit'); // обычный — members are elevated above view by default
 const grantExpiresDate = ref(null);          // Date | null
 const grantExpiresPreset = ref(null);        // null | 7 | 30 | 90
 
@@ -140,7 +141,7 @@ const copyableProjects = computed(() =>
 
 function resetGrantForm() {
   grantSelectedUsers.value = [];
-  grantLevel.value = 'view';
+  grantLevel.value = 'edit';
   grantExpiresDate.value = null;
   grantExpiresPreset.value = null;
 }
@@ -340,11 +341,7 @@ const accessHintText = computed(() => {
       <div class="grant-row">
         <Select
           v-model="grantLevel"
-          :options="[
-            { label: 'Просмотр',       value: 'view' },
-            { label: 'Редактирование', value: 'edit' },
-            { label: 'Администратор',  value: 'admin' },
-          ]"
+          :options="GRANT_LEVEL_OPTIONS"
           option-label="label"
           option-value="value"
           class="grant-level"
@@ -403,7 +400,7 @@ const accessHintText = computed(() => {
           {{ a.is_expired ? 'истёк' : `до ${formatDate(a.expires_at)}` }}
         </span>
         <span :class="['access-level', `access-level--${a.access_level}`]">
-          {{ a.access_level === 'view' ? 'Просмотр' : a.access_level === 'edit' ? 'Ред.' : 'Админ' }}
+          {{ grantLevelLabel(a.access_level) }}
         </span>
         <Button icon="pi pi-times" severity="danger" text size="small" @click="revokeAccess(a)" title="Отозвать доступ" />
       </div>
