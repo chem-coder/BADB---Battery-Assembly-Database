@@ -13,27 +13,33 @@ import {
   normalizeAccess,
   resolveProjectAccess,
   GRANT_LEVEL_OPTIONS,
+  DEFAULT_GRANT_LEVEL,
   grantLevelLabel,
 } from '@/utils/projectAccess';
 
 describe('GRANT_LEVEL_OPTIONS (per-member access level)', () => {
-  it('offers exactly обычный=edit + админ=admin (no view in the picker)', () => {
+  it('offers the four levels, strongest first', () => {
     expect(GRANT_LEVEL_OPTIONS).toEqual([
-      { value: 'edit', label: 'обычный' },
-      { value: 'admin', label: 'админ' },
+      { value: 'admin', label: 'Администратор' },
+      { value: 'edit', label: 'Обычный' },
+      { value: 'view', label: 'Просмотр' },
+      { value: 'none', label: 'Нет доступа' },
     ]);
-    expect(GRANT_LEVEL_OPTIONS.map((o) => o.value)).not.toContain('view');
+  });
+  it('defaults a new member to Обычный (edit)', () => {
+    expect(DEFAULT_GRANT_LEVEL).toBe('edit');
   });
 });
 
 describe('grantLevelLabel', () => {
-  it('labels the two member levels', () => {
-    expect(grantLevelLabel('edit')).toBe('обычный');
-    expect(grantLevelLabel('admin')).toBe('админ');
+  it('labels each level', () => {
+    expect(grantLevelLabel('admin')).toBe('Администратор');
+    expect(grantLevelLabel('edit')).toBe('Обычный');
+    expect(grantLevelLabel('view')).toBe('Просмотр');
+    expect(grantLevelLabel('none')).toBe('Нет доступа');
   });
-  it('marks legacy view as устар. and falls back gracefully', () => {
-    expect(grantLevelLabel('view')).toBe('просмотр (устар.)');
-    expect(grantLevelLabel(undefined)).toBe('обычный');
+  it('falls back gracefully', () => {
+    expect(grantLevelLabel(undefined)).toBe('Обычный');
     expect(grantLevelLabel('weird')).toBe('weird');
   });
 });

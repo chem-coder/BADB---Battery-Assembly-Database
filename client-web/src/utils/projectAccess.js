@@ -34,30 +34,37 @@ export function normalizeAccess(level) {
 
 /**
  * Per-member GRANT level vocabulary (distinct from project confidentiality
- * above). The model has two member capabilities; `view` is the auto-filled
- * baseline for non-members on non-restricted projects, not a chooseable level:
+ * above). Four levels, strongest first:
  *
- *   обычный → `edit`  — a project member: can CRUD the project's data
- *   админ   → `admin` — can also edit the project itself (fields, members, access)
+ *   Администратор → `admin` — edit the project (fields, members, access) + data
+ *   Обычный       → `edit`  — CRUD the project's data (default for new members)
+ *   Просмотр      → `view`  — view only
+ *   Нет доступа   → `none`  — explicit deny; project hidden even if public
  *
- * Backend `user_project_access.access_level` enum (view/edit/admin) is unchanged;
- * the UI just narrows the picker to these two and shows legacy `view` grants as
- * «просмотр (устар.)». See docs/future/project_member_flow.md.
+ * Default for a newly-added member is Обычный (`edit`). When a grant expires the
+ * member is auto-downgraded to the project baseline (open → view, restricted →
+ * none) rather than removed. See docs/future/project_member_flow.md.
  */
 export const GRANT_LEVEL_OPTIONS = [
-  { label: 'обычный', value: 'edit' },
-  { label: 'админ', value: 'admin' },
+  { label: 'Администратор', value: 'admin' },
+  { label: 'Обычный', value: 'edit' },
+  { label: 'Просмотр', value: 'view' },
+  { label: 'Нет доступа', value: 'none' },
 ]
 
+/** Default level for a freshly-added member. */
+export const DEFAULT_GRANT_LEVEL = 'edit'
+
 const GRANT_LEVEL_LABELS = {
-  edit: 'обычный',
-  admin: 'админ',
-  view: 'просмотр (устар.)', // legacy/baseline — no longer offered in the picker
+  admin: 'Администратор',
+  edit: 'Обычный',
+  view: 'Просмотр',
+  none: 'Нет доступа',
 }
 
-/** Display label for a member's grant level (incl. legacy `view`). */
+/** Display label for a member's grant level. */
 export function grantLevelLabel(level) {
-  return GRANT_LEVEL_LABELS[level] || level || 'обычный'
+  return GRANT_LEVEL_LABELS[level] || level || 'Обычный'
 }
 
 /**

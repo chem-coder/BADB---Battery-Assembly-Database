@@ -39,6 +39,7 @@ import RowOpenPage from '@/components/parity/RowOpenPage.vue';
 import OpenedRecordHeader from '@/components/parity/OpenedRecordHeader.vue';
 import EditableTitle from '@/components/parity/EditableTitle.vue';
 import ProjectAccessPanel from '@/components/ProjectAccessPanel.vue';
+import ProjectMembersTable from '@/components/ProjectMembersTable.vue';
 import { useRowOpenForm } from '@/composables/useRowOpenForm';
 
 import InputText from 'primevue/inputtext';
@@ -401,7 +402,15 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
           </div>
         </div>
 
-        <!-- Access management (only for saved records) -->
+        <!-- Member management (the «Участники» surface; only for saved records) -->
+        <ProjectMembersTable
+          v-if="ctx.mode.value === 'edit'"
+          :project-id="ctx.currentId.value"
+          :project="{ lead_id: ctx.form.value.lead_id, created_by: ctx.form.value.created_by, confidentiality_level: ctx.form.value.confidentiality_level }"
+          :users="activeUsers"
+        />
+
+        <!-- Advanced access (explicit grants, copy, presets) -->
         <ProjectAccessPanel
           v-if="ctx.mode.value === 'edit'"
           :project-id="ctx.currentId.value"
