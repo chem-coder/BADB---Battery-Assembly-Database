@@ -1,68 +1,78 @@
 <script setup>
 /**
- * AccessGraph — Cytoscape visualization of project access relationships.
- * Nodes: users, departments, projects
- * Edges: access grants (direct user, department, implicit)
- * Reuses dagre layout pattern from DashboardGraph.
+ * AccessGraph — force-directed MEMBERSHIP constellation (Obsidian-style).
+ *
+ * People + projects are nodes. A person connects to a project when they belong
+ * to it; the edge encodes their role (see utils/accessGraphModel.js):
+ *   - manager (lead / owner / admin) → red, thick — runs the project
+ *   - member  (listed participant)   → muted    — can CRUD the project's data
+ * A person node is sized by how many projects they belong to; people on nothing
+ * float to the outskirts. Projects are uniform, coloured by confidentiality.
+ *
+ * The transform lives in buildAccessGraph() (unit-tested); this component only
+ * renders it. The backend (GET /api/access/graph) returns the raw rows.
  */
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import cytoscape from 'cytoscape'
-import dagre from 'cytoscape-dagre'
+import fcose from 'cytoscape-fcose'
 import api from '@/services/api'
+import { buildAccessGraph } from '@/utils/accessGraphModel'
+import { accessLabel } from '@/utils/projectAccess'
 
-cytoscape.use(dagre)
+cytoscape.use(fcose)
 
 const containerRef = ref(null)
 let cy = null
 
 const loading = ref(true)
 const selectedNode = ref(null)
-const visibleTypes = ref({ user: true, department: true, project: true })
-const visibleEdges = ref({ member_of: true, implicit_dept: true, grant_user: true, grant_dept: true })
 const searchQuery = ref('')
 
 const NODE_COLORS = {
   user: '#6CACE4',
-  department: '#D3A754',
   project: '#003274',
-}
-
-const NODE_SHAPES = {
-  user: 'ellipse',
-  department: 'round-rectangle',
-  project: 'diamond',
 }
 
 const PROJECT_CONF_COLORS = {
   public: '#52C9A6',
-  department: '#003274',
   confidential: '#E74C3C',
 }
 
 const TYPE_LABELS = {
-  user: 'Пользователь',
-  department: 'Отдел',
+  user: 'Человек',
   project: 'Проект',
 }
 
-const EDGE_LABELS = {
-  member_of: 'в отделе',
-  implicit_dept: 'отдел→проект',
-  grant_user: 'явный grant',
-  grant_dept: 'grant отделу',
+// Edge role → style. Manager is red+thick (runs the project); member is a muted
+// connector (on the team, CRUD the data).
+const EDGE_STYLES = {
+  manager: { color: '#E74C3C', width: 3 },
+  member: { color: 'rgba(120, 150, 190, 0.6)', width: 1.6 },
 }
 
-const ACCESS_COLORS = {
-  view: 'rgba(82, 201, 166, 0.6)',
-  edit: 'rgba(0, 50, 116, 0.6)',
-  admin: 'rgba(231, 76, 60, 0.7)',
+const ROLE_LABELS = {
+  manager: 'руководит',
+  member: 'участник',
+}
+
+const FCOSE_LAYOUT = {
+  name: 'fcose',
+  quality: 'default',
+  animate: true,
+  animationDuration: 600,
+  randomize: true,
+  packComponents: true, // keep the many isolated people tidy on the outskirts
+  nodeRepulsion: 6500,
+  idealEdgeLength: 75,
+  nodeSeparation: 80,
+  padding: 30,
 }
 
 async function loadGraph() {
   loading.value = true
   try {
     const { data } = await api.get('/api/access/graph')
-    renderGraph(data)
+    renderGraph(buildAccessGraph(data))
   } catch (err) {
     console.error(err)
   } finally {
@@ -70,27 +80,21 @@ async function loadGraph() {
   }
 }
 
-function renderGraph(data) {
+function renderGraph(graph) {
   if (!containerRef.value) return
   if (cy) cy.destroy()
 
   const elements = []
-  for (const n of data.nodes) {
+  for (const n of graph.nodes) {
     elements.push({
       group: 'nodes',
-      data: { id: n.id, label: n.label, type: n.type, ...n.data },
+      data: { id: n.id, label: n.label, type: n.type, size: n.size, ...n.data },
     })
   }
-  for (const e of data.edges) {
+  for (const e of graph.edges) {
     elements.push({
       group: 'edges',
-      data: {
-        source: e.source,
-        target: e.target,
-        type: e.type,
-        access_level: e.access_level || null,
-        label: EDGE_LABELS[e.type] || '',
-      },
+      data: { source: e.source, target: e.target, role: e.role },
     })
   }
 
@@ -105,65 +109,57 @@ function renderGraph(data) {
           'font-size': '10px',
           'font-family': 'Rosatom, system-ui, sans-serif',
           'text-wrap': 'ellipsis',
-          'text-max-width': '100px',
+          'text-max-width': '110px',
           'text-valign': 'bottom',
-          'text-margin-y': 4,
+          'text-margin-y': 3,
           'color': '#333',
-          'width': 28,
-          'height': 28,
           'border-width': 2,
           'border-color': '#fff',
         },
       },
-      ...Object.entries(NODE_COLORS).map(([type, color]) => ({
-        selector: `node[type="${type}"]`,
+      // People — blue ellipse, sized by how many projects they belong to.
+      {
+        selector: 'node[type="user"]',
         style: {
-          'background-color': color,
-          'shape': NODE_SHAPES[type],
-          'width': type === 'project' ? 40 : type === 'department' ? 36 : 26,
-          'height': type === 'project' ? 40 : type === 'department' ? 36 : 26,
+          'background-color': NODE_COLORS.user,
+          'shape': 'ellipse',
+          'width': 'data(size)',
+          'height': 'data(size)',
         },
-      })),
-      // Project confidentiality overlay
+      },
+      // Projects — uniform diamond, coloured by confidentiality below.
+      {
+        selector: 'node[type="project"]',
+        style: {
+          'background-color': NODE_COLORS.project,
+          'shape': 'diamond',
+          'width': 34,
+          'height': 34,
+          'font-size': '11px',
+          'font-weight': 'bold',
+        },
+      },
       { selector: 'node[type="project"][confidentiality_level="public"]', style: { 'background-color': PROJECT_CONF_COLORS.public } },
-      { selector: 'node[type="project"][confidentiality_level="department"]', style: { 'background-color': PROJECT_CONF_COLORS.department } },
       { selector: 'node[type="project"][confidentiality_level="confidential"]', style: { 'background-color': PROJECT_CONF_COLORS.confidential } },
-      // Edges
+      // Legacy `department` confidentiality → restricted (mirror normalizeAccess).
+      { selector: 'node[type="project"][confidentiality_level="department"]', style: { 'background-color': PROJECT_CONF_COLORS.confidential } },
+      // Edges — undirected constellation lines, styled by role.
       {
         selector: 'edge',
         style: {
-          'width': 1,
-          'line-color': 'rgba(0, 50, 116, 0.1)',
-          'target-arrow-color': 'rgba(0, 50, 116, 0.15)',
-          'target-arrow-shape': 'triangle',
           'curve-style': 'bezier',
-          'arrow-scale': 0.5,
-          'opacity': 0.5,
-          'font-size': '8px',
-          'color': 'rgba(0, 50, 116, 0.3)',
+          'opacity': 0.7,
         },
       },
-      { selector: 'edge[type="member_of"]', style: { 'line-style': 'dashed', 'line-color': 'rgba(108, 172, 228, 0.3)' } },
-      { selector: 'edge[type="grant_user"][access_level="view"]', style: { 'line-color': ACCESS_COLORS.view, 'target-arrow-color': ACCESS_COLORS.view, 'width': 2 } },
-      { selector: 'edge[type="grant_user"][access_level="edit"]', style: { 'line-color': ACCESS_COLORS.edit, 'target-arrow-color': ACCESS_COLORS.edit, 'width': 2.5 } },
-      { selector: 'edge[type="grant_user"][access_level="admin"]', style: { 'line-color': ACCESS_COLORS.admin, 'target-arrow-color': ACCESS_COLORS.admin, 'width': 3 } },
-      { selector: 'edge[type="grant_dept"]', style: { 'line-color': 'rgba(211, 167, 84, 0.6)', 'target-arrow-color': 'rgba(211, 167, 84, 0.8)', 'width': 2 } },
-      { selector: 'edge[type="implicit_dept"]', style: { 'line-style': 'dotted', 'line-color': 'rgba(0, 50, 116, 0.25)' } },
-      // Highlight states
+      { selector: 'edge[role="manager"]', style: { 'line-color': EDGE_STYLES.manager.color, 'width': EDGE_STYLES.manager.width } },
+      { selector: 'edge[role="member"]', style: { 'line-color': EDGE_STYLES.member.color, 'width': EDGE_STYLES.member.width } },
+      // Highlight / dim states (click a node to focus its neighbourhood).
       { selector: 'node.highlighted', style: { 'border-width': 3, 'border-color': '#003274', 'overlay-color': '#003274', 'overlay-padding': 4, 'overlay-opacity': 0.08, 'z-index': 10 } },
       { selector: 'node.dimmed', style: { 'opacity': 0.12 } },
-      { selector: 'edge.dimmed', style: { 'opacity': 0.05 } },
-      { selector: 'edge.highlighted', style: { 'width': 3, 'opacity': 1, 'z-index': 10 } },
+      { selector: 'edge.dimmed', style: { 'opacity': 0.06 } },
+      { selector: 'edge.highlighted', style: { 'opacity': 1, 'z-index': 10 } },
     ],
-    layout: {
-      name: 'dagre',
-      rankDir: 'TB',
-      nodeSep: 30,
-      rankSep: 80,
-      animate: true,
-      animationDuration: 400,
-      padding: 30,
-    },
+    layout: FCOSE_LAYOUT,
     minZoom: 0.15,
     maxZoom: 4,
     wheelSensitivity: 0.25,
@@ -177,7 +173,10 @@ function renderGraph(data) {
     neighborhood.addClass('highlighted')
     neighborhood.edges().addClass('highlighted')
     cy.animate({ fit: { eles: neighborhood, padding: 60 }, duration: 400 })
-    selectedNode.value = { ...node.data(), neighbors: node.neighborhood().nodes().map(n => n.data()) }
+    selectedNode.value = {
+      ...node.data(),
+      neighbors: node.neighborhood('node').map((n) => n.data()),
+    }
   })
 
   cy.on('tap', (evt) => {
@@ -188,43 +187,30 @@ function renderGraph(data) {
   })
 }
 
-function toggleType(type) {
-  visibleTypes.value[type] = !visibleTypes.value[type]
-  applyFilters()
-}
-
-function toggleEdge(type) {
-  visibleEdges.value[type] = !visibleEdges.value[type]
-  applyFilters()
-}
-
 function applyFilters() {
   if (!cy) return
   const q = searchQuery.value.toLowerCase().trim()
-  cy.nodes().forEach(n => {
-    const typeVisible = visibleTypes.value[n.data('type')] !== false
-    const searchMatch = !q || (n.data('label') || '').toLowerCase().includes(q)
-    n.style('display', typeVisible && searchMatch ? 'element' : 'none')
+  cy.nodes().forEach((n) => {
+    const match = !q || (n.data('label') || '').toLowerCase().includes(q)
+    n.style('display', match ? 'element' : 'none')
   })
-  cy.edges().forEach(e => {
-    const typeVisible = visibleEdges.value[e.data('type')] !== false
-    const endpointsVisible =
-      e.source().style('display') !== 'none' && e.target().style('display') !== 'none'
-    e.style('display', typeVisible && endpointsVisible ? 'element' : 'none')
+  cy.edges().forEach((e) => {
+    const visible = e.source().style('display') !== 'none' && e.target().style('display') !== 'none'
+    e.style('display', visible ? 'element' : 'none')
   })
-  cy.layout({ name: 'dagre', rankDir: 'TB', nodeSep: 30, rankSep: 80, animate: true, animationDuration: 400, padding: 30 }).run()
 }
 
 function fitGraph() {
   if (cy) cy.fit(undefined, 30)
 }
 
-function showAll() {
+function resetView() {
   if (!cy) return
+  searchQuery.value = ''
   cy.elements().style('display', 'element')
   cy.elements().removeClass('highlighted dimmed')
   selectedNode.value = null
-  applyFilters()
+  cy.layout(FCOSE_LAYOUT).run()
 }
 
 onMounted(() => {
@@ -241,21 +227,10 @@ onUnmounted(() => {
     <!-- Toolbar -->
     <div class="graph-toolbar">
       <button class="graph-btn" @click="fitGraph" title="Вписать"><i class="pi pi-expand"></i></button>
-      <button class="graph-btn" @click="showAll" title="Сбросить"><i class="pi pi-replay"></i></button>
+      <button class="graph-btn" @click="resetView" title="Сбросить"><i class="pi pi-replay"></i></button>
       <div class="graph-search">
         <i class="pi pi-search"></i>
         <input v-model="searchQuery" @input="applyFilters" placeholder="Поиск..." />
-      </div>
-      <div class="type-filters">
-        <button
-          v-for="(color, type) in NODE_COLORS"
-          :key="type"
-          :class="['type-toggle', visibleTypes[type] ? '' : 'inactive']"
-          @click="toggleType(type)"
-        >
-          <span class="dot" :style="{ background: visibleTypes[type] ? color : '#ccc' }"></span>
-          {{ TYPE_LABELS[type] }}
-        </button>
       </div>
     </div>
 
@@ -271,11 +246,14 @@ onUnmounted(() => {
         <span class="info-type-badge" :style="{ background: NODE_COLORS[selectedNode.type] }">
           {{ TYPE_LABELS[selectedNode.type] }}
         </span>
-        <button class="info-close" @click="selectedNode = null; showAll()"><i class="pi pi-times"></i></button>
+        <button class="info-close" @click="selectedNode = null; resetView()"><i class="pi pi-times"></i></button>
       </div>
       <div class="info-name">{{ selectedNode.label }}</div>
-      <div v-if="selectedNode.confidentiality_level" class="info-meta">
-        Уровень: {{ selectedNode.confidentiality_level }}
+      <div v-if="selectedNode.type === 'user'" class="info-meta">
+        Проектов: {{ selectedNode.project_count ?? 0 }}
+      </div>
+      <div v-if="selectedNode.type === 'project' && selectedNode.confidentiality_level" class="info-meta">
+        Доступ: {{ accessLabel(selectedNode.confidentiality_level) }}
       </div>
       <div class="info-section-title">Связи ({{ selectedNode.neighbors?.length || 0 }})</div>
       <div class="info-neighbors">
@@ -290,13 +268,16 @@ onUnmounted(() => {
     <!-- Legend -->
     <div class="graph-legend">
       <div class="legend-row">
-        <strong>Доступы:</strong>
-        <span class="legend-item"><span class="line-sample" :style="{ background: ACCESS_COLORS.view }"></span> view</span>
-        <span class="legend-item"><span class="line-sample" :style="{ background: ACCESS_COLORS.edit }"></span> edit</span>
-        <span class="legend-item"><span class="line-sample" :style="{ background: ACCESS_COLORS.admin }"></span> admin</span>
-        <span class="legend-item"><span class="line-sample" style="background: rgba(211, 167, 84, 0.6)"></span> grant отделу</span>
-        <span class="legend-item"><span class="line-sample dotted"></span> implicit dept→project</span>
-        <span class="legend-item"><span class="line-sample dashed"></span> член отдела</span>
+        <strong>Связи:</strong>
+        <span class="legend-item"><span class="line-sample" :style="{ background: EDGE_STYLES.manager.color, height: '3px' }"></span> руководит проектом</span>
+        <span class="legend-item"><span class="line-sample" :style="{ background: EDGE_STYLES.member.color }"></span> участник — CRUD данных</span>
+        <span class="legend-item"><span class="dot-grow"></span> размер = число проектов</span>
+      </div>
+      <div class="legend-row">
+        <strong>Узлы:</strong>
+        <span class="legend-item"><span class="dot" :style="{ background: NODE_COLORS.user }"></span> человек</span>
+        <span class="legend-item"><span class="dot" :style="{ background: PROJECT_CONF_COLORS.public }"></span> открытый проект</span>
+        <span class="legend-item"><span class="dot" :style="{ background: PROJECT_CONF_COLORS.confidential }"></span> ограниченный проект</span>
       </div>
     </div>
   </div>
@@ -354,29 +335,10 @@ onUnmounted(() => {
   border: none;
   background: transparent;
   font-size: 12px;
-  width: 100px;
+  width: 110px;
   outline: none;
   font-family: inherit;
 }
-
-.type-filters { display: flex; gap: 0.25rem; margin-left: auto; }
-.type-toggle {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 8px;
-  border: 0.5px solid rgba(180, 210, 255, 0.55);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
-  font-size: 11px;
-  color: #333;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-}
-.type-toggle.inactive { opacity: 0.45; text-decoration: line-through; }
-.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
 .loading {
   display: flex;
@@ -401,7 +363,7 @@ onUnmounted(() => {
   position: absolute;
   top: 70px;
   right: 12px;
-  bottom: 60px;
+  bottom: 70px;
   width: 260px;
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(12px);
@@ -465,11 +427,20 @@ onUnmounted(() => {
   padding: 0.5rem 0.75rem;
   font-size: 11px;
   color: #6B7280;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 .legend-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
 .legend-row strong { color: rgba(0, 50, 116, 0.6); font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
 .legend-item { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-.line-sample { width: 20px; height: 2px; display: inline-block; }
-.line-sample.dotted { border-top: 2px dotted rgba(0, 50, 116, 0.3); background: transparent; }
-.line-sample.dashed { border-top: 2px dashed rgba(108, 172, 228, 0.4); background: transparent; }
+.line-sample { width: 20px; height: 2px; display: inline-block; border-radius: 2px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-grow {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #6CACE4 30%, rgba(108, 172, 228, 0.25) 70%);
+  display: inline-block;
+}
 </style>
