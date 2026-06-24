@@ -164,6 +164,12 @@ const ctx = useRowOpenForm({
   },
 });
 
+// The opened project's full list row — carries created_by, which the 8-field
+// edit form omits but the members table needs to freeze the creator.
+const openedProject = computed(
+  () => projects.value.find((p) => p.project_id === ctx.currentId.value) || {},
+);
+
 // ── Visibility quick selector ────────────────────────────────────────
 function setAccess(level) {
   ctx.form.value.confidentiality_level = level;
@@ -406,7 +412,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
         <ProjectMembersTable
           v-if="ctx.mode.value === 'edit'"
           :project-id="ctx.currentId.value"
-          :project="{ lead_id: ctx.form.value.lead_id, created_by: ctx.form.value.created_by, confidentiality_level: ctx.form.value.confidentiality_level }"
+          :project="{ lead_id: ctx.form.value.lead_id, created_by: openedProject.created_by, confidentiality_level: ctx.form.value.confidentiality_level }"
           :users="activeUsers"
         />
 
