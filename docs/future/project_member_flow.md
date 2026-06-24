@@ -2,7 +2,18 @@
 
 Created: 2026-06-24
 Edited: 2026-06-24
-Status: design approved — building (Vue + minimal backend), branch `dalia/project-member-flow`
+Status: IMPLEMENTED (Vue) 2026-06-24 — branch `dalia/project-member-flow`. Route
+enforcement remains R1.
+
+> Built end-to-end: L1 vocab → L1.5 model (migration d044 + resolver + delete-check)
+> → L2/L3 the «Участники» table (`ProjectMembersTable.vue`). Verified live: add /
+> soft-disable / level / expiry / role all work; the delete-check blocked removing
+> a member with a tape. **Build caveats:** (1) only the **lead** is frozen — the
+> create form doesn't carry `created_by`, so creator-freeze needs that threaded
+> through; (2) `ProjectAccessPanel` is kept below as the advanced/legacy grant
+> surface (copy/presets) — fold or retire once the table covers those; (3) during
+> save-testing, user «ai» was added to project 13 and couldn't be auto-removed (it
+> has a tape there → correctly blocked); left as a member.
 Verified against code: 2026-06-24 (`ProjectAccessPanel.vue`, `routes/projects.js`, `public/js/projects.js`, `project_participants`, `user_project_access`, live schema)
 Source paths: `client-web/src/components/ProjectAccessPanel.vue`, `client-web/src/pages/reference/ProjectsPage.vue`, `client-web/src/utils/projectAccess.js`, `routes/projects.js`, `migrations/011_project_confidentiality.sql`
 
