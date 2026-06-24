@@ -72,10 +72,15 @@ async function loadGraph() {
   loading.value = true
   try {
     const { data } = await api.get('/api/access/graph')
+    // Reveal the container BEFORE rendering: it is v-show-hidden while loading,
+    // and cytoscape captures the container size at init — initialising into a
+    // 0×0 hidden box leaves the graph blank. Flip loading off, wait for the DOM,
+    // then render into the now-visible, sized container.
+    loading.value = false
+    await nextTick()
     renderGraph(buildAccessGraph(data))
   } catch (err) {
     console.error(err)
-  } finally {
     loading.value = false
   }
 }
