@@ -45,6 +45,7 @@ import InputText from 'primevue/inputtext';
 import Textarea from 'primevue/textarea';
 import Select from 'primevue/select';
 import DateInputISO from '@/components/parity/DateInputISO.vue';
+import { isoDateToMskInput } from '@/utils/dateFormat';
 import { ACCESS_OPTIONS, accessLabel, normalizeAccess } from '@/utils/projectAccess';
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -108,8 +109,11 @@ async function loadOne(id) {
       name: item.name || '',
       lead_id: item.lead_id || '',
       description: item.description || '',
-      start_date: item.start_date ? item.start_date.slice(0, 10) : '',
-      due_date: item.due_date ? item.due_date.slice(0, 10) : '',
+      // DATE columns come back as a UTC instant (midnight MSK = prev-day 21:00Z);
+      // slicing the UTC string was off by one for MSK. Use the MSK calendar date
+      // so the edit form matches the list (which renders local).
+      start_date: isoDateToMskInput(item.start_date),
+      due_date: isoDateToMskInput(item.due_date),
       status: item.status || 'active',
       confidentiality_level: item.confidentiality_level || 'public',
       department_id: item.department_id || null,
