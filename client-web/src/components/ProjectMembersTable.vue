@@ -408,7 +408,10 @@ function reset() {
   overflow-y: auto;
   border: 1px solid rgba(0, 50, 116, 0.08);
   border-radius: 8px;
-  overscroll-behavior: contain;
+  /* NOTE: no `overscroll-behavior: contain` here — this table lives inside the
+     page's own scroll container (.app-content), so containment would trap the
+     scroll at the list's top/bottom until the cursor leaves the table. Default
+     chaining lets a scroll continue into the page, which feels natural. */
 }
 .members-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .members-table thead th {
