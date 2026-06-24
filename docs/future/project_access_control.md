@@ -54,6 +54,22 @@ model: member edges = "should CRUD the data," red manager edges = "runs the
 project." The graph shows intent; this doc is the enforcement work that makes it
 true.
 
+### Model finalised 2026-06-24 (see [Project Member Flow](project_member_flow.md))
+
+The per-member model the enforcement must implement:
+- **4 levels:** `admin` (edit project) / `edit` = Обычный (CRUD data) / `view`
+  (view only) / **`none`** = explicit deny that **overrides even public projects**.
+- **Expiry = auto-downgrade**, not delete: expired grant → `view` (open project)
+  or `none` (restricted). Membership rows are never erased (soft-disable).
+- **Deactivated user (`users.active=false`) → `none` everywhere** (guard in
+  `checkView`; login is already blocked at auth).
+- **Conditional hard-delete** of a participant only when they created no lab
+  entities on the project (`tapes`/`electrode_cut_batches`/`batteries` by
+  `created_by`).
+
+The `access_level` enum gains `none` (migration); `checkViewPermission` /
+`checkModifyPermission` must honor deny + expiry-downgrade + inactive-user.
+
 ## Why it is deferred (not patched piecemeal)
 
 This is cross-cutting and must be designed once and applied consistently across
