@@ -28,7 +28,7 @@ const props = defineProps({
   project: { type: Object, default: () => ({}) },
   users: { type: Array, required: true },
 });
-const emit = defineEmits(['saved']);
+const emit = defineEmits(['saved', 'update:dirty']);
 
 const toast = useToast();
 const { isAdmin } = storeToRefs(useAuthStore());
@@ -136,6 +136,9 @@ function rowChanged(r) {
   );
 }
 const dirtyCount = computed(() => rows.value.filter(rowChanged).length);
+// Surface unsaved state to the page so its exit/navigation guard catches member
+// edits too (the members table saves separately from the project form).
+watch(dirtyCount, (n) => emit('update:dirty', n > 0), { immediate: true });
 
 function toggle(r) {
   if (r.frozen || saving.value) return;

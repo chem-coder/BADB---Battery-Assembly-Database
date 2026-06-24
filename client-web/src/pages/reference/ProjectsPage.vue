@@ -144,6 +144,11 @@ function validate(form) {
 }
 
 // ── Foundation hook ──────────────────────────────────────────────────
+// Unsaved-state of the members table (it saves separately from the project
+// form) — folded into the exit guard so navigating away with pending member
+// changes prompts, instead of silently discarding them.
+const membersDirty = ref(false);
+
 const ctx = useRowOpenForm({
   entityType: 'projects',
   idField: 'project_id',
@@ -152,6 +157,7 @@ const ctx = useRowOpenForm({
   loadOne,
   saveOne,
   list: { ref: projects, load: loadList },
+  extraDirty: membersDirty,
   // No typed delete phrase, no delete-check (per vanilla):
   hasDeleteCheck: false,
   deletePhrase: null,
@@ -413,6 +419,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('projects', ctx);
           :project-id="ctx.currentId.value"
           :project="{ lead_id: ctx.form.value.lead_id, created_by: openedProject.created_by, confidentiality_level: ctx.form.value.confidentiality_level }"
           :users="activeUsers"
+          @update:dirty="membersDirty = $event"
         />
       </div>
     </template>
