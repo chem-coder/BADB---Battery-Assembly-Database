@@ -14,5 +14,6 @@ Small wording clarifications are fine. Behavior-changing rule edits need explici
 - [Auth Policy](auth_policy.md)
 - [Battery Lifecycle Rules](battery_lifecycle_rules.md)
 - [Electrode Stack Rules](electrode_stack_rules.md)
+- [Frontend State Rules (Vue)](frontend_state_rules.md)
 - [Material Composition Rules](material_composition_rules.md)
 - [Schema And API Naming Rules](schema_api_naming.md)

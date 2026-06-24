@@ -145,6 +145,17 @@ Use `client-web/src/config/navigation.js` for Vue sidebar/router labels and
 routes. Keep labels aligned with vanilla where the route mirrors a vanilla
 surface.
 
+### State management (MUST follow)
+
+Vue state placement follows `docs/rules/frontend_state_rules.md` — a fixed
+decision ladder (local `ref` → composable → `useBackendCache` → Pinia) so it
+stays repeatable and predictable. Key rules: push state DOWN not up (Pinia only
+for truly app-wide state — today just `auth`); reuse `useRowOpenForm` /
+`useBackendCache` instead of re-rolling per page; and when two pieces of state
+must agree, connect them (props/emit or Pinia) — never keep two copies synced by
+hand (e.g. a sub-panel's unsaved state must `emit('update:dirty')` into the
+page's `useRowOpenForm({ extraDirty })`).
+
 ## Remotes
 
 - **origin: `git@github.com:chem-coder/1_BADB---Battery-Assembly-Database.git` (Dalia) — main repo**
