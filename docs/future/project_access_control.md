@@ -1,7 +1,7 @@
 # Project-Based Access Control (Entity Authorization)
 
 Created: 2026-06-20
-Edited: 2026-06-20
+Edited: 2026-06-24
 Status: future idea
 
 This is the "R1" security item from the 2026-06 audit. It is the agreed next
@@ -34,6 +34,25 @@ projects. A user who has access to a project can **view and modify (including
 delete)** the physical items linked to it. A user with no access to the project
 cannot see the project or its linked items. **Materials are not linked to
 projects, so everyone can see materials.**
+
+### Capability split — reconfirmed 2026-06-24
+
+Two distinct capabilities, not one ladder:
+
+- **THE DATA** (linked physical items): **any project member** (a
+  `project_participants` row) can **CRUD**. This is the membership capability and
+  is the part **not yet enforced** — entity routes gate writes by `auth`/role
+  only, never by membership.
+- **THE PROJECT record** (title, dates, members, access settings): **only
+  owner / lead / admin** (`checkModifyPermission`). This part *is* enforced today.
+
+This resolves the open question below on "which access level grants modify": it's
+**membership** that should grant data-CRUD, not a graded view/edit/admin level.
+The access graph (membership constellation, shipped 2026-06-24 — see
+[Access Graph Redesign](access_graph_redesign.md)) now *visualises* this intended
+model: member edges = "should CRUD the data," red manager edges = "runs the
+project." The graph shows intent; this doc is the enforcement work that makes it
+true.
 
 ## Why it is deferred (not patched piecemeal)
 

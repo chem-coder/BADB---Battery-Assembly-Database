@@ -2,8 +2,14 @@
 
 Created: 2026-06-24
 Edited: 2026-06-24
-Status: design approved — implementation pending (build core + tests first)
+Status: IMPLEMENTED (v1) 2026-06-24 — branch `dalia/access-graph-redesign`
 Verified against code: checked 2026-06-24 (`checkModifyPermission`, `project_participants`)
+
+> Shipped in three layers: `accessGraphModel.js` builder + tests → `GET
+> /api/access/graph` raw-rows endpoint → `AccessGraph.vue` fcose render. Force
+> layout = `cytoscape-fcose` (chosen over plain `cose` for `packComponents`,
+> since ~30 of 38 users belong to no project and must pack tidily on the
+> outskirts). The Орбиты mode and all toggles remain deferred.
 Source paths: `client-web/src/components/AccessGraph.vue`, `routes/access.js` (`GET /api/access/graph`), `routes/projects.js` (`checkModifyPermission`), `client-web/src/pages/AccessPage.vue`, `client-web/src/utils/projectAccess.js`
 
 Design agreed with Dalia 2026-06-24. Replaces the dagre (hierarchical) "broom" on
@@ -26,13 +32,18 @@ This is a **membership** map, not an access-rights map. A person is a **node**; 
 project is a **node**. A person connects to a project when they *belong* to it:
 
 - **listed on the project's team** (`project_participants` roster) → **member**
-  (edit-level), or
+  — *should* be able to **CRUD the project's data** (tapes, electrodes,
+  batteries…), or
 - they **run it**: the **lead** (`projects.lead_id`), the **owner**
   (`projects.created_by`), or a holder of an explicit **admin** grant
-  (`user_project_access.access_level = 'admin'`).
+  (`user_project_access.access_level = 'admin'`) → **manager**, who can also
+  **edit the project itself** (title, dates, members, access).
 
 The manager roles mirror `checkModifyPermission` in `routes/projects.js`
-(owner / project-lead / project-admin).
+(owner / project-lead / project-admin). NB: the *member → CRUD-data* capability
+is the **intended** model and is what this graph depicts; it is **not yet
+enforced** on the entity routes — see [Project-Based Access Control
+(R1)](project_access_control.md).
 
 Edge styling encodes the person's role on that project:
 

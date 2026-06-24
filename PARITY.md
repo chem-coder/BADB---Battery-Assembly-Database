@@ -152,7 +152,7 @@ in-progress replacement.
 | Filters: text, status, access, lead | DONE | all present (`lead_id`); Vue also adds a department filter |
 | Print + duplicate (list) | DONE | `row-actions` |
 | Delete: backend dependency conflicts, no delete-check, no typed phrase | DONE | `hasDeleteCheck:false`, `deletePhrase:null` — matches vanilla |
-| Team/participants + access grants | DONE (Vue richer) | `ProjectAccessPanel` + access graph/matrix/timeline (beyond vanilla) |
+| Team/participants + access grants | DONE (Vue richer) | `ProjectAccessPanel` + access graph/matrix/timeline (beyond vanilla). Граф reworked to a force-directed membership constellation 2026-06-24 (`utils/accessGraphModel.js` + `AccessGraph.vue`, branch `dalia/access-graph-redesign`) — see `docs/future/access_graph_redesign.md`. |
 | Access labels & model | DONE | Done 2026-06-20 (`utils/projectAccess.js`): Vue now uses `открытый` / `ограниченный` (lowercase, matching vanilla + the app's option convention); the `department` access option is dropped (legacy `department` displays + filters as `ограниченный`). Vanilla was already correct — no change. Entity-route authz is the separate R1 item (deferred). |
 
 ### Users — `users.js` → `reference/UsersPage.vue`
