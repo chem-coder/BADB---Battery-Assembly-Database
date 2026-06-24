@@ -1,24 +1,16 @@
 <script setup>
 /**
- * ProjectMembersTable — the «Участники» surface for one project.
+ * ProjectMembersTable — two views for one project's team.
  *
- * A table of ALL users: check to add as a member, set the 4-level access
- * (Администратор / Обычный / Просмотр / Нет доступа), an optional expiry, and an
- * optional functional role («Роль в команде»). Adding is fast (check + defaults);
- * details are optional.
+ *  «Выбор команды» (select): a compact table of ALL users — checkbox + name +
+ *      access level. Check to add, set level. Used to build/edit the roster.
+ *  «Участники» (participants, default): only the people on the team. Each is a
+ *      bold name with a side/down expander; expanded shows their dept · title
+ *      (tiny grey), an inline-editable project role, and Dima's expiry controls.
  *
- * Soft-disable, not delete: unchecking a member keeps the participant record and
- * sets «Нет доступа» — the person is greyed «отключён», re-check to reinstate.
- * A genuine mistake can be hard-deleted (admin-only) ONLY when the user created
- * no lab records on the project (server-checked via the delete-check endpoint).
- * The lead / creator row is frozen-checked.
- *
- * Backend wiring:
- *   POST   /api/projects/:id/participants            (add member + role)
- *   PUT    /api/projects/:id/participants/:pid        (role)
- *   POST   /api/projects/:id/access                   (level + expiry; none = disable)
- *   GET    /api/projects/:id/participants/:pid/delete-check
- *   DELETE /api/projects/:id/participants/:pid        (guarded hard delete)
+ * Membership = a participant row OR an explicit user grant. Unchecking = soft
+ * disable («Нет доступа», record kept). Both views share one rows[] + one Save.
+ * See docs/future/project_member_flow.md.
  */
 import { ref, computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
@@ -33,23 +25,25 @@ import DatePicker from 'primevue/datepicker';
 
 const props = defineProps({
   projectId: { type: [Number, String, null], default: null },
-  // { lead_id, created_by, confidentiality_level } — lead/creator are frozen
   project: { type: Object, default: () => ({}) },
-  // all active users (parent already loads /api/users)
   users: { type: Array, required: true },
 });
 const emit = defineEmits(['saved']);
 
 const toast = useToast();
-const { isAdmin } = storeToRefs(useAuthStore()); // gates the hard-delete escape hatch
+const { isAdmin } = storeToRefs(useAuthStore());
+
 const loading = ref(false);
 const saving = ref(false);
 const search = ref('');
-
-const rows = ref([]);       // working copy (editable)
-const original = ref({});   // user_id -> snapshot for diffing
+const view = ref('participants'); // 'participants' | 'select'
+const rows = ref([]);
+const original = ref({});
+const expanded = ref(new Set());    // user_ids expanded in the participants view
+const editingRole = ref(new Set()); // user_ids whose role is mid-edit
 
 const todayMinDate = new Date();
+const DURATIONS = [7, 30, 90];
 
 function isFrozen(userId) {
   const id = Number(userId);
@@ -65,9 +59,8 @@ async function load(id) {
       api.get(`/api/projects/${id}/access`),
     ]);
     const partByUser = new Map(pp.data.map((p) => [p.user_id, p]));
-    // GET /access returns BOTH the implicit participant `view` row and the
-    // explicit user grant per member. Prefer the explicit grant — it carries the
-    // real level (edit/admin/none) and expiry.
+    // GET /access returns the implicit participant `view` row AND the explicit
+    // user grant; prefer the explicit grant (real level + expiry).
     const accByUser = new Map();
     for (const a of acc.data) {
       if (a.grantee_type === 'department') continue;
@@ -81,14 +74,15 @@ async function load(id) {
       const frozen = isFrozen(u.user_id);
       const grantLevel = a?.access_level || null;
       const grantExpired = !!a?.is_expired;
-      // "added" = on the roster OR holds an explicit user grant (old grant-panel
-      // data has grants without participant rows — those people are members too).
+      // "added" = on the roster OR holding an explicit user grant
       const member = !!part || (!!a && a.grantee_type === 'user') || frozen;
-      const denied = grantLevel === 'none' || grantExpired; // disabled member
+      const denied = grantLevel === 'none' || grantExpired;
       const checked = frozen || (member && !denied);
       const row = {
         user_id: u.user_id,
         name: u.name,
+        position: u.position,
+        department_name: u.department_name,
         frozen,
         member,
         participant_id: part?.participant_id || null,
@@ -96,6 +90,7 @@ async function load(id) {
         level: grantLevel && grantLevel !== 'none' ? grantLevel : DEFAULT_GRANT_LEVEL,
         expiresAt: a?.expires_at ? new Date(a.expires_at) : null,
         is_expired: grantExpired,
+        role: part?.role_in_team || '',
       };
       snap[u.user_id] = {
         checked,
@@ -103,6 +98,7 @@ async function load(id) {
         participant_id: row.participant_id,
         level: row.level,
         expiresAt: row.expiresAt ? row.expiresAt.getTime() : null,
+        role: row.role,
       };
       return row;
     });
@@ -115,14 +111,19 @@ async function load(id) {
   }
 }
 
-watch(() => props.projectId, (id) => load(id), { immediate: true });
+watch(() => props.projectId, (id) => { expanded.value = new Set(); load(id); }, { immediate: true });
 
-const filteredRows = computed(() => {
+const matchesSearch = (r) => {
   const q = search.value.toLowerCase().trim();
-  if (!q) return rows.value;
-  return rows.value.filter((r) => (r.name || '').toLowerCase().includes(q));
-});
+  if (!q) return true;
+  return (r.name || '').toLowerCase().includes(q) ||
+    (r.position || '').toLowerCase().includes(q) ||
+    (r.department_name || '').toLowerCase().includes(q);
+};
 
+// select view = all users; participants view = members only (active or disabled)
+const selectRows = computed(() => rows.value.filter(matchesSearch));
+const participantRows = computed(() => rows.value.filter((r) => r.member && matchesSearch(r)));
 const memberCount = computed(() => rows.value.filter((r) => r.checked).length);
 
 function rowChanged(r) {
@@ -130,10 +131,8 @@ function rowChanged(r) {
   if (!o) return r.checked;
   return (
     r.checked !== o.checked ||
-    (r.checked && (
-      r.level !== o.level ||
-      (r.expiresAt ? r.expiresAt.getTime() : null) !== o.expiresAt
-    ))
+    (r.checked && (r.level !== o.level || (r.expiresAt ? r.expiresAt.getTime() : null) !== o.expiresAt)) ||
+    (r.role || '') !== (o.role || '')
   );
 }
 const dirtyCount = computed(() => rows.value.filter(rowChanged).length);
@@ -141,8 +140,19 @@ const dirtyCount = computed(() => rows.value.filter(rowChanged).length);
 function toggle(r) {
   if (r.frozen || saving.value) return;
   r.checked = !r.checked;
-  // re-checking a disabled member reinstates them at the default level
   if (r.checked && r.level === 'none') r.level = DEFAULT_GRANT_LEVEL;
+}
+
+// ── participants-view interactions ───────────────────────────────────
+function toggleExpand(uid) {
+  const s = new Set(expanded.value);
+  s.has(uid) ? s.delete(uid) : s.add(uid);
+  expanded.value = s;
+}
+function startRoleEdit(uid) { editingRole.value = new Set(editingRole.value).add(uid); }
+function endRoleEdit(uid) { const s = new Set(editingRole.value); s.delete(uid); editingRole.value = s; }
+function setDuration(r, days) {
+  r.expiresAt = days == null ? null : new Date(Date.now() + days * 86400000);
 }
 
 async function save() {
@@ -152,7 +162,6 @@ async function save() {
   const failed = [];
   let okCount = 0;
 
-  // Each row is independent — one failure must NOT abort the rest of the batch.
   for (const r of rows.value) {
     if (!rowChanged(r)) continue;
     const o = original.value[r.user_id] || {};
@@ -160,35 +169,24 @@ async function save() {
     const level = r.level === 'none' ? DEFAULT_GRANT_LEVEL : r.level;
     try {
       if (r.checked && !o.checked) {
-        // becoming active — ensure a participant row (tolerate "already one"),
-        // then set the access level + expiry.
         if (!o.participant_id) {
           try {
-            await api.post(`/api/projects/${pid}/participants`, { user_id: r.user_id });
+            await api.post(`/api/projects/${pid}/participants`, { user_id: r.user_id, role_in_team: r.role || '' });
           } catch (e) {
-            if (e?.response?.status !== 409) throw e; // 409 = already a participant, fine
+            if (e?.response?.status !== 409) throw e;
           }
         }
-        await api.post(`/api/projects/${pid}/access`, {
-          user_ids: [r.user_id],
-          access_level: level,
-          expires_at: expIso,
-        });
+        await api.post(`/api/projects/${pid}/access`, { user_ids: [r.user_id], access_level: level, expires_at: expIso });
       } else if (!r.checked && o.checked) {
-        // soft-disable — keep the participant, deny access
-        await api.post(`/api/projects/${pid}/access`, {
-          user_ids: [r.user_id],
-          access_level: 'none',
-        });
+        await api.post(`/api/projects/${pid}/access`, { user_ids: [r.user_id], access_level: 'none' });
       } else if (r.checked && o.checked) {
-        // active member — push level/expiry if changed
         if (r.level !== o.level || (r.expiresAt ? r.expiresAt.getTime() : null) !== o.expiresAt) {
-          await api.post(`/api/projects/${pid}/access`, {
-            user_ids: [r.user_id],
-            access_level: level,
-            expires_at: expIso,
-          });
+          await api.post(`/api/projects/${pid}/access`, { user_ids: [r.user_id], access_level: level, expires_at: expIso });
         }
+      }
+      // role change on an existing participant (new members set it at creation)
+      if (r.participant_id && (r.role || '') !== (o.role || '')) {
+        await api.put(`/api/projects/${pid}/participants/${r.participant_id}`, { role_in_team: r.role || '' });
       }
       okCount += 1;
     } catch (e) {
@@ -200,12 +198,7 @@ async function save() {
 
   saving.value = false;
   if (failed.length) {
-    toast.add({
-      severity: 'warn',
-      summary: `Сохранено: ${okCount}, не удалось: ${failed.length}`,
-      detail: failed.join(', '),
-      life: 6000,
-    });
+    toast.add({ severity: 'warn', summary: `Сохранено: ${okCount}, не удалось: ${failed.length}`, detail: failed.join(', '), life: 6000 });
   } else if (okCount) {
     toast.add({ severity: 'success', summary: `Сохранено изменений: ${okCount}`, life: 2500 });
   }
@@ -222,7 +215,7 @@ async function hardDelete(r) {
       toast.add({ severity: 'warn', summary: 'Удаление недоступно', detail: data.message, life: 6000 });
       return;
     }
-    if (!window.confirm(`Удалить ${r.name} из участников без следа? Это возможно, т.к. нет связанных лабораторных записей.`)) return;
+    if (!window.confirm(`Удалить ${r.name} из участников без следа? Нет связанных лабораторных записей.`)) return;
     await api.delete(`/api/projects/${pid}/participants/${r.participant_id}`);
     toast.add({ severity: 'success', summary: 'Участник удалён', life: 2500 });
     await load(pid);
@@ -232,119 +225,110 @@ async function hardDelete(r) {
   }
 }
 
-function reset() {
-  load(props.projectId);
-}
+function reset() { load(props.projectId); }
 </script>
 
 <template>
   <div class="members-panel">
     <div class="members-header">
-      <span class="section-label">Участники проекта</span>
-      <span class="member-count">{{ memberCount }} в команде</span>
+      <div class="view-tabs">
+        <button :class="['view-tab', view === 'participants' ? 'active' : '']" @click="view = 'participants'">
+          Участники <span class="tab-count">{{ memberCount }}</span>
+        </button>
+        <button :class="['view-tab', view === 'select' ? 'active' : '']" @click="view = 'select'">
+          Выбор команды
+        </button>
+      </div>
       <div class="members-search">
         <i class="pi pi-search"></i>
-        <input v-model="search" placeholder="Поиск по имени, должности, отделу…" />
+        <input v-model="search" placeholder="Поиск…" />
       </div>
       <div class="members-actions">
         <Button label="Отмена" size="small" text :disabled="!dirtyCount || saving" @click="reset" />
         <Button
           :label="dirtyCount ? `Сохранить (${dirtyCount})` : 'Сохранить'"
-          icon="pi pi-check"
-          size="small"
-          :disabled="!dirtyCount || saving"
-          :loading="saving"
+          icon="pi pi-check" size="small"
+          :disabled="!dirtyCount || saving" :loading="saving"
           @click="save"
         />
       </div>
     </div>
 
-    <div v-if="loading" class="members-loading">
-      <i class="pi pi-spin pi-spinner"></i> Загрузка…
-    </div>
+    <div v-if="loading" class="members-loading"><i class="pi pi-spin pi-spinner"></i> Загрузка…</div>
 
-    <div v-else class="members-table-wrap">
-      <table class="members-table">
-        <thead>
-          <tr>
-            <th class="col-check"></th>
-            <th class="col-name">Сотрудник</th>
-            <th class="col-access">Доступ</th>
-            <th class="col-expires">Истекает</th>
-            <th class="col-act"></th>
-          </tr>
-        </thead>
+    <!-- ── SELECT TEAM ─────────────────────────────────────────── -->
+    <div v-else-if="view === 'select'" class="select-wrap">
+      <table class="select-table">
         <tbody>
-          <tr
-            v-for="r in filteredRows"
-            :key="r.user_id"
-            :class="['member-row', r.checked ? 'member-row--active' : (r.member ? 'member-row--disabled' : '')]"
-          >
-            <td class="col-check">
-              <input
-                type="checkbox"
-                :checked="r.checked"
-                :disabled="r.frozen || saving"
-                :title="r.frozen ? 'Руководитель / создатель — снять нельзя' : ''"
-                @change="toggle(r)"
-              />
+          <tr v-for="r in selectRows" :key="r.user_id" :class="['sel-row', r.checked ? 'sel-row--on' : '']">
+            <td class="sel-check">
+              <input type="checkbox" :checked="r.checked" :disabled="r.frozen || saving"
+                :title="r.frozen ? 'Руководитель / создатель' : ''" @change="toggle(r)" />
             </td>
-            <td class="col-name">
+            <td class="sel-name">
               <span class="m-name">{{ r.name }}</span>
-              <span v-if="r.frozen" class="m-frozen-badge">рук./создатель</span>
-              <span v-else-if="r.member && !r.checked" class="m-disabled-badge">отключён</span>
+              <span v-if="r.frozen" class="m-badge m-badge--lead">рук.</span>
+              <span v-else-if="r.member && !r.checked" class="m-badge m-badge--off">отключён</span>
             </td>
-            <td class="col-access">
-              <Select
-                v-if="r.checked"
-                v-model="r.level"
-                :options="GRANT_LEVEL_OPTIONS"
-                option-label="label"
-                option-value="value"
-                :disabled="r.frozen || saving"
-                class="m-level"
-              />
-              <span v-else-if="r.member" class="m-muted">{{ grantLevelLabel('none') }}</span>
-              <span v-else class="m-muted">—</span>
-            </td>
-            <td class="col-expires">
-              <DatePicker
-                v-if="r.checked"
-                v-model="r.expiresAt"
-                placeholder="бессрочно"
-                date-format="dd.mm.yy"
-                :first-day-of-week="1"
-                :min-date="todayMinDate"
-                show-button-bar
-                :disabled="saving"
-                class="m-expires"
-              />
-              <span v-else class="m-muted">—</span>
-            </td>
-            <td class="col-act">
-              <Button
-                v-if="isAdmin && r.member && !r.frozen && !r.checked"
-                icon="pi pi-trash"
-                severity="danger"
-                text
-                size="small"
-                title="Удалить запись (только если нет лабораторных записей)"
-                @click="hardDelete(r)"
-              />
+            <td class="sel-access">
+              <Select v-if="r.checked" v-model="r.level" :options="GRANT_LEVEL_OPTIONS"
+                option-label="label" option-value="value" :disabled="r.frozen || saving" class="lvl-select" />
+              <span v-else class="m-muted">{{ r.member ? grantLevelLabel('none') : '—' }}</span>
             </td>
           </tr>
-          <tr v-if="!filteredRows.length">
-            <td colspan="5" class="members-empty">Никого не найдено</td>
-          </tr>
+          <tr v-if="!selectRows.length"><td colspan="3" class="members-empty">Никого не найдено</td></tr>
         </tbody>
       </table>
     </div>
 
-    <p class="members-hint">
-      Снятие галочки <strong>отключает</strong> доступ (запись участника сохраняется — лабораторные
-      данные остаются связаны). Повторная отметка восстанавливает доступ. «Истекает» по умолчанию
-      бессрочно; по истечении участник понижается до просмотра (открытый проект) или «нет доступа»
-      (ограниченный).
+    <!-- ── PARTICIPANTS ────────────────────────────────────────── -->
+    <div v-else class="part-wrap">
+      <div v-for="r in participantRows" :key="r.user_id"
+        :class="['part-row', r.checked ? '' : 'part-row--off', expanded.has(r.user_id) ? 'is-open' : '']">
+        <div class="part-head" @click="toggleExpand(r.user_id)">
+          <button class="expander" :class="{ open: expanded.has(r.user_id) }" type="button" @click.stop="toggleExpand(r.user_id)">
+            <i class="pi pi-chevron-right"></i>
+          </button>
+          <span class="part-name">{{ r.name }}</span>
+          <span v-if="r.frozen" class="m-badge m-badge--lead">рук.</span>
+          <span v-else-if="!r.checked" class="m-badge m-badge--off">отключён</span>
+          <span class="part-lvl">{{ grantLevelLabel(r.checked ? r.level : 'none') }}</span>
+        </div>
+
+        <div v-if="expanded.has(r.user_id)" class="part-body">
+          <div class="part-col">
+            <div class="part-meta">{{ [r.position, r.department_name].filter(Boolean).join(' · ') || '—' }}</div>
+            <div class="role-line">
+              <span class="role-label">Роль в проекте:</span>
+              <input v-if="editingRole.has(r.user_id)" v-model="r.role" class="role-input"
+                placeholder="напр. инженер-технолог" @blur="endRoleEdit(r.user_id)"
+                @keyup.enter="endRoleEdit(r.user_id)" />
+              <a v-else class="role-value" :class="{ 'role-empty': !r.role }" @click="startRoleEdit(r.user_id)">
+                {{ r.role || 'Определить роль' }}
+              </a>
+            </div>
+            <Button v-if="isAdmin && !r.frozen && !r.checked" label="Удалить запись" icon="pi pi-trash"
+              severity="danger" text size="small" class="del-btn" @click="hardDelete(r)" />
+          </div>
+          <div class="part-col part-col--right" v-if="r.checked">
+            <span class="role-label">Доступ истекает:</span>
+            <div class="expiry-chips">
+              <button v-for="d in DURATIONS" :key="d" type="button" class="exp-chip" @click="setDuration(r, d)">{{ d }} дн</button>
+              <button type="button" :class="['exp-chip', !r.expiresAt ? 'active' : '']" @click="setDuration(r, null)">Бессрочно</button>
+            </div>
+            <DatePicker v-model="r.expiresAt" placeholder="или дата…" date-format="dd.mm.yy"
+              :first-day-of-week="1" :min-date="todayMinDate" show-button-bar class="exp-date" />
+          </div>
+        </div>
+      </div>
+      <div v-if="!participantRows.length" class="members-empty">
+        В команде пока никого. Нажмите «Выбор команды», чтобы добавить.
+      </div>
+    </div>
+
+    <p v-if="!loading" class="members-hint">
+      Снятие галочки <strong>отключает</strong> доступ (запись сохраняется). По истечении срока участник
+      понижается до просмотра (открытый проект) или «нет доступа» (ограниченный).
     </p>
   </div>
 </template>
@@ -358,97 +342,106 @@ function reset() {
   flex-direction: column;
   gap: 0.6rem;
 }
-.members-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+.members-header { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+.view-tabs { display: flex; gap: 4px; background: rgba(0, 50, 116, 0.05); border-radius: 8px; padding: 3px; }
+.view-tab {
+  border: none; background: transparent; cursor: pointer; font-family: inherit;
+  font-size: 12px; font-weight: 600; color: rgba(0, 50, 116, 0.55);
+  padding: 4px 12px; border-radius: 6px; display: flex; align-items: center; gap: 6px;
 }
-.section-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(0, 50, 116, 0.5);
+.view-tab.active { background: #fff; color: #003274; box-shadow: 0 1px 3px rgba(0, 50, 116, 0.1); }
+.tab-count {
+  font-size: 10px; font-weight: 700; background: rgba(0, 50, 116, 0.12);
+  color: #003274; border-radius: 10px; padding: 0 6px; min-width: 16px; text-align: center;
 }
-.member-count { font-size: 11px; font-weight: 600; color: rgba(0, 50, 116, 0.45); }
+
 .members-search {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(180, 210, 255, 0.55);
-  border-radius: 7px;
-  flex: 1;
-  min-width: 200px;
+  display: flex; align-items: center; gap: 5px; padding: 3px 10px;
+  background: rgba(255, 255, 255, 0.9); border: 1px solid rgba(180, 210, 255, 0.55);
+  border-radius: 7px; flex: 1; min-width: 160px;
 }
 .members-search i { font-size: 11px; color: #9CA3AF; }
 .members-search input { border: none; background: transparent; font-size: 12px; flex: 1; outline: none; font-family: inherit; }
 .members-actions { display: flex; gap: 0.4rem; margin-left: auto; }
 
-.members-loading, .members-empty {
-  padding: 2rem; text-align: center; color: rgba(0, 50, 116, 0.4); font-size: 13px;
-}
+.members-loading, .members-empty { padding: 1.5rem; text-align: center; color: rgba(0, 50, 116, 0.4); font-size: 13px; }
 
-.members-table-wrap {
-  max-height: 460px;
-  overflow-y: auto;
-  border: 1px solid rgba(0, 50, 116, 0.08);
-  border-radius: 8px;
-  /* NOTE: no `overscroll-behavior: contain` here — this table lives inside the
-     page's own scroll container (.app-content), so containment would trap the
-     scroll at the list's top/bottom until the cursor leaves the table. Default
-     chaining lets a scroll continue into the page, which feels natural. */
-}
-.members-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.members-table thead th {
-  position: sticky; top: 0; z-index: 1;
-  background: #f3f7fd;
-  text-align: left;
-  padding: 7px 10px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: rgba(0, 50, 116, 0.55);
-  border-bottom: 1px solid rgba(0, 50, 116, 0.1);
-}
-.member-row td { padding: 6px 10px; border-bottom: 1px solid rgba(0, 50, 116, 0.05); vertical-align: middle; }
-.member-row:nth-child(even) td { background: rgba(0, 50, 116, 0.012); }
-.member-row--active td { background: rgba(82, 201, 166, 0.06); }
-.member-row--disabled td { background: rgba(0, 0, 0, 0.02); }
-.member-row--disabled .m-name { color: #9CA3AF; }
-
-.col-check { width: 34px; text-align: center; }
-.col-check input { cursor: pointer; width: 15px; height: 15px; }
-.col-access { width: 170px; }
-.col-expires { width: 160px; }
-.col-act { width: 36px; text-align: center; }
-
-.m-name { font-weight: 600; color: #003274; margin-right: 6px; }
-.m-frozen-badge {
-  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-  color: #8E44AD; background: rgba(142, 68, 173, 0.1); padding: 1px 6px; border-radius: 10px;
-}
-.m-disabled-badge {
-  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-  color: #b00020; background: rgba(176, 0, 32, 0.08); padding: 1px 6px; border-radius: 10px;
-}
+.m-name { font-weight: 600; color: #003274; font-size: 13px; }
 .m-muted { color: #b8c2d0; font-size: 12px; }
-.m-level { width: 100%; }
-.m-expires { width: 100%; }
-.m-role-input {
-  width: 100%;
-  border: 1px solid rgba(180, 210, 255, 0.55);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 12px;
-  font-family: inherit;
-  outline: none;
-  background: #fff;
+.m-badge {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 1px 6px; border-radius: 10px; margin-left: 6px;
 }
-.m-role-input:focus { border-color: rgba(0, 50, 116, 0.4); }
+.m-badge--lead { color: #8E44AD; background: rgba(142, 68, 173, 0.1); }
+.m-badge--off { color: #b00020; background: rgba(176, 0, 32, 0.08); }
+
+/* ── select view ── */
+.select-wrap {
+  max-height: 440px; overflow-y: auto;
+  border: 1px solid rgba(0, 50, 116, 0.08); border-radius: 8px;
+}
+.select-table { width: 100%; border-collapse: collapse; }
+.sel-row td { height: 40px; padding: 0 10px; border-bottom: 1px solid rgba(0, 50, 116, 0.05); vertical-align: middle; }
+.sel-row:nth-child(even) td { background: rgba(0, 50, 116, 0.012); }
+.sel-row--on td { background: rgba(82, 201, 166, 0.06); }
+.sel-check { width: 34px; text-align: center; }
+.sel-check input { cursor: pointer; width: 15px; height: 15px; }
+.sel-access { width: 175px; }
+
+/* compact Select — fixed 28px height + matching font so checking a row never
+   changes its height (the original "table jumps when you select" complaint). */
+.lvl-select { width: 100%; font-family: inherit; }
+.lvl-select :deep(.p-select) { min-height: 0; height: 28px; align-items: center; }
+.lvl-select :deep(.p-select-label) { font-size: 13px; font-family: inherit; padding: 0 8px; color: #003274; display: flex; align-items: center; }
+.lvl-select :deep(.p-select-dropdown) { width: 1.8rem; }
+
+/* ── participants view ── */
+.part-wrap { display: flex; flex-direction: column; border: 1px solid rgba(0, 50, 116, 0.08); border-radius: 8px; overflow: hidden; }
+.part-row { border-bottom: 1px solid rgba(0, 50, 116, 0.06); }
+.part-row:last-child { border-bottom: none; }
+.part-row--off .part-name { color: #9CA3AF; }
+.part-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer; }
+.part-head:hover { background: rgba(0, 50, 116, 0.025); }
+.part-name { font-weight: 700; color: #003274; font-size: 13.5px; }
+.part-lvl { margin-left: auto; font-size: 11px; color: #8b97a8; }
+
+.expander {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border: 1px solid rgba(0, 50, 116, 0.3);
+  border-radius: 5px; background: #fff; cursor: pointer; flex-shrink: 0; padding: 0;
+}
+.expander i { font-size: 9px; color: #003274; transition: transform 0.18s ease; }
+.expander.open i { transform: rotate(90deg); }
+.expander:hover { border-color: #003274; background: rgba(0, 50, 116, 0.04); }
+
+.part-body {
+  display: flex; gap: 1.5rem; padding: 4px 12px 12px 38px;
+  background: rgba(0, 50, 116, 0.015);
+}
+.part-col { display: flex; flex-direction: column; gap: 6px; }
+.part-col--right { margin-left: auto; align-items: flex-start; }
+.part-meta { font-size: 11px; color: #8b97a8; }
+.role-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.role-label { font-size: 11px; color: rgba(0, 50, 116, 0.5); font-weight: 600; }
+.role-value { font-size: 13px; color: #003274; cursor: pointer; border-bottom: 1px dashed rgba(0, 50, 116, 0.3); }
+.role-value.role-empty { color: #9aa7b8; font-style: italic; border-bottom-color: rgba(0, 50, 116, 0.15); }
+.role-value:hover { border-bottom-style: solid; }
+.role-input {
+  font-size: 13px; font-family: inherit; color: #003274;
+  border: 1px solid rgba(0, 50, 116, 0.35); border-radius: 6px; padding: 3px 8px; outline: none; min-width: 200px;
+}
+.del-btn { align-self: flex-start; margin-top: 2px; }
+
+.expiry-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.exp-chip {
+  border: 1px solid rgba(180, 210, 255, 0.7); background: #fff; border-radius: 14px;
+  font-size: 11px; padding: 3px 10px; cursor: pointer; color: #003274; font-family: inherit;
+}
+.exp-chip:hover { background: rgba(0, 50, 116, 0.04); }
+.exp-chip.active { background: #003274; color: #fff; border-color: #003274; }
+.exp-date { margin-top: 2px; }
+.exp-date :deep(.p-inputtext) { font-size: 12px; padding: 4px 8px; }
 
 .members-hint { font-size: 11px; color: #8b97a8; line-height: 1.5; margin: 0; }
 </style>
