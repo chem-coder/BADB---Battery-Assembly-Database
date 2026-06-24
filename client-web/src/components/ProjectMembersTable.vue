@@ -79,33 +79,30 @@ async function load(id) {
       const part = partByUser.get(u.user_id);
       const a = accByUser.get(u.user_id);
       const frozen = isFrozen(u.user_id);
-      const isMember = !!part || frozen;
-      const level = a?.access_level || DEFAULT_GRANT_LEVEL;
-      const isExpired = !!a?.is_expired;
-      // active = a member whose access is neither denied nor expired
-      const isActive = isMember && level !== 'none' && !isExpired;
+      const grantLevel = a?.access_level || null;
+      const grantExpired = !!a?.is_expired;
+      // "added" = on the roster OR holds an explicit user grant (old grant-panel
+      // data has grants without participant rows — those people are members too).
+      const member = !!part || (!!a && a.grantee_type === 'user') || frozen;
+      const denied = grantLevel === 'none' || grantExpired; // disabled member
+      const checked = frozen || (member && !denied);
       const row = {
         user_id: u.user_id,
         name: u.name,
-        position: u.position,
-        department_name: u.department_name,
         frozen,
-        isMember,
+        member,
         participant_id: part?.participant_id || null,
-        checked: frozen || isActive,
-        level: level === 'none' ? DEFAULT_GRANT_LEVEL : level,
-        storedLevel: level,
+        checked,
+        level: grantLevel && grantLevel !== 'none' ? grantLevel : DEFAULT_GRANT_LEVEL,
         expiresAt: a?.expires_at ? new Date(a.expires_at) : null,
-        is_expired: isExpired,
-        role: part?.role_in_team || '',
+        is_expired: grantExpired,
       };
       snap[u.user_id] = {
-        checked: row.checked,
-        isMember,
+        checked,
+        member,
         participant_id: row.participant_id,
         level: row.level,
         expiresAt: row.expiresAt ? row.expiresAt.getTime() : null,
-        role: row.role,
       };
       return row;
     });
@@ -123,11 +120,7 @@ watch(() => props.projectId, (id) => load(id), { immediate: true });
 const filteredRows = computed(() => {
   const q = search.value.toLowerCase().trim();
   if (!q) return rows.value;
-  return rows.value.filter((r) =>
-    (r.name || '').toLowerCase().includes(q) ||
-    (r.position || '').toLowerCase().includes(q) ||
-    (r.department_name || '').toLowerCase().includes(q),
-  );
+  return rows.value.filter((r) => (r.name || '').toLowerCase().includes(q));
 });
 
 const memberCount = computed(() => rows.value.filter((r) => r.checked).length);
@@ -140,8 +133,7 @@ function rowChanged(r) {
     (r.checked && (
       r.level !== o.level ||
       (r.expiresAt ? r.expiresAt.getTime() : null) !== o.expiresAt
-    )) ||
-    (r.role || '') !== (o.role || '')
+    ))
   );
 }
 const dirtyCount = computed(() => rows.value.filter(rowChanged).length);
@@ -157,20 +149,25 @@ async function save() {
   const pid = props.projectId;
   if (!pid || saving.value) return;
   saving.value = true;
-  try {
-    for (const r of rows.value) {
-      if (!rowChanged(r)) continue;
-      const o = original.value[r.user_id] || {};
-      const expIso = r.expiresAt ? new Date(r.expiresAt).toISOString() : null;
-      const level = r.level === 'none' ? DEFAULT_GRANT_LEVEL : r.level;
+  const failed = [];
+  let okCount = 0;
 
+  // Each row is independent — one failure must NOT abort the rest of the batch.
+  for (const r of rows.value) {
+    if (!rowChanged(r)) continue;
+    const o = original.value[r.user_id] || {};
+    const expIso = r.expiresAt ? new Date(r.expiresAt).toISOString() : null;
+    const level = r.level === 'none' ? DEFAULT_GRANT_LEVEL : r.level;
+    try {
       if (r.checked && !o.checked) {
-        // becoming active — add participant if not already one, then set access
-        if (!o.isMember) {
-          await api.post(`/api/projects/${pid}/participants`, {
-            user_id: r.user_id,
-            role_in_team: r.role || '',
-          });
+        // becoming active — ensure a participant row (tolerate "already one"),
+        // then set the access level + expiry.
+        if (!o.participant_id) {
+          try {
+            await api.post(`/api/projects/${pid}/participants`, { user_id: r.user_id });
+          } catch (e) {
+            if (e?.response?.status !== 409) throw e; // 409 = already a participant, fine
+          }
         }
         await api.post(`/api/projects/${pid}/access`, {
           user_ids: [r.user_id],
@@ -193,22 +190,27 @@ async function save() {
           });
         }
       }
-
-      // role change for an existing participant (new members set it at creation)
-      if (r.participant_id && (r.role || '') !== (o.role || '')) {
-        await api.put(`/api/projects/${pid}/participants/${r.participant_id}`, {
-          role_in_team: r.role || '',
-        });
-      }
+      okCount += 1;
+    } catch (e) {
+      failed.push(r.name);
+      // eslint-disable-next-line no-console
+      console.error('member save failed for', r.name, e);
     }
-    toast.add({ severity: 'success', summary: 'Участники сохранены', life: 2500 });
-    await load(pid);
-    emit('saved');
-  } catch (err) {
-    toastApiError(toast, err);
-  } finally {
-    saving.value = false;
   }
+
+  saving.value = false;
+  if (failed.length) {
+    toast.add({
+      severity: 'warn',
+      summary: `Сохранено: ${okCount}, не удалось: ${failed.length}`,
+      detail: failed.join(', '),
+      life: 6000,
+    });
+  } else if (okCount) {
+    toast.add({ severity: 'success', summary: `Сохранено изменений: ${okCount}`, life: 2500 });
+  }
+  await load(pid);
+  emit('saved');
 }
 
 async function hardDelete(r) {
@@ -269,7 +271,6 @@ function reset() {
             <th class="col-name">Сотрудник</th>
             <th class="col-access">Доступ</th>
             <th class="col-expires">Истекает</th>
-            <th class="col-role">Роль в команде (функционал)</th>
             <th class="col-act"></th>
           </tr>
         </thead>
@@ -277,7 +278,7 @@ function reset() {
           <tr
             v-for="r in filteredRows"
             :key="r.user_id"
-            :class="['member-row', r.checked ? 'member-row--active' : (r.isMember ? 'member-row--disabled' : '')]"
+            :class="['member-row', r.checked ? 'member-row--active' : (r.member ? 'member-row--disabled' : '')]"
           >
             <td class="col-check">
               <input
@@ -289,12 +290,9 @@ function reset() {
               />
             </td>
             <td class="col-name">
-              <div class="m-name">
-                {{ r.name }}
-                <span v-if="r.frozen" class="m-frozen-badge">рук./создатель</span>
-                <span v-else-if="r.isMember && !r.checked" class="m-disabled-badge">отключён</span>
-              </div>
-              <div class="m-sub">{{ [r.position, r.department_name].filter(Boolean).join(' · ') }}</div>
+              <span class="m-name">{{ r.name }}</span>
+              <span v-if="r.frozen" class="m-frozen-badge">рук./создатель</span>
+              <span v-else-if="r.member && !r.checked" class="m-disabled-badge">отключён</span>
             </td>
             <td class="col-access">
               <Select
@@ -306,7 +304,7 @@ function reset() {
                 :disabled="r.frozen || saving"
                 class="m-level"
               />
-              <span v-else-if="r.isMember" class="m-muted">{{ grantLevelLabel('none') }}</span>
+              <span v-else-if="r.member" class="m-muted">{{ grantLevelLabel('none') }}</span>
               <span v-else class="m-muted">—</span>
             </td>
             <td class="col-expires">
@@ -323,19 +321,9 @@ function reset() {
               />
               <span v-else class="m-muted">—</span>
             </td>
-            <td class="col-role">
-              <input
-                v-if="r.checked"
-                v-model="r.role"
-                placeholder="напр. инженер-технолог"
-                class="m-role-input"
-                :disabled="saving"
-              />
-              <span v-else class="m-muted">—</span>
-            </td>
             <td class="col-act">
               <Button
-                v-if="isAdmin && r.isMember && !r.frozen && !r.checked"
+                v-if="isAdmin && r.member && !r.frozen && !r.checked"
                 icon="pi pi-trash"
                 severity="danger"
                 text
@@ -346,7 +334,7 @@ function reset() {
             </td>
           </tr>
           <tr v-if="!filteredRows.length">
-            <td colspan="6" class="members-empty">Никого не найдено</td>
+            <td colspan="5" class="members-empty">Никого не найдено</td>
           </tr>
         </tbody>
       </table>
@@ -434,12 +422,11 @@ function reset() {
 
 .col-check { width: 34px; text-align: center; }
 .col-check input { cursor: pointer; width: 15px; height: 15px; }
-.col-access { width: 160px; }
-.col-expires { width: 150px; }
+.col-access { width: 170px; }
+.col-expires { width: 160px; }
 .col-act { width: 36px; text-align: center; }
 
-.m-name { font-weight: 600; color: #003274; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.m-sub { font-size: 11px; color: #8b97a8; margin-top: 1px; }
+.m-name { font-weight: 600; color: #003274; margin-right: 6px; }
 .m-frozen-badge {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: #8E44AD; background: rgba(142, 68, 173, 0.1); padding: 1px 6px; border-radius: 10px;
