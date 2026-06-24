@@ -14,6 +14,7 @@ instead of keeping it here as future work.
 
 ## Future Docs
 
+- [Access Graph Redesign — Constellation View](access_graph_redesign.md)
 - [Battery Assembly Logs Future Reference](battery_assembly_logs_next.md)
 - [Battery Status Workflow Next](battery_status_workflow_next.md)
 - [Cycling Future Work](cycling_next.md)
