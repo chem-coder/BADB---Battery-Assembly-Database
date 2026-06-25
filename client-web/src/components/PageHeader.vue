@@ -12,7 +12,6 @@ defineProps({
 const route = useRoute()
 
 // Breadcrumbs: shown on all pages except root /
-// Current page title is NOT added to crumbs — H1 below already shows it
 const showCrumbs = computed(() => route.path !== '/')
 const crumbs = computed(() => [
   { label: 'Главная', to: '/' },
@@ -22,131 +21,110 @@ const crumbs = computed(() => [
 
 <template>
   <div class="page-header glass-card">
-
-    <!-- Title row -->
     <div class="page-header-row">
       <div class="page-header-left">
         <RouterLink v-if="backTo" :to="backTo" class="page-back-btn" title="Назад">
           <i class="pi pi-arrow-left"></i>
         </RouterLink>
         <i v-if="icon" :class="icon" class="page-header-icon"></i>
-        <div>
-          <h1 class="page-header-title">{{ title }}</h1>
-          <p v-if="subtitle" class="page-header-subtitle">{{ subtitle }}</p>
-        </div>
+        <h1 class="page-header-title">{{ title }}</h1>
+        <span v-if="subtitle" class="page-header-subtitle">{{ subtitle }}</span>
+
+        <!-- Breadcrumb on the SAME line as the title (one-line nav bar) -->
+        <nav v-if="showCrumbs" class="page-breadcrumb" aria-label="Навигация">
+          <template v-for="(crumb, i) in crumbs" :key="i">
+            <RouterLink v-if="crumb.to" :to="crumb.to" class="crumb-link">{{ crumb.label }}</RouterLink>
+            <span v-else class="crumb-text">{{ crumb.label }}</span>
+            <span class="crumb-sep">›</span>
+          </template>
+          <span class="crumb-current">{{ title }}</span>
+        </nav>
       </div>
       <div class="page-header-actions">
         <slot name="actions" />
       </div>
     </div>
-
-    <!-- Breadcrumbs — below the title, shown on all pages except / -->
-    <nav v-if="showCrumbs" class="page-breadcrumb" aria-label="Навигация">
-      <template v-for="(crumb, i) in crumbs" :key="i">
-        <span v-if="i > 0" class="crumb-sep">›</span>
-        <RouterLink v-if="crumb.to" :to="crumb.to" class="crumb-link">{{ crumb.label }}</RouterLink>
-        <span v-else class="crumb-text">{{ crumb.label }}</span>
-      </template>
-      <span class="crumb-sep">›</span>
-      <span class="crumb-current">{{ title }}</span>
-    </nav>
-
   </div>
 </template>
 
 <style scoped>
 .page-header {
-  /* Sticky card — layout only. Visual styles come from .glass-card */
+  /* Thin one-line nav bar pinned flush to the top. Visual styles (translucent
+     glass) come from .glass-card. */
   position: sticky;
   top: 0;
   z-index: 20;
-  margin: 0 0 1rem 0;
-  padding: 1.1rem 1.5rem 0.875rem;
-}
-
-/* Breadcrumbs row */
-.page-breadcrumb {
+  min-height: var(--page-header-h, 46px);
+  box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  margin-top: 5px;
+  margin: 0 0 0.75rem 0;
+  padding: 0 1.25rem;
 }
 
-.crumb-sep { color: #C0C7D0; font-size: 11px; margin: 0 1px; }
-
-/* Pill-chip style — each parent crumb is a frosted glass pill */
-.crumb-link {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 9px;
-  border-radius: 20px;
-  background: rgba(0, 50, 116, 0.07);
-  border: 0.5px solid rgba(0, 50, 116, 0.14);
-  color: #003274;
-  font-size: 11px;
-  text-decoration: none;
-  transition: background 0.15s, color 0.15s;
-}
-.crumb-link:hover {
-  background: rgba(0, 50, 116, 0.13);
-  color: #025EA1;
-  text-decoration: none;
-}
-
-.crumb-text    { color: #A8B0B8; font-size: 11px; } /* non-link crumb (section labels) */
-.crumb-current { color: #6B7280; font-size: 11px; } /* active page — plain text, no pill */
-
-/* Title row */
 .page-header-row {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
 }
-
 .page-header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
 }
 
 .page-back-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
   color: #003274;
-  transition: background 0.15s;
   text-decoration: none;
+  font-size: 15px;
   flex-shrink: 0;
 }
-.page-back-btn:hover { background: rgba(0, 50, 116, 0.07); }
+.page-back-btn:hover { color: #025EA1; }
 
-.page-header-icon {
-  font-size: 1.15rem;
-  color: #003274;
-  opacity: 0.55;
-  flex-shrink: 0;
-}
+.page-header-icon { font-size: 16px; color: #003274; opacity: 0.7; flex-shrink: 0; }
 
 .page-header-title {
   margin: 0;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   color: #003274;
+  white-space: nowrap;
+}
+.page-header-subtitle {
+  font-size: 12px;
+  color: #6B7280;
+  white-space: nowrap;
 }
 
-.page-header-subtitle {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--p-surface-600);
+/* Breadcrumb — plain inline text, muted, after the title */
+.page-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
 }
+.crumb-sep { color: #C0C7D0; font-size: 11px; }
+.crumb-link {
+  color: rgba(0, 50, 116, 0.55);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.crumb-link:hover { color: #003274; text-decoration: underline; }
+.crumb-text { color: #A8B0B8; white-space: nowrap; }
+.crumb-current { color: #6B7280; white-space: nowrap; }
 
 .page-header-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 </style>

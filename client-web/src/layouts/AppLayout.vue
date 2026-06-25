@@ -139,6 +139,7 @@ onUnmounted(() => {
 .app-layout {
   --frame: 0.5rem;
   --inset: 1.75rem;
+  --page-header-h: 46px; /* thin one-line nav bar; opened-record header sticks below it */
 }
 
 /* ── Outer frame ── */
@@ -183,7 +184,8 @@ onUnmounted(() => {
 /* ── Scroll container ── */
 .app-content {
   flex: 1;
-  padding: var(--inset);
+  /* No top padding — the thin nav-bar header sits flush to the top. */
+  padding: 0 var(--inset) var(--inset);
   background: transparent;
   height: 100%;
   overflow-y: auto;
@@ -191,9 +193,9 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* ── PageHeader: pinned in place ── */
+/* ── PageHeader: pinned flush to the top ── */
 .app-content :deep(.page-header) {
-  top: var(--inset);
+  top: 0;
   transition: box-shadow 0.4s ease;
 }
 .app-content.scrolled :deep(.page-header) {

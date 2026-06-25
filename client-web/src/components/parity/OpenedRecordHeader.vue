@@ -127,7 +127,9 @@ function statusBadge(tone) {
 <style scoped>
 .opened-record-header {
   position: sticky;
-  top: 0;
+  /* Stick just BELOW the thin nav bar (not at 0) so the toolbar — with Save —
+     stays visible instead of sliding under the page header. */
+  top: var(--page-header-h, 46px);
   z-index: 5;
   background: white;
   border-bottom: 1px solid rgba(0, 50, 116, 0.15);
