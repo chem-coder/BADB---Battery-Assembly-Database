@@ -22,6 +22,7 @@ instead of keeping it here as future work.
 - [Feature Backlog](feature_backlog.md)
 - [Materials And Capacity Future Work](materials_capacity_next.md)
 - [Project Member-Add Flow + Access Vocabulary](project_member_flow.md)
+- [Projects View — Session Handoff](projects_view_handoff.md)
 - [Project-Based Access Control (R1 security item)](project_access_control.md)
 - [Upload Storage Transition](upload_storage_transition.md)
 - [UI And Reports Future Work](ui_and_reports_next.md)
