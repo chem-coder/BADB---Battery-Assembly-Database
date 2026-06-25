@@ -2,7 +2,7 @@
 
 Created: 2026-06-25
 Status: handoff (work in progress)
-Branch: `dalia/project-member-flow` (pushed to origin; one commit `a2e2999` may be ahead — push it)
+Branch: `dalia/project-member-flow` (in sync with origin as of 2026-06-25)
 
 Snapshot of the projects-view / access-model work for the next chat. The arc:
 access-model cleanup → constellation graph → project member flow → projects-view
@@ -25,23 +25,32 @@ polish. Specs: `project_member_flow.md`, `project_access_control.md` (R1),
 - **Focus mode** (`b5b764b`): +Добавить, filters, and the project list hide while
   a record is open.
 - **Header redesign** (`a2e2999`): one-line flush nav bar + sticky record toolbar,
-  app-wide. Build + tests pass. **Visual confirm pending** (see below).
+  app-wide. Build + tests pass. **Visual confirmed on desktop (1440)** — nav bar
+  thin (46px) + flush; on scroll the record toolbar pins flush at the nav bar's
+  bottom edge (measured gap 0px, no overlap). `--page-header-h` 46px is correct.
 
-## PENDING — pick up here
+## Verified 2026-06-25 — both prior PENDING items confirmed, NO code change needed
 
-1. **Header — desktop visual confirm.** Logic is right (desktop `.app-content`
-   padding-top:0 = flush; the `80px`/`3.5rem` I measured was the MOBILE
-   breakpoint because the preview was narrow). Resize preview to ~1440 wide, open
-   a project, screenshot: confirm (a) nav bar flush + thin (~46px), (b) record
-   toolbar (Save…) stays visible just below the nav when you scroll the form.
-   Tweak `--page-header-h` (AppLayout `.app-layout`, currently 46px) if the
-   toolbar overlaps or gaps.
-2. **Role multi-save — confirm fixed.** Dalia saw "only the last role saved" on an
-   EARLIER version. Current `save()` (`ProjectMembersTable.vue`) loops all changed
-   rows and PUTs each role independently — looks correct. Verify: open a project
-   (≥2 participants, e.g. project 5 or 13), set roles on two, Save, check DB:
-   `SELECT user_id, role_in_team FROM project_participants WHERE project_id=X`.
-   If only one persisted, debug the inline-edit commit / dirty detection.
+1. **Header — desktop visual confirm: DONE.** At 1440 wide the nav bar is thin
+   (46px) and flush; on scroll the record toolbar (`OpenedRecordHeader`) pins
+   flush at the nav bar's bottom edge — measured gap 0px, no overlap. The
+   `80px`/`3.5rem` gap from last session was the MOBILE breakpoint only.
+   `--page-header-h` (AppLayout `.app-layout`) stays 46px; no tweak needed.
+2. **Role multi-save: DONE — no bug.** Opened project 5 (Мараулайте + Чудинов,
+   the two rows with real participant records), set two distinct roles via the
+   inline editor, Saved. Dirty count tracked both (`Сохранить (2)`); two
+   independent PUTs fired (`/participants/5` + `/participants/11`); the DB
+   persisted BOTH (same `updated_at`). The "only the last role saved" symptom is
+   gone — current `save()` loops all changed rows and PUTs each role
+   independently, and the backend PUT updates by `participant_id` (no cross-row
+   clobber). Test roles were restored to their originals afterwards.
+
+   Note: in project 5 only 2 of the 5 listed members have participant rows; the
+   other 3 are grant-only (the test-data quirk below). Role edits only PUT for
+   rows that have a `participant_id`.
+
+**Next up: R1 route enforcement** (the Deferred item below) — separate,
+security-sensitive; check with Dalia before starting.
 
 ## Deferred (own task, security-sensitive)
 - **R1 route enforcement** — make `none`/expired/inactive actually BLOCK at the
