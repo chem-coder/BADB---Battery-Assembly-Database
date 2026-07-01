@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const ExcelJS = require('exceljs');
 const pool = require('../db/pool');
 const { auth } = require('../middleware/auth');
+const { persistParserOutput, recordParserError } = require('../services/cyclingPersistenceService');
 
 const router = Router();
 
@@ -227,115 +228,42 @@ router.post('/upload', auth, (req, res, next) => {
 });
 
 // ── Background file processing ────────────────────────────────────────
+//
+// Spawns the Python parser, then delegates persistence to
+// services/cyclingPersistenceService.js — which wraps all multi-table
+// writes (datapoints + cycle summary + session finalize) in a single
+// transaction, so a session is either fully visible with status='ready'
+// or fully rolled back and marked status='error'. Previously these three
+// writes ran as separate pool.query calls: a mid-loop failure could leave
+// a session row with partial datapoints and no summary, rendering empty
+// charts with no clear error.
+//
+// Parser execution is intentionally OUTSIDE the persistence transaction:
+// parsing large files can take many seconds and we must not hold a DB
+// connection idle that long.
+//
+// Out of scope: a server crash mid-transaction leaves the session row at
+// status='processing' (PostgreSQL aborts the transaction but cannot flip
+// the session row). That needs a periodic sweep of stale 'processing'
+// sessions — separate follow-up.
 async function processFile(sessionId, filePath, format) {
+  const result = await runParser(filePath, format, sessionId);
+
+  if (result.error) {
+    await recordParserError(pool, sessionId, result.error).catch((err) =>
+      console.error('Failed to record parser error:', err),
+    );
+    return;
+  }
+
   try {
-    const result = await runParser(filePath, format, sessionId);
-
-    if (result.error) {
-      await pool.query(
-        'UPDATE cycling_sessions SET status = $1, error_message = $2 WHERE session_id = $3',
-        ['error', result.error, sessionId]
-      );
-      return;
-    }
-
-    const { datapoints, summary, meta } = result;
-
-    // Bulk insert datapoints (batches of 1000)
-    const BATCH_SIZE = 1000;
-    for (let i = 0; i < datapoints.length; i += BATCH_SIZE) {
-      const batch = datapoints.slice(i, i + BATCH_SIZE);
-      const values = [];
-      const params = [];
-      let paramIdx = 1;
-
-      for (const dp of batch) {
-        values.push(`($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`);
-        params.push(
-          sessionId,
-          dp.cycle_number ?? 0,
-          dp.step_number ?? null,
-          dp.step_type ?? null,
-          dp.time_s ?? null,
-          dp.voltage_v ?? null,
-          dp.current_a ?? null,
-          dp.capacity_ah ?? null,
-          dp.energy_wh ?? null,
-          dp.temperature_c ?? null,
-        );
-      }
-
-      await pool.query(`
-        INSERT INTO cycling_datapoints (session_id, cycle_number, step_number, step_type,
-          time_s, voltage_v, current_a, capacity_ah, energy_wh, temperature_c)
-        VALUES ${values.join(', ')}
-      `, params);
-    }
-
-    // Insert cycle summary — including the publication-grade extras:
-    // energy_efficiency, avg_charge_voltage_v, avg_discharge_voltage_v
-    // (added in migration 019). ON CONFLICT updates all computed metrics
-    // so re-processing a session refreshes everything, not just the core
-    // three columns we originally overwrote.
-    for (const s of summary) {
-      await pool.query(`
-        INSERT INTO cycling_cycle_summary (session_id, cycle_number,
-          charge_capacity_ah, discharge_capacity_ah, coulombic_efficiency,
-          energy_efficiency, charge_energy_wh, discharge_energy_wh,
-          avg_charge_voltage_v, avg_discharge_voltage_v,
-          max_voltage_v, min_voltage_v, avg_temperature_c, duration_s)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-        ON CONFLICT (session_id, cycle_number) DO UPDATE SET
-          charge_capacity_ah      = EXCLUDED.charge_capacity_ah,
-          discharge_capacity_ah   = EXCLUDED.discharge_capacity_ah,
-          coulombic_efficiency    = EXCLUDED.coulombic_efficiency,
-          energy_efficiency       = EXCLUDED.energy_efficiency,
-          charge_energy_wh        = EXCLUDED.charge_energy_wh,
-          discharge_energy_wh     = EXCLUDED.discharge_energy_wh,
-          avg_charge_voltage_v    = EXCLUDED.avg_charge_voltage_v,
-          avg_discharge_voltage_v = EXCLUDED.avg_discharge_voltage_v,
-          max_voltage_v           = EXCLUDED.max_voltage_v,
-          min_voltage_v           = EXCLUDED.min_voltage_v,
-          avg_temperature_c       = EXCLUDED.avg_temperature_c,
-          duration_s              = EXCLUDED.duration_s
-      `, [
-        sessionId, s.cycle_number,
-        s.charge_capacity_ah, s.discharge_capacity_ah, s.coulombic_efficiency,
-        s.energy_efficiency, s.charge_energy_wh, s.discharge_energy_wh,
-        s.avg_charge_voltage_v, s.avg_discharge_voltage_v,
-        s.max_voltage_v, s.min_voltage_v,
-        s.avg_temperature_c, s.duration_s,
-      ]);
-    }
-
-    // Update session. If the upload was submitted with equipment_type='auto',
-    // the parser figured out the real format (e.g. 'elitech') — persist it so
-    // the sessions table shows the actual format, not "auto".
-    await pool.query(`
-      UPDATE cycling_sessions SET
-        status = 'ready',
-        total_cycles = $1,
-        started_at = $2,
-        ended_at = $3,
-        equipment_type = CASE
-          WHEN equipment_type = 'auto' AND $5::text IS NOT NULL THEN $5
-          ELSE equipment_type
-        END
-      WHERE session_id = $4
-    `, [
-      meta.total_cycles || summary.length,
-      meta.started_at || null,
-      meta.ended_at || null,
-      sessionId,
-      meta.detected_format || null,
-    ]);
-
+    await persistParserOutput(pool, sessionId, result);
   } catch (err) {
-    console.error('Process file error:', err);
-    await pool.query(
-      'UPDATE cycling_sessions SET status = $1, error_message = $2 WHERE session_id = $3',
-      ['error', String(err.message || err), sessionId]
-    ).catch(() => {});
+    console.error('Process file persistence error:', err);
+    await recordParserError(pool, sessionId, err.message || err).catch(
+      (updateErr) =>
+        console.error('Failed to record persistence error:', updateErr),
+    );
   }
 }
 
