@@ -1031,13 +1031,27 @@ async function downloadExcel() {
 }
 
 async function deleteSession(items) {
+  const list = Array.isArray(items) ? items : [items]
+  if (!list.length) return
+
+  // Confirm before an irreversible delete (was: instant delete, no prompt).
+  const label = list.length === 1
+    ? `сессию #${list[0].session_id ?? list[0]}`
+    : `сессии (${list.length} шт.)`
+  if (!window.confirm(`Удалить ${label}? Действие необратимо.`)) return
+
   const deletedIds = []
-  for (const item of items) {
+  const failures = []
+  for (const item of list) {
     const id = item.session_id ?? item
     try {
       await api.delete(`/api/cycling/sessions/${id}`)
       deletedIds.push(id)
-    } catch { /* silent */ }
+    } catch (err) {
+      // Surface failures (e.g. 403 with the new project-access rules)
+      // instead of swallowing them, so the user knows what happened.
+      failures.push(err)
+    }
   }
   await loadData()
   // Purge any deleted session from the active overlay + per-session caches.
@@ -1054,6 +1068,13 @@ async function deleteSession(items) {
     loadingCyclesBy.value = { ...loadingCyclesBy.value }
     // If no active sessions remain, clear cycle selection too.
     if (!activeSessionIds.value.length) selectedCycles.value = []
+  }
+
+  // Feedback: success toast, or surface the first failure.
+  if (failures.length) {
+    toastApiError(toast, failures[0], `Не удалось удалить: ${failures.length} из ${list.length}`, { life: 4500 })
+  } else if (deletedIds.length) {
+    toast.add({ severity: 'success', summary: `Удалено сессий: ${deletedIds.length}`, life: 2500 })
   }
 }
 
