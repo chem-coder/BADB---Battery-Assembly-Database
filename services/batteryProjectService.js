@@ -52,6 +52,11 @@ async function validateProjectIds(db, projectIds) {
 async function getCutBatchProjectIds(db, cutBatchId) {
   if (!cutBatchId) return [];
 
+  // Projects a cut batch may belong to = its own links UNION its parent
+  // tape's links. Both sides read the many-to-many junctions
+  // (electrode_cut_batch_projects, tape_projects) — NOT the legacy
+  // single tapes.project_id column, which would silently drop the other
+  // projects of a multi-project tape.
   const result = await db.query(
     `
     SELECT project_id
@@ -60,12 +65,11 @@ async function getCutBatchProjectIds(db, cutBatchId) {
 
     UNION
 
-    SELECT t.project_id
+    SELECT tp.project_id
     FROM electrode_cut_batches ecb
-    JOIN tapes t
-      ON t.tape_id = ecb.tape_id
+    JOIN tape_projects tp
+      ON tp.tape_id = ecb.tape_id
     WHERE ecb.cut_batch_id = $1
-      AND t.project_id IS NOT NULL
 
     ORDER BY project_id
     `,
