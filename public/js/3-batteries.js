@@ -4869,12 +4869,31 @@ function renderElectrochemSavedFiles(entries) {
     row.append(`${index + 1}. `);
 
     if (entry.file_link) {
+      // R1: файлы приватные — /uploads больше не публичный. Скачиваем
+      // через авторизованный API-маршрут (глобальный fetch уже добавляет
+      // Bearer-токен, см. auth.js), затем отдаём как blob-ссылку.
       const link = document.createElement('a');
 
-      link.href = entry.file_link;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.textContent = entry.file_name || entry.file_link;
+      link.href = '#';
+      link.textContent = entry.file_name || 'файл';
+      link.title = 'Скачать файл';
+      link.onclick = async (e) => {
+        e.preventDefault();
+        try {
+          const resp = await fetch(`/api/batteries/battery_electrochem/${entry.battery_electrochem_id}/download`);
+          if (!resp.ok) throw new Error(`Ошибка скачивания (${resp.status})`);
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = entry.file_name || 'electrochem_file';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+        } catch (err) {
+          console.error(err);
+          alert(err.message || 'Не удалось скачать файл');
+        }
+      };
       row.appendChild(link);
 
       if (entry.electrochem_notes) {

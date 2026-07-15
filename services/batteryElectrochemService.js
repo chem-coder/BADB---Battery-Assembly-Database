@@ -3,6 +3,20 @@ const path = require('path');
 
 const ELECTROCHEM_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'electrochem');
 
+// Uploaded lab files are private (no public /uploads static since R1) —
+// every row with a file gets a computed download_url pointing at the
+// authenticated API route. file_link stays in the payload as an internal
+// storage reference for backward compatibility, but UIs must not use it
+// as an href anymore.
+function addElectrochemDownloadUrl(row) {
+  return {
+    ...row,
+    download_url: row.file_link
+      ? `/api/batteries/battery_electrochem/${row.battery_electrochem_id}/download`
+      : null
+  };
+}
+
 async function fetchBatteryElectrochem(pool, batteryId) {
   const result = await pool.query(
     `
@@ -20,7 +34,42 @@ async function fetchBatteryElectrochem(pool, batteryId) {
     [batteryId]
   );
 
-  return result.rows.length === 0 ? null : result.rows;
+  return result.rows.length === 0 ? null : result.rows.map(addElectrochemDownloadUrl);
+}
+
+// Fetch one electrochem row for the authenticated download route.
+async function getBatteryElectrochemFile(pool, electrochemId) {
+  const result = await pool.query(
+    `
+    SELECT
+      battery_electrochem_id,
+      battery_id,
+      file_name,
+      file_link
+    FROM battery_electrochem
+    WHERE battery_electrochem_id = $1
+    `,
+    [electrochemId]
+  );
+
+  return result.rows[0] || null;
+}
+
+// Resolve a stored file_link to a safe absolute path under
+// uploads/electrochem/, or null if the link is missing/escapes the dir.
+// Same defense-in-depth traversal guard as the delete path below.
+function resolveElectrochemAbsolutePath(link) {
+  if (typeof link !== 'string' || !link.startsWith('/uploads/electrochem/')) {
+    return null;
+  }
+  const fileName = link.replace(/^\/uploads\/electrochem\//, '');
+  const absolutePath = path.join(ELECTROCHEM_UPLOAD_DIR, path.basename(fileName));
+  const expectedRoot = path.resolve(ELECTROCHEM_UPLOAD_DIR);
+  const resolvedPath = path.resolve(absolutePath);
+  if (resolvedPath !== expectedRoot && resolvedPath.startsWith(expectedRoot + path.sep)) {
+    return resolvedPath;
+  }
+  return null;
 }
 
 async function saveBatteryElectrochem(pool, batteryId, entries = [], notes = null) {
@@ -155,5 +204,7 @@ module.exports = {
   deleteBatteryElectrochem,
   deleteBatteryElectrochemFileLinks,
   fetchBatteryElectrochem,
+  getBatteryElectrochemFile,
+  resolveElectrochemAbsolutePath,
   saveBatteryElectrochem
 };

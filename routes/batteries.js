@@ -95,8 +95,11 @@ const {
 const {
   deleteBatteryElectrochem,
   fetchBatteryElectrochem,
+  getBatteryElectrochemFile,
+  resolveElectrochemAbsolutePath,
   saveBatteryElectrochem
 } = require('../services/batteryElectrochemService');
+const fsSync = require('fs');
 
 router.get('/test', async (req, res) => {
   const result = await pool.query('SELECT 1 as ok');
@@ -876,6 +879,34 @@ router.patch('/battery_electrochem/:battery_id', auth, async (req, res) => {
 
 });
 
+
+// Download a single battery_electrochem file through an AUTHENTICATED
+// route (the public /uploads static mount is gone — see app.js). Access
+// follows the battery's project(s), same as reading the battery itself.
+// 400 = row exists but is notes-only (no file); 404 = row or disk file gone.
+router.get('/battery_electrochem/:electrochem_id/download', auth, requireEntityView('batteryElectrochem', { idParam: 'electrochem_id' }), async (req, res) => {
+  const electrochemId = Number(req.params.electrochem_id);
+
+  try {
+    const file = await getBatteryElectrochemFile(pool, electrochemId);
+    if (!file) {
+      return res.status(404).json({ error: 'Файл не найден' });
+    }
+    if (!file.file_link) {
+      return res.status(400).json({ error: 'К этой записи не прикреплён файл' });
+    }
+
+    const absolutePath = resolveElectrochemAbsolutePath(file.file_link);
+    if (!absolutePath || !fsSync.existsSync(absolutePath)) {
+      return res.status(404).json({ error: 'Файл не найден на диске' });
+    }
+
+    res.download(absolutePath, file.file_name || `electrochem_${electrochemId}`);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка скачивания файла электрохимических испытаний' });
+  }
+});
 
 // Delete a single battery_electrochem file (DB row + file on disk).
 //

@@ -90,6 +90,14 @@
       "sources": ["public/js/3-batteries.js"]
     },
     {
+      "path": "/api/batteries/battery_electrochem/:param/download",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "electrochem file download (attachment); replaces public /uploads static links (R1)",
+      "sources": ["public/js/3-batteries.js"]
+    },
+    {
       "path": "/api/batteries/battery_electrode_sources",
       "methods": ["POST"],
       "auth": "auth",
