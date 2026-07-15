@@ -5,12 +5,12 @@ Forward-only SQL migrations applied in alphabetical order to
 
 Current migration file state as of 2026-06-02:
 
-- `migrations/` has 51 SQL files.
-- `migrations_ASCII/` has 51 SQL files.
+- `migrations/` has 55 SQL files.
+- `migrations_ASCII/` has 55 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
 - Dalia's `dNNN` stream exists through `d042_project_leads_as_team_members.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 30` after `d042` is applied.
+  counts of `dima = 21` and `dalia = 34` after `d046` is applied.
 
 ## How to apply
 
@@ -175,10 +175,10 @@ Rows with `source = 'd032_baseline'` are historical backfill rows.
 Future migrations should insert their own row with a real `applied_at`
 as part of the migration file.
 
-Expected stream counts for a current migrated database:
+Expected stream counts for a current migrated database (after `d046`):
 
 ```text
-dalia = 31
+dalia = 34
 dima = 21
 ```
 
