@@ -33,9 +33,24 @@ function saveSettings(s) {
 const collapsed  = ref({})
 const animating  = ref({})   // tracks which folder icon is mid-animation
 
+// ── Desktop rail collapse (220px ↔ 64px icon rail) ─────────────────────────
+// Persisted per user alongside the section state. Desktop-only: on mobile the
+// sidebar is a full-width drawer (see AppLayout), so the rail rules are gated
+// behind @media (min-width: 1025px) and the toggle is hidden on small screens.
+const railCollapsed = ref(false)
+
 onMounted(() => {
-  collapsed.value = loadSettings().collapsedSections ?? {}
+  const s = loadSettings()
+  collapsed.value = s.collapsedSections ?? {}
+  railCollapsed.value = s.railCollapsed ?? false
 })
+
+function toggleRail() {
+  railCollapsed.value = !railCollapsed.value
+  const s = loadSettings()
+  s.railCollapsed = railCollapsed.value
+  saveSettings(s)
+}
 
 function toggleSection(name) {
   collapsed.value = { ...collapsed.value, [name]: !collapsed.value[name] }
@@ -118,17 +133,25 @@ async function hardRefresh() {
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ 'is-rail': railCollapsed }">
 
-    <!-- Logo -->
+    <!-- Logo + rail toggle -->
     <div class="sidebar-header">
-      <img :src="tvelLogo" alt="TVEL" class="sidebar-logo-img" />
+      <img :src="tvelLogo" alt="TVEL" class="sidebar-logo-img rail-hide" />
+      <button
+        class="sidebar-rail-toggle"
+        @click="toggleRail"
+        :title="railCollapsed ? 'Развернуть меню' : 'Свернуть меню'"
+        :aria-label="railCollapsed ? 'Развернуть меню' : 'Свернуть меню'"
+      >
+        <i class="pi" :class="railCollapsed ? 'pi-angle-double-right' : 'pi-angle-double-left'"></i>
+      </button>
     </div>
 
     <nav class="sidebar-nav">
 
       <!-- Главная — standalone at top -->
-      <RouterLink to="/" class="sidebar-item" exact-active-class="active" @click="onNav">
+      <RouterLink to="/" class="sidebar-item" exact-active-class="active" @click="onNav" :title="railCollapsed ? 'Главная' : null">
         <i class="pi pi-home"></i>
         <span class="sidebar-item-label">Главная</span>
       </RouterLink>
@@ -164,6 +187,7 @@ async function hardRefresh() {
             class="sidebar-item sidebar-item--nested"
             active-class="active"
             @click="onNav"
+            :title="railCollapsed ? item.label : null"
           >
             <!-- Custom SVG: droplet -->
             <svg v-if="item.customIcon === 'droplet'" class="sidebar-custom-icon" viewBox="0 0 18 18">
@@ -186,19 +210,19 @@ async function hardRefresh() {
         <span class="user-name">{{ authStore.user?.name }}</span>
         <span class="user-role">{{ roleLabel }}</span>
       </div>
-      <RouterLink to="/profile" class="sidebar-item" active-class="active" @click="onNav">
+      <RouterLink to="/profile" class="sidebar-item" active-class="active" @click="onNav" :title="railCollapsed ? 'Профиль' : null">
         <i class="pi pi-user"></i>
         <span class="sidebar-item-label">Профиль</span>
       </RouterLink>
       <button
         class="sidebar-item sidebar-refresh"
         @click="hardRefresh"
-        title="Полное обновление с очисткой кэша браузера"
+        :title="railCollapsed ? 'Обновить' : 'Полное обновление с очисткой кэша браузера'"
       >
         <i class="pi pi-refresh"></i>
         <span class="sidebar-item-label">Обновить</span>
       </button>
-      <button class="sidebar-item sidebar-logout" @click="logout">
+      <button class="sidebar-item sidebar-logout" @click="logout" :title="railCollapsed ? 'Выйти' : null">
         <i class="pi pi-sign-out"></i>
         <span class="sidebar-item-label">Выйти</span>
       </button>
@@ -246,11 +270,31 @@ async function hardRefresh() {
 .sidebar-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 1.25rem 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   flex-shrink: 0;
 }
 .sidebar-logo-img { height: 28px; }
+
+/* Rail toggle — collapse/expand the desktop sidebar to an icon rail */
+.sidebar-rail-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.sidebar-rail-toggle:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+.sidebar-rail-toggle .pi { font-size: 0.85rem; }
 
 /* ── Nav scroll ────────────────────────────────────────────────────────── */
 .sidebar-nav {
@@ -474,6 +518,53 @@ async function hardRefresh() {
 .sidebar-refresh:hover { color: #52C9A6; background: rgba(82, 201, 166, 0.12); }
 .sidebar-refresh:active i { transform: rotate(360deg); transition: transform 0.5s; }
 
+/* ── Desktop rail (collapsed) mode ──
+   Only applies on real desktop widths. On mobile the sidebar is a
+   full-width drawer (AppLayout), so rail collapse is disabled and the
+   toggle is hidden — a rail makes no sense inside a slide-in drawer. */
+@media (min-width: 1025px) {
+  .sidebar.is-rail {
+    width: 64px;
+    min-width: 64px;
+    max-width: 64px;
+  }
+  /* Smooth width animation on collapse/expand. */
+  .sidebar { transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
+
+  /* Hide every text label + the full logo when railed. */
+  .sidebar.is-rail .sidebar-item-label,
+  .sidebar.is-rail .sidebar-section-label,
+  .sidebar.is-rail .sidebar-user-info,
+  .sidebar.is-rail .rail-hide {
+    display: none;
+  }
+
+  /* Header: centre the toggle once the logo is hidden. */
+  .sidebar.is-rail .sidebar-header {
+    justify-content: center;
+    padding: 1.25rem 0;
+  }
+
+  /* Icons centre in the rail, no gap/indent. */
+  .sidebar.is-rail .sidebar-item {
+    justify-content: center;
+    gap: 0;
+    padding: 0.5rem 0;
+  }
+
+  /* Section folders don't make sense without labels — hide the headers
+     and force all items visible (ignore the accordion collapse state)
+     so the rail shows a flat strip of icons. */
+  .sidebar.is-rail .sidebar-section-title { display: none; }
+  .sidebar.is-rail .section-items {
+    max-height: none !important;
+    opacity: 1 !important;
+    padding-left: 0;
+  }
+  .sidebar.is-rail .section-items::before { display: none; } /* connector line */
+  .sidebar.is-rail .sidebar-section { margin-bottom: 0; }
+}
+
 /* ── Mobile ──
    Drawer transform / position-fixed / overlay logic lives in
    AppLayout.vue under `@media (max-width: 1024px)`. Single owner —
@@ -484,6 +575,8 @@ async function hardRefresh() {
   .sidebar-header {
     padding-top: 3.5rem; /* clear the hamburger button */
   }
+  /* Rail collapse is a desktop-only affordance — hide its toggle here. */
+  .sidebar-rail-toggle { display: none; }
   /* Slightly tighter spacing on small screens. */
   .sidebar-item {
     padding: 0.55rem 0.75rem;

@@ -14,7 +14,16 @@ provide('sidebarOpen', sidebarOpen)
 function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 function closeSidebar() { sidebarOpen.value = false }
 
-/* ── Scroll handler ── */
+/* ── Scroll handler ──
+   Fades cards out as they slide up under the sticky page-header.
+
+   PERF: this runs once per animation frame while scrolling, over every
+   card on the page. The old version interleaved getBoundingClientRect()
+   READS with style.maskImage WRITES in one loop — each write invalidates
+   layout, so the next read forced a synchronous reflow (layout thrash,
+   the main scroll-lag cause). Now split into two passes: read ALL rects
+   first (one layout flush), then write ALL masks (no reads to force
+   another reflow). Same visual, no thrash. */
 function handleScroll () {
   const el = contentEl.value
   if (!el) return
@@ -31,13 +40,17 @@ function handleScroll () {
   const fullyHiddenY = containerTop - 20
   const fadeZone = fadeStartY - fullyHiddenY
 
-  const allEls = el.querySelectorAll('.glass-card, section, .p-card')
-  for (const card of allEls) {
+  // ── Pass 1: reads only (batched — single layout flush) ──
+  const cards = el.querySelectorAll('.glass-card, section, .p-card')
+  const work = []
+  for (const card of cards) {
     if (card.classList.contains('page-header')) continue
     if (card.parentElement && card.parentElement.closest('.glass-card')) continue
+    work.push({ card, rect: card.getBoundingClientRect() })
+  }
 
-    const rect = card.getBoundingClientRect()
-
+  // ── Pass 2: writes only (no reads → no forced reflow) ──
+  for (const { card, rect } of work) {
     if (rect.top >= fadeStartY) {
       card.style.removeProperty('mask-image')
       card.style.removeProperty('-webkit-mask-image')
