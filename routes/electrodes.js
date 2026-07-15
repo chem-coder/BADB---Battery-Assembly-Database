@@ -3,6 +3,36 @@ const router = express.Router();
 const pool = require('../db');
 const { auth } = require('../middleware/auth');
 const {
+  requireEntityView,
+  requireEntityModify,
+  requireCreateInProjects,
+  filterRowsByEntityAccess
+} = require('../middleware/projectAccess');
+const { getEntityProjectIds } = require('../services/projectAccessService');
+
+// R1: a new cut batch belongs to its parent tape's projects — the user
+// needs edit/admin access there.
+async function cutBatchCreateProjects(req, db) {
+  const tapeId = Number(req.body && req.body.tape_id);
+  if (!Number.isInteger(tapeId)) {
+    return { error: { status: 400, message: 'Некорректные данные' } };
+  }
+  const { exists, projectIds } = await getEntityProjectIds(db, 'tape', tapeId);
+  if (!exists) return { error: { status: 404, message: 'Лента не найдена' } };
+  return { projectIds };
+}
+
+// R1: a new electrode belongs to its parent cut batch's projects.
+async function electrodeCreateProjects(req, db) {
+  const cutBatchId = Number(req.body && req.body.cut_batch_id);
+  if (!Number.isInteger(cutBatchId)) {
+    return { error: { status: 400, message: 'Некорректные данные' } };
+  }
+  const { exists, projectIds } = await getEntityProjectIds(db, 'cutBatch', cutBatchId);
+  if (!exists) return { error: { status: 404, message: 'Партия электродов не найдена' } };
+  return { projectIds };
+}
+const {
   sendDependencyConflict,
   sendForeignKeyConflict
 } = require('../utils/dependencyConflicts');
@@ -45,7 +75,9 @@ router.get('/test', async (req, res) => {
 
 router.get('/electrode-cut-batches', auth, async (req, res) => {
   try {
-    res.json(await listElectrodeCutBatches(pool));
+    // R1: users only see batches belonging to projects they can access.
+    const rows = await listElectrodeCutBatches(pool);
+    res.json(await filterRowsByEntityAccess(req, 'cutBatch', rows, 'cut_batch_id'));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -56,7 +88,7 @@ router.get('/electrode-cut-batches', auth, async (req, res) => {
 
 // -------- ELECTRODE CUT BATCHES --------
 // CREATE cut batch
-router.post('/electrode-cut-batches', auth, async (req, res) => {
+router.post('/electrode-cut-batches', auth, requireCreateInProjects(cutBatchCreateProjects), async (req, res) => {
   const tapeId = Number(req.body.tape_id);
 
   if (!Number.isInteger(tapeId)) {
@@ -76,7 +108,7 @@ router.post('/electrode-cut-batches', auth, async (req, res) => {
 });
 
 // UPDATE
-router.put('/electrode-cut-batches/:id', auth, async (req, res) => {
+router.put('/electrode-cut-batches/:id', auth, requireEntityModify('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId) || cutBatchId <= 0) {
@@ -96,7 +128,7 @@ router.put('/electrode-cut-batches/:id', auth, async (req, res) => {
 });
 
 // GET cut batch by ID
-router.get('/electrode-cut-batches/:id', auth, async (req, res) => {
+router.get('/electrode-cut-batches/:id', auth, requireEntityView('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -114,7 +146,7 @@ router.get('/electrode-cut-batches/:id', auth, async (req, res) => {
   }
 });
 
-router.get('/electrode-cut-batches/:id/report', auth, async (req, res) => {
+router.get('/electrode-cut-batches/:id/report', auth, requireEntityView('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -132,7 +164,7 @@ router.get('/electrode-cut-batches/:id/report', auth, async (req, res) => {
   }
 });
 
-router.get('/electrode-cut-batches/:id/delete-check', auth, async (req, res) => {
+router.get('/electrode-cut-batches/:id/delete-check', auth, requireEntityModify('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -153,7 +185,7 @@ router.get('/electrode-cut-batches/:id/delete-check', auth, async (req, res) => 
 // DELETE cut batch.
 // Electrode records must be deleted intentionally first; batch deletion should
 // never be used as a hidden cascade path for removing electrodes.
-router.delete('/electrode-cut-batches/:id', auth, async (req, res) => {
+router.delete('/electrode-cut-batches/:id', auth, requireEntityModify('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -190,7 +222,7 @@ router.delete('/electrode-cut-batches/:id', auth, async (req, res) => {
 
 
 // GET electrodes by batch
-router.get('/electrode-cut-batches/:id/electrodes', auth, async (req, res) => {
+router.get('/electrode-cut-batches/:id/electrodes', auth, requireEntityView('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -210,7 +242,7 @@ router.get('/electrode-cut-batches/:id/electrodes', auth, async (req, res) => {
 // -------- FOIL MASS MEASUREMENTS --------
 
 // ADD measurement
-router.post('/electrode-cut-batches/:id/foil-masses', auth, async (req, res) => {
+router.post('/electrode-cut-batches/:id/foil-masses', auth, requireEntityModify('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
   const { mass_g } = req.body;
   const mass = Number(mass_g);
@@ -228,7 +260,7 @@ router.post('/electrode-cut-batches/:id/foil-masses', auth, async (req, res) => 
 });
 
 // GET measurements
-router.get('/electrode-cut-batches/:id/foil-masses', auth, async (req, res) => {
+router.get('/electrode-cut-batches/:id/foil-masses', auth, requireEntityView('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -244,7 +276,7 @@ router.get('/electrode-cut-batches/:id/foil-masses', auth, async (req, res) => {
 });
 
 // DELETE all measurements for a batch
-router.delete('/electrode-cut-batches/:id/foil-masses', auth, async (req, res) => {
+router.delete('/electrode-cut-batches/:id/foil-masses', auth, requireEntityModify('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -263,7 +295,7 @@ router.delete('/electrode-cut-batches/:id/foil-masses', auth, async (req, res) =
 // These don't seem to appear anywhere... 
 // THere are no foil-measurements routes in the html files... 
 // UPDATE measurement
-router.put('/foil-measurements/:id', auth, async (req, res) => {
+router.put('/foil-measurements/:id', auth, requireEntityModify('foilMeasurement'), async (req, res) => {
   const measurementId = Number(req.params.id);
   const { mass_g } = req.body;
 
@@ -283,7 +315,7 @@ router.put('/foil-measurements/:id', auth, async (req, res) => {
 });
 
 // DELETE measurement
-router.delete('/foil-measurements/:id', auth, async (req, res) => {
+router.delete('/foil-measurements/:id', auth, requireEntityModify('foilMeasurement'), async (req, res) => {
   const measurementId = Number(req.params.id);
 
   if (!Number.isInteger(measurementId)) {
@@ -306,7 +338,7 @@ router.delete('/foil-measurements/:id', auth, async (req, res) => {
 // -------- ELECTRODES --------
 
 // CREATE electrode
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireCreateInProjects(electrodeCreateProjects), async (req, res) => {
   const {
     cut_batch_id,
     electrode_mass_g,
@@ -336,7 +368,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // UPDATE electrode status
-router.put('/:id/status', auth, async (req, res) => {
+router.put('/:id/status', auth, requireEntityModify('electrode'), async (req, res) => {
   const electrodeId = Number(req.params.id);
   const { status_code, used_in_battery_id, scrapped_reason } = req.body;
 
@@ -380,7 +412,7 @@ router.put('/:id/status', auth, async (req, res) => {
 });
 
 // UPDATE electrode fields (mass, cup, comments, capacity-average inclusion)
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireEntityModify('electrode'), async (req, res) => {
 
   const electrodeId = Number(req.params.id);
   const {
@@ -409,7 +441,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE single electrode
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireEntityModify('electrode'), async (req, res) => {
 
   const electrodeId = Number(req.params.id);
 
@@ -444,7 +476,7 @@ router.delete('/:id', auth, async (req, res) => {
 // -------- ELECTRODE DRYING --------
 
 // CREATE or UPDATE drying record (UPSERT)
-router.post('/electrode-cut-batches/:id/drying', auth, async (req, res) => {
+router.post('/electrode-cut-batches/:id/drying', auth, requireEntityModify('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -461,7 +493,7 @@ router.post('/electrode-cut-batches/:id/drying', auth, async (req, res) => {
 });
 
 // GET drying records by batch
-router.get('/electrode-cut-batches/:id/drying', auth, async (req, res) => {
+router.get('/electrode-cut-batches/:id/drying', auth, requireEntityView('cutBatch'), async (req, res) => {
   const cutBatchId = Number(req.params.id);
 
   if (!Number.isInteger(cutBatchId)) {
@@ -478,7 +510,7 @@ router.get('/electrode-cut-batches/:id/drying', auth, async (req, res) => {
 });
 
 // PUT update drying record
-router.put('/electrode-drying/:id', auth, async (req, res) => {
+router.put('/electrode-drying/:id', auth, requireEntityModify('electrodeDrying'), async (req, res) => {
   const dryingId = Number(req.params.id);
 
   if (!Number.isInteger(dryingId)) {
@@ -498,7 +530,7 @@ router.put('/electrode-drying/:id', auth, async (req, res) => {
 });
 
 // DELETE drying record
-router.delete('/electrode-drying/:id', auth, async (req, res) => {
+router.delete('/electrode-drying/:id', auth, requireEntityModify('electrodeDrying'), async (req, res) => {
   const dryingId = Number(req.params.id);
 
   if (!Number.isInteger(dryingId)) {

@@ -23,6 +23,7 @@ const pool = require('../db/pool');
 const {
   loadUserAccessContext,
   getEntityProjectIds,
+  getEntityProjectIdsBatch,
   canView,
   canModify,
   notFoundMessage,
@@ -102,9 +103,25 @@ function requireCreateInProjects(resolveProjectIds) {
   };
 }
 
+/**
+ * Filter a list-endpoint result down to rows the user may VIEW.
+ * One batched linkage query; skipped entirely for admin/director.
+ *
+ *   const rows = await listTapes(pool);
+ *   res.json(await filterRowsByEntityAccess(req, 'tape', rows, 'tape_id'));
+ */
+async function filterRowsByEntityAccess(req, entityType, rows, idField) {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+  const ctx = await getAccessContext(req);
+  if (ctx.all) return rows;
+  const map = await getEntityProjectIdsBatch(pool, entityType, rows.map((r) => r[idField]));
+  return rows.filter((r) => canView(ctx, map.get(Number(r[idField])) || []));
+}
+
 module.exports = {
   getAccessContext,
   requireEntityView,
   requireEntityModify,
   requireCreateInProjects,
+  filterRowsByEntityAccess,
 };

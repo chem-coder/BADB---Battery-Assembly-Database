@@ -178,6 +178,29 @@ const ENTITY_LINKS = {
           LEFT JOIN battery_projects j ON j.battery_id = b.battery_id
           WHERE cs.session_id = ANY($1)`,
   },
+  // Child records of a cut batch — access follows the parent batch's projects.
+  foilMeasurement: {
+    notFound: 'Измерение не найдено',
+    sql: `SELECT m.foil_measurement_id AS id, j.project_id
+          FROM foil_mass_measurements m
+          LEFT JOIN electrode_cut_batch_projects j ON j.cut_batch_id = m.cut_batch_id
+          WHERE m.foil_measurement_id = ANY($1)`,
+  },
+  electrodeDrying: {
+    notFound: 'Запись сушки не найдена',
+    sql: `SELECT d.drying_id AS id, j.project_id
+          FROM electrode_drying d
+          LEFT JOIN electrode_cut_batch_projects j ON j.cut_batch_id = d.cut_batch_id
+          WHERE d.drying_id = ANY($1)`,
+  },
+  // Child record of a battery — access follows the battery's projects.
+  batteryElectrochem: {
+    notFound: 'Файл испытаний не найден',
+    sql: `SELECT e.battery_electrochem_id AS id, j.project_id
+          FROM battery_electrochem e
+          LEFT JOIN battery_projects j ON j.battery_id = e.battery_id
+          WHERE e.battery_electrochem_id = ANY($1)`,
+  },
 };
 
 function notFoundMessage(entityType) {

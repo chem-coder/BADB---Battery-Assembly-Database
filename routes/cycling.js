@@ -7,6 +7,13 @@ const { spawn } = require('child_process');
 const ExcelJS = require('exceljs');
 const pool = require('../db/pool');
 const { auth } = require('../middleware/auth');
+const {
+  getAccessContext,
+  requireEntityView,
+  requireEntityModify,
+  filterRowsByEntityAccess
+} = require('../middleware/projectAccess');
+const { getEntityProjectIds, canModify } = require('../services/projectAccessService');
 
 const router = Router();
 
@@ -150,6 +157,22 @@ router.post('/upload', auth, (req, res, next) => {
   if (batteryCheck.rowCount === 0) {
     fs.unlinkSync(req.file.path);
     return res.status(404).json({ error: 'Battery not found' });
+  }
+
+  // R1: uploading cycling data writes to the battery's project(s) — the
+  // user needs edit/admin access there. Inline (not middleware) so the
+  // already-saved upload file gets cleaned up on denial.
+  try {
+    const ctx = await getAccessContext(req);
+    const { projectIds } = await getEntityProjectIds(pool, 'battery', Number(battery_id));
+    if (!canModify(ctx, projectIds)) {
+      fs.unlinkSync(req.file.path);
+      return res.status(403).json({ error: 'Недостаточно прав для загрузки данных в этот проект' });
+    }
+  } catch (accessErr) {
+    fs.unlinkSync(req.file.path);
+    console.error('cycling upload access check failed:', accessErr);
+    return res.status(500).json({ error: 'Ошибка сервера' });
   }
 
   // Track the file's current location throughout the handler — req.file.path
@@ -423,7 +446,8 @@ router.get('/sessions', auth, async (req, res) => {
       ORDER BY cs.created_at DESC
     `, params);
 
-    res.json(result.rows);
+    // R1: users only see sessions of batteries in projects they can access.
+    res.json(await filterRowsByEntityAccess(req, 'cyclingSession', result.rows, 'session_id'));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load sessions' });
@@ -431,7 +455,7 @@ router.get('/sessions', auth, async (req, res) => {
 });
 
 // ── GET /api/cycling/sessions/:id ─────────────────────────────────────
-router.get('/sessions/:id', auth, async (req, res) => {
+router.get('/sessions/:id', auth, requireEntityView('cyclingSession'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT cs.*,
@@ -467,18 +491,16 @@ router.get('/sessions/:id', auth, async (req, res) => {
 });
 
 // ── DELETE /api/cycling/sessions/:id ──────────────────────────────────
-router.delete('/sessions/:id', auth, async (req, res) => {
+// R1 note: was "only uploader or admin" — replaced by the project model
+// (any project member with edit/admin can CRUD the project's data,
+// per docs/future/project_access_control.md capability split).
+router.delete('/sessions/:id', auth, requireEntityModify('cyclingSession'), async (req, res) => {
   const sessionId = Number(req.params.id);
 
   try {
     const session = await pool.query('SELECT uploaded_by, file_path FROM cycling_sessions WHERE session_id = $1', [sessionId]);
     if (session.rowCount === 0) {
       return res.status(404).json({ error: 'Session not found' });
-    }
-
-    // Only uploader or admin can delete
-    if (session.rows[0].uploaded_by !== req.user.userId && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Not authorized' });
     }
 
     // Delete from DB (CASCADE deletes datapoints + summary)
@@ -497,7 +519,9 @@ router.delete('/sessions/:id', auth, async (req, res) => {
 // Lets the user backfill active_mass_mg (for mAh/g plots) or correct
 // notes/protocol after upload without re-uploading the file. Only the
 // uploader or an admin can edit.
-router.patch('/sessions/:id', auth, async (req, res) => {
+// R1 note: was "only uploader or admin" — replaced by the project model
+// (any project member with edit/admin can CRUD the project's data).
+router.patch('/sessions/:id', auth, requireEntityModify('cyclingSession'), async (req, res) => {
   const sessionId = Number(req.params.id);
   if (!Number.isInteger(sessionId)) {
     return res.status(400).json({ error: 'Invalid session id' });
@@ -505,9 +529,6 @@ router.patch('/sessions/:id', auth, async (req, res) => {
   try {
     const check = await pool.query('SELECT uploaded_by FROM cycling_sessions WHERE session_id = $1', [sessionId]);
     if (check.rowCount === 0) return res.status(404).json({ error: 'Session not found' });
-    if (check.rows[0].uploaded_by !== req.user.userId && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Not authorized' });
-    }
 
     // Whitelist editable columns. Channel/protocol/notes/active_mass_mg
     // only — file, hash, battery_id, uploaded_by are immutable audit data.
@@ -549,7 +570,7 @@ router.patch('/sessions/:id', auth, async (req, res) => {
 });
 
 // ── GET /api/cycling/sessions/:id/summary ─────────────────────────────
-router.get('/sessions/:id/summary', auth, async (req, res) => {
+router.get('/sessions/:id/summary', auth, requireEntityView('cyclingSession'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT * FROM cycling_cycle_summary
@@ -565,7 +586,7 @@ router.get('/sessions/:id/summary', auth, async (req, res) => {
 });
 
 // ── GET /api/cycling/sessions/:id/cycles/:cycle ───────────────────────
-router.get('/sessions/:id/cycles/:cycle', auth, async (req, res) => {
+router.get('/sessions/:id/cycles/:cycle', auth, requireEntityView('cyclingSession'), async (req, res) => {
   try {
     // step_number: needed by the provenance "Перепроверить" recompute —
     // per-step max aggregation (CCCV-correct) mirrors parse_cycling.py.
@@ -584,7 +605,7 @@ router.get('/sessions/:id/cycles/:cycle', auth, async (req, res) => {
 });
 
 // ── GET /api/cycling/sessions/:id/datapoints ──────────────────────────
-router.get('/sessions/:id/datapoints', auth, async (req, res) => {
+router.get('/sessions/:id/datapoints', auth, requireEntityView('cyclingSession'), async (req, res) => {
   try {
     const sessionId = Number(req.params.id);
     const fromCycle = Number(req.query.from_cycle) || 0;
@@ -632,7 +653,7 @@ router.get('/sessions/:id/datapoints', auth, async (req, res) => {
 });
 
 // ── GET /api/cycling/sessions/:id/export ──────────────────────────────
-router.get('/sessions/:id/export', auth, async (req, res) => {
+router.get('/sessions/:id/export', auth, requireEntityView('cyclingSession'), async (req, res) => {
   try {
     const sessionId = Number(req.params.id);
 
@@ -709,7 +730,12 @@ router.get('/export/xlsx', auth, async (req, res) => {
     if (!sessionsQ.rowCount) {
       return res.status(404).json({ error: 'No matching sessions found' });
     }
-    const sessionsList = sessionsQ.rows;
+    // R1: silently drop sessions the user can't view (same semantics as the
+    // "missing rows are skipped" behavior above — partial export, no block).
+    const sessionsList = await filterRowsByEntityAccess(req, 'cyclingSession', sessionsQ.rows, 'session_id');
+    if (!sessionsList.length) {
+      return res.status(404).json({ error: 'No matching sessions found' });
+    }
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'BADB Cycling';
