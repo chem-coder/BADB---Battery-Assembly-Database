@@ -11,6 +11,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   UNLINKED_ITEM_POLICY,
+  UNLINKED_VIEW,
+  UNLINKED_MODIFY,
   resolveProjectAccess,
   loadUserAccessContext,
   getEntityProjectIds,
@@ -202,11 +204,17 @@ describe('canView / canModify', () => {
     expect(canModify(ctx, [123])).toBe(true);
   });
 
-  it('unlinked item honours UNLINKED_ITEM_POLICY (open today)', () => {
-    const ctx = ctxWith({});
-    const expected = UNLINKED_ITEM_POLICY === 'open';
-    expect(canView(ctx, [])).toBe(expected);
-    expect(canModify(ctx, [])).toBe(expected);
+  it('unlinked item: VIEW is open, MODIFY is fail-closed (admin/director only)', () => {
+    const ctx = ctxWith({}); // ordinary employee, no admin/director
+    expect(canView(ctx, [])).toBe(UNLINKED_VIEW === 'open');   // open today → true
+    expect(canModify(ctx, [])).toBe(UNLINKED_MODIFY === 'open'); // restricted → false
+    // The whole point: an orphaned item never becomes world-writable.
+    expect(canModify(ctx, [])).toBe(false);
+  });
+
+  it('unlinked item: admin/director CAN modify (via ctx.all)', () => {
+    const ctx = ctxWith({}, 'admin');
+    expect(canModify(ctx, [])).toBe(true);
   });
 
   it('inactive or missing user → nothing, even for unlinked items', () => {

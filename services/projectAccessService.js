@@ -25,12 +25,20 @@
 // ANY ONE of them ("if you can see the project, you can see its items").
 // ═══════════════════════════════════════════════════════════════════
 
-// Items with NO project link at all: 'open' = visible/editable to any
-// logged-in user (nothing confidential governs them — matches pre-R1
-// behavior); flip to 'restricted' to hide them from everyone but
-// admin/director. As of 2026-07-15 every item in the DB is linked, so
-// this affects nothing today.
-const UNLINKED_ITEM_POLICY = 'open';
+// Items with NO project link at all (no governing project).
+//   VIEW  → open: any logged-in user may see them. Nothing confidential
+//           governs an unlinked item, and this matches pre-R1 reads.
+//   MODIFY → admin/director only. Editing is fail-CLOSED so that an item
+//           accidentally orphaned (e.g. an update path that drops its
+//           links) can never silently become world-writable. A real
+//           orphan is an anomaly an admin should re-link, not a free-for-all.
+// As of 2026-07-15 every item in the DB is linked, so this affects nothing
+// today — it's a safety floor. Flip UNLINKED_VIEW to 'restricted' to hide
+// unlinked items from non-admins entirely.
+const UNLINKED_VIEW = 'open';         // 'open' | 'restricted'
+const UNLINKED_MODIFY = 'restricted'; // 'open' | 'restricted' (admin/director only)
+// Back-compat export: the original single knob reflected the VIEW policy.
+const UNLINKED_ITEM_POLICY = UNLINKED_VIEW;
 
 /**
  * Resolve a user's effective access to ONE project.
@@ -237,14 +245,16 @@ async function getEntityProjectIds(db, entityType, id) {
 function canView(ctx, projectIds) {
   if (!ctx.user || ctx.user.active === false) return false;
   if (ctx.all) return true;
-  if (!projectIds || projectIds.length === 0) return UNLINKED_ITEM_POLICY === 'open';
+  if (!projectIds || projectIds.length === 0) return UNLINKED_VIEW === 'open';
   return projectIds.some((pid) => ctx.map.has(pid));
 }
 
 function canModify(ctx, projectIds) {
   if (!ctx.user || ctx.user.active === false) return false;
   if (ctx.all) return true;
-  if (!projectIds || projectIds.length === 0) return UNLINKED_ITEM_POLICY === 'open';
+  // Unlinked items: fail-closed — only admin/director (handled by ctx.all
+  // above) may modify. See UNLINKED_MODIFY.
+  if (!projectIds || projectIds.length === 0) return UNLINKED_MODIFY === 'open';
   return projectIds.some((pid) => {
     const level = ctx.map.get(pid);
     return level === 'edit' || level === 'admin';
@@ -253,6 +263,8 @@ function canModify(ctx, projectIds) {
 
 module.exports = {
   UNLINKED_ITEM_POLICY,
+  UNLINKED_VIEW,
+  UNLINKED_MODIFY,
   resolveProjectAccess,
   loadUserAccessContext,
   getEntityProjectIds,
