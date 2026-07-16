@@ -106,6 +106,9 @@ const columns = [
   { field: 'project_name',  header: 'Проект',     minWidth: '80px',  width: '115px' },
   { field: 'role',          header: 'Тип',        minWidth: '80px',  width: '115px' },
   { field: 'recipe_name',   header: 'Рецепт',     minWidth: '80px',  width: '115px' },
+  // d047 — the tape's chemistry for the recipe's open active-material
+  // slot (tapes.active_material_id → materials.name via the API join).
+  { field: 'active_material_name', header: 'Активный материал', minWidth: '90px', width: '130px' },
   // d024 — coating sidedness as a list-visible attribute. Filter via the
   // header overlay (sortable: true keeps the column predictable too).
   { field: 'coating_sidedness', header: 'Стороны', minWidth: '70px', width: '90px', sortable: true },
@@ -378,6 +381,9 @@ const refData = reactive({
   users: [],
   projects: [],
   recipes: [],
+  // d047 — materials feed the «Активный материал» select in the
+  // constructor's general_info stage (rows carry role + family).
+  materials: [],
   atmospheres: [],
   dryMixingMethods: [],
   wetMixingMethods: [],
@@ -386,9 +392,9 @@ const refData = reactive({
 })
 
 async function loadRefData() {
-  const keys = ['users', 'projects', 'recipes', 'atmospheres', 'dryMixingMethods', 'wetMixingMethods', 'foils', 'coatingMethods']
+  const keys = ['users', 'projects', 'recipes', 'materials', 'atmospheres', 'dryMixingMethods', 'wetMixingMethods', 'foils', 'coatingMethods']
   const urls = [
-    '/api/users', '/api/projects', '/api/recipes',
+    '/api/users', '/api/projects', '/api/recipes', '/api/materials',
     '/api/reference/drying-atmospheres', '/api/reference/dry-mixing-methods',
     '/api/reference/wet-mixing-methods', '/api/reference/foils', '/api/reference/coating-methods',
   ]
@@ -483,6 +489,11 @@ function formatDate(dt) {
       <!-- Custom cell: Рецепт -->
       <template #col-recipe_name="{ data }">
         <span>{{ data.recipe_name || '' }}</span>
+      </template>
+
+      <!-- Custom cell: Активный материал (d047) -->
+      <template #col-active_material_name="{ data }">
+        <span>{{ data.active_material_name || '' }}</span>
       </template>
 
       <!-- Custom cell: coating sidedness (audit #11) -->

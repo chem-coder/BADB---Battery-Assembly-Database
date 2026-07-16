@@ -32,6 +32,7 @@ const projectMultiSelectTrigger = document.getElementById('project-multiselect-t
 const projectMultiSelectOptions = document.getElementById('project-multiselect-options');
 const tapeTypeSelect  = document.getElementById('tape_type');
 const recipeSelect    = document.getElementById('tape-recipe-id'); // already added in HTML
+const activeMaterialSelect = document.getElementById('tape-active-material-id');
 const pendingInstanceComponentLoads = new Set();
 const pendingPlannedComponentLoads = new Set();
 
@@ -52,6 +53,7 @@ const tapePageState = window.tapePageState = {
       project_ids: [],
       tape_type: '',
       tape_recipe_id: '',
+      active_material_id: '',
       calc_mode: 'from_active_mass',
       target_mass_g: ''
     }
@@ -71,6 +73,7 @@ const tapePageState = window.tapePageState = {
     users: [],
     projects: [],
     currentRecipes: [],
+    activeMaterials: [],
     foils: [],
     coatingMethods: [],
     dryMixingMethods: [],
@@ -483,6 +486,7 @@ function getCurrentSnapshot(stepCode) {
       project_ids: state.form.fields.project_ids || [],
       tape_type: state.form.fields.tape_type || '',
       tape_recipe_id: state.form.fields.tape_recipe_id || '',
+      active_material_id: state.form.fields.active_material_id || '',
       calc_mode: state.form.fields.calc_mode || 'from_active_mass',
       target_mass_g: state.form.fields.target_mass_g || ''
     });
@@ -526,6 +530,7 @@ function markDuplicateDraftSnapshotsFromDefaults() {
     project_ids: defaultFields.project_ids || [],
     tape_type: defaultFields.tape_type || '',
     tape_recipe_id: defaultFields.tape_recipe_id || '',
+    active_material_id: defaultFields.active_material_id || '',
     calc_mode: defaultFields.calc_mode || 'from_active_mass',
     target_mass_g: defaultFields.target_mass_g || ''
   });
@@ -664,6 +669,35 @@ function setRecipeLines(lines) {
   state.recipe.currentLines = Array.isArray(lines) ? lines : [];
 }
 
+// The active line of a recipe comes from the API with material_id = null
+// (an "open slot"): the material is chosen on the tape (active_material_id).
+function isActiveSlotSourceLine(line) {
+  if (!line) return false;
+  if (line.is_active_slot === true) return true;
+  return line.material_id == null &&
+    (line.recipe_role === 'cathode_active' || line.recipe_role === 'anode_active');
+}
+
+// Fill the open slot of the recipe lines with the tape's active material,
+// so all downstream code (instances, densities, planned masses) can keep
+// working with line.material_id / line.material_name as before.
+function resolveActiveSlotInLines(lines) {
+  const activeMaterialId = Number(state.form.fields.active_material_id);
+  const hasActiveMaterial = Number.isFinite(activeMaterialId) && activeMaterialId > 0;
+  const activeMaterialName = getActiveMaterialNameFromState();
+
+  return (Array.isArray(lines) ? lines : []).map((line) => {
+    if (!isActiveSlotSourceLine(line)) return line;
+
+    return {
+      ...line,
+      is_active_slot: true,
+      material_id: hasActiveMaterial ? activeMaterialId : null,
+      material_name: hasActiveMaterial ? (activeMaterialName || null) : null
+    };
+  });
+}
+
 function setSelectedInstancesByLineId(nextMap) {
   state.recipe.selectedInstancesByLineId = nextMap || {};
   refreshDirtyFromSnapshots();
@@ -747,6 +781,10 @@ function setReferenceProjects(projects) {
 
 function setReferenceCurrentRecipes(recipes) {
   state.reference.currentRecipes = Array.isArray(recipes) ? recipes : [];
+}
+
+function setReferenceActiveMaterials(materials) {
+  state.reference.activeMaterials = Array.isArray(materials) ? materials : [];
 }
 
 function setReferenceFoils(foils) {
@@ -871,6 +909,7 @@ function getDefaultTopLevelFormFields() {
     project_ids: [],
     tape_type: '',
     tape_recipe_id: '',
+    active_material_id: '',
     calc_mode: 'from_active_mass',
     target_mass_g: ''
   };
@@ -1310,6 +1349,7 @@ function writeTopLevelFormStateToDom() {
   updateProjectMultiSelectDom();
   form.elements['tape_type'].value = state.form.fields.tape_type || '';
   form.elements['tape_recipe_id'].value = state.form.fields.tape_recipe_id || '';
+  form.elements['active_material_id'].value = state.form.fields.active_material_id || '';
   form.elements['calc_mode'].value = state.form.fields.calc_mode || 'from_active_mass';
   form.elements['target_mass_g'].value = state.form.fields.target_mass_g || '';
   applyNameStateToDom();
@@ -1761,6 +1801,19 @@ async function fetchRecipes(role) {
   return res.json();
 }
 
+async function fetchActiveMaterials() {
+  const res = await fetch('/api/materials');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Ошибка загрузки материалов');
+  }
+
+  const materials = await res.json();
+  return (Array.isArray(materials) ? materials : []).filter(
+    (material) => material.role === 'cathode_active' || material.role === 'anode_active'
+  );
+}
+
 async function fetchRecipeLines(recipeId) {
   const res = await fetch(`/api/recipes/${recipeId}/lines`);
   if (!res.ok) {
@@ -1927,6 +1980,9 @@ function getTapeFromLoadedList(tapeId, fallback = null) {
 function buildTapeSavePayload() {
   const data = { ...state.form.fields };
   delete data.created_by;
+  data.active_material_id = data.active_material_id
+    ? Number(data.active_material_id)
+    : null;
   return data;
 }
 
@@ -2245,17 +2301,25 @@ function renderRecipeLines() {
     roleInput.value = recipeRoleLabel(line.recipe_role);
     roleInput.disabled = true;
     
-    // material name (middle)
+    // material name (middle); the active slot shows the tape's active material
+    const isSlotWithoutMaterial = Boolean(line.is_active_slot) && !line.material_id;
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
-    nameInput.value = line.material_name;
+    nameInput.value = line.is_active_slot
+      ? (line.material_name || 'x — выберите активный материал')
+      : line.material_name;
     nameInput.disabled = true;
-    
+
     // material instance selector
     const instanceSelect = document.createElement('select');
     instanceSelect.className = 'material-instance-select';
     instanceSelect.dataset.recipeLineId = line.recipe_line_id;
-    
+
+    if (isSlotWithoutMaterial) {
+      instanceSelect.disabled = true;
+      instanceSelect.title = 'Сначала выберите активный материал ленты';
+    }
+
     const slurryInstanceSelect = document.createElement('select');
     slurryInstanceSelect.className = 'material-instance-select slurry-instance-select';
     slurryInstanceSelect.dataset.recipeLineId = line.recipe_line_id;
@@ -2668,6 +2732,101 @@ function renderRecipesSelect() {
     '<option value="">— выбрать рецепт —</option>',
     state.form.fields.tape_recipe_id
   );
+}
+
+function tapeRoleToMaterialRole(tapeRole) {
+  if (tapeRole === 'cathode') return 'cathode_active';
+  if (tapeRole === 'anode') return 'anode_active';
+  return null;
+}
+
+function materialRoleToTapeRole(materialRole) {
+  if (materialRole === 'cathode_active') return 'cathode';
+  if (materialRole === 'anode_active') return 'anode';
+  return null;
+}
+
+function getActiveMaterialFromState(materialId) {
+  if (!materialId) return null;
+  return state.reference.activeMaterials.find(
+    (material) => String(material.material_id) === String(materialId)
+  ) || null;
+}
+
+function getActiveMaterialNameFromState() {
+  const materialId = String(state.form.fields.active_material_id || '');
+  if (!materialId) return '';
+
+  const material = getActiveMaterialFromState(materialId);
+  if (material?.name) return material.name;
+
+  // Fallback for restore: the reference list may not be loaded yet,
+  // but the opened tape already knows its active material name.
+  const currentTape = state.selection.currentTape;
+  if (currentTape && String(currentTape.active_material_id || '') === materialId) {
+    return currentTape.active_material_name || '';
+  }
+
+  return '';
+}
+
+function isActiveMaterialCompatibleWithTapeType(materialId) {
+  const material = getActiveMaterialFromState(materialId);
+  if (!material) return false;
+
+  const requiredRole = tapeRoleToMaterialRole(state.form.fields.tape_type);
+  return requiredRole ? material.role === requiredRole : true;
+}
+
+function renderActiveMaterialsSelect() {
+  if (!activeMaterialSelect) return;
+
+  const requiredRole = tapeRoleToMaterialRole(state.form.fields.tape_type);
+  const materials = state.reference.activeMaterials.filter((material) => (
+    requiredRole
+      ? material.role === requiredRole
+      : material.role === 'cathode_active' || material.role === 'anode_active'
+  ));
+
+  activeMaterialSelect.innerHTML = '<option value="">— выбрать активный материал —</option>';
+
+  const groupsByFamily = new Map();
+  materials.forEach((material) => {
+    const family = String(material.family || '').trim() || 'Прочие';
+    if (!groupsByFamily.has(family)) groupsByFamily.set(family, []);
+    groupsByFamily.get(family).push(material);
+  });
+
+  const familyNames = [...groupsByFamily.keys()].sort((a, b) => {
+    if (a === 'Прочие') return 1;
+    if (b === 'Прочие') return -1;
+    return a.localeCompare(b);
+  });
+
+  familyNames.forEach((family) => {
+    const group = document.createElement('optgroup');
+    group.label = family;
+
+    groupsByFamily.get(family)
+      .slice()
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      .forEach((material) => {
+        const opt = document.createElement('option');
+        opt.value = material.material_id;
+        opt.textContent = material.name;
+        group.appendChild(opt);
+      });
+
+    activeMaterialSelect.appendChild(group);
+  });
+
+  const selectedValue = String(state.form.fields.active_material_id || '');
+  if (
+    selectedValue &&
+    [...activeMaterialSelect.options].some((option) => option.value === selectedValue)
+  ) {
+    activeMaterialSelect.value = selectedValue;
+  }
 }
 
 function renderFoilsSelect() {
@@ -3816,6 +3975,7 @@ function normalizeTapeRestoreDataIntoState(restoreData, options = {}) {
     project_ids: getTapeProjectIds(tape),
     tape_type: tape?.role || '',
     tape_recipe_id: tape?.tape_recipe_id || '',
+    active_material_id: tape?.active_material_id || '',
     calc_mode: tape?.calc_mode || 'from_active_mass',
     target_mass_g: tape?.target_mass_g || ''
   }, { render: false });
@@ -3958,6 +4118,10 @@ async function renderTapeRestoreFromState(restoreData, options = {}) {
   const asDuplicateDraft = Boolean(options.asDuplicateDraft);
   const currentName = (state.form.fields.name || restoreData.tape?.name || '').trim();
 
+  await loadActiveMaterialsDropdown({
+    selectedValue: state.form.fields.active_material_id,
+    clearOnInvalid: false
+  });
   await loadRecipesDropdown({
     selectedValue: state.form.fields.tape_recipe_id,
     clearOnInvalid: true
@@ -4488,8 +4652,14 @@ async function loadProjects() {
 
 async function loadRecipesDropdown({ selectedValue = null, clearOnInvalid = true } = {}) {
   try {
-    const role = state.form.fields.tape_type || null;
-    
+    // "Choose material, then recipe": without a tape type the role can be
+    // inferred from the already chosen active material.
+    const role = state.form.fields.tape_type
+      || materialRoleToTapeRole(
+        getActiveMaterialFromState(state.form.fields.active_material_id)?.role
+      )
+      || null;
+
     // If no role selected → show only placeholder
     if (!role) {
       recipeSelect.innerHTML = '<option value="">— выбрать рецепт —</option>';
@@ -4521,7 +4691,33 @@ async function loadRecipesDropdown({ selectedValue = null, clearOnInvalid = true
       recipeSelect.value = '';
       clearRecipeStateAndUi({ clearRecipeField: true });
     }
-    
+
+  } catch (err) {
+    logLoadError(err);
+  }
+}
+
+async function loadActiveMaterialsDropdown({ selectedValue = null, clearOnInvalid = true } = {}) {
+  try {
+    const desiredValue = String(
+      selectedValue ?? state.form.fields.active_material_id ?? ''
+    );
+
+    const materials = await fetchActiveMaterials();
+    setReferenceActiveMaterials(materials);
+
+    // Auto-clear if the chosen material no longer matches the tape/recipe role
+    if (
+      clearOnInvalid &&
+      desiredValue &&
+      !isActiveMaterialCompatibleWithTapeType(desiredValue)
+    ) {
+      setFormField('active_material_id', '');
+      await refreshActiveSlotLineUi();
+    }
+
+    renderActiveMaterialsSelect();
+
   } catch (err) {
     logLoadError(err);
   }
@@ -4575,6 +4771,7 @@ function attachTopLevelFormStateSync() {
     ['project_id', form.elements['project_id']],
     ['tape_type', form.elements['tape_type']],
     ['tape_recipe_id', form.elements['tape_recipe_id']],
+    ['active_material_id', form.elements['active_material_id']],
     ['calc_mode', form.elements['calc_mode']],
     ['target_mass_g', form.elements['target_mass_g']]
   ];
@@ -4711,7 +4908,7 @@ async function loadRecipeLinesIntoStateAndRender(recipeId, { restoringActuals = 
   }
 
   const lines = await fetchRecipeLines(recipeId);
-  setRecipeLines(lines);
+  setRecipeLines(resolveActiveSlotInLines(lines));
 
   if (!state.form.isRestoringTape) {
     setSelectedInstancesByLineId({});
@@ -4737,6 +4934,33 @@ async function loadRecipeLinesIntoStateAndRender(recipeId, { restoringActuals = 
   }
 }
 
+// Re-resolve the active slot line after the tape's active material changed:
+// update the material cell, reload the slot's instance options and drop the
+// previously selected instance (it belongs to the old material).
+async function refreshActiveSlotLineUi() {
+  const previousSlotLine = state.recipe.currentLines.find((line) => line.is_active_slot);
+  if (!previousSlotLine) return;
+
+  setRecipeLines(resolveActiveSlotInLines(state.recipe.currentLines));
+  const slotLine = state.recipe.currentLines.find((line) => line.is_active_slot);
+
+  if (String(previousSlotLine.material_id ?? '') !== String(slotLine.material_id ?? '')) {
+    setSelectedInstanceForLine(slotLine.recipe_line_id, '');
+  }
+
+  const materialId = Number(slotLine.material_id);
+  if (Number.isFinite(materialId) && materialId > 0) {
+    try {
+      await fetchMaterialInstances(materialId);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  renderRecipeLines();
+  recalculatePlannedMasses();
+}
+
 // -------- Events --------
 
 projectMultiSelectTrigger.addEventListener('click', async () => {
@@ -4748,6 +4972,20 @@ document.addEventListener('click', (event) => {
   setProjectMultiSelectOpen(false);
 });
 recipeSelect.addEventListener('focus', loadRecipesDropdown);
+activeMaterialSelect.addEventListener('focus', () => loadActiveMaterialsDropdown());
+
+// When the active material changes: filter recipes by the matching role
+// and refresh the slot line of the current recipe (instances + name cell)
+activeMaterialSelect.addEventListener('change', async () => {
+  setFormField('active_material_id', activeMaterialSelect.value || '');
+
+  try {
+    await loadRecipesDropdown();
+    await refreshActiveSlotLineUi();
+  } catch (err) {
+    console.error(err);
+  }
+});
 
 const recipeLinesContainer = document.getElementById('recipe-lines-container');
 if (recipeLinesContainer) {
@@ -4764,6 +5002,7 @@ if (recipeLinesContainer) {
 }
 
 tapeTypeSelect.addEventListener('change', loadRecipesDropdown);
+tapeTypeSelect.addEventListener('change', () => loadActiveMaterialsDropdown());
 tapeTypeSelect.addEventListener('change', applyDefaultCoatingFoil);
 tapeTypeSelect.addEventListener('change', () => applyDryingTapePrefillFromCoating({ forceDefaults: true }));
 
@@ -4889,9 +5128,28 @@ saveBtn.addEventListener('click', () => trackPendingSave(withInlineSaveStatus('s
     }
     
     if (state.form.mode === 'edit') {
-      
-      // 1. Update tape general info only
-      await updateTape(state.selection.currentTapeId, data);
+
+      // 1. Update tape general info only.
+      // Changing the recipe while weighing actuals exist gets a 409 from the
+      // backend (code 'stale_actuals'): confirm, then retry with the flag —
+      // the backend deletes the old actuals and changes the recipe atomically.
+      try {
+        await updateTape(state.selection.currentTapeId, data);
+      } catch (err) {
+        if (err.status !== 409 || err.responseBody?.code !== 'stale_actuals') {
+          throw err;
+        }
+        const count = err.responseBody.stale_actuals_count;
+        const ok = confirm(
+          `Для этой ленты уже сохранены навески по прежнему рецепту (строк: ${count}). ` +
+          'Смена рецепта удалит их безвозвратно. Продолжить?'
+        );
+        if (!ok) {
+          showInlineStatus('saveBtn', 'Сохранение отменено: рецепт не изменён', true);
+          return;
+        }
+        await updateTape(state.selection.currentTapeId, { ...data, delete_stale_actuals: true });
+      }
       setCurrentTape({
         ...(state.selection.currentTape || {}),
         tape_id: state.selection.currentTapeId,
@@ -5741,6 +5999,7 @@ loadTapes();
 loadUsers();
 loadProjects();
 loadRecipesDropdown();
+loadActiveMaterialsDropdown();
 
 const dryingAtmosphereSelectIds = [
   '0-drying_am-atmosphere',

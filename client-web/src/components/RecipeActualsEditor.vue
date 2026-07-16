@@ -36,6 +36,8 @@ const toast = useToast()
 const lines = computed(() => props.tapeState?.currentRecipeLines?.value || [])
 const hasTape = computed(() => !!props.tapeState?.currentTapeId?.value)
 const hasRecipe = computed(() => !!props.tapeState?.general?.tapeRecipeId)
+// d047 — the tape's chemistry for the recipe's open active-material slot.
+const hasActiveMaterial = computed(() => !!props.tapeState?.general?.activeMaterialId)
 
 const statusMessage = computed(() => {
   if (!props.tapeState) return 'Выберите ленту в конструкторе для редактирования навесок'
@@ -84,7 +86,19 @@ function hasDensity(lineId) {
   return Number.isFinite(d) && d > 0
 }
 
+// d047 — recipe lines with material_id null are the open active-material
+// slot: the material comes from the TAPE (general.activeMaterialId), not
+// the recipe. While unset, the row shows the «x» hint and the instance
+// select stays disabled (instances belong to a concrete material).
+function isSlotLine(line) {
+  return line.material_id == null
+}
+
 function materialName(line) {
+  if (isSlotLine(line)) {
+    return props.tapeState?.activeMaterialName?.value
+      || 'x — выберите активный материал'
+  }
   return line.material_name || `#${line.material_id}`
 }
 
@@ -196,8 +210,12 @@ function onValueBlur(lineId) {
         </thead>
         <tbody>
           <tr v-for="line in lines" :key="line.recipe_line_id" class="ra-row">
-            <!-- Material name (read-only from recipe) -->
-            <td class="ra-cell-name">{{ materialName(line) }}</td>
+            <!-- Material name (read-only: from recipe, or — for the d047
+                 slot line — from the tape's active material) -->
+            <td
+              class="ra-cell-name"
+              :class="{ 'ra-cell-name--slot-empty': isSlotLine(line) && !hasActiveMaterial }"
+            >{{ materialName(line) }}</td>
 
             <!-- Instance dropdown -->
             <td>
@@ -207,6 +225,10 @@ function onValueBlur(lineId) {
               <select
                 v-else
                 :value="tapeState.selectedInstanceByLineId[line.recipe_line_id] || ''"
+                :disabled="isSlotLine(line) && !hasActiveMaterial"
+                :title="isSlotLine(line) && !hasActiveMaterial
+                  ? 'Сначала выберите активный материал ленты (раздел «Общая информация»)'
+                  : ''"
                 @change="onInstanceChange(line.recipe_line_id, $event.target.value)"
                 class="ra-select"
               >
@@ -389,6 +411,19 @@ function onValueBlur(lineId) {
 .ra-cell-name {
   color: #003274;
   font-weight: 500;
+}
+
+/* d047 — slot line without a chosen active material: muted hint text. */
+.ra-cell-name--slot-empty {
+  color: rgba(0, 50, 116, 0.45);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.ra-select:disabled {
+  background: rgba(0, 50, 116, 0.04);
+  color: rgba(0, 50, 116, 0.4);
+  cursor: not-allowed;
 }
 
 .ra-select,

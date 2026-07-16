@@ -111,10 +111,28 @@ function getRefOptions(field, tapeId = null) {
   }
   if (field.options) return field.options.map(o => ({ value: o.value, label: o.label }))
   if (field.ref && props.refs[field.ref]?.length) {
-    const items = props.refs[field.ref]
+    let items = props.refs[field.ref]
+    // d047 — schema-driven option narrowing: a field may carry
+    // `optionsFilter(item, general, refs)` to filter ref options against
+    // the tape's own general state (recipe ↔ active material role
+    // compatibility). `general` falls back to {} when the tape state
+    // isn't reachable so role-only predicates still apply.
+    if (typeof field.optionsFilter === 'function') {
+      const general = tapeId != null ? props.tapeStates[String(tapeId)]?.general : null
+      items = items.filter(i => field.optionsFilter(i, general || {}, props.refs))
+    }
+    if (typeof field.optionsSort === 'function') {
+      items = items.slice().sort(field.optionsSort)
+    }
     const idKey = field.refConfig?.idField || _defaultIdFields[field.ref] || 'id'
     const nameKey = field.refConfig?.nameField || _defaultNameFields[field.ref] || 'name'
-    return items.map(i => ({ value: i[idKey], label: i[nameKey] || `#${i[idKey]}` }))
+    return items.map(i => ({
+      value: i[idKey],
+      // `optionLabel(item)` lets the schema build compound labels
+      // (e.g. «family» — name for grouped-by-family material pickers).
+      label: (typeof field.optionLabel === 'function' ? field.optionLabel(i) : null)
+        || i[nameKey] || `#${i[idKey]}`,
+    }))
   }
   return []
 }

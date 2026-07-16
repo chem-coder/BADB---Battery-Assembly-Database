@@ -44,7 +44,11 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd040_add_coated_thickness_fields.sql'),
   path.join(ROOT, 'migrations', 'd041_project_participants.sql'),
   path.join(ROOT, 'migrations', 'd042_project_leads_as_team_members.sql'),
-  path.join(ROOT, 'migrations', 'd043_enable_multi_battery_electrode_sources.sql')
+  path.join(ROOT, 'migrations', 'd043_enable_multi_battery_electrode_sources.sql'),
+  path.join(ROOT, 'migrations', 'd044_access_level_none.sql'),
+  path.join(ROOT, 'migrations', 'd045_material_instance_components_ddl.sql'),
+  path.join(ROOT, 'migrations', 'd046_indexes_and_timestamps.sql'),
+  path.join(ROOT, 'migrations', 'd047_recipe_active_material_slot.sql')
 ];
 
 function parseArgs(argv) {
@@ -503,9 +507,12 @@ async function runWriteSmoke(client, seed, context) {
       seed.users.find((u) => u.login === DEFAULT_LOGIN)?.user_id ||
       first(seed.users)?.user_id;
     const projectId = first(seed.projects)?.project_id;
-    const existingRecipeId = first(seed.recipes)?.tape_recipe_id;
+    // d047: tapes name their own active material; keep the picked recipe and
+    // material role-compatible (cathode recipe <-> cathode_active material).
+    const existingRecipeId = (seed.recipes.find((r) => r.role === 'cathode') || first(seed.recipes))?.tape_recipe_id;
     const existingElectrolyteId = first(seed.electrolytes)?.electrolyte_id;
-    const activeMaterial = seed.materials.find((m) => String(m.role).includes('active')) || first(seed.materials);
+    const activeMaterial = seed.materials.find((m) => m.role === 'cathode_active') ||
+      seed.materials.find((m) => String(m.role).includes('active')) || first(seed.materials);
     const binderMaterial = seed.materials.find((m) => m.role === 'binder') || seed.materials[1] || first(seed.materials);
     const solventMaterial = seed.materials.find((m) => m.role === 'solvent') || seed.materials[2] || first(seed.materials);
 
@@ -759,12 +766,19 @@ async function runWriteSmoke(client, seed, context) {
 
     made.materialId = (await client.post('/api/materials', {
       name: `Codex Smoke Material ${suffix}`,
-      role: 'other'
+      role: 'other',
+      family: 'Smoke Family'
     })).material_id;
     await client.put(`/api/materials/${made.materialId}`, {
       name: `Codex Smoke Material ${suffix} Updated`,
-      role: 'other'
+      role: 'other',
+      family: 'Smoke Family Updated'
     });
+    client.assertEqual(
+      (await client.get('/api/materials')).find((m) => m.material_id === made.materialId)?.family,
+      'Smoke Family Updated',
+      'material family round-trips (d047)'
+    );
     made.materialInstanceId = (await client.get(`/api/materials/${made.materialId}/instances`))[0]?.material_instance_id;
     await client.expectDependencyConflict('DELETE', `/api/materials/${made.materialId}`);
     made.extraMaterialInstanceId = (await client.post(`/api/materials/${made.materialId}/instances`, {
@@ -838,7 +852,8 @@ async function runWriteSmoke(client, seed, context) {
       notes: 'smoke',
       created_by: forgedUserId,
       lines: [
-        recipeLine(activeMaterial.material_id, 'cathode_active', true, 90, 'active'),
+        // d047: the active line is an open slot — no material on the recipe
+        recipeLine(null, 'cathode_active', true, 90, 'active'),
         recipeLine(binderMaterial.material_id, 'binder', true, 10, 'binder'),
         recipeLine(solventMaterial.material_id, 'solvent', false, null, 'solvent')
       ]
@@ -863,7 +878,7 @@ async function runWriteSmoke(client, seed, context) {
       variant_label: 'B',
       notes: 'smoke update',
       lines: [
-        recipeLine(activeMaterial.material_id, 'cathode_active', true, 88, 'active'),
+        recipeLine(null, 'cathode_active', true, 88, 'active'),
         recipeLine(binderMaterial.material_id, 'binder', true, 12, 'binder'),
         recipeLine(solventMaterial.material_id, 'solvent', false, null, 'solvent')
       ]
@@ -878,6 +893,7 @@ async function runWriteSmoke(client, seed, context) {
       project_id: projectId,
       project_ids: tapeProjectIds,
       tape_recipe_id: existingRecipeId,
+      active_material_id: activeMaterial.material_id,
       created_by: forgedUserId,
       item_created_at: '2024-01-02',
       notes: 'smoke',
@@ -886,6 +902,11 @@ async function runWriteSmoke(client, seed, context) {
     });
     made.tapeId = tape.tape_id;
     client.assertEqual(tape.created_by, userId, 'tape create ignores browser-created created_by');
+    client.assertEqual(
+      Number(tape.active_material_id),
+      Number(activeMaterial.material_id),
+      'tape create stores active material (d047)'
+    );
     client.assertEqual(formatDateOnly(tape.item_created_at), '2024-01-02', 'tape create stores physical item date');
     client.assertEqual(
       Array.isArray(tape.project_ids) && tape.project_ids.map(Number).includes(Number(made.projectId)),
@@ -898,6 +919,7 @@ async function runWriteSmoke(client, seed, context) {
       project_id: projectId,
       project_ids: [projectId],
       tape_recipe_id: existingRecipeId,
+      active_material_id: activeMaterial.material_id,
       created_by: forgedUserId,
       item_created_at: '2024-01-03',
       notes: 'smoke update',
@@ -912,6 +934,7 @@ async function runWriteSmoke(client, seed, context) {
       project_id: projectId,
       project_ids: [projectId],
       tape_recipe_id: made.recipeId,
+      active_material_id: activeMaterial.material_id,
       created_by: userId,
       notes: 'smoke recipe dependency check',
       calc_mode: 'from_slurry_mass',
@@ -923,6 +946,7 @@ async function runWriteSmoke(client, seed, context) {
       project_id: projectId,
       project_ids: [projectId],
       tape_recipe_id: existingRecipeId,
+      active_material_id: activeMaterial.material_id,
       created_by: userId,
       notes: 'smoke update',
       calc_mode: 'from_slurry_mass',
@@ -930,7 +954,10 @@ async function runWriteSmoke(client, seed, context) {
     });
 
     const firstLine = (await client.get(`/api/recipes/${existingRecipeId}/lines`)).find((line) => line.include_in_pct);
-    const instanceId = (await client.get(`/api/materials/${firstLine.material_id}/instances`))[0]?.material_instance_id;
+    // d047: the active slot line has material_id null — its instances come
+    // from the tape's active material, and the actuals save validates that.
+    const firstLineMaterialId = firstLine.material_id ?? activeMaterial.material_id;
+    const instanceId = (await client.get(`/api/materials/${firstLineMaterialId}/instances`))[0]?.material_instance_id;
     await client.post(`/api/tapes/${made.tapeId}/actuals`, {
       recipe_line_id: firstLine.recipe_line_id,
       material_instance_id: instanceId,

@@ -67,7 +67,7 @@ onMounted(loadMaterials)
 function selectMaterial(m) {
   if (selectedMaterialId.value === m.material_id) return
   selectedMaterialId.value = m.material_id
-  editForm.value = { name: m.name, role: m.role }
+  editForm.value = { name: m.name, role: m.role, family: m.family || '' }
   instances.value = []
   openInstances.value = new Set()
   componentsMap.value = {}
@@ -79,17 +79,19 @@ function selectMaterial(m) {
 }
 
 // ── Create material (inline in left panel) ────────────────────────────
+// `family` (d047) — optional free-text chemistry family (NMC, LFP,
+// Graphite, …) used to group active-material pickers on the tape form.
 const creatingMaterial = ref(false)
-const newMaterialForm = ref({ name: '', role: '' })
+const newMaterialForm = ref({ name: '', role: '', family: '' })
 
 function startMaterialCreate() {
   creatingMaterial.value = true
-  newMaterialForm.value = { name: '', role: '' }
+  newMaterialForm.value = { name: '', role: '', family: '' }
 }
 
 function cancelMaterialCreate() {
   creatingMaterial.value = false
-  newMaterialForm.value = { name: '', role: '' }
+  newMaterialForm.value = { name: '', role: '', family: '' }
 }
 
 async function saveNewMaterial() {
@@ -97,7 +99,11 @@ async function saveNewMaterial() {
   if (!name) { toast.add({ severity: 'warn', summary: 'Название обязательно', life: 3000 }); return }
   if (!newMaterialForm.value.role) { toast.add({ severity: 'warn', summary: 'Роль обязательна', life: 3000 }); return }
   try {
-    const { data } = await api.post('/api/materials', { name, role: newMaterialForm.value.role })
+    const { data } = await api.post('/api/materials', {
+      name,
+      role: newMaterialForm.value.role,
+      family: newMaterialForm.value.family.trim() || null,
+    })
     toast.add({ severity: 'success', summary: 'Материал создан', life: 3000 })
     cancelMaterialCreate()
     await loadMaterials()
@@ -110,7 +116,7 @@ async function saveNewMaterial() {
 }
 
 // ── Edit material (right panel metadata) ──────────────────────────────
-const editForm = ref({ name: '', role: '' })
+const editForm = ref({ name: '', role: '', family: '' })
 
 async function saveMaterialEdit() {
   const name = editForm.value.name.trim()
@@ -119,6 +125,7 @@ async function saveMaterialEdit() {
     await api.put(`/api/materials/${selectedMaterialId.value}`, {
       name,
       role: editForm.value.role,
+      family: (editForm.value.family || '').trim() || null,
     })
     toast.add({ severity: 'success', summary: 'Материал обновлён', life: 3000 })
     await loadMaterials()
@@ -757,6 +764,13 @@ function onEditKeydown(e, saveFn, cancelFn) {
             placeholder="-- роль --"
             class="w-full"
           />
+          <InputText
+            v-model="newMaterialForm.family"
+            placeholder="Семейство (NMC, LFP…)"
+            class="w-full"
+            @keydown.enter.prevent="saveNewMaterial"
+            @keydown.escape="cancelMaterialCreate"
+          />
           <div class="create-material-actions">
             <Button label="Создать" @click="saveNewMaterial" />
             <Button label="Отмена" severity="secondary" outlined @click="cancelMaterialCreate" />
@@ -786,7 +800,7 @@ function onEditKeydown(e, saveFn, cancelFn) {
           >
             <div class="material-item-info">
               <span class="material-item-name">{{ m.name }}</span>
-              <span class="material-item-role">{{ roleMap[m.role] || m.role }}</span>
+              <span class="material-item-role">{{ roleMap[m.role] || m.role }}<template v-if="m.family"> · {{ m.family }}</template></span>
             </div>
             <Button
               icon="pi pi-trash"
@@ -816,6 +830,12 @@ function onEditKeydown(e, saveFn, cancelFn) {
                 optionLabel="label"
                 optionValue="value"
                 class="meta-role"
+              />
+              <InputText
+                v-model="editForm.family"
+                placeholder="Семейство"
+                v-tooltip.top="'Семейство химии (NMC, LFP, Graphite…) — группирует материалы в выборе активного материала ленты'"
+                class="meta-family"
               />
               <Button label="Сохранить" @click="saveMaterialEdit" />
             </div>
@@ -1418,6 +1438,7 @@ function onEditKeydown(e, saveFn, cancelFn) {
 }
 .meta-name { flex: 1; }
 .meta-role { width: 160px; flex-shrink: 0; }
+.meta-family { width: 130px; flex-shrink: 0; }
 
 /* ── Shared form styles ── */
 .w-full { width: 100%; }
@@ -1758,5 +1779,6 @@ function onEditKeydown(e, saveFn, cancelFn) {
   }
   .meta-name { flex: 1 1 100%; }
   .meta-role { width: 100%; }
+  .meta-family { width: 100%; }
 }
 </style>

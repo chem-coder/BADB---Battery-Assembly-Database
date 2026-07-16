@@ -10,6 +10,21 @@
  *  - hasApiStep: whether this stage uses /api/tapes/:id/steps/by-code/:code
  *  - fields: list of field descriptors for comparison view
  */
+
+// ── d047: recipe ↔ active material role compatibility ────────────────
+// Recipes are reusable formulations with an open active-material slot;
+// the tape picks the chemistry via tapes.active_material_id. A recipe
+// of role 'cathode' pairs only with materials of role 'cathode_active'
+// (same for anode). Shared with useTapeState's compat-reset logic.
+export const RECIPE_ROLE_TO_MATERIAL_ROLE = {
+  cathode: 'cathode_active',
+  anode: 'anode_active',
+}
+export const MATERIAL_ROLE_TO_RECIPE_ROLE = {
+  cathode_active: 'cathode',
+  anode_active: 'anode',
+}
+
 export const TAPE_STAGES = [
   {
     code: 'general_info',
@@ -23,7 +38,43 @@ export const TAPE_STAGES = [
       { key: 'tapeType',     label: 'Тип',             type: 'select', options: [
         { value: 'cathode', label: 'Катод' }, { value: 'anode', label: 'Анод' },
       ]},
-      { key: 'tapeRecipeId', label: 'Рецепт',          type: 'select', ref: 'recipes' },
+      // d047 — bidirectional role filtering with «Активный материал»:
+      // once a material is chosen, only recipes of the matching
+      // electrode role are offered (and vice versa below).
+      { key: 'tapeRecipeId', label: 'Рецепт',          type: 'select', ref: 'recipes',
+        optionsFilter: (recipe, general, refs) => {
+          const matId = general?.activeMaterialId
+          if (!matId) return true
+          const mat = (refs?.materials || []).find(m => String(m.material_id) === String(matId))
+          const wanted = mat ? MATERIAL_ROLE_TO_RECIPE_ROLE[mat.role] : null
+          return wanted ? recipe.role === wanted : true
+        },
+      },
+      // d047 — the tape's chemistry for the recipe's open slot. Options
+      // are grouped by material `family` via a label prefix + sort (the
+      // constructor's AutoComplete renders flat lists, no optgroups).
+      { key: 'activeMaterialId', label: 'Активный материал', type: 'select', ref: 'materials',
+        refConfig: { idField: 'material_id', nameField: 'name' },
+        optionsFilter: (mat, general, refs) => {
+          if (!MATERIAL_ROLE_TO_RECIPE_ROLE[mat.role]) return false
+          const rid = general?.tapeRecipeId
+          if (!rid) return true
+          const recipe = (refs?.recipes || []).find(r => String(r.tape_recipe_id) === String(rid))
+          const wanted = recipe ? RECIPE_ROLE_TO_MATERIAL_ROLE[recipe.role] : null
+          return wanted ? mat.role === wanted : true
+        },
+        optionLabel: (mat) => (mat.family ? `«${mat.family}» — ${mat.name}` : mat.name),
+        optionsSort: (a, b) => {
+          const fa = a.family || ''
+          const fb = b.family || ''
+          if (fa !== fb) {
+            if (!fa) return 1   // family-less materials go last
+            if (!fb) return -1
+            return fa.localeCompare(fb, 'ru')
+          }
+          return (a.name || '').localeCompare(b.name || '', 'ru')
+        },
+      },
       { key: 'calcMode',     label: 'Расчёт по',       type: 'select', options: [
         { value: 'from_active_mass', label: 'массе активного материала' },
         { value: 'from_slurry_mass', label: 'общей массе суспензии' },

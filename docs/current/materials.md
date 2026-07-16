@@ -173,7 +173,8 @@ Current file routes support:
 Material deletion is blocked when the material is still used by:
 
 - `material_instances`;
-- `tape_recipe_lines`.
+- `tape_recipe_lines`;
+- `tapes.active_material_id` (tapes that chose it as their active material).
 
 Material instance deletion is blocked when the instance is still used by:
 

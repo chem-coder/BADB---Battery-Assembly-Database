@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "public/js/**/*.js",
-  "updatedAt": "2026-06-02",
+  "updatedAt": "2026-07-16",
   "normalization": {
     "pathParams": ":param",
     "query": "?:query"
@@ -253,9 +253,9 @@
       "path": "/api/materials",
       "methods": ["GET", "POST"],
       "auth": "auth",
-      "request": "GET none; POST material name/role payload",
-      "response": "material list or created material JSON",
-      "sources": ["public/js/materials.js", "public/js/recipes.js"]
+      "request": "GET none; POST material name/role/family payload",
+      "response": "material list or created material JSON (incl. family since d047)",
+      "sources": ["public/js/materials.js", "public/js/recipes.js", "public/js/1-tapes.js"]
     },
     {
       "path": "/api/materials/:param",

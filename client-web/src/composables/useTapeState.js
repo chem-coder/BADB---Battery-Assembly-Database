@@ -12,7 +12,9 @@
  */
 import { ref, reactive, computed, watch } from 'vue'
 import api from '@/services/api'
+import { askToContinue } from '@/services/unsavedConfirm'
 import { isoDateToMskInput } from '@/utils/dateFormat'
+import { MATERIAL_ROLE_TO_RECIPE_ROLE } from '@/config/tapeStages'
 
 // ── helpers ──
 function parseDt(isoStr) {
@@ -61,6 +63,10 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     tapeNotes: '',
     tapeType: '',
     tapeRecipeId: '',
+    // d047 — the tape's chemistry for the recipe's open active-material
+    // slot (tapes.active_material_id). Kept role-compatible with the
+    // recipe via _syncRecipeMaterialCompat below.
+    activeMaterialId: '',
     calcMode: '',
     targetMassG: '',
     status: 'draft',
@@ -282,9 +288,45 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
 
   async function loadInstancesForLine(line) {
     if (instancesByLineId[line.recipe_line_id]) return
-    const data = await fetchInstances(line.material_id)
+    // d047 — the active line is an open slot (material_id null): its
+    // instances come from the TAPE's active material.
+    const materialId = line.material_id ?? general.activeMaterialId
+    if (!materialId) {
+      // No active material chosen yet — expose an empty list so the
+      // actuals editor renders a disabled select instead of the
+      // infinite "…" loading placeholder.
+      instancesByLineId[line.recipe_line_id] = []
+      return
+    }
+    const data = await fetchInstances(materialId)
     instancesByLineId[line.recipe_line_id] = data.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   }
+
+  // d047 — the active material's display name for the slot line in the
+  // actuals editor. Resolved from refs.materials; falls back to the name
+  // the API returned on restore() (covers refs not loaded yet).
+  const _activeMaterialNameFromApi = ref('')
+  const activeMaterialName = computed(() => {
+    if (!general.activeMaterialId) return ''
+    const m = (refs.materials || []).find(
+      (x) => String(x.material_id) === String(general.activeMaterialId)
+    )
+    return m?.name || _activeMaterialNameFromApi.value || `#${general.activeMaterialId}`
+  })
+
+  // d047 — when the tape's active material changes, the slot line's
+  // instance list (and any selected instance) belongs to the OLD
+  // chemistry: drop both and reload. Skipped during restore() — restore
+  // re-populates selections from /actuals right after setting the id.
+  watch(() => general.activeMaterialId, () => {
+    if (isRestoring.value) return
+    for (const line of currentRecipeLines.value) {
+      if (line.material_id != null) continue
+      delete instancesByLineId[line.recipe_line_id]
+      delete selectedInstanceByLineId[line.recipe_line_id]
+      loadInstancesForLine(line)
+    }
+  })
 
   // ── Gantt stages ──
   function findUserName(userId) {
@@ -376,6 +418,10 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       notes: general.tapeNotes,
       tape_type: general.tapeType,
       tape_recipe_id: general.tapeRecipeId || null,
+      // d047 — chemistry for the recipe's open active-material slot.
+      // Backend validates role compatibility with the recipe (400 on
+      // mismatch, Russian message surfaced via the usual error path).
+      active_material_id: general.activeMaterialId || null,
       calc_mode: general.calcMode,
       target_mass_g: general.targetMassG || null,
     }
@@ -388,7 +434,31 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
         clearAllDirty()
         return created.tape_id
       } else {
-        await api.put(`/api/tapes/${currentTapeId.value}`, data)
+        // Changing the recipe while weighing actuals exist gets a 409
+        // (code 'stale_actuals') — parity with vanilla: confirm, then retry
+        // with the flag so the backend deletes the old actuals atomically.
+        try {
+          await api.put(`/api/tapes/${currentTapeId.value}`, data)
+        } catch (err) {
+          if (err.response?.status !== 409 || err.response?.data?.code !== 'stale_actuals') {
+            throw err
+          }
+          const count = err.response.data.stale_actuals_count
+          const ok = await askToContinue(
+            `Для этой ленты уже сохранены навески по прежнему рецепту (строк: ${count}). ` +
+            'Смена рецепта удалит их безвозвратно. Продолжить?',
+            {
+              title: 'Смена рецепта удалит навески',
+              confirmLabel: 'Сменить рецепт и удалить',
+              confirmIcon: 'pi pi-trash',
+              cancelLabel: 'Отмена',
+            }
+          )
+          if (!ok) {
+            throw new Error('Сохранение отменено: рецепт не изменён')
+          }
+          await api.put(`/api/tapes/${currentTapeId.value}`, { ...data, delete_stale_actuals: true })
+        }
         await saveAllActuals()
         setDirty('general_info', false)
         setDirty('recipe_materials', false)
@@ -640,6 +710,10 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       general.status = t.status || 'draft'
       general.createdAt = t.created_at || null
       general.tapeRecipeId = t.tape_recipe_id || ''
+      // d047 — set BEFORE the recipe-lines fetch below so the slot
+      // line's instance list loads from the tape's active material.
+      general.activeMaterialId = t.active_material_id || ''
+      _activeMaterialNameFromApi.value = t.active_material_name || ''
 
       // Entity metadata
       meta.created_by_name = t.created_by_name || null
@@ -775,11 +849,33 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     return steps[stageCode]?.[fieldKey] ?? ''
   }
 
+  // d047 — keep recipe ↔ active material role-compatible: when the
+  // changed field makes the pair mismatch (cathode recipe + anode
+  // material), clear the OTHER one. Mirrors vanilla's bidirectional
+  // reset; option filtering in StageCompareEditor prevents most of
+  // these, but copy/undo/stale refs can still produce a mismatch.
+  function _syncRecipeMaterialCompat(changedKey) {
+    if (!general.tapeRecipeId || !general.activeMaterialId) return
+    const recipe = (refs.recipes || []).find(
+      (r) => String(r.tape_recipe_id) === String(general.tapeRecipeId)
+    )
+    const mat = (refs.materials || []).find(
+      (m) => String(m.material_id) === String(general.activeMaterialId)
+    )
+    if (!recipe?.role || !mat?.role) return
+    if (MATERIAL_ROLE_TO_RECIPE_ROLE[mat.role] === recipe.role) return
+    if (changedKey === 'tapeRecipeId') general.activeMaterialId = ''
+    else general.tapeRecipeId = ''
+  }
+
   // ── Set field value (for comparison view) ──
   function setFieldValue(stageCode, fieldKey, value) {
     pushHistoryDebounced() // snapshot on first change, debounce subsequent keystrokes
     if (stageCode === 'general_info') {
       general[fieldKey] = value
+      if (fieldKey === 'tapeRecipeId' || fieldKey === 'activeMaterialId') {
+        _syncRecipeMaterialCompat(fieldKey)
+      }
       setDirty('general_info')
       _scheduleAutoSave('general_info')
     } else if (steps[stageCode]) {
@@ -835,6 +931,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     selectedInstanceByLineId,
     instancesByLineId,
     slurryActuals,
+    activeMaterialName,
 
     // Gantt
     ganttStages,

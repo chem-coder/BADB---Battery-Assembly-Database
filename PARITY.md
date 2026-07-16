@@ -43,6 +43,7 @@ in-progress replacement.
 | Create tape (requires project + recipe) | DONE | `EntityCreateDialog`, project+recipe+date |
 | Multi-stage workflow editing | DONE (different UX) | Vue uses a multi-select **Constructor**; vanilla uses row-open. Same data, different interaction model. |
 | Recipe actual masses entry | DONE | `RecipeActualsEditor` |
+| Active material select on tape (d047: grouped by family, role-filtered vs recipe; slot line instances from tape's material) | DONE | implemented in both frontends together 2026-07-16 |
 | Dry-box place / return / remove / deplete | DONE | `TapeDryBoxPanel` (audit #6 closed) |
 | Tape export (Excel/CSV/JSON, multi-select) | DONE | `useExportTapes`, context menu |
 | Duplicate (client-side draft) | DONE | `duplicateTape` → create dialog |
@@ -100,6 +101,7 @@ in-progress replacement.
 |---|---|---|
 | Row-open editing + sticky header | DONE | `RowOpenPage`/`OpenedRecordHeader` |
 | Composition lines (roles, materials, % to 100) | DONE | sum-to-100 validate; role auto-set from active material |
+| Active line as open slot (d047: no material, «x — выбирается на ленте») | DONE | implemented in both frontends together 2026-07-16 |
 | Filters: text, role | DONE | `filters` text + role |
 | Print + duplicate (list) | DONE | `row-actions=['print','duplicate']` |
 | Delete: opened-record, delete-check, typed `DELETE RECIPE` | DONE | `hasDeleteCheck:true`, `deletePhrase` |
@@ -136,6 +138,7 @@ in-progress replacement.
 | Feature | Vue status | Note |
 |---|---|---|
 | Material list + master-detail layout | DONE | left list + right instances/components |
+| Family label (d047: «Семейство» field, create/edit + display) | DONE | implemented in both frontends together 2026-07-16 |
 | Material instances | DONE | `/materials/:id/instances` |
 | Composition components (instance-level) | DONE | `componentsMap`, load/edit components |
 | Source info (pure instances only) | DONE | `loadSourceInfo`, guarded to pure |
