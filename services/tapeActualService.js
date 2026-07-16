@@ -1,4 +1,51 @@
+function statusError(message, statusCode) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
 async function saveTapeActual(pool, tapeId, payload) {
+  // The chosen instance must belong to the line's material; the active slot
+  // line (material_id IS NULL, d047) is filled by the tape's active material.
+  if (payload.material_instance_id != null) {
+    const check = await pool.query(
+      `
+      SELECT
+        COALESCE(rl.material_id, t.active_material_id) AS expected_material_id,
+        (rl.material_id IS NULL) AS is_active_slot,
+        mi.material_id AS instance_material_id
+      FROM tape_recipe_lines rl
+      JOIN tapes t ON t.tape_id = $1
+      LEFT JOIN material_instances mi ON mi.material_instance_id = $3
+      WHERE rl.recipe_line_id = $2
+      `,
+      [tapeId, payload.recipe_line_id, payload.material_instance_id]
+    );
+
+    if (check.rowCount === 0) {
+      throw statusError('Строка рецепта не найдена', 400);
+    }
+
+    const guard = check.rows[0];
+
+    if (guard.instance_material_id === null) {
+      throw statusError('Экземпляр материала не найден', 400);
+    }
+
+    if (guard.is_active_slot && guard.expected_material_id === null) {
+      throw statusError('Сначала выберите активный материал ленты', 400);
+    }
+
+    if (Number(guard.instance_material_id) !== Number(guard.expected_material_id)) {
+      throw statusError(
+        guard.is_active_slot
+          ? 'Экземпляр должен принадлежать активному материалу ленты'
+          : 'Экземпляр не принадлежит материалу строки рецепта',
+        400
+      );
+    }
+  }
+
   const result = await pool.query(
     `
     INSERT INTO tape_recipe_line_actuals (

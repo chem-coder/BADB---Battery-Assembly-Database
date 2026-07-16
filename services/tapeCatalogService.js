@@ -66,15 +66,57 @@ function defaultWorkflowStatus() {
   };
 }
 
+// The tape's active material must exist and its role must match the recipe's
+// electrode role (cathode recipe <-> cathode_active material). The recipe's
+// active line itself carries no material (open slot, see migration d047).
+async function validateActiveMaterial(db, activeMaterialId, recipeId) {
+  if (activeMaterialId === null) {
+    return;
+  }
+
+  const material = await db.query(
+    'SELECT role FROM materials WHERE material_id = $1',
+    [activeMaterialId]
+  );
+
+  if (material.rowCount === 0) {
+    throw statusError('Активный материал не найден', 400);
+  }
+
+  if (recipeId !== null) {
+    const recipe = await db.query(
+      'SELECT role FROM tape_recipes WHERE tape_recipe_id = $1',
+      [recipeId]
+    );
+
+    if (recipe.rowCount === 0) {
+      throw statusError('Рецепт не найден', 400);
+    }
+
+    const expectedMaterialRole =
+      recipe.rows[0].role === 'cathode' ? 'cathode_active' : 'anode_active';
+
+    if (material.rows[0].role !== expectedMaterialRole) {
+      throw statusError(
+        'Роль активного материала не соответствует роли рецепта (катод/анод)',
+        400
+      );
+    }
+  }
+}
+
 async function createTape(pool, payload, createdBy) {
   const projectIds = normalizeTapeProjectIds(payload);
   const projectId = getPrimaryProjectId(projectIds);
   const recipeId = parseOptionalId(payload.tape_recipe_id);
+  const activeMaterialId = parseOptionalId(payload.active_material_id);
   const itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    await validateActiveMaterial(client, activeMaterialId, recipeId);
 
     const result = await client.query(
       `
@@ -82,6 +124,7 @@ async function createTape(pool, payload, createdBy) {
         name,
         project_id,
         tape_recipe_id,
+        active_material_id,
         created_by,
         created_at,
         updated_at,
@@ -90,13 +133,14 @@ async function createTape(pool, payload, createdBy) {
         calc_mode,
         target_mass_g
       )
-      VALUES ($1,$2,$3,$4,now(),now(),COALESCE($5::date, CURRENT_DATE),$6,$7,$8)
+      VALUES ($1,$2,$3,$4,$5,now(),now(),COALESCE($6::date, CURRENT_DATE),$7,$8,$9)
       RETURNING *
       `,
       [
         payload.name,
         projectId,
         recipeId,
+        activeMaterialId,
         createdBy,
         itemCreatedAtDate,
         payload.notes ?? null,
@@ -134,6 +178,9 @@ async function listTapes(pool, role) {
       t.notes,
       t.calc_mode,
       t.target_mass_g,
+      t.active_material_id,
+      m_act.name AS active_material_name,
+      m_act.family AS active_material_family,
       r.role,
       r.name AS recipe_name,
       p.name AS project_name,
@@ -164,6 +211,7 @@ async function listTapes(pool, role) {
       ) AS coating_sidedness
     FROM tapes t
     LEFT JOIN tape_recipes r ON r.tape_recipe_id = t.tape_recipe_id
+    LEFT JOIN materials m_act ON m_act.material_id = t.active_material_id
     LEFT JOIN projects p ON p.project_id = t.project_id
     LEFT JOIN users u_created ON u_created.user_id = t.created_by
     LEFT JOIN users u_updated ON u_updated.user_id = t.updated_by
@@ -188,14 +236,17 @@ async function updateTape(pool, id, payload, userId) {
   const projectIds = normalizeTapeProjectIds(payload);
   const projectId = getPrimaryProjectId(projectIds);
   const recipeId = parseOptionalId(payload.tape_recipe_id);
+  const activeMaterialId = parseOptionalId(payload.active_material_id);
   const itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    await validateActiveMaterial(client, activeMaterialId, recipeId);
+
     const current = await client.query(
-      'SELECT tape_id, name, project_id, tape_recipe_id, created_by, created_at, item_created_at, notes, calc_mode, target_mass_g FROM tapes WHERE tape_id = $1',
+      'SELECT tape_id, name, project_id, tape_recipe_id, active_material_id, created_by, created_at, item_created_at, notes, calc_mode, target_mass_g FROM tapes WHERE tape_id = $1',
       [id]
     );
 
@@ -212,20 +263,22 @@ async function updateTape(pool, id, payload, userId) {
         name = $1,
         project_id = $2,
         tape_recipe_id = $3,
-        created_by = $4,
-        item_created_at = COALESCE($5::date, item_created_at),
-        notes = $6,
-        calc_mode = $7,
-        target_mass_g = $8,
-        updated_by = $9,
+        active_material_id = $4,
+        created_by = $5,
+        item_created_at = COALESCE($6::date, item_created_at),
+        notes = $7,
+        calc_mode = $8,
+        target_mass_g = $9,
+        updated_by = $10,
         updated_at = now()
-      WHERE tape_id = $10
+      WHERE tape_id = $11
       RETURNING *
       `,
       [
         payload.name,
         projectId,
         recipeId,
+        activeMaterialId,
         current.rows[0].created_by,
         itemCreatedAtDate,
         payload.notes ?? null,
@@ -254,6 +307,7 @@ async function updateTape(pool, id, payload, userId) {
         project_id: projectId,
         project_ids: projectIds,
         tape_recipe_id: recipeId,
+        active_material_id: activeMaterialId,
         created_by: current.rows[0].created_by,
         item_created_at: result.rows[0].item_created_at,
         notes: payload.notes ?? null,

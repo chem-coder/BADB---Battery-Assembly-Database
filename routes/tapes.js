@@ -86,6 +86,9 @@ router.post('/:id/actuals', auth, requireEntityModify('tape'), async (req, res) 
   try {
     res.json(await saveTapeActual(pool, tapeId, req.body));
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Ошибка сохранения фактических данных' });
   }

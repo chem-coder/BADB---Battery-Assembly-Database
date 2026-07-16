@@ -133,6 +133,8 @@ async function listTapesForElectrodes(pool) {
       t.project_id,
       r.role,
       r.name AS recipe_name,
+      t.active_material_id,
+      m_act.name AS active_material_name,
       u.name AS created_by,
       TO_CHAR(coating_step.started_at, 'YYYY-MM-DD') AS finished_at,
       t.availability_status,
@@ -142,6 +144,9 @@ async function listTapesForElectrodes(pool) {
 
     JOIN tape_recipes r
       ON r.tape_recipe_id = t.tape_recipe_id
+
+    LEFT JOIN materials m_act
+      ON m_act.material_id = t.active_material_id
 
     LEFT JOIN users u
       ON u.user_id = t.created_by
@@ -241,6 +246,9 @@ async function getTapeReport(pool, tapeId) {
         t.notes,
         t.calc_mode,
         t.target_mass_g,
+        t.active_material_id,
+        m_act.name AS active_material_name,
+        m_act.family AS active_material_family,
         r.role,
         r.name AS recipe_name,
         p.name AS project_name,
@@ -248,6 +256,8 @@ async function getTapeReport(pool, tapeId) {
       FROM tapes t
       LEFT JOIN tape_recipes r
         ON r.tape_recipe_id = t.tape_recipe_id
+      LEFT JOIN materials m_act
+        ON m_act.material_id = t.active_material_id
       LEFT JOIN projects p
         ON p.project_id = t.project_id
       LEFT JOIN users u
@@ -260,8 +270,11 @@ async function getTapeReport(pool, tapeId) {
       `
       SELECT
         rl.recipe_line_id,
-        rl.material_id,
+        -- The active line is an open slot (material_id IS NULL, d047):
+        -- in the context of a tape it is filled by the tape's active material.
+        COALESCE(rl.material_id, t.active_material_id) AS material_id,
         m.name AS material_name,
+        (rl.material_id IS NULL) AS is_active_slot,
         rl.recipe_role,
         rl.include_in_pct,
         rl.slurry_percent,
@@ -277,8 +290,8 @@ async function getTapeReport(pool, tapeId) {
       FROM tapes t
       JOIN tape_recipe_lines rl
         ON rl.tape_recipe_id = t.tape_recipe_id
-      JOIN materials m
-        ON m.material_id = rl.material_id
+      LEFT JOIN materials m
+        ON m.material_id = COALESCE(rl.material_id, t.active_material_id)
       LEFT JOIN tape_recipe_line_actuals a
         ON a.tape_id = t.tape_id
        AND a.recipe_line_id = rl.recipe_line_id
@@ -511,6 +524,9 @@ async function getTape(pool, id) {
         t.target_mass_g,
         t.updated_by,
         t.updated_at,
+        t.active_material_id,
+        m_act.name AS active_material_name,
+        m_act.family AS active_material_family,
         r.role,
         r.name AS recipe_name,
         p.name AS project_name,
@@ -518,6 +534,7 @@ async function getTape(pool, id) {
         u_updated.name AS updated_by_name
       FROM tapes t
       LEFT JOIN tape_recipes r ON r.tape_recipe_id = t.tape_recipe_id
+      LEFT JOIN materials m_act ON m_act.material_id = t.active_material_id
       LEFT JOIN projects p ON p.project_id = t.project_id
       LEFT JOIN users u_created ON u_created.user_id = t.created_by
       LEFT JOIN users u_updated ON u_updated.user_id = t.updated_by
