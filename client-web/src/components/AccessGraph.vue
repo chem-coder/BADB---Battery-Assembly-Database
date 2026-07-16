@@ -167,7 +167,9 @@ function renderGraph(graph) {
     layout: FCOSE_LAYOUT,
     minZoom: 0.15,
     maxZoom: 4,
-    wheelSensitivity: 0.25,
+    // No custom wheelSensitivity — Cytoscape warns that a non-default value
+    // zooms unnaturally on other mice/trackpads (a real risk on shared lab
+    // machines). Explicit −/+ toolbar buttons give precise zoom instead.
   })
 
   cy.on('tap', 'node', (evt) => {
@@ -209,6 +211,17 @@ function fitGraph() {
   if (cy) cy.fit(undefined, 30)
 }
 
+// Step zoom toward the viewport centre. Cytoscape clamps to minZoom/maxZoom.
+function zoomBy(factor) {
+  if (!cy) return
+  cy.zoom({
+    level: cy.zoom() * factor,
+    renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 },
+  })
+}
+function zoomIn()  { zoomBy(1.25) }
+function zoomOut() { zoomBy(0.8) }
+
 function resetView() {
   if (!cy) return
   searchQuery.value = ''
@@ -233,6 +246,10 @@ onUnmounted(() => {
     <div class="graph-toolbar">
       <button class="graph-btn" @click="fitGraph" title="Вписать"><i class="pi pi-expand"></i></button>
       <button class="graph-btn" @click="resetView" title="Сбросить"><i class="pi pi-replay"></i></button>
+      <div class="graph-zoom">
+        <button class="graph-btn" @click="zoomOut" title="Уменьшить"><i class="pi pi-minus"></i></button>
+        <button class="graph-btn" @click="zoomIn" title="Увеличить"><i class="pi pi-plus"></i></button>
+      </div>
       <div class="graph-search">
         <i class="pi pi-search"></i>
         <input v-model="searchQuery" @input="applyFilters" placeholder="Поиск..." />
@@ -309,6 +326,8 @@ onUnmounted(() => {
   gap: 0.4rem;
   flex-wrap: wrap;
 }
+
+.graph-zoom { display: flex; gap: 4px; }
 
 .graph-btn {
   width: 30px;
