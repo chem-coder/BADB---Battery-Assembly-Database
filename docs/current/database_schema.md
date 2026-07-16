@@ -37,14 +37,31 @@ NOT tied to a project.
   material catalog and the composition ("recipe") links between instances.
   `material_instance_components` is the parent→component table with mass
   fractions that must sum to 1 per parent (enforced in code).
-- **tape_recipes** — coating recipes for tapes.
+  `materials.family` (since d047) is an optional free-text grouping label
+  for pickers (NMC / LFP / NCA / Graphite / …).
+- **tape_recipes** — reusable slurry formulations for tapes (since d047).
+  A recipe's lines (`tape_recipe_lines`) carry percentages and the supporting
+  materials (additives, binders, solvent), while the active line
+  (`recipe_role` = `cathode_active`/`anode_active`) is an **open slot**:
+  its `material_id` is NULL — enforced by the CHECK
+  `tape_recipe_lines_active_slot_material_check`
+  (`active line <=> material_id IS NULL`). The concrete chemistry is chosen
+  per tape via `tapes.active_material_id` (FK → materials, ON DELETE
+  RESTRICT). Recipe names are composition-derived
+  ("96 x : 2.2 Super P : 1.8 PVDF", "x" = the active slot) but editable.
+  The solution concentration (e.g. 5% vs 7% PVDF in NMP) is NOT part of the
+  recipe — it's a `material_instance` picked when recording actuals
+  (`tape_recipe_line_actuals`); for the active-slot line the instance must
+  belong to the tape's `active_material_id` (enforced in code).
 - **electrolytes**, **separators**, **separator_structure** — component catalogs.
 - **reference lookups** — `coating_methods`, `wet_mixing_methods`,
   `dry_mixing_methods`, `drying_atmospheres`, foils, etc.
 - **users**, **departments** — people and org units.
 
 ### Project-scoped lab items (the data R1 access control protects)
-- **tapes** — coated electrode tape ("лента").
+- **tapes** — coated electrode tape ("лента"). Carries the tape's chemistry
+  in `active_material_id` (since d047); the recipe only provides the
+  formulation.
 - **electrode_cut_batches** — a batch of electrodes cut from a tape ("партия"),
   plus **electrodes** (individual pieces) and **electrode_drying**,
   **foil_mass_measurements** underneath them.

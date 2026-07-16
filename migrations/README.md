@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-06-02:
+Current migration file state as of 2026-07-16:
 
-- `migrations/` has 55 SQL files.
-- `migrations_ASCII/` has 55 SQL files.
+- `migrations/` has 56 SQL files.
+- `migrations_ASCII/` has 56 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d042_project_leads_as_team_members.sql`.
+- Dalia's `dNNN` stream exists through `d047_recipe_active_material_slot.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 34` after `d046` is applied.
+  counts of `dima = 21` and `dalia = 35` after `d047` is applied.
 
 ## How to apply
 
@@ -160,6 +160,13 @@ Full timeline is in the git log. High-level:
   `battery_electrode_sources` from one row per battery/role to multiple rows
   per role with a surrogate row ID, `sort_order`, and exactly one primary row
   per role.
+- `d047_recipe_active_material_slot` — decouples recipes from their active
+  material: recipes become reusable formulations ("96 x : 2.2 Super P :
+  1.8 PVDF") whose active line is an open slot (`material_id IS NULL`);
+  tapes carry the chosen chemistry in the new `tapes.active_material_id`;
+  `materials.family` groups pickers. One-off guarded data step dedups
+  identical recipes (remapping tapes + actuals) and renames all recipes
+  from their composition, preserving old names in notes.
 
 ## Check migration ledger
 
@@ -175,10 +182,10 @@ Rows with `source = 'd032_baseline'` are historical backfill rows.
 Future migrations should insert their own row with a real `applied_at`
 as part of the migration file.
 
-Expected stream counts for a current migrated database (after `d046`):
+Expected stream counts for a current migrated database (after `d047`):
 
 ```text
-dalia = 34
+dalia = 35
 dima = 21
 ```
 
