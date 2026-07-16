@@ -56,7 +56,9 @@ router.get('/wet-mixing-methods', auth, async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT wet_mixing_id, name, description
+      SELECT wet_mixing_id, name, description,
+             auto_min_volume_ml, auto_max_volume_ml,
+             uses_balls, uses_containers
       FROM wet_mixing_methods
       ORDER BY wet_mixing_id ASC
       `
@@ -65,6 +67,23 @@ router.get('/wet-mixing-methods', auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка загрузки wet mixing методов' });
+  }
+});
+
+// READ: mixing containers (cups for the planetary centrifugal mixer etc.)
+router.get('/mixing-containers', auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT container_id, name, nominal_volume_ml, max_working_volume_ml, notes
+      FROM mixing_containers
+      ORDER BY sort_order ASC, container_id ASC
+      `
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки ёмкостей для смешивания' });
   }
 });
 

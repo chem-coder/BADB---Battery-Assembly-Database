@@ -294,8 +294,25 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
     wet_end_time,
     wet_rpm,
     viscosity_cP,
-    viscosity_conditions
+    viscosity_conditions,
+    container_id,
+    balls
   } = body;
+
+  // Milling balls (planetary centrifugal mixer): [{diameter_cm, ball_count}].
+  // Normalized here; the whole set is replaced on every save.
+  const normalizedBalls = Array.isArray(balls)
+    ? balls
+        .map((ball) => ({
+          diameter_cm: Number(ball?.diameter_cm),
+          ball_count: Number(ball?.ball_count)
+        }))
+        .filter(
+          (ball) =>
+            Number.isFinite(ball.diameter_cm) && ball.diameter_cm > 0 &&
+            Number.isInteger(ball.ball_count) && ball.ball_count > 0
+        )
+    : [];
 
   const result = await runInTransaction(pool, async (client) => {
     const operationTypeId = await getOperationTypeId(client, code);
@@ -307,7 +324,16 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
              sub.dry_mixing_id, sub.dry_start_time, sub.dry_duration_min, sub.dry_rpm,
              sub.wet_mixing_id, sub.wet_start_time, sub.wet_duration_min, sub.wet_rpm,
              sub.viscosity_cp,
-             sub.viscosity_conditions
+             sub.viscosity_conditions,
+             sub.container_id,
+             (
+               SELECT json_agg(json_build_object(
+                        'diameter_cm', b.diameter_cm,
+                        'ball_count', b.ball_count
+                      ) ORDER BY b.diameter_cm)
+               FROM tape_step_mixing_balls b
+               WHERE b.step_id = ps.step_id
+             ) AS mixing_balls
       FROM tape_process_steps ps
       LEFT JOIN tape_step_mixing sub ON sub.step_id = ps.step_id
       WHERE ps.tape_id = $1 AND ps.operation_type_id = $2
@@ -330,9 +356,9 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
         (step_id, slurry_volume_ml,
         dry_mixing_id, dry_start_time, dry_duration_min, dry_end_time, dry_rpm,
         wet_mixing_id, wet_start_time, wet_duration_min, wet_end_time, wet_rpm,
-        viscosity_cP, viscosity_conditions)
+        viscosity_cP, viscosity_conditions, container_id)
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
       ON CONFLICT (step_id)
       DO UPDATE SET
         slurry_volume_ml  = EXCLUDED.slurry_volume_ml,
@@ -347,7 +373,8 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
         wet_end_time      = EXCLUDED.wet_end_time,
         wet_rpm           = EXCLUDED.wet_rpm,
         viscosity_cP      = EXCLUDED.viscosity_cP,
-        viscosity_conditions = EXCLUDED.viscosity_conditions
+        viscosity_conditions = EXCLUDED.viscosity_conditions,
+        container_id      = EXCLUDED.container_id
       `,
       [
         stepId,
@@ -363,9 +390,27 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
         valueOrNull(wet_end_time),
         valueOrNull(wet_rpm),
         finiteNumberOrNull(viscosity_cP),
-        valueOrNull(viscosity_conditions)
+        valueOrNull(viscosity_conditions),
+        numberOrNull(container_id)
       ]
     );
+
+    // Replace the milling-ball set for this step.
+    await client.query(
+      'DELETE FROM tape_step_mixing_balls WHERE step_id = $1',
+      [stepId]
+    );
+    for (const ball of normalizedBalls) {
+      await client.query(
+        `
+        INSERT INTO tape_step_mixing_balls (step_id, diameter_cm, ball_count)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (step_id, diameter_cm)
+        DO UPDATE SET ball_count = tape_step_mixing_balls.ball_count + EXCLUDED.ball_count
+        `,
+        [stepId, ball.diameter_cm, ball.ball_count]
+      );
+    }
 
     return {
       stepId,
@@ -384,7 +429,9 @@ async function saveMixingStep(pool, { tapeId, code, body, userId }) {
         wet_duration_min: finiteNumberOrNull(wet_duration_min),
         wet_rpm: valueOrNull(wet_rpm),
         viscosity_cp: finiteNumberOrNull(viscosity_cP),
-        viscosity_conditions: valueOrNull(viscosity_conditions)
+        viscosity_conditions: valueOrNull(viscosity_conditions),
+        container_id: numberOrNull(container_id),
+        mixing_balls: normalizedBalls.length ? normalizedBalls : null
       }
     };
   });

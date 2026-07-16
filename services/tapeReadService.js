@@ -60,7 +60,16 @@ async function getTapeStepByCode(pool, tapeId, code) {
       m.wet_end_time,
       m.wet_rpm,
       m.viscosity_cP,
-      m.viscosity_conditions
+      m.viscosity_conditions,
+      m.container_id,
+      (
+        SELECT json_agg(json_build_object(
+                 'diameter_cm', b.diameter_cm,
+                 'ball_count', b.ball_count
+               ) ORDER BY b.diameter_cm)
+        FROM tape_step_mixing_balls b
+        WHERE b.step_id = s.step_id
+      ) AS mixing_balls
     `;
   }
 
@@ -334,6 +343,16 @@ async function getTapeReport(pool, tapeId) {
         mix.wet_rpm,
         mix.viscosity_cp,
         mix.viscosity_conditions,
+        mix.container_id,
+        mcont.name AS container_name,
+        (
+          SELECT json_agg(json_build_object(
+                   'diameter_cm', b.diameter_cm,
+                   'ball_count', b.ball_count
+                 ) ORDER BY b.diameter_cm)
+          FROM tape_step_mixing_balls b
+          WHERE b.step_id = s.step_id
+        ) AS mixing_balls,
         c.foil_id,
         f.type AS foil_type,
         c.coating_id,
@@ -368,6 +387,8 @@ async function getTapeReport(pool, tapeId) {
         ON dm.dry_mixing_id = mix.dry_mixing_id
       LEFT JOIN wet_mixing_methods wm
         ON wm.wet_mixing_id = mix.wet_mixing_id
+      LEFT JOIN mixing_containers mcont
+        ON mcont.container_id = mix.container_id
       LEFT JOIN tape_step_coating c
         ON c.step_id = s.step_id
       LEFT JOIN foils f
