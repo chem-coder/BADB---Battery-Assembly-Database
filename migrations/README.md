@@ -5,12 +5,12 @@ Forward-only SQL migrations applied in alphabetical order to
 
 Current migration file state as of 2026-07-16:
 
-- `migrations/` has 56 SQL files.
-- `migrations_ASCII/` has 56 SQL files.
+- `migrations/` has 57 SQL files.
+- `migrations_ASCII/` has 57 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d047_recipe_active_material_slot.sql`.
+- Dalia's `dNNN` stream exists through `d048_vilitek_mixer_containers_and_balls.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 35` after `d047` is applied.
+  counts of `dima = 21` and `dalia = 36` after `d048` is applied.
 
 ## How to apply
 
@@ -167,6 +167,14 @@ Full timeline is in the git log. High-level:
   `materials.family` groups pickers. One-off guarded data step dedups
   identical recipes (remapping tapes + actuals) and renames all recipes
   from their composition, preserving old names in notes.
+- `d048_vilitek_mixer_containers_and_balls` — adds the Vilitek V-ITT-300s
+  vacuum planetary centrifugal mixer; wet_mixing_methods gains DB-driven
+  auto-selection windows (`auto_min/max_volume_ml`, previously hardcoded in
+  the vanilla JS) and `uses_balls`/`uses_containers` capability flags; new
+  `mixing_containers` reference (Vilitek cups 30/80/250 ml) with
+  `tape_step_mixing.container_id`; new `tape_step_mixing_balls`
+  (step_id, diameter_cm, ball_count) for the agate milling balls. The
+  magnetic stirrer stays selectable but is no longer auto-suggested.
 
 ## Check migration ledger
 
@@ -182,10 +190,10 @@ Rows with `source = 'd032_baseline'` are historical backfill rows.
 Future migrations should insert their own row with a real `applied_at`
 as part of the migration file.
 
-Expected stream counts for a current migrated database (after `d047`):
+Expected stream counts for a current migrated database (after `d048`):
 
 ```text
-dalia = 35
+dalia = 36
 dima = 21
 ```
 

@@ -1,9 +1,9 @@
 Human migration checkpoint note only.
 Authoritative applied-migration ledger: public.schema_migrations.
 
-As of 2026-07-16, live local badb_app_v1 schema_migrations should report after d047 is applied:
+As of 2026-07-17, live local badb_app_v1 schema_migrations should report after d048 is applied:
 
-Dalia stream: d047_ current; 35 rows.
+Dalia stream: d048_ current; 36 rows.
 Dima stream:  020_ current; 21 rows because there are two historical 008_ files.
 
 Verify target database state with public.schema_migrations, not this flat log.
