@@ -1,7 +1,7 @@
 # Materials
 
 Created: 2026-05-06
-Edited: 2026-05-06
+Edited: 2026-07-16
 Status: current
 Verified against code: 2026-05-06
 
@@ -28,7 +28,9 @@ lives in `docs/current/capacity_calculations.md`.
 
 The current materials model has three main levels:
 
-- `materials`: abstract material identities used in recipes;
+- `materials`: abstract material identities used in recipes; since d047 each
+  material can carry an optional free-text `family` label (NMC, LFP, NCA,
+  Graphite, ...) used to group material pickers;
 - `material_instances`: concrete usable lab things, such as a purchased batch,
   powder, solution, dispersion, or prepared mixture;
 - `material_instance_components`: instance-level composition rows that define
@@ -36,7 +38,9 @@ The current materials model has three main levels:
 
 The practical distinction is:
 
-- a recipe states formulation intent through `materials.material_id`;
+- a recipe states formulation intent through `materials.material_id` for its
+  supporting lines; the active line is an open slot (d047), and the active
+  material is chosen per tape (`tapes.active_material_id`);
 - tape execution selects concrete `material_instances.material_instance_id`;
 - composition is attached only to material instances.
 
