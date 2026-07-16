@@ -365,9 +365,10 @@ onUnmounted(() => {
     padding: 0.5rem;
   }
   /* PrimeVue DataTable — horizontal scroll instead of cropping/wrapping
-     cells. PrimeVue already makes the inner table scroll inside its
-     wrapper; we just make sure the wrapper's overflow is honored. */
-  :deep(.p-datatable-wrapper) {
+     cells. PrimeVue 4 scrolls the table inside .p-datatable-table-container
+     (the old .p-datatable-wrapper class is gone); we add momentum
+     scrolling for touch. */
+  :deep(.p-datatable-table-container) {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }

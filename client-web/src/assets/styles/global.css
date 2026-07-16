@@ -895,13 +895,33 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
     min-height: 36px;
   }
 
-  /* Page containers: less padding */
+  /* Page containers: less padding (.row-open-page covers all the
+     reference pages built on the RowOpenPage foundation) */
   .tapes-page,
   .assembly-page,
   .recipes-page,
   .materials-page,
-  .electrodes-page {
+  .electrodes-page,
+  .row-open-page,
+  .cycling-page {
     padding: 0.75rem !important;
+  }
+
+  /* Reference-page edit forms: the shared `label | field` grid
+     (grid-template-columns: 120–180px 1fr, copy-pasted across the
+     reference pages' scoped styles) stacks to label-above-field on
+     phones. Global + !important because the page rules are scoped
+     (higher specificity) — one rule here beats seven per-page copies.
+     Also covers SeparatorsPage's nested .perm-row (value | unit). */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 4px 0 !important;
+  }
+  .form-grid > label {
+    margin-top: 8px;
+  }
+  .perm-row {
+    grid-template-columns: 1fr !important;
   }
 }
 

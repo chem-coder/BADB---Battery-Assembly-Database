@@ -499,4 +499,20 @@ function onReorder(newOrder) {
 .constructor-empty i {
   font-size: 18px;
 }
+
+/* ── Mobile (≤768px): stack the stage sidebar ABOVE the editor ──
+   Side-by-side, the editor was squeezed to ~97px on a 375px phone.
+   Stacked, the compare table gets the full width (its sticky label
+   column + horizontal scroll make it usable there). */
+@media (max-width: 768px) {
+  .constructor-body {
+    flex-direction: column;
+    max-height: none;
+  }
+  .constructor-sidebar {
+    border-right: none;
+    border-bottom: 1px solid rgba(0, 50, 116, 0.10);
+    max-height: 220px; /* stage list scrolls; the editor keeps the space */
+  }
+}
 </style>

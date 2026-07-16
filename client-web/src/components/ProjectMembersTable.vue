@@ -447,4 +447,21 @@ function reset() { load(props.projectId); }
 .exp-date :deep(.p-inputtext) { font-size: 12px; padding: 4px 8px; }
 
 .members-hint { font-size: 11px; color: #8b97a8; line-height: 1.5; margin: 0; }
+
+/* ── Mobile (≤768px): stack the expanded member panel; let controls shrink ── */
+@media (max-width: 768px) {
+  /* «Участники» expanded row: role column and expiry column stack
+     vertically instead of fighting for width side-by-side. */
+  .part-body {
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-left: 12px;
+  }
+  .part-col--right { margin-left: 0; }
+  .role-input { min-width: 0; width: 100%; }
+
+  /* «Выбор команды»: narrower access-level column, search can shrink. */
+  .sel-access { width: 132px; }
+  .members-search { min-width: 120px; }
+}
 </style>

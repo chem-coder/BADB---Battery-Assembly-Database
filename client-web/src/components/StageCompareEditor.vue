@@ -765,9 +765,23 @@ function onColDragEnd(e) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: rgba(0, 50, 116, 0.50);
-  background: rgba(0, 50, 116, 0.03);
+  /* Sticky first column: the label column stays visible while the tape
+     columns scroll horizontally (.compare-editor has overflow:auto).
+     Background must be OPAQUE (not the old 3% navy tint) or the
+     scrolling tape cells show through underneath. z-index 3 keeps the
+     corner cell above both the sticky header row (z 2) and body cells. */
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #f2f6fa;
   border-bottom: 1.5px solid rgba(0, 50, 116, 0.10);
   border-right: 1px solid rgba(0, 50, 116, 0.06);
+}
+
+/* Phones: narrower label column — the tape columns keep their width and
+   scroll; the sticky label eats less of a 375px viewport. */
+@media (max-width: 768px) {
+  .ce-th-label { width: 108px; min-width: 108px; }
 }
 
 /* Tape columns — ALL variants (default / active / source) use the same
@@ -934,6 +948,11 @@ function onColDragEnd(e) {
   color: rgba(0, 50, 116, 0.55);
   border-bottom: 1px solid rgba(0, 50, 116, 0.05);
   border-right: 1px solid rgba(0, 50, 116, 0.06);
+  /* Sticky first column (see .ce-th-label). Background already opaque
+     white; z-index 1 sits under the sticky header but over tape cells. */
+  position: sticky;
+  left: 0;
+  z-index: 1;
   background: white;
   vertical-align: middle;
 }

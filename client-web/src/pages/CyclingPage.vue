@@ -1319,7 +1319,7 @@ const batteryOptions = computed(() =>
 
     <!-- Upload dialog — multi-file -->
     <Dialog v-model:visible="showUpload" header="Загрузить файлы циклирования"
-            :modal="true" style="width: 760px" :closable="!uploading">
+            :modal="true" style="width: min(760px, 96vw)" :closable="!uploading">
       <div class="upload-form">
 
         <!-- File picker: hidden native <input>, custom Button triggers it -->
@@ -1501,7 +1501,7 @@ const batteryOptions = computed(() =>
       v-model:visible="showMassEditor"
       header="Масса активного материала"
       :modal="true"
-      style="width: 760px"
+      style="width: min(760px, 96vw)"
     >
       <div class="mass-editor">
         <p class="mass-editor-hint">
@@ -1512,10 +1512,10 @@ const batteryOptions = computed(() =>
         <table class="mass-table">
           <thead>
             <tr>
-              <th style="width:70px">Сессия</th>
+              <th class="mass-th-sid">Сессия</th>
               <th>Аккумулятор</th>
               <th>Файл</th>
-              <th style="width:160px">Масса, мг</th>
+              <th class="mass-th-mass">Масса, мг</th>
             </tr>
           </thead>
           <tbody>
@@ -2274,4 +2274,14 @@ const batteryOptions = computed(() =>
 }
 /* Скролл-щит: канвасы не ловят мышь во время прокрутки */
 .cycling-page.is-scrolling :deep(canvas) { pointer-events: none; }
+
+/* Mass-editor column widths (were inline styles; classes so the phone
+   breakpoint can shrink them — inline styles can't be overridden). */
+.mass-th-sid { width: 70px; }
+.mass-th-mass { width: 160px; }
+@media (max-width: 768px) {
+  .mass-th-sid { width: 52px; }
+  .mass-th-mass { width: 104px; }
+  .mass-cell-file { max-width: 90px; }
+}
 </style>
