@@ -514,11 +514,19 @@
       "sources": ["public/js/1-tapes.js"]
     },
     {
+      "path": "/api/reference/mixing-containers",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "reference list (container_id, name, nominal_volume_ml, max_working_volume_ml, notes)",
+      "sources": ["public/js/1-tapes.js"]
+    },
+    {
       "path": "/api/reference/wet-mixing-methods",
       "methods": ["GET"],
       "auth": "auth",
       "request": "none",
-      "response": "reference list",
+      "response": "reference list (incl. auto_min_volume_ml, auto_max_volume_ml, uses_balls, uses_containers)",
       "sources": ["public/js/1-tapes.js"]
     },
     {

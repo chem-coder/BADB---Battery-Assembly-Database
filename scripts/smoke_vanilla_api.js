@@ -48,7 +48,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd044_access_level_none.sql'),
   path.join(ROOT, 'migrations', 'd045_material_instance_components_ddl.sql'),
   path.join(ROOT, 'migrations', 'd046_indexes_and_timestamps.sql'),
-  path.join(ROOT, 'migrations', 'd047_recipe_active_material_slot.sql')
+  path.join(ROOT, 'migrations', 'd047_recipe_active_material_slot.sql'),
+  path.join(ROOT, 'migrations', 'd048_vilitek_mixer_containers_and_balls.sql')
 ];
 
 function parseArgs(argv) {
@@ -972,6 +973,13 @@ async function runWriteSmoke(client, seed, context) {
       started_at: now,
       comments: 'smoke weighing'
     });
+    // d048: Vilitek planetary centrifugal mixer with cup + milling balls
+    const wetMethods = await client.get('/api/reference/wet-mixing-methods');
+    const vilitek = wetMethods.find((m) => m.name === 'vilitek_vitt_300s');
+    const containers = await client.get('/api/reference/mixing-containers');
+    const smokeContainer = first(containers);
+    requireSeed({ vilitek, smokeContainer });
+
     await client.post(`/api/tapes/${made.tapeId}/steps/by-code/mixing`, {
       performed_by: userId,
       started_at: now,
@@ -980,17 +988,33 @@ async function runWriteSmoke(client, seed, context) {
       dry_start_time: now,
       dry_duration_min: 1,
       dry_rpm: '100',
+      wet_mixing_id: vilitek.wet_mixing_id,
       wet_start_time: now,
       wet_duration_min: 1,
       wet_rpm: '100',
       viscosity_cP: 5,
-      viscosity_conditions: '#3, 6 об/мин'
+      viscosity_conditions: '#3, 6 об/мин',
+      container_id: smokeContainer.container_id,
+      balls: [
+        { diameter_cm: 0.5, ball_count: 10 },
+        { diameter_cm: 1.0, ball_count: 3 }
+      ]
     });
     const savedMixing = await client.get(`/api/tapes/${made.tapeId}/steps/by-code/mixing`);
     client.assertEqual(
       savedMixing.viscosity_conditions,
       '#3, 6 об/мин',
       'tape mixing stores viscosity measurement conditions'
+    );
+    client.assertEqual(
+      Number(savedMixing.container_id),
+      Number(smokeContainer.container_id),
+      'tape mixing stores the mixing container (d048)'
+    );
+    client.assertEqual(
+      (savedMixing.mixing_balls || []).map((b) => `${b.diameter_cm}x${b.ball_count}`).join(','),
+      '0.5x10,1x3',
+      'tape mixing stores milling balls (d048)'
     );
     await client.post(`/api/tapes/${made.tapeId}/steps/by-code/coating`, {
       performed_by: userId,

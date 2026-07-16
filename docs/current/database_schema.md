@@ -56,6 +56,13 @@ NOT tied to a project.
 - **electrolytes**, **separators**, **separator_structure** — component catalogs.
 - **reference lookups** — `coating_methods`, `wet_mixing_methods`,
   `dry_mixing_methods`, `drying_atmospheres`, foils, etc.
+  `wet_mixing_methods` carries the volume window for auto-selection
+  (`auto_min_volume_ml`/`auto_max_volume_ml`, NULL = manual-only) and
+  `uses_balls`/`uses_containers` capability flags (d048).
+  `mixing_containers` (d048) lists the mixer cups (nominal + realistic
+  working volume incl. balls); `tape_step_mixing.container_id` references
+  it and `tape_step_mixing_balls` records the milling balls used per
+  mixing step (diameter_cm, ball_count).
 - **users**, **departments** — people and org units.
 
 ### Project-scoped lab items (the data R1 access control protects)

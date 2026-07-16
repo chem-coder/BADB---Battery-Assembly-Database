@@ -394,7 +394,43 @@
             name="wet_rpm"
             placeholder="Например: 500–800 об/мин"><br>
           </div>
-          
+
+          <!-- Стакан/ёмкость (только для методов со стаканами) -->
+          <div id="mix-container-row" hidden>
+            <label for="1-mixing-container_id">Стакан/ёмкость: </label>
+            <select id="1-mixing-container_id" name="container_id">
+              <option value="">— не выбрано —</option>
+            </select><br>
+          </div>
+
+          <!-- Мелющие шары (только для методов с шарами) -->
+          <fieldset id="mix-balls-fieldset" hidden>
+            <legend>Шары (агат)</legend>
+            <div class="mix-ball-row">
+              <input id="1-mixing-ball-check-05" type="checkbox" data-diameter="0.5">
+              <label for="1-mixing-ball-check-05">d = 0,5 см</label>
+              <label for="1-mixing-ball-count-05"> сколько: </label>
+              <input id="1-mixing-ball-count-05" type="number" inputmode="numeric" min="1" step="1" data-diameter="0.5" disabled>
+            </div>
+            <div class="mix-ball-row">
+              <input id="1-mixing-ball-check-075" type="checkbox" data-diameter="0.75">
+              <label for="1-mixing-ball-check-075">d = 0,75 см</label>
+              <label for="1-mixing-ball-count-075"> сколько: </label>
+              <input id="1-mixing-ball-count-075" type="number" inputmode="numeric" min="1" step="1" data-diameter="0.75" disabled>
+            </div>
+            <div class="mix-ball-row">
+              <input id="1-mixing-ball-check-10" type="checkbox" data-diameter="1">
+              <label for="1-mixing-ball-check-10">d = 1,0 см</label>
+              <label for="1-mixing-ball-count-10"> сколько: </label>
+              <input id="1-mixing-ball-count-10" type="number" inputmode="numeric" min="1" step="1" data-diameter="1" disabled>
+            </div>
+          </fieldset>
+
+          <div id="mix-ball-hint-block" hidden>
+            <div id="mix-ball-hint" class="field-hint" aria-live="polite"></div>
+            <div id="mix-ball-overfill" class="record-delete-warning" aria-live="polite" hidden></div>
+          </div>
+
           <h4>Вязкость</h4>
           <label for="wet-viscosity_cP">Вязкость, мПа·с: </label>
           <input id="wet-viscosity_cP"

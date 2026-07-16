@@ -104,6 +104,11 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       viscosityCp: '',
       // d037 — text describing the measurement conditions (e.g. "25°C, ротор 4").
       viscosity_conditions: '',
+      // d048 — mixing cup (FK to mixing_containers) + agate milling
+      // balls for planetary-centrifugal mixers. `balls` holds only
+      // checked rows with count>0: [{diameter_cm, ball_count}].
+      containerId: '',
+      balls: [],
     },
     coating: {
       operator: '', date: '', time: '', notes: '',
@@ -581,6 +586,13 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       wet_rpm: m.wetRpm || null,
       viscosity_cP: m.viscosityCp || null,
       viscosity_conditions: m.viscosity_conditions || null,
+      // d048 — cup + balls. `balls` is replace-all on the backend, so an
+      // empty array is meaningful (deletes previously saved rows).
+      container_id: m.containerId || null,
+      balls: (Array.isArray(m.balls) ? m.balls : [])
+        .map(b => ({ diameter_cm: Number(b.diameter_cm), ball_count: Number(b.ball_count) }))
+        .filter(b => Number.isFinite(b.diameter_cm) && b.diameter_cm > 0
+          && Number.isInteger(b.ball_count) && b.ball_count > 0),
     }
     await api.post(`/api/tapes/${currentTapeId.value}/steps/by-code/mixing`, payload)
     setDirty('mixing', false)
@@ -780,6 +792,14 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
           steps.mixing.wetRpm = m.wet_rpm ?? ''
           steps.mixing.viscosityCp = m.viscosity_cp ?? ''
           steps.mixing.viscosity_conditions = m.viscosity_conditions || ''
+          // d048 — cup + balls (step read returns `container_id` and
+          // `mixing_balls` array|null).
+          steps.mixing.containerId = m.container_id ?? ''
+          steps.mixing.balls = Array.isArray(m.mixing_balls)
+            ? m.mixing_balls
+                .map(b => ({ diameter_cm: Number(b.diameter_cm), ball_count: Number(b.ball_count) }))
+                .filter(b => Number.isFinite(b.diameter_cm) && b.ball_count > 0)
+            : []
         }
       } catch {}
 
@@ -868,6 +888,33 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     else general.tapeRecipeId = ''
   }
 
+  // d048 — slurry volume → wet-mixing-method auto-selection. Reference
+  // rows carry an auto-selection window (auto_min_volume_ml /
+  // auto_max_volume_ml; NULL = manual-only, never auto-suggested).
+  // Semantics (mirrors vanilla): auto-set only while the method field is
+  // EMPTY or still holding the LAST auto-set value — a manual pick stops
+  // the auto-override until the user clears the method. On overlapping
+  // windows the method with the largest auto_min_volume_ml wins.
+  let _lastAutoWetMixingId = null
+
+  function _autoSelectWetMixingByVolume() {
+    const cur = steps.mixing.wetMixingId
+    const holdsAuto = cur === '' || cur == null ||
+      (_lastAutoWetMixingId != null && String(cur) === String(_lastAutoWetMixingId))
+    if (!holdsAuto) return
+    const v = Number(steps.mixing.slurryVolumeMl)
+    if (!Number.isFinite(v) || v <= 0) return
+    const matches = (refs.wetMixingMethods || []).filter(m =>
+      m.auto_min_volume_ml != null && m.auto_max_volume_ml != null &&
+      v >= Number(m.auto_min_volume_ml) && v <= Number(m.auto_max_volume_ml)
+    )
+    if (!matches.length) return
+    matches.sort((a, b) => Number(b.auto_min_volume_ml) - Number(a.auto_min_volume_ml))
+    const winner = matches[0].wet_mixing_id
+    _lastAutoWetMixingId = winner
+    if (String(cur) !== String(winner)) steps.mixing.wetMixingId = winner
+  }
+
   // ── Set field value (for comparison view) ──
   function setFieldValue(stageCode, fieldKey, value) {
     pushHistoryDebounced() // snapshot on first change, debounce subsequent keystrokes
@@ -880,6 +927,18 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       _scheduleAutoSave('general_info')
     } else if (steps[stageCode]) {
       steps[stageCode][fieldKey] = value
+      if (stageCode === 'mixing') {
+        if (fieldKey === 'slurryVolumeMl') {
+          // d048 — the auto-set (if any) lands in the SAME edit, so the
+          // shared setDirty/auto-save below covers both fields.
+          _autoSelectWetMixingByVolume()
+        } else if (fieldKey === 'wetMixingId' && (value === '' || value == null)) {
+          // Clearing the method re-arms auto-selection for the next
+          // volume edit (it does NOT re-fill immediately — an empty
+          // method with a volume set must stay possible).
+          _lastAutoWetMixingId = null
+        }
+      }
       setDirty(stageCode)
       _scheduleAutoSave(stageCode)
     }
@@ -897,7 +956,11 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       const src = sourceTape.steps[stageCode]
       const tgt = steps[stageCode]
       for (const key of Object.keys(tgt)) {
-        tgt[key] = src[key]
+        // Deep-copy arrays (d048 mixing `balls`) — a shared reference
+        // would tie the two tapes' state together.
+        tgt[key] = Array.isArray(src[key])
+          ? JSON.parse(JSON.stringify(src[key]))
+          : src[key]
       }
       setDirty(stageCode)
     }
