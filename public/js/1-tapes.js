@@ -5544,7 +5544,7 @@ function getWetMixingMethodIdForVolume(slurryVolumeMl) {
 // client-web/src/utils/ballSuggestion.js (unit-tested there) — the two
 // frontends share no modules by design, keep both copies in sync.
 const BALL_VOLUME_FRACTION_OF_SLURRY = 1 / 3;
-const BALL_DIAMETERS_CM = [0.5, 0.75, 1.0];
+const BALL_DIAMETERS_CM = [0.25, 0.5, 0.75, 1.0];
 function ballVolumeMl(diameterCm) { return (Math.PI * Math.pow(diameterCm, 3)) / 6; }
 function suggestBalls(slurryVolumeMl, opts = {}) {
   const volume = Number(slurryVolumeMl);

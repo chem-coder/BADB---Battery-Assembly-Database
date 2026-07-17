@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-07-16:
+Current migration file state as of 2026-07-17:
 
-- `migrations/` has 57 SQL files.
-- `migrations_ASCII/` has 57 SQL files.
+- `migrations/` has 58 SQL files.
+- `migrations_ASCII/` has 58 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d048_vilitek_mixer_containers_and_balls.sql`.
+- Dalia's `dNNN` stream exists through `d049_fix_vilitek_cup_sizes.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 36` after `d048` is applied.
+  counts of `dima = 21` and `dalia = 37` after `d049` is applied.
 
 ## How to apply
 
@@ -175,6 +175,12 @@ Full timeline is in the git log. High-level:
   `tape_step_mixing.container_id`; new `tape_step_mixing_balls`
   (step_id, diameter_cm, ball_count) for the agate milling balls. The
   magnetic stirrer stays selectable but is no longer auto-suggested.
+- `d049_fix_vilitek_cup_sizes` — corrects the d048 cup seeds to the
+  confirmed lab set (30/100/375 ml, was 30/80/250): renames the 80 ml cup
+  to 100 ml and the 250 ml cup to 375 ml (references survive), resets the
+  375 ml working volume to NULL (the 125 ml estimate belonged to the wrong
+  250 ml guess). Ball diameters confirmed as 0.25/0.5/0.75/1.0 cm (UI-side
+  list only, no schema change).
 
 ## Check migration ledger
 
@@ -190,10 +196,10 @@ Rows with `source = 'd032_baseline'` are historical backfill rows.
 Future migrations should insert their own row with a real `applied_at`
 as part of the migration file.
 
-Expected stream counts for a current migrated database (after `d048`):
+Expected stream counts for a current migrated database (after `d049`):
 
 ```text
-dalia = 36
+dalia = 37
 dima = 21
 ```
 

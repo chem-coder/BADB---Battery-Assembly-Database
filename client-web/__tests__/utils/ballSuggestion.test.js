@@ -8,6 +8,7 @@ import {
 
 describe('ballVolumeMl', () => {
   it('computes sphere volumes from lab diameters', () => {
+    expect(ballVolumeMl(0.25)).toBeCloseTo(0.0082, 3)
     expect(ballVolumeMl(0.5)).toBeCloseTo(0.0654, 3)
     expect(ballVolumeMl(0.75)).toBeCloseTo(0.2209, 3)
     expect(ballVolumeMl(1.0)).toBeCloseTo(0.5236, 3)
@@ -26,9 +27,9 @@ describe('suggestBalls', () => {
   })
 
   it('suggests at least one smallest ball for tiny volumes', () => {
-    const s = suggestBalls(0.05)
+    const s = suggestBalls(0.002)
     expect(s.items).toEqual([
-      { diameter_cm: 0.5, ball_count: 1, volume_ml: ballVolumeMl(0.5) }
+      { diameter_cm: 0.25, ball_count: 1, volume_ml: ballVolumeMl(0.25) }
     ])
   })
 

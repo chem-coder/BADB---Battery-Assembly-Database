@@ -164,7 +164,7 @@ export const TAPE_STAGES = [
       // d048 — mixing cup for planetary-centrifugal mixers. Shown only
       // when the selected wet method uses containers (Vilitek). Label
       // includes the working limit WITH balls when the row has one
-      // (e.g. «Стакан 250 мл — до 125 мл с шарами»).
+      // (e.g. «Стакан 375 мл — до 200 мл с шарами»).
       { key: 'containerId',    label: 'Стакан/ёмкость',         type: 'select', ref: 'mixingContainers', group: 'wet_mixing',
         refConfig: { idField: 'container_id', nameField: 'name' },
         optionLabel: (c) => {

@@ -9,8 +9,9 @@
 
 export const BALL_VOLUME_FRACTION_OF_SLURRY = 1 / 3;
 
-// Agate ball diameters available in the lab, cm.
-export const BALL_DIAMETERS_CM = [0.5, 0.75, 1.0];
+// Agate ball diameters available in the lab, cm (confirmed by Dalia
+// 2026-07-17: four sizes).
+export const BALL_DIAMETERS_CM = [0.25, 0.5, 0.75, 1.0];
 
 export function ballVolumeMl(diameterCm) {
   return (Math.PI * Math.pow(diameterCm, 3)) / 6;
