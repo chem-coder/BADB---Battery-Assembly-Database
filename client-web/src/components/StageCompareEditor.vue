@@ -11,6 +11,7 @@
 import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 import AutoComplete from 'primevue/autocomplete'
 import DSMultiSelect from '@/components/ds/DSMultiSelect.vue'
+import ElectrodeSourcesEditor from '@/components/ElectrodeSourcesEditor.vue'
 import Checkbox from 'primevue/checkbox'
 import EntityMeta from '@/components/EntityMeta.vue'
 import DateTimeWithNow from '@/components/parity/DateTimeWithNow.vue'
@@ -127,6 +128,20 @@ function getValue(tapeId, fieldKey) {
 function setValue(tapeId, fieldKey, value) {
   const ts = props.tapeStates[String(tapeId)]
   if (ts) ts.setFieldValue(props.stageCode, fieldKey, value)
+}
+
+// Form factor of one battery/tape — `electrode-sources` cells use it to
+// gate multi-source rows and filter compatible cut batches per cell.
+function getFormFactor(tapeId) {
+  const ts = props.tapeStates[String(tapeId)]
+  return ts?.general?.form_factor ?? ts?.general?.target_form_factor ?? ''
+}
+
+// Rows array for an `electrode-sources` field — always an array, never
+// the raw '' fallback getFieldValue returns for missing keys.
+function getRowsValue(tapeId, fieldKey) {
+  const v = getValue(tapeId, fieldKey)
+  return Array.isArray(v) ? v : []
 }
 
 // Get the tape ID immediately to the left of the given tape in tabOrder
@@ -275,9 +290,11 @@ function copyField(sourceTapeId, fieldKey, destTapeId) {
     setValue(dest, tKey, getValue(sourceTapeId, tKey))
   } else {
     const val = getValue(sourceTapeId, fieldKey)
-    // Deep-copy arrays so the dest tape gets its own multiselect state —
-    // a shared reference would mutate the source on next user edit.
-    setValue(dest, fieldKey, Array.isArray(val) ? [...val] : val)
+    // Deep-copy arrays so the dest tape gets its own state — a shared
+    // reference would mutate the source on next user edit. JSON round-
+    // trip (not spread) because electrode-source rows are arrays of
+    // OBJECTS; a shallow [...val] would still share the row objects.
+    setValue(dest, fieldKey, Array.isArray(val) ? JSON.parse(JSON.stringify(val)) : val)
   }
   // Sync local AC models for destination tape — re-sync all currently visible
   // select fields because cascades (e.g. form_factor → config_code) may clear
@@ -337,8 +354,14 @@ function fieldHasData(tapeId, fieldKey) {
     return (d !== '' && d != null) || (t !== '' && t != null)
   }
   const v = getValue(tapeId, fieldKey)
-  // Empty array (multiselect with no choice) is "no data".
-  if (Array.isArray(v)) return v.length > 0
+  // Arrays: multiselect → "no data" when empty; electrode-source rows →
+  // an always-present blank row must NOT count as data, so object items
+  // are "filled" only when at least one of their fields has a value.
+  if (Array.isArray(v)) {
+    return v.some(item => (item && typeof item === 'object')
+      ? Object.values(item).some(x => x !== '' && x !== null && x !== undefined)
+      : (item !== '' && item !== null && item !== undefined))
+  }
   return v !== '' && v !== null && v !== undefined
 }
 
@@ -647,6 +670,21 @@ function onColDragEnd(e) {
                 :options="getRefOptions(field, tid)"
                 placeholder="—"
                 @update:model-value="setValue(tid, field.key, $event)"
+              />
+            </div>
+            <div v-else-if="field.type === 'electrode-sources'" class="ce-sources-wrap">
+              <!-- Multi-source electrode rows (battery «Электроды» stage).
+                   The editor receives the plain rows array + per-battery
+                   context (role from the field config, form factor from
+                   this battery's general stage, reference lists from
+                   refs) and emits the FULL new array on real change. -->
+              <ElectrodeSourcesEditor
+                :rows="getRowsValue(tid, field.key)"
+                :role="field.role"
+                :form-factor="getFormFactor(tid)"
+                :tapes="refs.electrodeTapes || []"
+                :batches="refs.electrodeBatches || []"
+                @update:rows="setValue(tid, field.key, $event)"
               />
             </div>
             <div v-else-if="field.type === 'datetime-with-now'" class="datetime-cell">
@@ -1145,9 +1183,17 @@ function onColDragEnd(e) {
    leaves the right side of the cell empty — visual inconsistency vs
    neighbouring AutoComplete/MultiSelect rows which fill the full
    265px cell. */
-.cell-wrap > .dtwn {
+.cell-wrap > .dtwn,
+.cell-wrap > .ce-sources-wrap {
   flex: 1;
   min-width: 0;
+}
+
+/* Electrode multi-source cell — the inner editor manages its own row
+   layout; the wrapper only joins the cell's flex flow. Copy button
+   alignment: rows are taller than one input, keep the arrow at top. */
+.ce-sources-wrap {
+  align-self: stretch;
 }
 
 /* Boolean cell — Checkbox left-aligned with a 32px height to match the

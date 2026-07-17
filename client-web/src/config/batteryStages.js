@@ -84,15 +84,15 @@ export const BATTERY_STAGES = [
     label: 'Электроды',
     icon: 'pi pi-clone',
     hasApiStep: true,
+    // Multi-source rows per role (vanilla parity). Each field backs onto
+    // an ARRAY of {tape_id, cut_batch_id, source_notes} rows in
+    // useBatteryState (`cathodeSources` / `anodeSources`, row 0 =
+    // primary) rendered by ElectrodeSourcesEditor via the
+    // 'electrode-sources' branch in StageCompareEditor. `role` routes
+    // tape/batch filtering inside the editor.
     fields: [
-      { key: 'cathode_tape_id', label: 'Катодная лента', type: 'select', ref: 'cathodeTapes' },
-      { key: 'cathode_cut_batch_id', label: 'Катодная партия', type: 'select', ref: 'electrodeBatches',
-        refConfig: { idField: 'cut_batch_id', nameField: '_label' } },
-      { key: 'cathode_source_notes', label: 'Заметки (катод)', type: 'textarea' },
-      { key: 'anode_tape_id', label: 'Анодная лента', type: 'select', ref: 'anodeTapes' },
-      { key: 'anode_cut_batch_id', label: 'Анодная партия', type: 'select', ref: 'electrodeBatches',
-        refConfig: { idField: 'cut_batch_id', nameField: '_label' } },
-      { key: 'anode_source_notes', label: 'Заметки (анод)', type: 'textarea' },
+      { key: 'cathodeSources', label: 'Катодные источники', type: 'electrode-sources', role: 'cathode' },
+      { key: 'anodeSources', label: 'Анодные источники', type: 'electrode-sources', role: 'anode' },
     ],
   },
   {
