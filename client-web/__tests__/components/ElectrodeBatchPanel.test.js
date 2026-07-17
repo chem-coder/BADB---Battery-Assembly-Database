@@ -29,6 +29,7 @@ vi.mock('@/utils/errorClassifier', () => ({ toastApiError: vi.fn() }));
 vi.mock('@/utils/formatCapacity', () => ({ fmtCapacity: (v) => v == null ? '—' : `${v} мАч` }));
 
 import api from '@/services/api';
+import { toastApiError } from '@/utils/errorClassifier';
 import ElectrodeBatchPanel from '@/components/ElectrodeBatchPanel.vue';
 
 const ButtonStub = {
@@ -77,6 +78,7 @@ const CollapsibleSectionStub = {
 const BulkPasteStub = {
   name: 'ElectrodeBulkPasteDialog',
   props: ['visible'],
+  emits: ['update:visible', 'applied'],
   template: `<div v-if="visible" class="bp-stub" />`,
 };
 
@@ -223,6 +225,142 @@ describe('ElectrodeBatchPanel.vue', () => {
       expect(confirmRequire).toHaveBeenCalled();
       expect(confirmRequire._lastOpts.acceptLabel).toBe('Удалить');
       expect(confirmRequire._lastOpts.message).toContain('#42');
+    });
+  });
+
+  describe('column sorting', () => {
+    // Server order = number_in_batch ASC; masses/cups deliberately NOT
+    // monotonic so we can tell the sorts apart.
+    const serverRows = [
+      { electrode_id: 11, number_in_batch: 1, electrode_mass_g: 3.0, cup_number: 9, comments: '', include_in_capacity_average: true, status_code: 1 },
+      { electrode_id: 12, number_in_batch: 2, electrode_mass_g: 1.0, cup_number: 7, comments: '', include_in_capacity_average: true, status_code: 3 },
+      { electrode_id: 13, number_in_batch: 3, electrode_mass_g: 2.0, cup_number: 8, comments: '', include_in_capacity_average: true, status_code: 2 },
+    ];
+
+    function mountWithRows() {
+      api.get.mockImplementation((url) => {
+        if (url.endsWith('/electrodes')) return Promise.resolve({ data: serverRows.map((r) => ({ ...r })) });
+        if (url.endsWith('/foil-masses')) return Promise.resolve({ data: [] });
+        if (url.endsWith('/report')) return Promise.resolve({ data: { capacity_summary: null } });
+        return Promise.resolve({ data: null });
+      });
+      return mount(ElectrodeBatchPanel, {
+        props: { batchId: 7 },
+        global: { stubs: makeStubs() },
+      });
+    }
+
+    // № column is the 2nd <td> of each electrode row.
+    function numberColumn(w) {
+      const table = w.find('.cs-stub[data-title="Электроды"] table');
+      return table.findAll('tbody tr').map((tr) => tr.findAll('td')[1].text());
+    }
+
+    it('default sort = № ascending with ▲ indicator on №', async () => {
+      const w = mountWithRows();
+      await flushPromises();
+      expect(numberColumn(w)).toEqual(['1', '2', '3']);
+      const numTh = w.find('th[data-sort-key="number"]');
+      expect(numTh.text()).toContain('▲');
+      // Other sortable headers carry no indicator.
+      expect(w.find('th[data-sort-key="mass"]').text()).not.toMatch(/[▲▼]/);
+    });
+
+    it('click on Масса sorts asc, second click toggles desc', async () => {
+      const w = mountWithRows();
+      await flushPromises();
+      const massTh = w.find('th[data-sort-key="mass"]');
+
+      await massTh.trigger('click');
+      // masses 1.0 (№2), 2.0 (№3), 3.0 (№1)
+      expect(numberColumn(w)).toEqual(['2', '3', '1']);
+      expect(massTh.text()).toContain('▲');
+
+      await massTh.trigger('click');
+      expect(numberColumn(w)).toEqual(['1', '3', '2']);
+      expect(massTh.text()).toContain('▼');
+    });
+
+    it('status header sorts by status_code; unsaved drafts stay at the bottom', async () => {
+      const w = mountWithRows();
+      await flushPromises();
+
+      // Add a manual draft row, then resort — the draft must remain
+      // last (and deletable) regardless of the active sort.
+      await w.find('[data-label="Добавить строку"]').trigger('click');
+      await w.find('th[data-sort-key="status"]').trigger('click');
+
+      const rows = w.find('.cs-stub[data-title="Электроды"] table').findAll('tbody tr');
+      expect(rows.length).toBe(4);
+      expect(numberColumn(w).slice(0, 3)).toEqual(['1', '3', '2']); // status_code 1,2,3
+      expect(rows[3].text()).toContain('новый');
+
+      // Deleting the draft after a resort removes THAT row (identity
+      // lookup, not display index).
+      const trash = rows[3].find('[data-icon="pi pi-trash"]');
+      await trash.trigger('click');
+      expect(w.find('.cs-stub[data-title="Электроды"] table').findAll('tbody tr').length).toBe(3);
+      expect(confirmRequire).not.toHaveBeenCalled(); // draft delete needs no confirm
+    });
+  });
+
+  describe('bulk paste — sequential commit in paste order', () => {
+    const pasted = [
+      { mass_g: 1.1, cup_number: 1, comments: '' },
+      { mass_g: 2.2, cup_number: 2, comments: 'x' },
+      { mass_g: 3.3, cup_number: null, comments: '' },
+    ];
+
+    it('POSTs each row awaited in paste order, then refreshes the list once', async () => {
+      const w = mountPanel();
+      await flushPromises();
+      api.get.mockClear();
+
+      let active = 0;
+      let maxActive = 0;
+      const postedMasses = [];
+      api.post.mockImplementation(async (url, body) => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        postedMasses.push(body.electrode_mass_g);
+        await Promise.resolve(); // if calls were parallel, active would stack
+        active -= 1;
+        return { data: {} };
+      });
+
+      w.findComponent({ name: 'ElectrodeBulkPasteDialog' }).vm.$emit('applied', pasted);
+      await flushPromises();
+
+      expect(api.post).toHaveBeenCalledTimes(3);
+      expect(postedMasses).toEqual([1.1, 2.2, 3.3]); // paste order preserved
+      expect(maxActive).toBe(1);                     // strictly sequential
+      expect(api.post.mock.calls[0][1]).toMatchObject({ cut_batch_id: 7, electrode_mass_g: 1.1, cup_number: 1 });
+
+      // Exactly ONE electrodes reload after the whole sequence.
+      const electrodeGets = api.get.mock.calls.filter((c) => c[0].endsWith('/electrodes'));
+      expect(electrodeGets.length).toBe(1);
+    });
+
+    it('mid-sequence failure: stops, toasts the failing row, keeps rest as drafts', async () => {
+      const w = mountPanel();
+      await flushPromises();
+      toastApiError.mockClear();
+
+      api.post
+        .mockResolvedValueOnce({ data: {} })                 // row 1 OK
+        .mockRejectedValueOnce(new Error('boom'));           // row 2 fails
+
+      w.findComponent({ name: 'ElectrodeBulkPasteDialog' }).vm.$emit('applied', pasted);
+      await flushPromises();
+
+      // Row 3 must NOT have been attempted after the failure.
+      expect(api.post).toHaveBeenCalledTimes(2);
+      expect(toastApiError).toHaveBeenCalledTimes(1);
+      expect(toastApiError.mock.calls[0][2]).toContain('строка 2 из 3');
+
+      // Failed row 2 + untried row 3 remain as editable drafts.
+      const drafts = w.findAll('.badge').filter((b) => b.text() === 'новый');
+      expect(drafts.length).toBe(2);
     });
   });
 

@@ -86,6 +86,49 @@ const bulkPasteVisible = ref(false);
 let foilCounter = 0;
 let nextNewRowId = -1;               // local sentinel for new (unsaved) rows
 
+// ── Column sorting (local, display-only) ──
+// Default = № ascending, which matches the server order
+// (GET .../electrodes returns ORDER BY number_in_batch ASC). Unsaved
+// `_new` draft rows are always kept at the bottom in insertion order so
+// they stay visible/editable regardless of the active sort.
+const sortKey = ref('number');       // 'number' | 'mass' | 'cup' | 'status'
+const sortDir = ref('asc');          // 'asc' | 'desc'
+
+const SORT_ACCESSORS = {
+  number: (e) => e.number_in_batch,
+  mass:   (e) => e.electrode_mass_g,
+  cup:    (e) => e.cup_number,
+  status: (e) => e.status_code,
+};
+
+function toggleSort(key) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortKey.value = key;
+    sortDir.value = 'asc';
+  }
+}
+
+const sortedElectrodes = computed(() => {
+  const saved = electrodes.value.filter((e) => !e._new);
+  const drafts = electrodes.value.filter((e) => e._new);
+  const acc = SORT_ACCESSORS[sortKey.value] || SORT_ACCESSORS.number;
+  const dir = sortDir.value === 'desc' ? -1 : 1;
+  saved.sort((a, b) => {
+    const va = acc(a);
+    const vb = acc(b);
+    // nulls always sink to the bottom regardless of direction
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (va < vb) return -1 * dir;
+    if (va > vb) return 1 * dir;
+    return 0;
+  });
+  return saved.concat(drafts);
+});
+
 // ── Load all batch data ──
 async function load(batchId) {
   if (!batchId) {
@@ -204,9 +247,12 @@ async function confirmScrap() {
   }
 }
 
-function deleteElectrode(e, index) {
+function deleteElectrode(e) {
   if (e._new) {
-    electrodes.value.splice(index, 1);
+    // Look the row up by identity — the display index comes from the
+    // sorted view and doesn't match the underlying array position.
+    const i = electrodes.value.indexOf(e);
+    if (i !== -1) electrodes.value.splice(i, 1);
     return;
   }
   // PrimeVue ConfirmDialog (audit P2 #6) — replaces ugly window.confirm.
@@ -246,7 +292,7 @@ function appendElectrodeRow() {
   });
 }
 
-async function commitNewRow(e, index) {
+async function commitNewRow(e) {
   if (!e._new || !e.electrode_mass_g) return;
   startSave();
   try {
@@ -304,18 +350,59 @@ async function saveFoilMassesNow() {
 }
 
 // ── Bulk paste handler ──
-function onBulkPasteApplied(rows) {
-  // Each row from ElectrodeBulkPasteDialog has { mass_g, cup_number, comments }.
-  // Append as `_new` so the user can adjust before they actually commit.
-  for (const r of rows) {
-    electrodes.value.push({
-      _new: true,
-      _localId: nextNewRowId--,
-      electrode_mass_g: r.mass_g,
-      cup_number: r.cup_number ?? null,
-      comments: r.comments || '',
-      include_in_capacity_average: true,
-    });
+// Each row from ElectrodeBulkPasteDialog has { mass_g, cup_number, comments }.
+//
+// Rows are committed IMMEDIATELY and SEQUENTIALLY, in paste order. The
+// server assigns number_in_batch = MAX+1 per insert, so awaiting each
+// POST before the next guarantees № 1..N matches the pasted sheet.
+// (The old flow appended `_new` drafts that committed on @blur — blur
+// order ≠ paste order, so № got scrambled vs the source Excel sheet.)
+// Do NOT parallelize these POSTs.
+//
+// On a mid-sequence failure we stop, report which row failed, and keep
+// the failed + remaining rows as editable `_new` drafts so no pasted
+// data is lost. Manually added single rows keep the blur-commit flow.
+async function onBulkPasteApplied(rows) {
+  if (!rows.length || !props.batchId) return;
+  startSave();
+  let failedAt = -1;
+  try {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      try {
+        await api.post('/api/electrodes', {
+          cut_batch_id: Number(props.batchId),
+          electrode_mass_g: r.mass_g,
+          cup_number: r.cup_number ?? null,
+          comments: r.comments || null,
+        });
+      } catch (err) {
+        failedAt = i;
+        toastApiError(
+          toast,
+          err,
+          `Вставка остановлена: строка ${i + 1} из ${rows.length} не сохранена. Остальные строки добавлены как черновики.`,
+        );
+        break;
+      }
+    }
+    // Refresh the list ONCE after the whole sequence (not per row).
+    await loadElectrodes(props.batchId);
+    scheduleCapacityReload(props.batchId);
+    if (failedAt !== -1) {
+      for (const r of rows.slice(failedAt)) {
+        electrodes.value.push({
+          _new: true,
+          _localId: nextNewRowId--,
+          electrode_mass_g: r.mass_g,
+          cup_number: r.cup_number ?? null,
+          comments: r.comments || '',
+          include_in_capacity_average: true,
+        });
+      }
+    }
+  } finally {
+    endSave();
   }
 }
 
@@ -416,17 +503,25 @@ function fmtCap(val) {
         <thead>
           <tr>
             <th class="ebp-th-idx">#</th>
-            <th>№</th>
-            <th>Масса, г</th>
-            <th>Стаканчик №</th>
+            <th class="ebp-th-sort" data-sort-key="number" title="Сортировать" @click="toggleSort('number')">
+              №<span v-if="sortKey === 'number'" class="ebp-sort-ind">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+            </th>
+            <th class="ebp-th-sort" data-sort-key="mass" title="Сортировать" @click="toggleSort('mass')">
+              Масса, г<span v-if="sortKey === 'mass'" class="ebp-sort-ind">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+            </th>
+            <th class="ebp-th-sort" data-sort-key="cup" title="Сортировать" @click="toggleSort('cup')">
+              Стаканчик №<span v-if="sortKey === 'cup'" class="ebp-sort-ind">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+            </th>
             <th>Комментарии</th>
             <th class="ebp-th-include" title="Включать в средние значения ёмкости партии">В среднем</th>
-            <th>Статус</th>
+            <th class="ebp-th-sort" data-sort-key="status" title="Сортировать" @click="toggleSort('status')">
+              Статус<span v-if="sortKey === 'status'" class="ebp-sort-ind">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+            </th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(e, idx) in electrodes" :key="e.electrode_id || `new-${e._localId}`">
+          <tr v-for="(e, idx) in sortedElectrodes" :key="e.electrode_id || `new-${e._localId}`">
             <td class="ebp-td-idx">{{ idx + 1 }}</td>
             <td>{{ e.number_in_batch ?? '' }}</td>
             <td>
@@ -435,7 +530,7 @@ function fmtCap(val) {
                 :min="0"
                 :max-fraction-digits="4"
                 class="ebp-input"
-                @blur="e._new ? commitNewRow(e, idx) : updateElectrode(e, 'electrode_mass_g', e.electrode_mass_g)"
+                @blur="e._new ? commitNewRow(e) : updateElectrode(e, 'electrode_mass_g', e.electrode_mass_g)"
               />
             </td>
             <td>
@@ -487,7 +582,7 @@ function fmtCap(val) {
                 rounded
                 size="small"
                 title="Удалить"
-                @click="deleteElectrode(e, idx)"
+                @click="deleteElectrode(e)"
               />
             </td>
           </tr>
@@ -544,7 +639,7 @@ function fmtCap(val) {
 
     <ElectrodeBulkPasteDialog
       v-model:visible="bulkPasteVisible"
-      @apply="onBulkPasteApplied"
+      @applied="onBulkPasteApplied"
     />
 
     <!-- Scrap-reason dialog — replaces window.prompt with a DS-styled
@@ -739,6 +834,20 @@ function fmtCap(val) {
   white-space: nowrap;
 }
 .ebp-table thead th:last-child { border-right: none; }
+/* Click-sortable headers — pointer + hover tint; the ▲/▼ indicator is
+   rendered inline on the active column only. */
+.ebp-th-sort {
+  cursor: pointer;
+  user-select: none;
+}
+.ebp-th-sort:hover {
+  background: rgba(0, 50, 116, 0.18);
+}
+.ebp-sort-ind {
+  font-size: 9px;
+  margin-left: 4px;
+  color: rgba(0, 50, 116, 0.70);
+}
 .ebp-table tbody tr {
   background: transparent;
   border-bottom: 1px solid rgba(180, 210, 255, 0.18);
