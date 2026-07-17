@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
+import ConfirmDialog from 'primevue/confirmdialog'
 import UnsavedConfirmDialog from '@/components/parity/UnsavedConfirmDialog.vue'
 
 // Randomise РЭНЕРА pattern vertical position on every page load
@@ -15,4 +16,8 @@ onMounted(() => {
 <template>
   <RouterView />
   <UnsavedConfirmDialog />
+  <!-- Host for PrimeVue's confirm.require() — without this mounted, every
+       confirm.require call silently does nothing (electrode delete was
+       broken exactly this way). -->
+  <ConfirmDialog />
 </template>
