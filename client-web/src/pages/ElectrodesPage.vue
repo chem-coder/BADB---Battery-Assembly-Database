@@ -66,8 +66,15 @@ const columns = [
   // (capacity_summary.average_capacity_*_mAh). Loaded lazily after the
   // batch list lands and flattened into tableData so CrudTable / PrimeVue
   // sort by the numeric field correctly (the slot only handles display).
-  { field: 'avg_cap_theoretical_mAh', header: 'Ёмкость теор., мАч', minWidth: '110px', width: '130px', sortable: true, filterable: false },
-  { field: 'avg_cap_actual_mAh',      header: 'Ёмкость факт., мАч', minWidth: '110px', width: '130px', sortable: true, filterable: false },
+  // Header wording per vanilla's reworked capacity scheme
+  // (public/js/3-batteries.js:3046-3065): the "actual" number is the
+  // РАСЧЁТНАЯ ёмкость по фактически введённым массам (not a measured
+  // capacity), the "theoretical" number is «по рецепту». Tooltip text
+  // verbatim from vanilla's capacity-cell title.
+  { field: 'avg_cap_theoretical_mAh', header: 'Ёмкость по рецепту, мАч', minWidth: '110px', width: '130px', sortable: true, filterable: false,
+    tooltip: 'Теоретическая ёмкость по рецепту ленты' },
+  { field: 'avg_cap_actual_mAh',      header: 'Ёмкость расч., мАч', minWidth: '110px', width: '130px', sortable: true, filterable: false,
+    tooltip: 'Расчётная ёмкость по фактически введённой массе и составу; не измерение после циклирования.' },
   // 'progress' column — visual 2-segment bar matching the actual
   // electrode-batch lifecycle: «Нарезка» (always done — batch exists)
   // and «Сушка» (done when drying_end is set). drying_start without

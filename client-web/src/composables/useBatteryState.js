@@ -96,10 +96,10 @@ export function useBatteryState({ batteryId }) {
       electrolyte_total_ul: '',
       electrolyte_notes: '',
     },
-    assembly: {
-      separator_layout: '',
-      electrolyte_assembly_notes: '',
-    },
+    // No 'assembly' step: vanilla's «Параметры сборки» maps onto config /
+    // separator / electrolyte above. See batteryStages.js for the history
+    // of the phantom fields (separator_layout, electrolyte_assembly_notes)
+    // that used to live here.
     qc: {
       ocv_v: '',
       esr_mohm: '',
@@ -114,7 +114,6 @@ export function useBatteryState({ batteryId }) {
     electrodes: false,
     separator: false,
     electrolyte: false,
-    assembly: false,
     qc: false,
   })
 
@@ -387,12 +386,6 @@ export function useBatteryState({ batteryId }) {
           electrolyte_total_ul: el.electrolyte_total_ul || null,
           electrolyte_notes: el.electrolyte_notes || null,
         })
-      } else if (code === 'assembly') {
-        // Assembly params saved via coin config endpoint (spacer layout etc.)
-        const a = steps.assembly
-        await api.patch(`/api/batteries/battery_coin_config/${id}`, {
-          coin_layout: a.separator_layout || null,
-        })
       } else if (code === 'qc') {
         // QC → dedicated battery_qc table. UPSERT via POST (ON CONFLICT
         // battery_id) is idempotent and safer than PATCH which 404s when
@@ -564,7 +557,6 @@ export function useBatteryState({ batteryId }) {
     }
     if (code === 'separator') return steps.separator.separator_id ? 'done' : 'pending'
     if (code === 'electrolyte') return steps.electrolyte.electrolyte_id ? 'done' : 'pending'
-    if (code === 'assembly') return steps.assembly.separator_layout ? 'done' : 'pending'
     if (code === 'qc') return steps.qc.ocv_v || steps.qc.esr_mohm ? 'done' : 'pending'
     return 'pending'
   }

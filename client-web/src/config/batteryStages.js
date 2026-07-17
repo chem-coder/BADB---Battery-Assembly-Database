@@ -60,10 +60,13 @@ export const BATTERY_STAGES = [
         { value: 'half_cell', label: 'Half cell' },
       ]},
       { key: 'coin_size_code', label: 'Размер корпуса', type: 'select', showIfFormFactor: 'coin', options: COIN_SIZE_OPTIONS },
-      { key: 'coin_layout', label: 'Схема сборки', type: 'select', showIfFormFactor: 'coin', options: [
-        { value: 'SE', label: 'SE' },
-        { value: 'ES', label: 'ES' },
-        { value: 'ESE', label: 'ESE' },
+      // Label + option labels/order verbatim from vanilla
+      // (public/workflow/3-batteries.html:817-835, fieldset #coin_layout).
+      // Stored values stay 'ESE'/'ES'/'SE' — battery_coin_config.coin_layout.
+      { key: 'coin_layout', label: 'Схема расположения сепаратора и электролита', type: 'select', showIfFormFactor: 'coin', options: [
+        { value: 'ESE', label: 'E-S-E' },
+        { value: 'ES', label: 'E-S' },
+        { value: 'SE', label: 'S-E' },
       ]},
       { key: 'half_cell_type', label: 'Тип полуячейки', type: 'text', showIfFormFactor: 'coin' },
       { key: 'spacer_thickness_mm', label: 'Толщина спейсера, мм', type: 'number', showIfFormFactor: 'coin' },
@@ -116,20 +119,14 @@ export const BATTERY_STAGES = [
       { key: 'electrolyte_notes', label: 'Заметки', type: 'textarea' },
     ],
   },
-  {
-    code: 'assembly',
-    label: 'Сборка',
-    icon: 'pi pi-wrench',
-    hasApiStep: true,
-    fields: [
-      { key: 'separator_layout', label: 'Схема укладки', type: 'select', options: [
-        { value: 'ESE', label: 'ESE (электрод-сепаратор-электрод)' },
-        { value: 'ES', label: 'ES (электрод-сепаратор)' },
-        { value: 'SE', label: 'SE (сепаратор-электрод)' },
-      ]},
-      { key: 'electrolyte_assembly_notes', label: 'Заметки по заливке', type: 'textarea' },
-    ],
-  },
+  // NB: there is deliberately NO 'assembly' stage. Vanilla's «4 Параметры
+  // сборки» section maps onto the config (coin_layout, spacer), separator
+  // and electrolyte stages above. The stage that used to sit here held only
+  // phantom fields with no backend column or restore path — `separator_layout`
+  // (duplicated battery_coin_config.coin_layout and could null the config
+  // value on autosave) and `electrolyte_assembly_notes` (PATCHed nowhere,
+  // silently lost) — both removed 2026-07-17. Don't reintroduce a stage here
+  // without a real column to persist to.
   {
     code: 'qc',
     label: 'Контроль',

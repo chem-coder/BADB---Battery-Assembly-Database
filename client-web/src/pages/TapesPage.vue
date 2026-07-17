@@ -20,6 +20,7 @@ import TapeConstructor from '@/components/TapeConstructor.vue'
 import RecipeActualsEditor from '@/components/RecipeActualsEditor.vue'
 import TapeDryBoxPanel from '@/components/TapeDryBoxPanel.vue'
 import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
+import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
 import Checkbox from 'primevue/checkbox'
 import { useExportTapes } from '@/composables/useExportTapes'
 import { todayIsoMsk } from '@/utils/dateFormat'
@@ -308,6 +309,22 @@ function toggleAllConstructor() {
   }
 }
 
+// Tape print — loads Dalia's /workflow/tape-print.html inside an
+// in-app modal Dialog (PrintPreviewDialog), same pattern as
+// ElectrodesPage.openBatchPrint / AssemblyPage.openBatteryPrint.
+// Offered via the right-click context menu (CrudTable show-print);
+// like electrodes/batteries, the «Печать» item appears only when
+// exactly one row is selected — printing is single-record.
+const printDialog = ref({ visible: false, url: '', title: '' })
+function openTapePrint(tapeId) {
+  if (!tapeId) return
+  printDialog.value = {
+    visible: true,
+    url: `/workflow/tape-print.html?tape_id=${encodeURIComponent(tapeId)}`,
+    title: `Печать · Лента #${tapeId}`,
+  }
+}
+
 // ── Export (context menu: selected rows + constructor checkboxes) ─────
 const exportBadge = computed(() => {
   const ids = new Set(constructorIds.value)
@@ -389,11 +406,13 @@ function formatDate(dt) {
       :export-badge="exportBadge"
       show-add
       show-duplicate
+      show-print
       row-clickable
       @add="createNewTape"
       @delete="onDelete"
       @export="onExportTapes"
       @duplicate="duplicateTape"
+      @print="(item) => openTapePrint(item.tape_id)"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
       @row-click="(data) => toggleConstructor(data.tape_id)"
     >
@@ -512,6 +531,14 @@ function formatDate(dt) {
          is active in the constructor so the panel scopes to one tape
          at a time. -->
     <TapeDryBoxPanel :tape-id="activeTapeState?.currentTapeId?.value || null" />
+
+    <!-- In-app print preview — modal iframe over the page, same as
+         ElectrodesPage / AssemblyPage. -->
+    <PrintPreviewDialog
+      v-model:visible="printDialog.visible"
+      :url="printDialog.url"
+      :title="printDialog.title"
+    />
 
     <EntityCreateDialog
       v-model:visible="createDialogVisible"
