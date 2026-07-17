@@ -10,6 +10,11 @@ current migration state after pulling the latest `main`.
 
 Run commands from `BADB_main`, not the outer `RENERA` workspace.
 
+App-side note (2026-07-17): the `dev`/`dev:bypass` npm scripts now use a
+POSIX `PORT=3003` prefix and will not run in cmd.exe/PowerShell. The lab
+path is unaffected: use `npm run build:web` then `npm start`. See
+"2026-07-17 change" in `docs/instructions/run_local.md`.
+
 ## Current Migration State
 
 - `migrations/` has 49 SQL files.

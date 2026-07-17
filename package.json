@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "concurrently \"nodemon server.js\" \"npm run dev --prefix client-web\"",
+    "dev": "concurrently \"PORT=3003 nodemon server.js\" \"npm run dev --prefix client-web\"",
     "build:web": "npm run build --prefix client-web",
-    "dev:bypass": "concurrently \"AUTH_BYPASS=true BYPASS_LOGIN=dsmenyaylov nodemon server.js\" \"npm run dev --prefix client-web\"",
+    "dev:bypass": "concurrently \"AUTH_BYPASS=true BYPASS_LOGIN=dsmenyaylov PORT=3003 nodemon server.js\" \"npm run dev --prefix client-web\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "backup": "node scripts/backup.js",
