@@ -119,7 +119,6 @@
         areal_capacity_theoretical: false,
         areal_capacity_actual: false,
         capacity_per_side_actual: false,
-        cup: false,
         comments: true,
         status: true
       };
@@ -439,7 +438,6 @@
         .filter(row => !row.dataset.electrodeId)
         .map(row => ({
           electrode_mass_g: row.dataset.mass || null,
-          cup_number: row.dataset.cup || null,
           comments: row.dataset.comments || null
         }));
     }
@@ -846,7 +844,6 @@
       { key: 'areal_capacity_theoretical', label: 'Ёмкость (теор.), мАч/см²' },
       { key: 'areal_capacity_actual', label: 'Ёмкость (по факт. массе), мАч/см²' },
       { key: 'capacity_per_side_actual', label: 'Ёмкость 1 стороны, мАч/см²' },
-      { key: 'cup', label: 'Стаканчик №' },
       { key: 'comments', label: 'Комментарии' },
       { key: 'status', label: 'Статус' }
     ];
@@ -2079,7 +2076,6 @@
     const ELECTRODE_SORT_DEFAULT_DIRECTIONS = {
       number: 'asc',
       mass: 'desc',
-      cup: 'asc',
       status: 'asc'
     };
 
@@ -2089,7 +2085,6 @@
 
     function getElectrodeSortValue(e, key) {
       if (key === 'mass') return Number(e.electrode_mass_g);
-      if (key === 'cup') return Number(e.cup_number);
       if (key === 'status') return Number(e.status_code);
       return Number(e.number_in_batch);
     }
@@ -2257,22 +2252,8 @@
         capacityPerSideActualCell.dataset.col = 'capacity_per_side_actual';
         capacityPerSideActualCell.textContent = formatDerivedNumber(e.capacity_per_side_actual_mAh_cm2, 3);
         
-        const cupCell = document.createElement('td');
-        cupCell.dataset.col = 'cup';
-        const cupInput = document.createElement('input');
-        cupInput.type = 'number';
-        cupInput.step = '1';
-        cupInput.min = '0';
-        cupInput.className = 'electrode-cup';
-        cupInput.value = e.cup_number ?? '';
-        cupInput.addEventListener('change', async () => {
-          await updateElectrode(e.electrode_id, {
-            cup_number: cupInput.value || null
-          });
-          await loadElectrodes(state.selection.currentCutBatchId);
-        });
-        cupCell.appendChild(cupInput);
-        
+        /* cup_number column removed from UI 2026-07-17 — the DB column
+           stays (forward-only policy), it is just no longer shown/sent. */
         const commentCell = document.createElement('td');
         commentCell.dataset.col = 'comments';
         const commentInput = document.createElement('input');
@@ -2352,11 +2333,10 @@
         tr.appendChild(arealCapacityTheoreticalCell);
         tr.appendChild(arealCapacityActualCell);
         tr.appendChild(capacityPerSideActualCell);
-        tr.appendChild(cupCell);
         tr.appendChild(commentCell);
         tr.appendChild(statusCell);
         tr.appendChild(actionCell);
-        
+
         body.appendChild(tr);
 
       });
@@ -2896,7 +2876,6 @@
       tr.appendChild(indexCell);
       
       tr.dataset.mass = data.electrode_mass_g || '';
-      tr.dataset.cup = data.cup_number || '';
       tr.dataset.comments = data.comments || '';
       
       const numTd = document.createElement('td');
@@ -2965,24 +2944,7 @@
       capacityPerSideActualTd.dataset.col = 'capacity_per_side_actual';
       capacityPerSideActualTd.textContent = '—';
       
-      const cupTd = document.createElement('td');
-      cupTd.dataset.col = 'cup';
-      const cupInput = document.createElement('input');
-      cupInput.type = 'number';
-      cupInput.step = '1';
-      cupInput.min = '0';
-      cupInput.className = 'electrode-cup';
-      if (data.cup_number) {
-        cupInput.value = data.cup_number;
-      }
-      
-      cupTd.appendChild(cupInput);
-      cupInput.addEventListener('input', () => {
-        tr.dataset.cup = cupInput.value;
-        syncElectrodeDraftStateFromDom();
-      });
-      cupInput.addEventListener('change', refreshElectrodeDraftDirtyStateFromDom);
-      
+      /* cup_number entry removed from UI 2026-07-17 — use comments instead. */
       const commentTd = document.createElement('td');
       commentTd.dataset.col = 'comments';
       const commentInput = document.createElement('input');
@@ -3022,7 +2984,6 @@
       tr.appendChild(arealCapacityTheoreticalTd);
       tr.appendChild(arealCapacityActualTd);
       tr.appendChild(capacityPerSideActualTd);
-      tr.appendChild(cupTd);
       tr.appendChild(commentTd);
       tr.appendChild(statusTd);
       tr.appendChild(actionTd);
@@ -3390,7 +3351,6 @@
           body: JSON.stringify({
             cut_batch_id: state.selection.currentCutBatchId,
             electrode_mass_g: mass,
-            cup_number: row.cup_number || null,
             comments: row.comments || null
           })
         });

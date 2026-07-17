@@ -19,7 +19,7 @@
  *   - constructor box: 1px solid rgba(0,50,116,0.12), 10px radius
  *
  * Output: emits `applied` with an array of
- *   { mass_g, cup_number, comments }
+ *   { mass_g, comments }
  * Parent appends these as new electrode rows (append-only).
  */
 import { ref, watch, computed } from 'vue';
@@ -56,13 +56,8 @@ function fmtMass(n) {
   if (n == null) return '—';
   return Number(n).toFixed(4).replace(/\.?0+$/, '');
 }
-function fmtCup(n) {
-  return n == null ? '—' : n;
-}
-
 const columnLabels = {
   mass: 'Масса',
-  cup: 'Стакан',
   comments: 'Комментарий',
 };
 </script>
@@ -83,9 +78,9 @@ const columnLabels = {
       <p class="bp-hint">
         Скопируйте столбцы из Excel или Google Sheets и вставьте в поле ниже.
         Заголовок строки распознаётся автоматически — поддерживаются
-        <code>Масса</code> / <code>Стакан</code> / <code>Комментарий</code>
+        <code>Масса</code> / <code>Комментарий</code>
         (и английские аналоги). Без заголовка порядок столбцов —
-        масса, стакан, комментарий.
+        масса, комментарий.
       </p>
 
       <label class="bp-field-label" for="bp-paste">Данные</label>
@@ -94,7 +89,7 @@ const columnLabels = {
         v-model="pastedText"
         rows="6"
         class="bp-paste-area"
-        placeholder="1,234&#9;5&#9;комментарий&#10;1,256&#9;6"
+        placeholder="1,234&#9;комментарий&#10;1,256"
         autofocus
       />
 
@@ -118,7 +113,6 @@ const columnLabels = {
               <tr>
                 <th class="bp-num">№</th>
                 <th>Масса, г</th>
-                <th>Стакан №</th>
                 <th>Комментарий</th>
               </tr>
             </thead>
@@ -126,7 +120,6 @@ const columnLabels = {
               <tr v-for="(row, idx) in parsed.rows" :key="idx">
                 <td class="bp-num">{{ idx + 1 }}</td>
                 <td>{{ fmtMass(row.mass_g) }}</td>
-                <td>{{ fmtCup(row.cup_number) }}</td>
                 <td>{{ row.comments || '—' }}</td>
               </tr>
             </tbody>

@@ -339,7 +339,6 @@ function renderElectrodesSection(electrodes) {
               <th class="report_number">C теор., мАч</th>
               <th class="report_number">C по факт. массе, мАч</th>
               <th>В расчёт</th>
-              <th>Стаканчик</th>
               <th>Статус</th>
             </tr>
           </thead>
@@ -355,7 +354,6 @@ function renderElectrodesSection(electrodes) {
                 <td class="report_number">${escapeHtml(formatCapacity(row.capacity_theoretical_mAh))}</td>
                 <td class="report_number">${escapeHtml(formatCapacity(row.capacity_actual_mAh))}</td>
                 <td>${escapeHtml(formatCapacityAverageInclusion(row))}</td>
-                <td>${escapeHtml(row.cup_number ?? '—')}</td>
                 <td>${escapeHtml(formatElectrodeStatus(row))}</td>
               </tr>
             `).join('')}
