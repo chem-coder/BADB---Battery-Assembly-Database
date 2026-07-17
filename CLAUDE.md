@@ -77,15 +77,17 @@ lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null
 - **BADB server:** port **3003** (`config/index.js` → `PORT || 3003`)
 - **Vite dev server:** port **5173**
 - **Port 3000** — was Dalia's old standalone server. After integration, only port 3003 is used.
-- **Vanilla browser URL:** http://localhost:3003
-- **Vue browser URL (dev/HMR):** http://localhost:5173
-- **Vue browser URL (production build):** http://localhost:3003/tapes (or any Vue
-  route) — run `npm run build:web` first; Express serves `public-vue/` with an
-  SPA history fallback for extensionless non-`/api` paths. **Lab machines should
-  use this**, not :5173: the dev server is unminified/per-module (feels slow) and
-  funnels all users' API traffic through the Vite proxy into ONE shared
-  rate-limit bucket (429 «Слишком много запросов» glitches). Rebuild after
-  pulling client-web changes.
+- **Vue browser URL (production, the front door):** http://localhost:3003 —
+  the root serves the built Vue SPA (run `npm run build:web` first); Express
+  serves `public-vue/` with an SPA history fallback for extensionless
+  non-`/api` paths. **Lab machines use this**, not :5173: the dev server is
+  unminified/per-module (feels slow) and funnels all users' API traffic
+  through the Vite proxy into ONE shared rate-limit bucket (429 «Слишком
+  много запросов» glitches). Rebuild after pulling client-web changes.
+- **Vanilla browser URL:** http://localhost:3003/index.html (alias:
+  /vanilla). Vanilla's internal links all target /index.html explicitly, so
+  it is fully self-contained behind the Vue root.
+- **Vue browser URL (dev/HMR):** http://localhost:5173 — development only.
 
 ### How API requests flow (CRITICAL)
 

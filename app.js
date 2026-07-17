@@ -47,9 +47,22 @@ if (process.env.VUE_HTML_REDIRECTS === 'true') {
   });
 }
 
+// ── Front door: the built Vue app owns the root ────────────────────
+// Explicit routes beat the static middlewares below, so `/` serves the
+// Vue SPA even though public/index.html exists. Vanilla stays fully
+// functional at /index.html (all of its internal links already point
+// there explicitly), with /vanilla as the memorable alias.
+app.get('/', (req, res, next) => {
+  res.sendFile(path.join(__dirname, 'public-vue', 'index.html'), (err) => {
+    if (err) next(); // Vue not built yet → fall through to vanilla
+  });
+});
+app.get('/vanilla', (req, res) => res.redirect(302, '/index.html'));
+
 app.use(express.static('public'));
 // Built Vue SPA (client-web → `npm run build:web`). Served AFTER public/
-// so vanilla wins any path conflict; assets live under /assets/*.
+// so vanilla wins remaining file conflicts (e.g. /index.html stays
+// vanilla); Vue assets live under /assets/*.
 app.use(express.static('public-vue'));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
