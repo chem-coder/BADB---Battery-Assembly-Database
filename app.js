@@ -48,6 +48,9 @@ if (process.env.VUE_HTML_REDIRECTS === 'true') {
 }
 
 app.use(express.static('public'));
+// Built Vue SPA (client-web → `npm run build:web`). Served AFTER public/
+// so vanilla wins any path conflict; assets live under /assets/*.
+app.use(express.static('public-vue'));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ── IP allowlist (optional, controlled by ALLOWED_IPS env var) ─────
@@ -79,6 +82,20 @@ app.use('/api', (req, res, next) => {
 });
 
 registerRoutes(app);
+
+// ── SPA history fallback for the built Vue app ─────────────────────
+// Vue Router uses createWebHistory, so direct loads/refreshes of routes
+// like /tapes or /reference/projects must serve the Vue index.html.
+// Only extensionless GET paths that nothing above matched land here:
+// /api/* and /uploads/* are excluded, and vanilla pages are real .html
+// files in public/ that the static middleware already served. If the
+// build is missing (public-vue not built yet), falls through to 404.
+app.get(/^\/(?!api\/|uploads\/)[^.]*$/, (req, res, next) => {
+  res.sendFile(path.join(__dirname, 'public-vue', 'index.html'), (err) => {
+    if (err) next();
+  });
+});
+
 app.use(errorHandler);
 
 module.exports = app;
