@@ -2815,7 +2815,12 @@ function renderBatchOptionsForSelect(select, role, row) {
   const oppositeRole = role === 'cathode' ? 'anode' : 'cathode';
   const siblingSelectedBatchIds = getSiblingSelectedSourceBatchIds(role, row);
 
-  select.innerHTML = '<option value="">— выбрать партию —</option>';
+  // Without a form factor the compatibility filter has no expected shape and
+  // the list is legitimately empty — say why instead of showing a bare select.
+  const placeholder = !state.selection.currentBatteryId && !getExpectedBatteryBatchShape() && !selectedBatchId
+    ? '— сначала выберите форм-фактор —'
+    : '— выбрать партию —';
+  select.innerHTML = `<option value="">${placeholder}</option>`;
 
   sortElectrodeCutBatches(
     (row?.tape_id ? getRoleBatchReference(role) : getUnfilteredCompatibleBatchReference(role)).filter(batch => (
