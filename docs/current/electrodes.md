@@ -1,7 +1,7 @@
 # Electrodes
 
 Created: 2026-05-06
-Edited: 2026-06-09
+Edited: 2026-07-17
 Status: current
 Verified against code: 2026-06-09
 
@@ -100,7 +100,13 @@ Important fields:
 
 - `electrode_id`;
 - `cut_batch_id`;
-- `number_in_batch`;
+- `number_in_batch` — the stable per-batch entry number (assigned
+  server-side as MAX+1 on insert, never renumbered on delete, so it stays
+  in step with the tech's Excel sheet; deletions leave honest gaps).
+  Since 2026-07-17 electrode lists are served in `number_in_batch` order
+  and both frontends show it as the default `№` sort, with click-sortable
+  mass/cup/status headers; the Vue bulk paste commits rows sequentially in
+  paste order so assigned numbers always match the pasted sheet;
 - `electrode_mass_g`;
 - `include_in_capacity_average`;
 - `status_code`;

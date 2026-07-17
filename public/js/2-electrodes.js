@@ -101,7 +101,8 @@
           savedSectionSnapshots: {},
           dirtySections: {},
           tableColumnVisibility: getDefaultElectrodeTableColumnVisibility(),
-          filtersBeforeWorkspace: null
+          filtersBeforeWorkspace: null,
+          electrodeSort: { key: 'number', dir: 'asc' }
         }
       };
     }
@@ -2073,12 +2074,102 @@
       
     }
     
+    /* ---------- saved electrodes list sorting ---------- */
+
+    const ELECTRODE_SORT_DEFAULT_DIRECTIONS = {
+      number: 'asc',
+      mass: 'desc',
+      cup: 'asc',
+      status: 'asc'
+    };
+
+    function getElectrodeSortState() {
+      return state.ui.electrodeSort || { key: 'number', dir: 'asc' };
+    }
+
+    function getElectrodeSortValue(e, key) {
+      if (key === 'mass') return Number(e.electrode_mass_g);
+      if (key === 'cup') return Number(e.cup_number);
+      if (key === 'status') return Number(e.status_code);
+      return Number(e.number_in_batch);
+    }
+
+    function sortElectrodesForDisplay(electrodes) {
+      const { key, dir } = getElectrodeSortState();
+      const mult = dir === 'desc' ? -1 : 1;
+
+      return [...electrodes].sort((a, b) => {
+        const aValue = getElectrodeSortValue(a, key);
+        const bValue = getElectrodeSortValue(b, key);
+        const aMissing = !Number.isFinite(aValue);
+        const bMissing = !Number.isFinite(bValue);
+
+        // Rows without a value always sink to the bottom, regardless of direction.
+        if (!aMissing || !bMissing) {
+          if (aMissing) return 1;
+          if (bMissing) return -1;
+          if (aValue !== bValue) return (aValue - bValue) * mult;
+        }
+
+        const aNumber = Number(a.number_in_batch);
+        const bNumber = Number(b.number_in_batch);
+        if (Number.isFinite(aNumber) && Number.isFinite(bNumber) && aNumber !== bNumber) {
+          return aNumber - bNumber;
+        }
+
+        return Number(a.electrode_id) - Number(b.electrode_id);
+      });
+    }
+
+    function handleElectrodeSortHeaderClick(key) {
+      if (!key) return;
+
+      const current = getElectrodeSortState();
+      const dir = current.key === key
+        ? (current.dir === 'asc' ? 'desc' : 'asc')
+        : (ELECTRODE_SORT_DEFAULT_DIRECTIONS[key] || 'asc');
+
+      state.ui.electrodeSort = { key, dir };
+      renderElectrodeTableFromState();
+    }
+
+    function initElectrodeSortableHeaders() {
+      document.querySelectorAll('#electrodes-table thead th[data-sort-key]').forEach((th) => {
+        if (th.dataset.sortBound === 'true') return;
+        th.dataset.sortBound = 'true';
+
+        const arrow = document.createElement('span');
+        arrow.className = 'sort-arrow';
+        arrow.setAttribute('aria-hidden', 'true');
+        th.appendChild(arrow);
+
+        th.addEventListener('click', () => {
+          handleElectrodeSortHeaderClick(th.dataset.sortKey);
+        });
+      });
+    }
+
+    function updateElectrodeSortIndicators() {
+      const { key, dir } = getElectrodeSortState();
+
+      document.querySelectorAll('#electrodes-table thead th[data-sort-key]').forEach((th) => {
+        const isActive = th.dataset.sortKey === key;
+        const arrow = th.querySelector('.sort-arrow');
+
+        if (arrow) {
+          arrow.textContent = isActive ? (dir === 'desc' ? '▼' : '▲') : '';
+        }
+
+        th.setAttribute('aria-sort', isActive ? (dir === 'desc' ? 'descending' : 'ascending') : 'none');
+      });
+    }
+
     function renderElectrodes(electrodes) {
-      
+
       const body = document.getElementById('electrodes-body');
       body.innerHTML = '';
-      
-      electrodes.forEach((e, index) => {
+
+      sortElectrodesForDisplay(electrodes).forEach((e, index) => {
         
         const tr = document.createElement('tr');
         
@@ -2267,13 +2358,14 @@
         tr.appendChild(actionCell);
         
         body.appendChild(tr);
-        
+
       });
 
+      updateElectrodeSortIndicators();
       applyElectrodeColumnVisibility();
-      
+
     }
-    
+
     function renderStatus(e) {
       
       if (e.status_code === 1) {
@@ -3461,6 +3553,7 @@
     
     async function initElectrodePage() {
       installElectrodeDebugInspector();
+      initElectrodeSortableHeaders();
       setAllCutBatches([]);
       renderElectrodePage();
       await loadProjects();
