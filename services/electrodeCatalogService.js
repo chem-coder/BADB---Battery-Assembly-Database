@@ -31,8 +31,7 @@ async function listElectrodesForCutBatch(pool, cutBatchId) {
       FROM electrodes
       WHERE cut_batch_id = $1
       ORDER BY
-        status_code ASC,
-        electrode_mass_g DESC,
+        number_in_batch ASC,
         electrode_id ASC
       `,
       [cutBatchId]
