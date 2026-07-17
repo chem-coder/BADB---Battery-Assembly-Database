@@ -4,7 +4,8 @@
  * Shows ALL electrode cut batches with optional filters (Role, Project, Tape).
  * Follows TapesPage pattern: CrudTable + TapeConstructor.
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useConfirm } from 'primevue/useconfirm'
 import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
@@ -12,7 +13,6 @@ import { fmtCapacity } from '@/utils/formatCapacity'
 import { toastApiError } from '@/utils/errorClassifier'
 import { useBackendCache } from '@/composables/useBackendCache'
 import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 import TapeConstructor from '@/components/TapeConstructor.vue'
 import ElectrodeBatchPanel from '@/components/ElectrodeBatchPanel.vue'
@@ -27,6 +27,7 @@ import { useElectrodeState } from '@/composables/useElectrodeState'
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
+const confirm = useConfirm()
 const crudTable = ref(null)
 
 // ── Reference data ──
@@ -385,35 +386,39 @@ function electrodeStateFactory(id) {
 }
 
 // ── Delete flow ──
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
-
+// Immediate confirm-then-delete (owner decision 2026-07-17): the old
+// mark-for-deletion + «Сохранить» pattern read as a stealth confirm
+// button. Destruction now confirms explicitly and happens at once;
+// dependency refusals (electrodes/battery links) surface via toast.
 function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
-}
-
-async function confirmSave() {
-  try {
-    for (const item of pendingDelete.value) {
-      await api.delete(`/api/electrodes/electrode-cut-batches/${item.cut_batch_id}`)
-    }
-    pendingDelete.value = []
-    crudTable.value?.clearSelection()
-    await loadAllBatches()
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось удалить')
-  }
-}
-
-function discardChanges() {
-  pendingDelete.value = []
-  crudTable.value?.clearSelection()
-  saveState.value = 'idle'
+  const labels = items.map((i) => `#${i.cut_batch_id}`).join(', ')
+  confirm.require({
+    message: items.length === 1
+      ? `Удалить партию ${labels}? Действие необратимо.`
+      : `Удалить партии ${labels}? Действие необратимо.`,
+    header: 'Удаление партии электродов',
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Удалить',
+    rejectLabel: 'Отмена',
+    acceptProps: { severity: 'danger' },
+    accept: async () => {
+      const failed = []
+      for (const item of items) {
+        try {
+          await api.delete(`/api/electrodes/electrode-cut-batches/${item.cut_batch_id}`)
+        } catch (err) {
+          failed.push(`#${item.cut_batch_id} (${err.response?.data?.error || 'ошибка'})`)
+        }
+      }
+      crudTable.value?.clearSelection()
+      await loadAllBatches()
+      if (failed.length) {
+        toast.add({ severity: 'warn', summary: 'Не удалены', detail: failed.join('; '), life: 8000 })
+      } else {
+        toast.add({ severity: 'success', summary: items.length === 1 ? `Партия ${labels} удалена` : `Партии удалены: ${labels}`, life: 3000 })
+      }
+    },
+  })
 }
 
 // ── Deep link: /electrodes/:id ──
@@ -425,21 +430,11 @@ onMounted(async () => {
     constructorIds.value = [batchId]
   }
 })
-onUnmounted(() => clearTimeout(saveTimer))
 </script>
 
 <template>
   <div class="electrodes-page">
-    <PageHeader title="Электроды" icon="pi pi-stop-circle">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
-        />
-      </template>
-    </PageHeader>
+    <PageHeader title="Электроды" icon="pi pi-stop-circle" />
 
     <!-- Filters live in column headers — click «Тип» / «Проект» / «Лента»
          in the table below to open the Excel-style filter overlay. -->

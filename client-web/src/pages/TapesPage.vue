@@ -6,14 +6,14 @@
  * The old TapeFormPage is replaced by the inline Constructor.
  * Table has a checkbox column "В конструктор" to add tapes to the Constructor zone.
  */
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
+import { useConfirm } from 'primevue/useconfirm'
 import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
 import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 // StatusBadge removed — status column replaced by project/operator
 import TapeConstructor from '@/components/TapeConstructor.vue'
@@ -29,6 +29,7 @@ import { todayIsoMsk } from '@/utils/dateFormat'
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
+const confirm = useConfirm()
 const authStore = useAuthStore()
 const crudTable = ref(null)
 const constructorRef = ref(null)
@@ -233,44 +234,40 @@ async function onCreateDialogSubmit(payload) {
   }
 }
 
-// ── Save indicator (delete flow) ──────────────────────────────────────
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
-
+// ── Delete flow ──────────────────────────────────────────────────────
+// Immediate confirm-then-delete (owner decision 2026-07-17): the old
+// mark-for-deletion + «Сохранить» pattern read as a stealth confirm
+// button. Dependency refusals (batches, workflow data) surface via toast.
 function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
-}
-
-async function confirmSave() {
-  try {
-    // Handle delete flow (the only action requiring explicit confirmation)
-    if (pendingDelete.value.length) {
-      for (const item of pendingDelete.value) {
-        await api.delete(`/api/tapes/${item.tape_id}`)
+  const labels = items.map((i) => `#${i.tape_id} ${i.name || ''}`.trim()).join(', ')
+  confirm.require({
+    message: items.length === 1
+      ? `Удалить ленту ${labels}? Действие необратимо.`
+      : `Удалить ленты ${labels}? Действие необратимо.`,
+    header: 'Удаление ленты',
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Удалить',
+    rejectLabel: 'Отмена',
+    acceptProps: { severity: 'danger' },
+    accept: async () => {
+      const failed = []
+      for (const item of items) {
+        try {
+          await api.delete(`/api/tapes/${item.tape_id}`)
+        } catch (err) {
+          failed.push(`#${item.tape_id} (${err.response?.data?.error || 'ошибка'})`)
+        }
       }
-      pendingDelete.value = []
       crudTable.value?.clearSelection()
       await loadTapes()
-    }
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось сохранить')
-  }
+      if (failed.length) {
+        toast.add({ severity: 'warn', summary: 'Не удалены', detail: failed.join('; '), life: 8000 })
+      } else {
+        toast.add({ severity: 'success', summary: items.length === 1 ? `Лента удалена` : `Ленты удалены`, life: 3000 })
+      }
+    },
+  })
 }
-
-function discardChanges() {
-  if (pendingDelete.value.length) {
-    pendingDelete.value = []
-    crudTable.value?.clearSelection()
-  }
-  saveState.value = 'idle'
-}
-
-onUnmounted(() => clearTimeout(saveTimer))
 
 // ── Constructor: selected tapes ───────────────────────────────────────
 const constructorIds = ref([])
@@ -383,16 +380,7 @@ function formatDate(dt) {
 <template>
   <div class="tapes-page">
 
-    <PageHeader title="Подготовка лент" icon="pi pi-bars">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
-        />
-      </template>
-    </PageHeader>
+    <PageHeader title="Подготовка лент" icon="pi pi-bars" />
 
     <!-- ── Table (collapsible via max-height) ── -->
     <CrudTable
