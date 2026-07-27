@@ -452,7 +452,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('recipes', ctx);
                     :options="filteredMaterialsCache[line._key] || []"
                     option-label="name"
                     option-value="material_id"
-                    :placeholder="isActiveLine(line) ? 'x — выбирается на ленте' : '— материал —'"
+                    :placeholder="isActiveLine(line) ? 'АМ — выбирается на ленте' : '— материал —'"
                     :disabled="!line.recipe_role || isActiveLine(line)"
                   />
                 </td>

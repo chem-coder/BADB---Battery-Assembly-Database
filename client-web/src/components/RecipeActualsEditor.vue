@@ -97,7 +97,7 @@ function isSlotLine(line) {
 function materialName(line) {
   if (isSlotLine(line)) {
     return props.tapeState?.activeMaterialName?.value
-      || 'x — выберите активный материал'
+      || 'АМ — выберите активный материал'
   }
   return line.material_name || `#${line.material_id}`
 }

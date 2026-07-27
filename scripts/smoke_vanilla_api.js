@@ -50,7 +50,8 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd046_indexes_and_timestamps.sql'),
   path.join(ROOT, 'migrations', 'd047_recipe_active_material_slot.sql'),
   path.join(ROOT, 'migrations', 'd048_vilitek_mixer_containers_and_balls.sql'),
-  path.join(ROOT, 'migrations', 'd049_fix_vilitek_cup_sizes.sql')
+  path.join(ROOT, 'migrations', 'd049_fix_vilitek_cup_sizes.sql'),
+  path.join(ROOT, 'migrations', 'd050_recipe_slot_marker_am.sql')
 ];
 
 function parseArgs(argv) {

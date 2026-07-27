@@ -48,7 +48,7 @@ NOT tied to a project.
   (`active line <=> material_id IS NULL`). The concrete chemistry is chosen
   per tape via `tapes.active_material_id` (FK → materials, ON DELETE
   RESTRICT). Recipe names are composition-derived
-  ("96 x : 2.2 Super P : 1.8 PVDF", "x" = the active slot) but editable.
+  ("96 АМ : 2.2 Super P : 1.8 PVDF", «АМ» = the active slot) but editable.
   The solution concentration (e.g. 5% vs 7% PVDF in NMP) is NOT part of the
   recipe — it's a `material_instance` picked when recording actuals
   (`tape_recipe_line_actuals`); for the active-slot line the instance must

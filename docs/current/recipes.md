@@ -23,8 +23,8 @@ formulation decoupled from any specific active material. The active line
 (`recipe_role` = `cathode_active`/`anode_active`) is an **open slot**: its
 `material_id` is NULL (DB CHECK enforced). The concrete chemistry (NMC 811,
 LFP S19, ...) is chosen per tape via `tapes.active_material_id`. Recipe names
-are composition-derived by convention — `96 x : 2.2 Super P : 1.8 PVDF`,
-where `x` stands for the active slot — but remain freely editable. Solution
+are composition-derived by convention — `96 АМ : 2.2 Super P : 1.8 PVDF`,
+where `АМ` (активный материал) stands for the active slot — but remain freely editable. Solution
 concentration (5% vs 7% PVDF in NMP) is NOT part of the recipe; it is a
 material-instance choice made when recording tape actuals.
 
@@ -67,7 +67,7 @@ The page filters available materials by the selected line role. `additive`
 maps to material role `conductive_additive`. Solvent lines are excluded from
 the required 100 percent dry-solids sum. Active lines (`cathode_active` /
 `anode_active`) carry no material: the material select is disabled and shows
-`x — выбирается на ленте`; the percent is still required and counts toward
+`АМ — выбирается на ленте`; the percent is still required and counts toward
 the 100 percent sum.
 
 Included line percentages are used downstream by the Tapes page to calculate

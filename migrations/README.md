@@ -5,12 +5,12 @@ Forward-only SQL migrations applied in alphabetical order to
 
 Current migration file state as of 2026-07-17:
 
-- `migrations/` has 58 SQL files.
-- `migrations_ASCII/` has 58 SQL files.
+- `migrations/` has 59 SQL files.
+- `migrations_ASCII/` has 59 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d049_fix_vilitek_cup_sizes.sql`.
+- Dalia's `dNNN` stream exists through `d050_recipe_slot_marker_am.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 37` after `d049` is applied.
+  counts of `dima = 21` and `dalia = 38` after `d050` is applied.
 
 ## How to apply
 
@@ -161,7 +161,7 @@ Full timeline is in the git log. High-level:
   per role with a surrogate row ID, `sort_order`, and exactly one primary row
   per role.
 - `d047_recipe_active_material_slot` — decouples recipes from their active
-  material: recipes become reusable formulations ("96 x : 2.2 Super P :
+  material: recipes become reusable formulations ("96 АМ : 2.2 Super P :
   1.8 PVDF") whose active line is an open slot (`material_id IS NULL`);
   tapes carry the chosen chemistry in the new `tapes.active_material_id`;
   `materials.family` groups pickers. One-off guarded data step dedups
@@ -181,6 +181,10 @@ Full timeline is in the git log. High-level:
   375 ml working volume to NULL (the 125 ml estimate belonged to the wrong
   250 ml guess). Ball diameters confirmed as 0.25/0.5/0.75/1.0 cm (UI-side
   list only, no schema change).
+- `d050_recipe_slot_marker_am` — renames the active-slot marker in
+  composition-derived recipe names from "x" to "АМ" (активный материал):
+  "96 АМ : 2.2 Super P : 1.8 PVDF". Cosmetic; only d047-shaped names are
+  touched, so hand-renamed recipes are left alone.
 
 ## Check migration ledger
 
