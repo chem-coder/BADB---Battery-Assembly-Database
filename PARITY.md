@@ -54,6 +54,7 @@ in-progress replacement.
 | Print report (`tape-print.html`) | DONE | Implemented 2026-06-20 (`utils/tapePrint.js` + `openTapePrint` + `show-print`/`@print` + `PrintPreviewDialog`) — opens `/workflow/tape-print.html?tape_id=<id>` in-app, mirroring Electrodes/Batteries. |
 | Guided delete: admin/lead, delete-check, typed `DELETE TAPE <id>` | DONE | Implemented 2026-06-20 (`utils/tapeDelete.js` + `useDeleteCheck` + `TypedDeleteConfirm`): `authStore.isLead` UI gate → delete-check preflight → blockers OR typed «DELETE TAPE <id>» → DELETE; per-tape. Backend already gates admin/lead + enforces dependency blockers (now covered by a test). |
 | Editing model (vanilla row-open vs Vue constructor) | DONE (by design) | Vue's multi-select Constructor is the accepted V2 replacement for vanilla's row-open/sticky model (decision 2026-06-19) |
+| Table QoL: default 20 rows, shrink-to-fit on column deselect, «Выбрано: N — показать» selection lens | DONE (Vue extra) | CrudTable 2026-07-17 — vanilla has no column selector, nothing to mirror |
 
 ### Electrodes — `public/workflow/2-electrodes.html` + `2-electrodes.js` → `pages/ElectrodesPage.vue` (+ `ElectrodeBatchPanel`, `BatchCreateDialog`, `ElectrodeBulkPasteDialog`)
 
@@ -70,6 +71,9 @@ in-progress replacement.
 | List filters: Role, Project, Tape | DONE (by design) | Column-overlay filters — accepted V2 pattern (decision 2026-06-19) |
 | Duplicate | DONE (Vue extra) | Vue has `@duplicate=duplicateBatch`; **vanilla electrodes has NO duplicate** (0 «дублир» in `2-electrodes.js`). Vue over-implements — decide keep vs remove. |
 | Guided delete: delete-check + typed `DELETE BATCH <id>` | DONE | Implemented 2026-06-19 (`utils/electrodeDelete.js` + `useDeleteCheck` checkUrl override + `TypedDeleteConfirm`): delete-check preflight → blockers OR typed «DELETE BATCH <id>» → DELETE; per-batch; auth-only (matches vanilla). Backend already enforced dependency blockers (now covered by a test). Project-based access = R1, deferred. |
+| Electrode № (number_in_batch) as default sort + click-sortable headers | DONE | Both frontends 2026-07-17; server now lists electrodes in № order; bulk paste commits in paste order so № matches the Excel sheet |
+| Electrode bulk delete (checkboxes → one confirm listing №s) | DONE (Vue extra) | ElectrodeBatchPanel 2026-07-17; guard-refused rows reported per-row in one toast |
+| «Стаканчик №» (cup_number) | RETIRED | Removed from ALL UI both frontends 2026-07-17 (nobody records it; comments field covers it); DB column deprecated in place per forward-only policy |
 
 ### Batteries — `public/workflow/3-batteries.html` + `3-batteries.js` → `pages/AssemblyPage.vue` (+ `useBatteryState`, `BatteryElectrochemEditor`)
 
@@ -87,6 +91,10 @@ in-progress replacement.
 | Guided delete (delete-check, hard blockers, typed `DELETE BATTERY`, electrode disposition) | DONE | implemented 2026-06-16 (`utils/batteryDelete.js` + `TypedDeleteConfirm`); verified in-app |
 | Duplicate (client-side draft) | DONE | `duplicateBattery` |
 | Print report (`battery-print.html`) | DONE | `openBatteryPrint` + `PrintPreviewDialog` |
+| Multi-source electrode rows per role (pouch/prism/cyl) | DONE | ElectrodeSourcesEditor 2026-07-17: depleted-tape marking « — списана», shape-compat + sibling-dedup filtering, batch→tape backfill, «— сначала выберите форм-фактор —» hint; saves via ARRAY mode of the electrode-sources PATCH (closed the legacy flat-key data-loss path) |
+| Stack picker: № column + sortable headers | DONE | number_in_batch shown in vanilla pickers/stack summary/battery print 2026-07-17 (data now in assembly payload) |
+| Coin layout wording «Схема расположения сепаратора и электролита» (E-S-E/E-S/S-E) | DONE | verbatim from vanilla 2026-07-17; stray «Схема укладки» duplicate field removed (silently nulled coin_layout) |
+| Capacity wording «расч. (по факт. массам)» / «по рецепту» | DONE | ported from vanilla rework 2026-07-17 incl. tooltips |
 | Modules link / membership | N/A | Modules subsystem out of scope (decision 2026-06-19) |
 
 ---
