@@ -5,8 +5,9 @@
  * Replaces the legacy ElectrodeFormPage (route /electrodes/:id), folding
  * its three legitimate sections into one inline panel mounted below the
  * constructor:
- *   1. Электроды — list of electrodes in the batch (mass / cup /
- *      comments / include_in_capacity_average / status / scrap+delete)
+ *   1. Электроды — list of electrodes in the batch (mass / comments /
+ *      include_in_capacity_average / status / scrap+delete, with
+ *      checkbox multi-select + bulk delete)
  *   2. Масса фольги — foil mass rows
  *   3. Сводная ёмкость — capacity summary (read-only derived)
  *
@@ -86,6 +87,171 @@ const bulkPasteVisible = ref(false);
 let foilCounter = 0;
 let nextNewRowId = -1;               // local sentinel for new (unsaved) rows
 
+// ── Column sorting (local, display-only) ──
+// Default = № ascending, which matches the server order
+// (GET .../electrodes returns ORDER BY number_in_batch ASC). Unsaved
+// `_new` draft rows are always kept at the bottom in insertion order so
+// they stay visible/editable regardless of the active sort.
+const sortKey = ref('number');       // 'number' | 'mass' | 'status'
+const sortDir = ref('asc');          // 'asc' | 'desc'
+
+const SORT_ACCESSORS = {
+  number: (e) => e.number_in_batch,
+  mass:   (e) => e.electrode_mass_g,
+  status: (e) => e.status_code,
+};
+
+function toggleSort(key) {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortKey.value = key;
+    sortDir.value = 'asc';
+  }
+}
+
+const sortedElectrodes = computed(() => {
+  const saved = electrodes.value.filter((e) => !e._new);
+  const drafts = electrodes.value.filter((e) => e._new);
+  const acc = SORT_ACCESSORS[sortKey.value] || SORT_ACCESSORS.number;
+  const dir = sortDir.value === 'desc' ? -1 : 1;
+  saved.sort((a, b) => {
+    const va = acc(a);
+    const vb = acc(b);
+    // nulls always sink to the bottom regardless of direction
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (va < vb) return -1 * dir;
+    if (va > vb) return 1 * dir;
+    return 0;
+  });
+  return saved.concat(drafts);
+});
+
+// ── Checkbox multi-select + bulk delete ──
+// Owner-approved design (live-testing feedback 2026-07-17): leading
+// checkbox column on SAVED rows only (drafts are just removed locally),
+// header checkbox = select all visible, one confirm dialog listing the
+// electrode №s, then sequential per-row DELETEs (no bulk endpoint
+// exists on the backend — do not add one). Failures are skipped and
+// reported in ONE toast with the server error text.
+const selectedIds = ref([]);
+
+const savedElectrodes = computed(() => electrodes.value.filter((e) => !e._new));
+
+const allVisibleSelected = computed(() =>
+  savedElectrodes.value.length > 0 &&
+  savedElectrodes.value.every((e) => selectedIds.value.includes(e.electrode_id)),
+);
+
+function isSelected(e) {
+  return selectedIds.value.includes(e.electrode_id);
+}
+
+function toggleSelected(e, checked) {
+  if (checked) {
+    if (!selectedIds.value.includes(e.electrode_id)) {
+      selectedIds.value = [...selectedIds.value, e.electrode_id];
+    }
+  } else {
+    selectedIds.value = selectedIds.value.filter((id) => id !== e.electrode_id);
+  }
+}
+
+function toggleSelectAll(checked) {
+  selectedIds.value = checked
+    ? savedElectrodes.value.map((e) => e.electrode_id)
+    : [];
+}
+
+// Russian plural helper: 1 электрод / 2 электрода / 5 электродов.
+function ruPlural(n, one, few, many) {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+// Compress a №-list for the confirm message: [3,7,12,13,14] → «3, 7, 12–14».
+// Runs of ≥3 consecutive numbers collapse to an en-dash range.
+function formatNumberRanges(nums) {
+  const sorted = [...nums].sort((a, b) => a - b);
+  const parts = [];
+  let start = null;
+  let prev = null;
+  const flush = () => {
+    if (start === null) return;
+    if (prev - start >= 2) parts.push(`${start}–${prev}`);
+    else if (prev - start === 1) parts.push(String(start), String(prev));
+    else parts.push(String(start));
+  };
+  for (const n of sorted) {
+    if (start === null) { start = prev = n; continue; }
+    if (n === prev + 1) { prev = n; continue; }
+    flush();
+    start = prev = n;
+  }
+  flush();
+  return parts.join(', ');
+}
+
+function bulkDeleteSelected() {
+  const targets = savedElectrodes.value.filter((e) =>
+    selectedIds.value.includes(e.electrode_id),
+  );
+  if (!targets.length) return;
+
+  const nums = targets.map((e) => e.number_in_batch).filter((n) => n != null);
+  const numsLabel = nums.length ? ` (№ ${formatNumberRanges(nums)})` : '';
+  const n = targets.length;
+
+  confirm.require({
+    message: `Удалить ${n} ${ruPlural(n, 'электрод', 'электрода', 'электродов')}${numsLabel}? Действие необратимо.`,
+    header: 'Удаление электродов',
+    icon: 'pi pi-exclamation-triangle',
+    acceptLabel: 'Удалить',
+    rejectLabel: 'Отмена',
+    acceptProps: { severity: 'danger' },
+    accept: async () => {
+      startSave();
+      const failed = [];
+      try {
+        // Sequential on purpose: the per-row endpoint is the only one
+        // that exists, and hammering it in parallel would race the
+        // used-in-battery guard checks server-side.
+        for (const e of targets) {
+          try {
+            await api.delete(`/api/electrodes/${e.electrode_id}`);
+          } catch (err) {
+            const serverText =
+              err?.response?.data?.error || err?.message || 'ошибка';
+            const label = e.number_in_batch != null
+              ? `№ ${e.number_in_batch}`
+              : `#${e.electrode_id}`;
+            failed.push(`${label} (${serverText})`);
+          }
+        }
+        // ONE list reload after the whole sequence, not per row.
+        await loadElectrodes(props.batchId);
+        scheduleCapacityReload(props.batchId);
+        selectedIds.value = [];
+        if (failed.length) {
+          toast.add({
+            severity: 'warn',
+            summary: 'Удалены не все электроды',
+            detail: `Не удалены: ${failed.join('; ')}`,
+            life: 10000,
+          });
+        }
+      } finally {
+        endSave();
+      }
+    },
+  });
+}
+
 // ── Load all batch data ──
 async function load(batchId) {
   if (!batchId) {
@@ -114,6 +280,9 @@ async function loadElectrodes(batchId) {
       `/api/electrodes/electrode-cut-batches/${batchId}/electrodes`,
     );
     electrodes.value = data;
+    // Prune selection to rows that still exist after the reload.
+    const liveIds = new Set(data.map((e) => e.electrode_id));
+    selectedIds.value = selectedIds.value.filter((id) => liveIds.has(id));
   } catch (err) {
     toastApiError(toast, err, 'Ошибка загрузки электродов');
   }
@@ -165,8 +334,7 @@ async function updateElectrode(e, field, value) {
   startSave();
   try {
     // ?? null (not || null) to preserve numeric 0 — mass=0 is a valid
-    // calibration record, cup=0 means "stand zero" — legacy comment from
-    // ElectrodeFormPage.
+    // calibration record — legacy comment from ElectrodeFormPage.
     await api.put(`/api/electrodes/${e.electrode_id}`, { [field]: value ?? null });
     await loadElectrodes(props.batchId);
     scheduleCapacityReload(props.batchId);
@@ -204,9 +372,12 @@ async function confirmScrap() {
   }
 }
 
-function deleteElectrode(e, index) {
+function deleteElectrode(e) {
   if (e._new) {
-    electrodes.value.splice(index, 1);
+    // Look the row up by identity — the display index comes from the
+    // sorted view and doesn't match the underlying array position.
+    const i = electrodes.value.indexOf(e);
+    if (i !== -1) electrodes.value.splice(i, 1);
     return;
   }
   // PrimeVue ConfirmDialog (audit P2 #6) — replaces ugly window.confirm.
@@ -240,20 +411,20 @@ function appendElectrodeRow() {
     _new: true,
     _localId: nextNewRowId--,
     electrode_mass_g: null,
-    cup_number: null,
     comments: '',
     include_in_capacity_average: true,
   });
 }
 
-async function commitNewRow(e, index) {
+async function commitNewRow(e) {
   if (!e._new || !e.electrode_mass_g) return;
   startSave();
   try {
+    // cup_number deliberately NOT sent — UI removed 2026-07-17, DB
+    // column deprecated in place (forward-only migration policy).
     await api.post('/api/electrodes', {
       cut_batch_id: Number(props.batchId),
       electrode_mass_g: e.electrode_mass_g,
-      cup_number: e.cup_number ?? null,
       comments: e.comments || null,
     });
     await loadElectrodes(props.batchId);
@@ -304,18 +475,58 @@ async function saveFoilMassesNow() {
 }
 
 // ── Bulk paste handler ──
-function onBulkPasteApplied(rows) {
-  // Each row from ElectrodeBulkPasteDialog has { mass_g, cup_number, comments }.
-  // Append as `_new` so the user can adjust before they actually commit.
-  for (const r of rows) {
-    electrodes.value.push({
-      _new: true,
-      _localId: nextNewRowId--,
-      electrode_mass_g: r.mass_g,
-      cup_number: r.cup_number ?? null,
-      comments: r.comments || '',
-      include_in_capacity_average: true,
-    });
+// Each row from ElectrodeBulkPasteDialog has { mass_g, comments }.
+// (cup_number is no longer parsed or sent — deprecated 2026-07-17.)
+//
+// Rows are committed IMMEDIATELY and SEQUENTIALLY, in paste order. The
+// server assigns number_in_batch = MAX+1 per insert, so awaiting each
+// POST before the next guarantees № 1..N matches the pasted sheet.
+// (The old flow appended `_new` drafts that committed on @blur — blur
+// order ≠ paste order, so № got scrambled vs the source Excel sheet.)
+// Do NOT parallelize these POSTs.
+//
+// On a mid-sequence failure we stop, report which row failed, and keep
+// the failed + remaining rows as editable `_new` drafts so no pasted
+// data is lost. Manually added single rows keep the blur-commit flow.
+async function onBulkPasteApplied(rows) {
+  if (!rows.length || !props.batchId) return;
+  startSave();
+  let failedAt = -1;
+  try {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      try {
+        await api.post('/api/electrodes', {
+          cut_batch_id: Number(props.batchId),
+          electrode_mass_g: r.mass_g,
+          comments: r.comments || null,
+        });
+      } catch (err) {
+        failedAt = i;
+        toastApiError(
+          toast,
+          err,
+          `Вставка остановлена: строка ${i + 1} из ${rows.length} не сохранена. Остальные строки добавлены как черновики.`,
+        );
+        break;
+      }
+    }
+    // Refresh the list ONCE after the whole sequence (not per row).
+    await loadElectrodes(props.batchId);
+    scheduleCapacityReload(props.batchId);
+    if (failedAt !== -1) {
+      for (const r of rows.slice(failedAt)) {
+        electrodes.value.push({
+          _new: true,
+          _localId: nextNewRowId--,
+          electrode_mass_g: r.mass_g,
+          comments: r.comments || '',
+          include_in_capacity_average: true,
+        });
+      }
+    }
+  } finally {
+    endSave();
   }
 }
 
@@ -412,87 +623,119 @@ function fmtCap(val) {
         Нет электродов в партии. Добавьте строку или вставьте список из Excel.
       </div>
 
-      <table v-else class="ebp-table">
-        <thead>
-          <tr>
-            <th class="ebp-th-idx">#</th>
-            <th>№</th>
-            <th>Масса, г</th>
-            <th>Стаканчик №</th>
-            <th>Комментарии</th>
-            <th class="ebp-th-include" title="Включать в средние значения ёмкости партии">В среднем</th>
-            <th>Статус</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(e, idx) in electrodes" :key="e.electrode_id || `new-${e._localId}`">
-            <td class="ebp-td-idx">{{ idx + 1 }}</td>
-            <td>{{ e.number_in_batch ?? '' }}</td>
-            <td>
-              <InputNumber
-                v-model="e.electrode_mass_g"
-                :min="0"
-                :max-fraction-digits="4"
-                class="ebp-input"
-                @blur="e._new ? commitNewRow(e, idx) : updateElectrode(e, 'electrode_mass_g', e.electrode_mass_g)"
-              />
-            </td>
-            <td>
-              <InputNumber
-                v-model="e.cup_number"
-                :min="0"
-                :use-grouping="false"
-                class="ebp-input"
-                @blur="e._new ? null : updateElectrode(e, 'cup_number', e.cup_number)"
-              />
-            </td>
-            <td>
-              <InputText
-                v-model="e.comments"
-                class="ebp-input"
-                @blur="e._new ? null : updateElectrode(e, 'comments', e.comments)"
-              />
-            </td>
-            <td class="ebp-td-include">
-              <Checkbox
-                v-if="!e._new && e.electrode_id"
-                :model-value="!!e.include_in_capacity_average"
-                :binary="true"
-                @update:model-value="(v) => updateElectrode(e, 'include_in_capacity_average', v)"
-              />
-            </td>
-            <td class="ebp-td-status">
-              <span v-if="e._new" class="badge badge-outline badge-2">новый</span>
-              <span v-else-if="e.status_code === 1" class="badge badge-4">Доступен</span>
-              <span v-else-if="e.status_code === 2" class="badge badge-6" :title="`Использован в батарее #${e.used_in_battery_id}`">В батарее {{ e.used_in_battery_id }}</span>
-              <span v-else-if="e.status_code === 3" class="badge badge-8" :title="`Причина: ${e.scrapped_reason || '—'}`">Списан</span>
-              <span v-else class="ebp-cell-empty">—</span>
-            </td>
-            <td class="ebp-td-actions">
-              <Button
-                v-if="!e._new && e.status_code === 1"
-                icon="pi pi-ban"
-                severity="warning"
-                text
-                rounded
-                size="small"
-                title="Списать"
-                @click="scrapElectrode(e)"
-              />
-              <Button
-                icon="pi pi-trash"
-                severity="danger"
-                text
-                rounded
-                size="small"
-                title="Удалить"
-                @click="deleteElectrode(e, idx)"
-              />
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <template v-else>
+        <!-- Compact bulk-action bar — appears only when ≥1 row checked. -->
+        <div v-if="selectedIds.length" class="ebp-bulkbar">
+          <span class="ebp-bulkbar-count">Выбрано: {{ selectedIds.length }}</span>
+          <Button
+            label="Удалить выбранные"
+            icon="pi pi-trash"
+            severity="danger"
+            size="small"
+            @click="bulkDeleteSelected"
+          />
+        </div>
+
+        <div class="ebp-table-scroll">
+          <table class="ebp-table ebp-table--electrodes">
+            <thead>
+              <tr>
+                <th class="ebp-th-select">
+                  <Checkbox
+                    class="ebp-select-all"
+                    :model-value="allVisibleSelected"
+                    :binary="true"
+                    :disabled="!savedElectrodes.length"
+                    title="Выбрать все"
+                    @update:model-value="toggleSelectAll"
+                  />
+                </th>
+                <th class="ebp-th-idx">#</th>
+                <th class="ebp-th-num ebp-th-sort" data-sort-key="number" title="Сортировать" @click="toggleSort('number')">
+                  №<span v-if="sortKey === 'number'" class="ebp-sort-ind">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+                </th>
+                <th class="ebp-th-mass ebp-th-sort" data-sort-key="mass" title="Сортировать" @click="toggleSort('mass')">
+                  Масса, г<span v-if="sortKey === 'mass'" class="ebp-sort-ind">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+                </th>
+                <th>Комментарии</th>
+                <th class="ebp-th-include" title="Включать в средние значения ёмкости партии">В среднем</th>
+                <th class="ebp-th-status ebp-th-sort" data-sort-key="status" title="Сортировать" @click="toggleSort('status')">
+                  Статус<span v-if="sortKey === 'status'" class="ebp-sort-ind">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+                </th>
+                <th class="ebp-th-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(e, idx) in sortedElectrodes" :key="e.electrode_id || `new-${e._localId}`">
+                <td class="ebp-td-select">
+                  <Checkbox
+                    v-if="!e._new && e.electrode_id"
+                    class="ebp-select-cb"
+                    :model-value="isSelected(e)"
+                    :binary="true"
+                    @update:model-value="(v) => toggleSelected(e, v)"
+                  />
+                </td>
+                <td class="ebp-td-idx">{{ idx + 1 }}</td>
+                <td class="ebp-td-num">{{ e.number_in_batch ?? '' }}</td>
+                <td class="ebp-td-mass">
+                  <InputNumber
+                    v-model="e.electrode_mass_g"
+                    :min="0"
+                    :max-fraction-digits="4"
+                    class="ebp-input"
+                    @blur="e._new ? commitNewRow(e) : updateElectrode(e, 'electrode_mass_g', e.electrode_mass_g)"
+                  />
+                </td>
+                <td>
+                  <InputText
+                    v-model="e.comments"
+                    class="ebp-input"
+                    @blur="e._new ? null : updateElectrode(e, 'comments', e.comments)"
+                  />
+                </td>
+                <td class="ebp-td-include">
+                  <Checkbox
+                    v-if="!e._new && e.electrode_id"
+                    class="ebp-include-cb"
+                    :model-value="!!e.include_in_capacity_average"
+                    :binary="true"
+                    @update:model-value="(v) => updateElectrode(e, 'include_in_capacity_average', v)"
+                  />
+                </td>
+                <td class="ebp-td-status">
+                  <span v-if="e._new" class="badge badge-outline badge-2">новый</span>
+                  <span v-else-if="e.status_code === 1" class="badge badge-4">Доступен</span>
+                  <span v-else-if="e.status_code === 2" class="badge badge-6" :title="`Использован в батарее #${e.used_in_battery_id}`">В батарее {{ e.used_in_battery_id }}</span>
+                  <span v-else-if="e.status_code === 3" class="badge badge-8" :title="`Причина: ${e.scrapped_reason || '—'}`">Списан</span>
+                  <span v-else class="ebp-cell-empty">—</span>
+                </td>
+                <td class="ebp-td-actions">
+                  <Button
+                    v-if="!e._new && e.status_code === 1"
+                    icon="pi pi-ban"
+                    severity="warning"
+                    text
+                    rounded
+                    size="small"
+                    title="Списать"
+                    @click="scrapElectrode(e)"
+                  />
+                  <Button
+                    icon="pi pi-trash"
+                    severity="danger"
+                    text
+                    rounded
+                    size="small"
+                    title="Удалить"
+                    @click="deleteElectrode(e)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
     </CollapsibleSection>
 
     <!-- ────── Масса фольги ────── -->
@@ -544,7 +787,7 @@ function fmtCap(val) {
 
     <ElectrodeBulkPasteDialog
       v-model:visible="bulkPasteVisible"
-      @apply="onBulkPasteApplied"
+      @applied="onBulkPasteApplied"
     />
 
     <!-- Scrap-reason dialog — replaces window.prompt with a DS-styled
@@ -714,18 +957,51 @@ function fmtCap(val) {
   color: #6B7280;
   padding: 8px 4px;
 }
+/* Bulk-action bar — compact strip between the toolbar and the table,
+   rendered only while ≥1 saved row is checked. */
+.ebp-bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 10px;
+  margin: 0 0 8px;
+  background: rgba(229, 57, 53, 0.06);
+  border: 1px solid rgba(229, 57, 53, 0.22);
+  border-radius: 8px;
+}
+.ebp-bulkbar-count {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #003274;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Table — mirrors CrudTable header/row visuals so the EBP reads as
-   the same component family. Header bg/colour, body hover, vertical
-   row separators all match `.ct-table-card :deep(.p-datatable-*)`
-   in CrudTable.vue. The hand-rolled table can't reuse the PrimeVue
-   DataTable wholesale (per-row editable cells with bespoke save flow),
-   so we hand-match the visual rhythm. */
+   the same component family. The hand-rolled table can't reuse the
+   PrimeVue DataTable wholesale (per-row editable cells with bespoke
+   save flow), so we hand-match the visual rhythm.
+
+   Layout robustness (owner bug 2026-07-17, inputs bleeding across
+   columns): the root cause was `table-layout: fixed` + fixed px column
+   widths while only the OUTER `.ebp-input` wrapper got width:100% —
+   the inner PrimeVue `<input>` kept its intrinsic ~170px width and
+   overflowed the 100–110px cells under the neighbouring column. Fix:
+   (a) force the inner input to 100% of its cell, and (b) give the
+   table a min-width inside an overflow-x wrapper so narrow viewports
+   scroll horizontally instead of crushing the columns. */
+.ebp-table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
 .ebp-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
   table-layout: fixed;
 }
+/* Below this width the wrapper scrolls; columns never collapse under
+   their inputs. */
+.ebp-table--electrodes { min-width: 640px; }
 .ebp-table thead th {
   text-align: left;
   font-size: 13px;
@@ -735,39 +1011,65 @@ function fmtCap(val) {
   background: rgba(0, 50, 116, 0.12);
   padding: 8px 10px;
   border-bottom: 1px solid rgba(0, 50, 116, 0.18);
-  border-right: 1px solid rgba(0, 50, 116, 0.15);
   white-space: nowrap;
 }
-.ebp-table thead th:last-child { border-right: none; }
+/* Click-sortable headers — pointer + hover tint; the ▲/▼ indicator is
+   rendered inline on the active column only. */
+.ebp-th-sort {
+  cursor: pointer;
+  user-select: none;
+}
+.ebp-th-sort:hover {
+  background: rgba(0, 50, 116, 0.18);
+}
+.ebp-sort-ind {
+  font-size: 9px;
+  margin-left: 4px;
+  color: rgba(0, 50, 116, 0.70);
+}
+/* Zebra striping (project convention for scrollable lists) — no
+   per-cell grid lines: vertical borders shimmer while scrolling. */
 .ebp-table tbody tr {
   background: transparent;
-  border-bottom: 1px solid rgba(180, 210, 255, 0.18);
   transition: background 0.12s;
 }
-.ebp-table tbody tr:hover {
-  background: rgba(0, 50, 116, 0.04);
+.ebp-table tbody tr:nth-child(even) {
+  background: rgba(0, 50, 116, 0.045);
 }
-.ebp-table tbody tr:last-child {
-  border-bottom: none;
+.ebp-table tbody tr:hover {
+  background: rgba(0, 50, 116, 0.08);
 }
 .ebp-table tbody td {
   padding: 6px 10px;
-  border-right: 1px solid rgba(0, 50, 116, 0.08);
   vertical-align: middle;
 }
-.ebp-table tbody td:last-child {
-  border-right: none;
-}
 
+/* Column sizing via explicit classes (was brittle nth-child rules).
+   Комментарии has no width class and absorbs the remaining space. */
+.ebp-th-select, .ebp-td-select {
+  width: 36px;
+  text-align: center;
+}
 .ebp-th-idx, .ebp-td-idx {
   width: 44px;
   text-align: center;
   color: #6B7280;
   font-variant-numeric: tabular-nums;
 }
+.ebp-th-num, .ebp-td-num {
+  width: 52px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ebp-th-mass, .ebp-td-mass {
+  width: 110px;
+}
 .ebp-th-include, .ebp-td-include {
   width: 78px;
   text-align: center;
+}
+.ebp-th-status, .ebp-td-status {
+  width: 130px;
 }
 .ebp-td-status {
   font-size: 12px;
@@ -779,33 +1081,20 @@ function fmtCap(val) {
   text-align: right;
   white-space: nowrap;
 }
-/* Column widths for the electrodes table (8 cols). Foil table has its
-   own simpler 3-col layout via .ebp-table--foil + max-width below. */
-.ebp-table:not(.ebp-table--foil) thead th:nth-child(2),
-.ebp-table:not(.ebp-table--foil) tbody td:nth-child(2) {
-  width: 52px;   /* № (number_in_batch) */
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-.ebp-table:not(.ebp-table--foil) thead th:nth-child(3),
-.ebp-table:not(.ebp-table--foil) tbody td:nth-child(3) {
-  width: 110px;  /* Масса, г */
-}
-.ebp-table:not(.ebp-table--foil) thead th:nth-child(4),
-.ebp-table:not(.ebp-table--foil) tbody td:nth-child(4) {
-  width: 100px;  /* Стаканчик № */
-}
-/* Col 5 (Комментарии) takes remaining space — no explicit width. */
-.ebp-table:not(.ebp-table--foil) thead th:nth-child(7),
-.ebp-table:not(.ebp-table--foil) tbody td:nth-child(7) {
-  width: 130px;  /* Статус — accommodates the badge */
-}
 .ebp-cell-empty {
   color: rgba(0, 50, 116, 0.30);
 }
 .ebp-input {
   width: 100%;
-  min-width: 60px;
+}
+/* Constrain the INNER input too — the wrapper alone doesn't stop an
+   <input>'s intrinsic width from overflowing a fixed-layout cell. */
+.ebp-input :deep(input),
+.ebp-input :deep(.p-inputtext) {
+  width: 100% !important;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .ebp-input :deep(.p-inputtext) {
   height: 30px !important;

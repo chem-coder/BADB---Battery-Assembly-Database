@@ -1,7 +1,7 @@
 # Feature Backlog
 
 Created: 2026-05-06
-Edited: 2026-05-15
+Edited: 2026-07-17
 Status: future idea
 Verified against current docs/code: cleanup pass 2026-05-09
 
@@ -94,3 +94,46 @@ UI consistency and remaining reference-page report/list-print ideas live in:
 
 - `docs/future/ui_and_reports_next.md`
 - `docs/future/vanilla_reference_page_upgrade.md`
+
+## Leftovers From The 2026 Inbox Notes (added 2026-07-17)
+
+Everything else in `docs/archive/inbox/BADB_notes.txt` and
+`frontend_notes.txt` was verified implemented (or already stale) on
+2026-07-17; the source txt files can be deleted. What survives them:
+
+### Vilitek planar centrifugal mixer (V-ITT-300s) automation
+
+The mixer itself is being added on `dalia/vilitek-mixer`. Still open, and
+blocked on a discussion with Dalia before any implementation:
+
+- auto-select the Vilitek instead of the magnetic stirrer as the default
+  for small mixes — Dalia must define "small" (she has used it for 10–15 g
+  of active material) and any other conditions;
+- suggest the number/size of agate balls from the amount of active
+  material and/or total mixture volume or mass. Available ball diameters:
+  0.25 / 0.5 / 0.75 / 1.0 cm (confirmed by Dalia 2026-07-17). Known lab
+  data points: 10× 0.5 cm + 3× 1.0 cm in one run; 5× 0.75 cm in another.
+  Needs more lab data or a literature pass before it can be a real model;
+- available cup sizes: 30 mL, 100 mL, and 375 mL (confirmed by Dalia
+  2026-07-17). Only the small sizes have been used so far; the 375 mL cup
+  is unused — keep in mind for volume limits and for the auto-select rule.
+
+### Vue list-selection presentation
+
+CrudTable got a «Выбрано: N — показать» lens (narrow the table to selected
+rows) as the answer to the "selected tapes jump to top?" note. Dalia has
+not yet confirmed this is the behavior she wants — if not, the alternative
+is pinning selected rows to the top of the list.
+
+### Org-structure parity in Vue (F2/F3)
+
+- F2: Users page — «Проекты» fieldset parity with vanilla;
+- F3: Departments page — members list parity with vanilla.
+
+### Direction statement (context for all of the above)
+
+Vanilla is the source of truth: it encodes the lab's real processes.
+The Vue frontend must first reach parity with vanilla; only after that
+does the app itself evolve to match the team's needs (Dalia's stated
+sequencing, 2026-07-17 — preserved here because the original note file
+is being deleted).

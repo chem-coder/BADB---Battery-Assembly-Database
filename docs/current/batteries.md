@@ -1,7 +1,7 @@
 # Batteries
 
 Created: 2026-05-06
-Edited: 2026-06-10
+Edited: 2026-07-17
 Status: current
 Verified against code: 2026-06-10
 
@@ -216,8 +216,20 @@ Current high-level behavior:
 - when a source row is saved with a cut batch but no tape id, the backend derives
   the tape from `electrode_cut_batches` and still validates that the batch is
   compatible with the battery configuration;
-- stack picker and selected-stack rows show electrode id, mass, and calculated
-  per-electrode capacity;
+- batch selects on a new battery show `— сначала выберите форм-фактор —`
+  until a form factor is chosen (the compatibility filter needs the shape);
+- stack picker and selected-stack rows show `№` (`number_in_batch`, the
+  per-batch Excel row number), electrode id, mass, and calculated
+  per-electrode capacity; picker tables default to `№` ascending and their
+  `№` / id / mass headers are click-sortable (▲/▼ toggles direction); the
+  selected-stack summary keeps physical position order;
+- the Vue assembly page has the same multi-source model since 2026-07-17:
+  N source rows per role (pouch/prism/cylindrical), depleted-tape marking
+  (` — списана`, sorted last), shape-compatibility and sibling-duplicate
+  filtering, batch→tape backfill; it saves through the array mode of
+  `PATCH /api/batteries/battery_electrode_sources/:id` — the legacy flat
+  keys are gone from the Vue client because they collapsed a role's rows
+  to one (silent data loss);
 - for pouch/prism/cylindrical batteries, the user enters cathode count and
   chooses whether anodes equal cathodes or use one extra anode; the anode count
   is calculated by the page;

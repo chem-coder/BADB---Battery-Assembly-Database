@@ -23,6 +23,20 @@
         width: 32px;
       }
 
+      #electrodes-table th[data-sort-key] {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+      }
+
+      #electrodes-table th[data-sort-key] .sort-arrow {
+        display: inline-block;
+        min-width: 1em;
+        margin-left: 3px;
+        font-size: 0.85em;
+        color: #5e6572;
+      }
+
       .electrode-capacity-summary {
         margin-top: 10px;
         padding: 12px 14px;
@@ -338,8 +352,8 @@
                     <thead>
                       <tr>
                         <th class="row-index"></th>
-                        <th data-col="number">№</th>
-                        <th>Масса, г</th>
+                        <th data-col="number" data-sort-key="number" title="Номер электрода в партии (как в Excel). Нажмите для сортировки">№</th>
+                        <th data-sort-key="mass" title="Нажмите для сортировки">Масса, г</th>
                         <th data-col="include_capacity">В расчёт</th>
                         <th data-col="coating_mass">Масса покрытия, г</th>
                         <th data-col="active_mass_theoretical">Масса активн. мат. (теор.), г</th>
@@ -349,9 +363,8 @@
                         <th data-col="areal_capacity_theoretical">Ёмкость (теор.), мАч/см²</th>
                         <th data-col="areal_capacity_actual">Ёмкость (по факт. массе), мАч/см²</th>
                         <th data-col="capacity_per_side_actual">Ёмкость 1 стороны, мАч/см²</th>
-                        <th data-col="cup">Стаканчик №</th>
                         <th data-col="comments">Комментарии</th>
-                        <th data-col="status">Статус</th>
+                        <th data-col="status" data-sort-key="status" title="Нажмите для сортировки">Статус</th>
                         <th></th>
                       </tr>
                     </thead>

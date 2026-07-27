@@ -101,7 +101,8 @@
           savedSectionSnapshots: {},
           dirtySections: {},
           tableColumnVisibility: getDefaultElectrodeTableColumnVisibility(),
-          filtersBeforeWorkspace: null
+          filtersBeforeWorkspace: null,
+          electrodeSort: { key: 'number', dir: 'asc' }
         }
       };
     }
@@ -118,7 +119,6 @@
         areal_capacity_theoretical: false,
         areal_capacity_actual: false,
         capacity_per_side_actual: false,
-        cup: false,
         comments: true,
         status: true
       };
@@ -438,7 +438,6 @@
         .filter(row => !row.dataset.electrodeId)
         .map(row => ({
           electrode_mass_g: row.dataset.mass || null,
-          cup_number: row.dataset.cup || null,
           comments: row.dataset.comments || null
         }));
     }
@@ -845,7 +844,6 @@
       { key: 'areal_capacity_theoretical', label: 'Ёмкость (теор.), мАч/см²' },
       { key: 'areal_capacity_actual', label: 'Ёмкость (по факт. массе), мАч/см²' },
       { key: 'capacity_per_side_actual', label: 'Ёмкость 1 стороны, мАч/см²' },
-      { key: 'cup', label: 'Стаканчик №' },
       { key: 'comments', label: 'Комментарии' },
       { key: 'status', label: 'Статус' }
     ];
@@ -2073,12 +2071,100 @@
       
     }
     
+    /* ---------- saved electrodes list sorting ---------- */
+
+    const ELECTRODE_SORT_DEFAULT_DIRECTIONS = {
+      number: 'asc',
+      mass: 'desc',
+      status: 'asc'
+    };
+
+    function getElectrodeSortState() {
+      return state.ui.electrodeSort || { key: 'number', dir: 'asc' };
+    }
+
+    function getElectrodeSortValue(e, key) {
+      if (key === 'mass') return Number(e.electrode_mass_g);
+      if (key === 'status') return Number(e.status_code);
+      return Number(e.number_in_batch);
+    }
+
+    function sortElectrodesForDisplay(electrodes) {
+      const { key, dir } = getElectrodeSortState();
+      const mult = dir === 'desc' ? -1 : 1;
+
+      return [...electrodes].sort((a, b) => {
+        const aValue = getElectrodeSortValue(a, key);
+        const bValue = getElectrodeSortValue(b, key);
+        const aMissing = !Number.isFinite(aValue);
+        const bMissing = !Number.isFinite(bValue);
+
+        // Rows without a value always sink to the bottom, regardless of direction.
+        if (!aMissing || !bMissing) {
+          if (aMissing) return 1;
+          if (bMissing) return -1;
+          if (aValue !== bValue) return (aValue - bValue) * mult;
+        }
+
+        const aNumber = Number(a.number_in_batch);
+        const bNumber = Number(b.number_in_batch);
+        if (Number.isFinite(aNumber) && Number.isFinite(bNumber) && aNumber !== bNumber) {
+          return aNumber - bNumber;
+        }
+
+        return Number(a.electrode_id) - Number(b.electrode_id);
+      });
+    }
+
+    function handleElectrodeSortHeaderClick(key) {
+      if (!key) return;
+
+      const current = getElectrodeSortState();
+      const dir = current.key === key
+        ? (current.dir === 'asc' ? 'desc' : 'asc')
+        : (ELECTRODE_SORT_DEFAULT_DIRECTIONS[key] || 'asc');
+
+      state.ui.electrodeSort = { key, dir };
+      renderElectrodeTableFromState();
+    }
+
+    function initElectrodeSortableHeaders() {
+      document.querySelectorAll('#electrodes-table thead th[data-sort-key]').forEach((th) => {
+        if (th.dataset.sortBound === 'true') return;
+        th.dataset.sortBound = 'true';
+
+        const arrow = document.createElement('span');
+        arrow.className = 'sort-arrow';
+        arrow.setAttribute('aria-hidden', 'true');
+        th.appendChild(arrow);
+
+        th.addEventListener('click', () => {
+          handleElectrodeSortHeaderClick(th.dataset.sortKey);
+        });
+      });
+    }
+
+    function updateElectrodeSortIndicators() {
+      const { key, dir } = getElectrodeSortState();
+
+      document.querySelectorAll('#electrodes-table thead th[data-sort-key]').forEach((th) => {
+        const isActive = th.dataset.sortKey === key;
+        const arrow = th.querySelector('.sort-arrow');
+
+        if (arrow) {
+          arrow.textContent = isActive ? (dir === 'desc' ? '▼' : '▲') : '';
+        }
+
+        th.setAttribute('aria-sort', isActive ? (dir === 'desc' ? 'descending' : 'ascending') : 'none');
+      });
+    }
+
     function renderElectrodes(electrodes) {
-      
+
       const body = document.getElementById('electrodes-body');
       body.innerHTML = '';
-      
-      electrodes.forEach((e, index) => {
+
+      sortElectrodesForDisplay(electrodes).forEach((e, index) => {
         
         const tr = document.createElement('tr');
         
@@ -2166,22 +2252,8 @@
         capacityPerSideActualCell.dataset.col = 'capacity_per_side_actual';
         capacityPerSideActualCell.textContent = formatDerivedNumber(e.capacity_per_side_actual_mAh_cm2, 3);
         
-        const cupCell = document.createElement('td');
-        cupCell.dataset.col = 'cup';
-        const cupInput = document.createElement('input');
-        cupInput.type = 'number';
-        cupInput.step = '1';
-        cupInput.min = '0';
-        cupInput.className = 'electrode-cup';
-        cupInput.value = e.cup_number ?? '';
-        cupInput.addEventListener('change', async () => {
-          await updateElectrode(e.electrode_id, {
-            cup_number: cupInput.value || null
-          });
-          await loadElectrodes(state.selection.currentCutBatchId);
-        });
-        cupCell.appendChild(cupInput);
-        
+        /* cup_number column removed from UI 2026-07-17 — the DB column
+           stays (forward-only policy), it is just no longer shown/sent. */
         const commentCell = document.createElement('td');
         commentCell.dataset.col = 'comments';
         const commentInput = document.createElement('input');
@@ -2261,19 +2333,19 @@
         tr.appendChild(arealCapacityTheoreticalCell);
         tr.appendChild(arealCapacityActualCell);
         tr.appendChild(capacityPerSideActualCell);
-        tr.appendChild(cupCell);
         tr.appendChild(commentCell);
         tr.appendChild(statusCell);
         tr.appendChild(actionCell);
-        
+
         body.appendChild(tr);
-        
+
       });
 
+      updateElectrodeSortIndicators();
       applyElectrodeColumnVisibility();
-      
+
     }
-    
+
     function renderStatus(e) {
       
       if (e.status_code === 1) {
@@ -2804,7 +2876,6 @@
       tr.appendChild(indexCell);
       
       tr.dataset.mass = data.electrode_mass_g || '';
-      tr.dataset.cup = data.cup_number || '';
       tr.dataset.comments = data.comments || '';
       
       const numTd = document.createElement('td');
@@ -2873,24 +2944,7 @@
       capacityPerSideActualTd.dataset.col = 'capacity_per_side_actual';
       capacityPerSideActualTd.textContent = '—';
       
-      const cupTd = document.createElement('td');
-      cupTd.dataset.col = 'cup';
-      const cupInput = document.createElement('input');
-      cupInput.type = 'number';
-      cupInput.step = '1';
-      cupInput.min = '0';
-      cupInput.className = 'electrode-cup';
-      if (data.cup_number) {
-        cupInput.value = data.cup_number;
-      }
-      
-      cupTd.appendChild(cupInput);
-      cupInput.addEventListener('input', () => {
-        tr.dataset.cup = cupInput.value;
-        syncElectrodeDraftStateFromDom();
-      });
-      cupInput.addEventListener('change', refreshElectrodeDraftDirtyStateFromDom);
-      
+      /* cup_number entry removed from UI 2026-07-17 — use comments instead. */
       const commentTd = document.createElement('td');
       commentTd.dataset.col = 'comments';
       const commentInput = document.createElement('input');
@@ -2930,7 +2984,6 @@
       tr.appendChild(arealCapacityTheoreticalTd);
       tr.appendChild(arealCapacityActualTd);
       tr.appendChild(capacityPerSideActualTd);
-      tr.appendChild(cupTd);
       tr.appendChild(commentTd);
       tr.appendChild(statusTd);
       tr.appendChild(actionTd);
@@ -3298,7 +3351,6 @@
           body: JSON.stringify({
             cut_batch_id: state.selection.currentCutBatchId,
             electrode_mass_g: mass,
-            cup_number: row.cup_number || null,
             comments: row.comments || null
           })
         });
@@ -3461,6 +3513,7 @@
     
     async function initElectrodePage() {
       installElectrodeDebugInspector();
+      initElectrodeSortableHeaders();
       setAllCutBatches([]);
       renderElectrodePage();
       await loadProjects();

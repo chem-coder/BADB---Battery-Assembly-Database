@@ -1,7 +1,7 @@
 # Run BADB Locally
 
 Created: 2026-05-06
-Edited: 2026-05-25
+Edited: 2026-07-17
 Status: instruction
 Verified against code: 2026-05-25
 Source paths: `package.json`, `server.js`, `app.js`, `config/index.js`, `db/pool.js`, `middleware/auth.js`, `client-web/package.json`, `client-web/vite.config.js`, `migrations/README.md`
@@ -80,6 +80,33 @@ http://localhost:5173
 The Vue dev server proxies `/api`, `/workflow`, `/css`, `/js`, and `/uploads` to the backend on port `3003`.
 
 Do not run `npm start` in one terminal and `npm run dev` in another unless you also change ports. `npm run dev` already starts the backend on `3003`, so running both normally creates a port conflict.
+
+### 2026-07-17 change: backend port pinned in dev scripts (Windows note)
+
+The `dev` and `dev:bypass` scripts in `package.json` now start the backend as
+`PORT=3003 nodemon server.js` instead of plain `nodemon server.js`.
+
+Why: Claude Code's browser preview injects `PORT=5173` (the Vite port) into
+the environment of whatever it launches. Without the pin, Express read that
+variable, bound Vite's port instead of `3003`, and every `/api` call failed
+with 502. Pinning `PORT=3003` is harmless everywhere else because `3003` is
+already the default in `config/index.js`.
+
+**Windows/lab install:** the `VAR=value` prefix is POSIX shell syntax and does
+not work in cmd.exe or PowerShell — so `npm run dev` and `npm run dev:bypass`
+will fail on Windows as written. This does not affect the lab machine's normal
+path, which is the production build served by Express:
+
+```powershell
+npm run build:web
+npm start
+```
+
+`npm start` (`node server.js`) has no env prefix and is unchanged. If you ever
+do need the Vite dev server on Windows, run the two halves in separate
+terminals (`node server.js` and `npm run dev --prefix client-web`) or use
+Git Bash/WSL. Never set `AUTH_BYPASS` on the lab machine — production startup
+refuses it (`server.js`), and the lab must use real logins.
 
 ## Development Auth Bypass
 

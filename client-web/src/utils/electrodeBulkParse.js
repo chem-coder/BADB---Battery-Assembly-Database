@@ -3,31 +3,37 @@
  *
  * Accepts text pasted from Excel/Google Sheets/CSV (tab- or comma-separated)
  * and returns an array of electrode-row candidates. Each candidate has at
- * least `mass_g` plus optional `cup_number` and `comments`.
+ * least `mass_g` plus optional `comments`.
  *
  * Column detection rules (in priority order):
  *   1. If the first line is a header row with recognised keywords
- *      ("масса", "mass", "стакан", "cup", "коммент", "comment"), use it
- *      to map columns.
+ *      ("масса", "mass", "коммент", "comment"), use it to map columns.
+ *      A "стакан"/"cup" header column is still RECOGNISED but its values
+ *      are discarded: cup numbers were removed from the UI on 2026-07-17
+ *      (nobody records them; the comments field suffices), so old sheets
+ *      that still carry a cup column are ignored gracefully instead of
+ *      erroring or polluting comments.
  *   2. Otherwise, fall back to positional defaults:
  *        1 column  → [mass]
- *        2 columns → [mass, cup]
- *        3+ cols   → [mass, cup, comments] (extra columns joined into
- *                    comments with " | " separators)
+ *        2 columns → [mass, comments]
+ *        3+ cols   → [mass, comments, …] (extra columns joined into
+ *                    comments with " | " separators so nothing is
+ *                    silently dropped)
  *
  * Cells are trimmed; empty `mass` cells skip the whole row.
  * Russian decimal commas (1,23) and dots (1.23) both parse to Number.
  *
- * Output row shape: { mass_g: number, cup_number: number|null, comments: string }
+ * Output row shape: { mass_g: number, comments: string }
  */
 
 const HEADER_PATTERNS = {
   mass: /(масса|вес|mass|weight)/i,
+  // Recognised only to EXCLUDE the column from output (deprecated field).
   cup: /(стакан|cup)/i,
   comments: /(коммент|comment|примеч|note)/i,
 };
 
-const FIELD_ORDER_FALLBACK = ['mass', 'cup', 'comments'];
+const FIELD_ORDER_FALLBACK = ['mass', 'comments'];
 
 function splitLine(line) {
   // Tab-first, then comma. Excel paste is always tab-separated.
@@ -92,7 +98,10 @@ export function parseBulkPaste(text) {
   const startLine = headerMap ? 1 : 0;
   const colMap = headerMap || buildPositionalMap(firstCells.length);
 
-  const columnsDetected = Object.keys(colMap);
+  // A mapped cup column is deliberately not surfaced: it exists in the
+  // map only so its cells are claimed (and skipped) rather than parsed
+  // as something else.
+  const columnsDetected = Object.keys(colMap).filter((f) => f !== 'cup');
   const rows = [];
   let skippedLines = 0;
 
@@ -104,8 +113,6 @@ export function parseBulkPaste(text) {
       skippedLines += 1;
       continue;
     }
-    const cupRaw = colMap.cup != null ? cells[colMap.cup] : null;
-    const cup_number = parseNumberLoose(cupRaw);
 
     let comments = '';
     if (colMap.comments != null && cells[colMap.comments]) {
@@ -118,7 +125,7 @@ export function parseBulkPaste(text) {
       comments = comments ? `${comments} | ${extra}` : extra;
     }
 
-    rows.push({ mass_g, cup_number, comments });
+    rows.push({ mass_g, comments });
   }
 
   return { rows, columnsDetected, skippedLines };

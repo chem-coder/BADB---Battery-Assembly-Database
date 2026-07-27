@@ -298,7 +298,11 @@ const state = {
     duplicateSourceBatteryId: null,
     duplicateCopiedAssembly: false,
     sectionState: {},
-    deleteFlow: getDefaultBatteryDeleteFlowState()
+    deleteFlow: getDefaultBatteryDeleteFlowState(),
+    stackSort: {
+      cathode: { key: 'number', dir: 'asc' },
+      anode: { key: 'number', dir: 'asc' }
+    }
   },
   snapshots: {
     savedSectionStates: {}
@@ -2815,7 +2819,12 @@ function renderBatchOptionsForSelect(select, role, row) {
   const oppositeRole = role === 'cathode' ? 'anode' : 'cathode';
   const siblingSelectedBatchIds = getSiblingSelectedSourceBatchIds(role, row);
 
-  select.innerHTML = '<option value="">— выбрать партию —</option>';
+  // Without a form factor the compatibility filter has no expected shape and
+  // the list is legitimately empty — say why instead of showing a bare select.
+  const placeholder = !state.selection.currentBatteryId && !getExpectedBatteryBatchShape() && !selectedBatchId
+    ? '— сначала выберите форм-фактор —'
+    : '— выбрать партию —';
+  select.innerHTML = `<option value="">${placeholder}</option>`;
 
   sortElectrodeCutBatches(
     (row?.tape_id ? getRoleBatchReference(role) : getUnfilteredCompatibleBatchReference(role)).filter(batch => (
@@ -6286,36 +6295,151 @@ function renderStackTables() {
 }
 
 
+// -------- Stack picker sorting (shared by cathode/anode tables) --------
+
+const STACK_SORT_DEFAULT_DIRECTIONS = {
+  number: 'asc',
+  mass: 'desc',
+  id: 'asc'
+};
+
+function getStackSortState(role) {
+  return state.ui.stackSort?.[role] || { key: 'number', dir: 'asc' };
+}
+
+function getStackSortValue(electrode, key) {
+  if (key === 'mass') return Number(electrode.electrode_mass_g);
+  if (key === 'id') return Number(electrode.electrode_id);
+  return Number(electrode.number_in_batch);
+}
+
+function compareStackElectrodes(a, b, key, dir) {
+  const mult = dir === 'desc' ? -1 : 1;
+  const aValue = getStackSortValue(a, key);
+  const bValue = getStackSortValue(b, key);
+  const aMissing = !Number.isFinite(aValue);
+  const bMissing = !Number.isFinite(bValue);
+
+  // Rows without a value always sink to the bottom, regardless of direction.
+  if (aMissing && bMissing) return 0;
+  if (aMissing) return 1;
+  if (bMissing) return -1;
+  if (aValue !== bValue) return (aValue - bValue) * mult;
+
+  return Number(a.electrode_id) - Number(b.electrode_id);
+}
+
+function sortStackElectrodesForDisplay(electrodes, role) {
+  const { key, dir } = getStackSortState(role);
+  return [...electrodes].sort((a, b) => compareStackElectrodes(a, b, key, dir));
+}
+
+function getStackTableByRole(role) {
+  const body = document.getElementById(
+    role === 'cathode' ? 'stack_cathode_table_body' : 'stack_anode_table_body'
+  );
+  return body ? body.closest('table') : null;
+}
+
+function handleStackSortHeaderClick(role, key) {
+  if (!key) return;
+
+  const current = getStackSortState(role);
+  const dir = current.key === key
+    ? (current.dir === 'asc' ? 'desc' : 'asc')
+    : (STACK_SORT_DEFAULT_DIRECTIONS[key] || 'asc');
+
+  if (!state.ui.stackSort) {
+    state.ui.stackSort = {
+      cathode: { key: 'number', dir: 'asc' },
+      anode: { key: 'number', dir: 'asc' }
+    };
+  }
+
+  state.ui.stackSort[role] = { key, dir };
+
+  if (role === 'cathode') {
+    renderCathodeElectrodeTable();
+  } else {
+    renderAnodeElectrodeTable();
+  }
+}
+
+function initStackSortableHeaders() {
+  ['cathode', 'anode'].forEach((role) => {
+    const table = getStackTableByRole(role);
+    if (!table) return;
+
+    table.querySelectorAll('th[data-sort-key]').forEach((th) => {
+      if (th.dataset.sortBound === 'true') return;
+      th.dataset.sortBound = 'true';
+
+      const arrow = document.createElement('span');
+      arrow.className = 'sort-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      th.appendChild(arrow);
+
+      th.addEventListener('click', () => {
+        handleStackSortHeaderClick(role, th.dataset.sortKey);
+      });
+    });
+  });
+}
+
+function updateStackSortIndicators(role) {
+  const table = getStackTableByRole(role);
+  if (!table) return;
+
+  const { key, dir } = getStackSortState(role);
+
+  table.querySelectorAll('th[data-sort-key]').forEach((th) => {
+    const isActive = th.dataset.sortKey === key;
+    const arrow = th.querySelector('.sort-arrow');
+
+    if (arrow) {
+      arrow.textContent = isActive ? (dir === 'desc' ? '▼' : '▲') : '';
+    }
+
+    th.setAttribute('aria-sort', isActive ? (dir === 'desc' ? 'descending' : 'ascending') : 'none');
+  });
+}
+
+
 function renderCathodeElectrodeTable() {
-  
+
   const body =
   document.getElementById('stack_cathode_table_body');
-  
+
   body.innerHTML = '';
   //      selectedCathodes = [];
   //     renderStackSummary();
-  
-  state.reference.cathodeElectrodes.forEach((e, index) => {
-    
+
+  sortStackElectrodesForDisplay(state.reference.cathodeElectrodes, 'cathode').forEach((e, index) => {
+
     const tr = document.createElement('tr');
     tr.classList.toggle('stack-electrode-unavailable', !isAvailableElectrodeStatus(e.status_code));
-    
+
+    const indexCell = document.createElement('td');
+    indexCell.className = 'row-index';
+    indexCell.textContent = index + 1;
+    tr.appendChild(indexCell);
+
     const numCell = document.createElement('td');
-    numCell.textContent = index + 1;
+    numCell.textContent = e.number_in_batch ?? '';
     tr.appendChild(numCell);
-    
+
     const idCell = document.createElement('td');
     idCell.textContent = e.electrode_id;
     tr.appendChild(idCell);
-    
+
     const massCell = document.createElement('td');
     massCell.textContent = e.electrode_mass_g ?? '';
     tr.appendChild(massCell);
 
     tr.appendChild(renderBatteryElectrodeCapacityCell(e));
-    
+
     const selectCell = document.createElement('td');
-    
+
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.value = e.electrode_id;
@@ -6323,46 +6447,52 @@ function renderCathodeElectrodeTable() {
     checkbox.checked = state.stack.selectedCathodes.some(
       el => idsMatch(el.electrode_id, e.electrode_id)
     );
-    
+
     checkbox.addEventListener('click', event => {
       handleStackElectrodeClick(event, 'cathode');
     });
-    
+
     selectCell.appendChild(checkbox);
     tr.appendChild(selectCell);
-    
+
     body.appendChild(tr);
-    
+
   });
 
+  updateStackSortIndicators('cathode');
   renderStackUiState();
-  
+
 }
 
 function renderAnodeElectrodeTable() {
-  
+
   const body =
   document.getElementById('stack_anode_table_body');
-  
+
   body.innerHTML = '';
   //      selectedAnodes = [];
   //      renderStackSummary();
-  
-  state.reference.anodeElectrodes.forEach((e, index) => {
-    
+
+  sortStackElectrodesForDisplay(state.reference.anodeElectrodes, 'anode').forEach((e, index) => {
+
     const tr = document.createElement('tr');
     tr.dataset.anodeElectrodeRow = 'true';
     tr.dataset.electrodeId = e.electrode_id;
     tr.classList.toggle('stack-electrode-unavailable', !isAvailableElectrodeStatus(e.status_code));
-    
+
+    const indexCell = document.createElement('td');
+    indexCell.className = 'row-index';
+    indexCell.textContent = index + 1;
+    tr.appendChild(indexCell);
+
     const numCell = document.createElement('td');
-    numCell.textContent = index + 1;
+    numCell.textContent = e.number_in_batch ?? '';
     tr.appendChild(numCell);
-    
+
     const idCell = document.createElement('td');
     idCell.textContent = e.electrode_id;
     tr.appendChild(idCell);
-    
+
     const massCell = document.createElement('td');
     massCell.textContent = e.electrode_mass_g ?? '';
     tr.appendChild(massCell);
@@ -6370,9 +6500,9 @@ function renderAnodeElectrodeTable() {
     tr.appendChild(renderBatteryElectrodeCapacityCell(e));
 
     tr.appendChild(renderBatteryNpDeltaCell());
-    
+
     const selectCell = document.createElement('td');
-    
+
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.value = e.electrode_id;
@@ -6380,20 +6510,21 @@ function renderAnodeElectrodeTable() {
     checkbox.checked = state.stack.selectedAnodes.some(
       el => idsMatch(el.electrode_id, e.electrode_id)
     );
-    
+
     checkbox.addEventListener('click', event => {
       handleStackElectrodeClick(event, 'anode');
     });
-    
+
     selectCell.appendChild(checkbox);
     tr.appendChild(selectCell);
-    
+
     body.appendChild(tr);
-    
+
   });
 
+  updateStackSortIndicators('anode');
   renderStackUiState();
-  
+
 }
 
 function normalizeBatteryStackRole(role) {
@@ -6473,7 +6604,11 @@ function renderStackSummary() {
     const idCell = document.createElement('td');
     idCell.textContent = e.electrode_id;
     tr.appendChild(idCell);
-    
+
+    const numCell = document.createElement('td');
+    numCell.textContent = e.number_in_batch ?? '';
+    tr.appendChild(numCell);
+
     const roleCell = document.createElement('td');
     roleCell.textContent = formatBatteryStackRoleLabel(e.role);
     tr.appendChild(roleCell);
@@ -7721,6 +7856,7 @@ async function handleBatteryPageFocus() {
 
 async function initBatteryPage() {
   installBatteryDebugInspector();
+  initStackSortableHeaders();
   await refreshBatteryReferenceData();
   await loadTapes();
   await loadBatteries();

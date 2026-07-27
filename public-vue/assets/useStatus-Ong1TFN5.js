@@ -1,1 +1,0 @@
-import{$ as e}from"./_plugin-vue_export-helper-kZ7KRUHX.js";function t(){let t=e(``),n=e(!1);function r(e,r=!1){t.value=e,n.value=r,setTimeout(()=>{t.value=``},1200)}return{statusMsg:t,statusError:n,showStatus:r}}export{t};

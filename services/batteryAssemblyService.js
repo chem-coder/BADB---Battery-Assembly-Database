@@ -234,6 +234,7 @@ async function fetchBatteryAssembly(queryable, batteryId) {
             be.role,
             be.position_index,
             e.electrode_mass_g,
+            e.number_in_batch,
             e.cut_batch_id
           FROM battery_electrodes be
           LEFT JOIN electrodes e
@@ -456,6 +457,7 @@ async function fetchBatteryReport(queryable, batteryId) {
             be.role,
             be.position_index,
             e.electrode_mass_g,
+            e.number_in_batch,
             e.cut_batch_id
           FROM battery_electrodes be
           LEFT JOIN electrodes e

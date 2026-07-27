@@ -59,6 +59,10 @@ export default defineConfig({
   },
   build: {
     outDir: '../public-vue',
+    // outDir is outside the project root, so Vite keeps old files unless
+    // told otherwise — without this, hashed chunks accumulate forever
+    // (2000+ stale files by July 2026).
+    emptyOutDir: true,
   },
   optimizeDeps: {
     include: ['chart.js', 'chartjs-plugin-zoom', 'vue-chartjs'],

@@ -269,6 +269,7 @@ function renderStackSection(report) {
               <th class="report_number">Поз.</th>
               <th>Роль</th>
               <th>ID электрода</th>
+              <th class="report_number" title="Номер электрода в партии">№ в партии</th>
               <th>ID партии</th>
               <th class="report_number">m, г</th>
               <th class="report_number">C расч. по факт. массе, мАч</th>
@@ -281,6 +282,7 @@ function renderStackSection(report) {
                 <td class="report_number">${escapeHtml(row.position_index ?? '—')}</td>
                 <td>${escapeHtml(formatElectrodeRole(row.role))}</td>
                 <td>${escapeHtml(row.electrode_id ?? '—')}</td>
+                <td class="report_number">${escapeHtml(row.number_in_batch ?? '—')}</td>
                 <td>${escapeHtml(row.cut_batch_id ?? '—')}</td>
                 <td class="report_number">${escapeHtml(formatMass(row.electrode_mass_g))}</td>
                 <td class="report_number">${escapeHtml(formatCapacity(row.capacity_actual_mAh))}</td>

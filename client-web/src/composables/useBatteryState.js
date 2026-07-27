@@ -17,6 +17,20 @@ function toNum(v) {
   return Number.isFinite(n) ? n : null
 }
 
+// One electrode-source row (battery_electrode_sources). Row 0 of each
+// role array is the primary source; extra rows are additional batches
+// (pouch/prism/cylindrical cells only). Factory — never share row
+// object references between states/rows.
+export function emptyElectrodeSourceRow() {
+  return { tape_id: '', cut_batch_id: '', source_notes: '' }
+}
+
+// Vanilla parity (3-batteries.js getElectrodeSourcesPayloadRows): a row
+// is "worth sending/keeping" when any of its fields carries a value.
+function electrodeSourceRowHasValue(r) {
+  return Boolean(r && (r.tape_id || r.cut_batch_id || String(r.source_notes || '').trim()))
+}
+
 export function useBatteryState({ batteryId }) {
   const currentBatchId = ref(batteryId)
   const loading = ref(false)
@@ -64,13 +78,14 @@ export function useBatteryState({ batteryId }) {
       cyl_size_code: '',
       cyl_notes: '',
     },
+    // Multi-source model (battery_electrode_sources supports N rows per
+    // role). Arrays ALWAYS have at least one row per role — row 0 is the
+    // primary source. The old 6 flat keys (cathode_tape_id, …) collapsed
+    // every role to a single row and silently destroyed extra sources
+    // saved from vanilla; do not reintroduce them.
     electrodes: {
-      cathode_tape_id: '',
-      cathode_cut_batch_id: '',
-      cathode_source_notes: '',
-      anode_tape_id: '',
-      anode_cut_batch_id: '',
-      anode_source_notes: '',
+      cathodeSources: [emptyElectrodeSourceRow()],
+      anodeSources: [emptyElectrodeSourceRow()],
     },
     separator: {
       separator_id: '',
@@ -81,10 +96,10 @@ export function useBatteryState({ batteryId }) {
       electrolyte_total_ul: '',
       electrolyte_notes: '',
     },
-    assembly: {
-      separator_layout: '',
-      electrolyte_assembly_notes: '',
-    },
+    // No 'assembly' step: vanilla's «Параметры сборки» maps onto config /
+    // separator / electrolyte above. See batteryStages.js for the history
+    // of the phantom fields (separator_layout, electrolyte_assembly_notes)
+    // that used to live here.
     qc: {
       ocv_v: '',
       esr_mohm: '',
@@ -99,7 +114,6 @@ export function useBatteryState({ batteryId }) {
     electrodes: false,
     separator: false,
     electrolyte: false,
-    assembly: false,
     qc: false,
   })
 
@@ -255,7 +269,14 @@ export function useBatteryState({ batteryId }) {
       setDirty('general')
       _scheduleAutoSave('general')
     } else if (steps[stageCode]) {
-      steps[stageCode][fieldKey] = value
+      // Deep-copy arrays (electrode source rows, multiselects) so the
+      // stored state never shares object references with the caller —
+      // a shared row object would let a later edit in one battery/row
+      // silently mutate another (same discipline as the multiselect
+      // deep-copy in StageCompareEditor.copyField).
+      steps[stageCode][fieldKey] = Array.isArray(value)
+        ? JSON.parse(JSON.stringify(value))
+        : value
       // Cascade: pouch_case_size_code !== 'other' → clear pouch_case_size_other
       // (mirrors backend validator in routes/batteries.js:validatePouchCaseSizeInput)
       if (stageCode === 'config' && fieldKey === 'pouch_case_size_code' && value !== 'other') {
@@ -326,14 +347,31 @@ export function useBatteryState({ batteryId }) {
           })
         }
       } else if (code === 'electrodes') {
+        // ARRAY mode of the PATCH (routes/batteries.js →
+        // updateBatteryElectrodeSources → replaceSourceRows). The legacy
+        // flat-key payload collapsed each role to ONE row and silently
+        // deleted extra sources added in vanilla — never use it here.
+        // Array mode always replaces BOTH roles (requestedRoles is fixed
+        // to ['cathode','anode'] server-side), so both role arrays are
+        // serialized on every save; sending an empty role deletes its
+        // rows, which matches the state (user cleared them). Array mode
+        // never 404s on "no rows yet" — no POST fallback required.
         const e = steps.electrodes
+        const serializeRole = (role, rows) => (Array.isArray(rows) ? rows : [])
+          .filter(electrodeSourceRowHasValue)
+          .map((r, i) => ({
+            role,
+            tape_id: r.tape_id || null,
+            cut_batch_id: r.cut_batch_id || null,
+            source_notes: String(r.source_notes || '').trim() || null,
+            sort_order: i,          // per-role index, row 0 = primary
+            is_primary: i === 0,
+          }))
         await api.patch(`/api/batteries/battery_electrode_sources/${id}`, {
-          cathode_tape_id: e.cathode_tape_id || null,
-          cathode_cut_batch_id: e.cathode_cut_batch_id || null,
-          cathode_source_notes: e.cathode_source_notes || null,
-          anode_tape_id: e.anode_tape_id || null,
-          anode_cut_batch_id: e.anode_cut_batch_id || null,
-          anode_source_notes: e.anode_source_notes || null,
+          sources: [
+            ...serializeRole('cathode', e.cathodeSources),
+            ...serializeRole('anode', e.anodeSources),
+          ],
         })
       } else if (code === 'separator') {
         const s = steps.separator
@@ -347,12 +385,6 @@ export function useBatteryState({ batteryId }) {
           electrolyte_id: el.electrolyte_id || null,
           electrolyte_total_ul: el.electrolyte_total_ul || null,
           electrolyte_notes: el.electrolyte_notes || null,
-        })
-      } else if (code === 'assembly') {
-        // Assembly params saved via coin config endpoint (spacer layout etc.)
-        const a = steps.assembly
-        await api.patch(`/api/batteries/battery_coin_config/${id}`, {
-          coin_layout: a.separator_layout || null,
         })
       } else if (code === 'qc') {
         // QC → dedicated battery_qc table. UPSERT via POST (ON CONFLICT
@@ -445,22 +477,27 @@ export function useBatteryState({ batteryId }) {
         } catch {}
       }
 
-      // Load electrode sources
+      // Load electrode sources — ALL rows per role (multi-source), not
+      // just the first. Ordered is_primary DESC, sort_order ASC so row 0
+      // is always the primary source (backend GET already orders this
+      // way; the local sort is a defensive mirror).
       try {
         const { data: sources } = await api.get(`/api/batteries/battery_electrode_sources/${id}`)
         if (sources && Array.isArray(sources)) {
-          const cathode = sources.find(s => s.role === 'cathode')
-          const anode = sources.find(s => s.role === 'anode')
-          if (cathode) {
-            steps.electrodes.cathode_tape_id = cathode.tape_id ?? ''
-            steps.electrodes.cathode_cut_batch_id = cathode.cut_batch_id ?? ''
-            steps.electrodes.cathode_source_notes = cathode.source_notes || ''
-          }
-          if (anode) {
-            steps.electrodes.anode_tape_id = anode.tape_id ?? ''
-            steps.electrodes.anode_cut_batch_id = anode.cut_batch_id ?? ''
-            steps.electrodes.anode_source_notes = anode.source_notes || ''
-          }
+          const mapRole = (role) => sources
+            .filter(s => s.role === role)
+            .sort((a, b) =>
+              (Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary))) ||
+              (Number(a.sort_order || 0) - Number(b.sort_order || 0)))
+            .map(s => ({
+              tape_id: s.tape_id ?? '',
+              cut_batch_id: s.cut_batch_id ?? '',
+              source_notes: s.source_notes || '',
+            }))
+          const cathodeRows = mapRole('cathode')
+          const anodeRows = mapRole('anode')
+          steps.electrodes.cathodeSources = cathodeRows.length ? cathodeRows : [emptyElectrodeSourceRow()]
+          steps.electrodes.anodeSources = anodeRows.length ? anodeRows : [emptyElectrodeSourceRow()]
         }
       } catch {}
 
@@ -513,10 +550,13 @@ export function useBatteryState({ batteryId }) {
       }
       return steps.config.coin_cell_mode || steps.config.coin_size_code ? 'done' : 'pending'
     }
-    if (code === 'electrodes') return steps.electrodes.cathode_tape_id || steps.electrodes.anode_tape_id ? 'done' : 'pending'
+    if (code === 'electrodes') {
+      const anySource = [...steps.electrodes.cathodeSources, ...steps.electrodes.anodeSources]
+        .some(r => r.tape_id || r.cut_batch_id)
+      return anySource ? 'done' : 'pending'
+    }
     if (code === 'separator') return steps.separator.separator_id ? 'done' : 'pending'
     if (code === 'electrolyte') return steps.electrolyte.electrolyte_id ? 'done' : 'pending'
-    if (code === 'assembly') return steps.assembly.separator_layout ? 'done' : 'pending'
     if (code === 'qc') return steps.qc.ocv_v || steps.qc.esr_mohm ? 'done' : 'pending'
     return 'pending'
   }

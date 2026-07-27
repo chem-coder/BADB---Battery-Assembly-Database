@@ -52,8 +52,11 @@ const refData = reactive({
   projects: [],
   separators: [],
   electrolytes: [],
-  cathodeTapes: [],
-  anodeTapes: [],
+  // Full tape list from /api/tapes/for-electrodes (vanilla parity):
+  // carries role, availability_status (depleted tapes stay listed for
+  // saved references) and coating_sidedness. ElectrodeSourcesEditor
+  // filters by role per field.
+  electrodeTapes: [],
   electrodeBatches: [],
 })
 
@@ -68,11 +71,13 @@ async function loadRefData() {
     if (r.status === 'fulfilled') refData[endpoints[i].key] = r.value.data
   })
 
-  // Load tapes and split by role
+  // Tapes for electrode-source selects — the dedicated endpoint (same
+  // one vanilla uses) returns role + availability_status +
+  // coating_sidedness and keeps depleted tapes that still have cut
+  // batches, so saved sources on written-off tapes remain resolvable.
   try {
-    const { data: tapes } = await api.get('/api/tapes')
-    refData.cathodeTapes = tapes.filter(t => t.role === 'cathode')
-    refData.anodeTapes = tapes.filter(t => t.role === 'anode')
+    const { data: tapes } = await api.get('/api/tapes/for-electrodes')
+    refData.electrodeTapes = tapes
   } catch {}
 
   // Load electrode batches with labels
@@ -370,8 +375,9 @@ function capacityErrorMessage(id) {
 // `''` into the URL. Normalize to a numeric id or null.
 function hintExtra(batteryId) {
   const ts = tapeConstructorRef.value?.tapeStates?.[String(batteryId)]
-  const c = ts?.steps?.electrodes?.cathode_tape_id
-  const a = ts?.steps?.electrodes?.anode_tape_id
+  // Electrode sources are multi-row arrays; row 0 is the primary source.
+  const c = ts?.steps?.electrodes?.cathodeSources?.[0]?.tape_id
+  const a = ts?.steps?.electrodes?.anodeSources?.[0]?.tape_id
   const toId = (v) => {
     const n = Number(v)
     return Number.isInteger(n) && n > 0 ? n : null
@@ -642,12 +648,15 @@ onMounted(async () => {
 
         <template v-if="capacity.cache.value[id]">
           <div class="capacity-grid">
-            <div class="capacity-cell">
+            <!-- Vanilla wording scheme (3-batteries.js:3846-3869, 3852-3857):
+                 primary line = «Расчётная ёмкость» по фактически введённым
+                 массам (NOT a measured post-cycling capacity), secondary
+                 line = «по рецепту». Numbers/computations untouched. -->
+            <div class="capacity-cell" title="Расчёт по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования.">
               <div class="capacity-label">Катод ({{ capacity.cache.value[id].cathode_count }} шт.)</div>
               <div class="capacity-value">
-                <div>теор.: <strong>{{ fmtCapacity(capacity.cache.value[id].cathode_capacity_theoretical_mAh) }}</strong></div>
                 <div class="capacity-actual-row">
-                  факт.: <strong>{{ fmtCapacity(capacity.cache.value[id].cathode_capacity_actual_mAh) }}</strong>
+                  расч. (по факт. массам): <strong>{{ fmtCapacity(capacity.cache.value[id].cathode_capacity_actual_mAh) }}</strong>
                   <CapacityHint
                     v-if="capacity.cache.value[id].cathode_capacity_actual_mAh == null"
                     :summary="capacity.cache.value[id]"
@@ -656,14 +665,14 @@ onMounted(async () => {
                     @go="handleHintGo"
                   />
                 </div>
+                <div class="capacity-secondary">по рецепту: {{ fmtCapacity(capacity.cache.value[id].cathode_capacity_theoretical_mAh) }}</div>
               </div>
             </div>
-            <div class="capacity-cell">
+            <div class="capacity-cell" title="Расчёт по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования.">
               <div class="capacity-label">Анод ({{ capacity.cache.value[id].anode_count }} шт.)</div>
               <div class="capacity-value">
-                <div>теор.: <strong>{{ fmtCapacity(capacity.cache.value[id].anode_capacity_theoretical_mAh) }}</strong></div>
                 <div class="capacity-actual-row">
-                  факт.: <strong>{{ fmtCapacity(capacity.cache.value[id].anode_capacity_actual_mAh) }}</strong>
+                  расч. (по факт. массам): <strong>{{ fmtCapacity(capacity.cache.value[id].anode_capacity_actual_mAh) }}</strong>
                   <CapacityHint
                     v-if="capacity.cache.value[id].anode_capacity_actual_mAh == null"
                     :summary="capacity.cache.value[id]"
@@ -672,14 +681,16 @@ onMounted(async () => {
                     @go="handleHintGo"
                   />
                 </div>
+                <div class="capacity-secondary">по рецепту: {{ fmtCapacity(capacity.cache.value[id].anode_capacity_theoretical_mAh) }}</div>
               </div>
             </div>
-            <div class="capacity-cell capacity-cell--primary">
-              <div class="capacity-label" title="Ограничивающая ёмкость ячейки — min(катод, анод)">Ёмкость ячейки</div>
+            <!-- Vanilla calls this limiting metric «Расчётная ёмкость»
+                 (3-batteries.js:3852-3857) with the same tooltip. -->
+            <div class="capacity-cell capacity-cell--primary" title="Расчёт по фактически введённым массам электродов. Это не измеренная ёмкость после циклирования.">
+              <div class="capacity-label" title="Ограничивающая ёмкость ячейки — min(катод, анод)">Расчётная ёмкость ячейки</div>
               <div class="capacity-value">
-                <div>теор.: <strong>{{ fmtCapacity(capacity.cache.value[id].limiting_capacity_theoretical_mAh) }}</strong></div>
                 <div class="capacity-actual-row">
-                  факт.: <strong>{{ fmtCapacity(capacity.cache.value[id].limiting_capacity_actual_mAh) }}</strong>
+                  расч. (по факт. массам): <strong>{{ fmtCapacity(capacity.cache.value[id].limiting_capacity_actual_mAh) }}</strong>
                   <CapacityHint
                     v-if="capacity.cache.value[id].limiting_capacity_actual_mAh == null"
                     :summary="capacity.cache.value[id]"
@@ -688,14 +699,15 @@ onMounted(async () => {
                     @go="handleHintGo"
                   />
                 </div>
+                <div class="capacity-secondary">по рецепту: {{ fmtCapacity(capacity.cache.value[id].limiting_capacity_theoretical_mAh) }}</div>
               </div>
             </div>
-            <div class="capacity-cell" title="N/P ratio = Q_анод / Q_катод; обычно 1.05–1.2 для Li-ion">
+            <!-- N/P tooltip verbatim from vanilla (3-batteries.js:3874). -->
+            <div class="capacity-cell" title="N/P по расчётной ёмкости из фактически введённых масс электродов. Вторичная строка — расчётное отношение по рецепту.">
               <div class="capacity-label">N/P соотношение</div>
               <div class="capacity-value">
-                <div>теор.: <strong>{{ fmtRatio(capacity.cache.value[id].np_theoretical) }}</strong></div>
                 <div class="capacity-actual-row">
-                  факт.: <strong>{{ fmtRatio(capacity.cache.value[id].np_actual) }}</strong>
+                  расч. (по факт. массам): <strong>{{ fmtRatio(capacity.cache.value[id].np_actual) }}</strong>
                   <CapacityHint
                     v-if="!Number.isFinite(Number(capacity.cache.value[id].np_actual))"
                     :summary="capacity.cache.value[id]"
@@ -704,6 +716,7 @@ onMounted(async () => {
                     @go="handleHintGo"
                   />
                 </div>
+                <div class="capacity-secondary">по рецепту: {{ fmtRatio(capacity.cache.value[id].np_theoretical) }}</div>
               </div>
             </div>
           </div>
@@ -979,6 +992,13 @@ onMounted(async () => {
   line-height: 1.5;
 }
 .capacity-value strong { font-weight: 600; }
+/* Secondary «по рецепту» line — mirrors vanilla's
+   .battery-electrode-capacity-secondary (muted, under the primary
+   расчётная value). */
+.capacity-secondary {
+  font-size: 12px;
+  color: rgba(0, 50, 116, 0.55);
+}
 .capacity-actual-row {
   display: inline-flex;
   align-items: center;

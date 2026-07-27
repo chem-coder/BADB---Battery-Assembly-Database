@@ -72,18 +72,42 @@ const emit = defineEmits(['delete', 'add', 'row-click', 'export', 'header-click'
 // ── Toolbar state ──────────────────────────────────────────────────────
 const localTableName = ref(props.tableName)
 
-// "Строк в окне" — fixed Select with 5 / 25 / Все (all). `-1` is the
-// sentinel for "all rows visible, no pagination". Per-user, namespaced
-// by tableKey so each list remembers its own choice. Default = 5.
+// "Строк в окне" — fixed Select with 5 / 20 / 50 / Все (all). `-1` is
+// the sentinel for "all rows visible, no pagination". Per-user,
+// namespaced by tableKey so each list remembers its own choice.
+// Default = 20.
 const VISIBLE_ROWS_OPTIONS = [
   { value: 5,  label: '5' },
-  { value: 25, label: '25' },
+  { value: 20, label: '20' },
+  { value: 50, label: '50' },
   { value: -1, label: 'Все' },
 ]
 const visibleRows = useUserPref(
   `crud:visible-rows:${props.tableKey || 'default'}`,
-  5,
+  20,
 )
+
+// Guard against a corrupted stored pref (non-numeric / zero / negative
+// other than the -1 sentinel) — fall back to the default instead of
+// rendering an empty select with broken pagination math.
+if (visibleRows.value !== -1
+    && (!Number.isFinite(visibleRows.value) || visibleRows.value <= 0)) {
+  visibleRows.value = 20
+}
+
+// A stored pref may predate the current option set (e.g. 25 from the
+// old 5/25/Все options). Render it as an extra option instead of
+// resetting, so the user's saved choice keeps working and the select
+// never shows a blank value. Numeric options stay sorted, «Все» last.
+const visibleRowsOptions = computed(() => {
+  const v = visibleRows.value
+  if (VISIBLE_ROWS_OPTIONS.some(o => o.value === v)) return VISIBLE_ROWS_OPTIONS
+  const numeric = VISIBLE_ROWS_OPTIONS
+    .filter(o => o.value !== -1)
+    .concat({ value: v, label: String(v) })
+    .sort((a, b) => a.value - b.value)
+  return [...numeric, VISIBLE_ROWS_OPTIONS.find(o => o.value === -1)]
+})
 
 // `effectiveVisibleRows` returns the actual number of rows to display.
 // When `visibleRows === -1` ("Все"), it falls back to the filtered
@@ -166,6 +190,19 @@ const tableScrollHeight = computed(() => (45 + TABLE_MAX_VIEW * 53) + 'px')
 
 // ── Row selection & context menu ───────────────────────────────────────
 const selectedRows = ref(new Set())
+
+// «Выбрано: N — показать» — transient toggle that narrows the table to
+// the currently selected rows only. Composes with header filters and
+// pagination (both operate on filteredData). Not persisted on purpose:
+// it is a working-session lens, not a layout preference.
+const selectionOnly = ref(false)
+
+// Auto-exit the mode when the selection empties (delete, clearSelection,
+// plain click in rowClickable tables, deselecting the last row).
+watch(() => selectedRows.value.size, (n) => {
+  if (n === 0) selectionOnly.value = false
+})
+
 const ctxMenuVisible = ref(false)
 const ctxMenuPos = ref({ x: 0, y: 0 })
 let lastClickedIdx = null
@@ -340,13 +377,21 @@ function resetFilter() {
 }
 
 // ── Filtered & paginated data ─────────────────────────────────────────
+// Header filters first, then the selection-only lens. Both are plain
+// Array.filter passes, so the original row order is preserved.
 const filteredData = computed(() => {
   const filters = activeFilters.value
   const fields = Object.keys(filters)
-  if (fields.length === 0) return props.data
-  return props.data.filter(r =>
-    fields.every(f => filters[f].has(String(r[f] ?? '')))
-  )
+  let rows = props.data
+  if (fields.length > 0) {
+    rows = rows.filter(r =>
+      fields.every(f => filters[f].has(String(r[f] ?? '')))
+    )
+  }
+  if (selectionOnly.value && selectedRows.value.size > 0) {
+    rows = rows.filter(r => selectedRows.value.has(getRowId(r)))
+  }
+  return rows
 })
 
 const tableFirst = ref(0)
@@ -473,6 +518,48 @@ function onResizerDblClick(e) {
   if (th) autoFitColumn(th)
 }
 
+// ── Shrink-to-fit when columns are hidden ─────────────────────────────
+// With all columns visible the table keeps today's behaviour (stretches
+// to 100% of the card). As soon as ≥1 column is hidden, the table gets
+// an explicit width = sum of the visible columns' declared widths, and
+// the card collapses to fit-content — so deselecting columns actually
+// narrows the table instead of stretching the survivors.
+//
+// Interaction with resizableColumns / columnResizeMode="expand": an
+// expand-mode resize sets inline width AND min-width directly on the
+// <table> element (PrimeVue) — inline min-width is never touched by our
+// width binding, so a user-widened table can never be clamped back. We
+// additionally record the post-resize table width and feed it into the
+// computed width (max), so toggling columns after a manual resize keeps
+// the user's total width too.
+const NUM_COL_WIDTH = 50      // frozen № column (style below in template)
+const DEFAULT_COL_WIDTH = 80  // matches the minWidth fallback per column
+
+function colWidthPx(col) {
+  const w = parseFloat(col.width) || 0
+  const mw = parseFloat(col.minWidth) || 0
+  return Math.max(w, mw) || DEFAULT_COL_WIDTH
+}
+
+const columnsWidthSum = computed(() =>
+  NUM_COL_WIDTH + visibleColumns.value.reduce((sum, c) => sum + colWidthPx(c), 0)
+)
+
+// Last table width measured after a manual column resize (expand mode
+// grows/shrinks the whole table). 0 = user hasn't resized yet.
+const manualTableWidth = ref(0)
+function onColumnResizeEnd() {
+  const table = tableRef.value?.$el?.querySelector('table[data-pc-section="table"]')
+  if (table) manualTableWidth.value = table.offsetWidth
+}
+
+const shrinkActive = computed(() => hiddenColumns.value.size > 0)
+
+const tableStyleComputed = computed(() => {
+  if (!shrinkActive.value) return undefined
+  return { width: Math.max(columnsWidthSum.value, manualTableWidth.value) + 'px' }
+})
+
 // ── Lifecycle ─────────────────────────────────────────────────────────
 function onDocClick(e) {
   if (filterOverlay.value && !filterOverlay.value.contains(e.target)) {
@@ -516,7 +603,8 @@ defineExpose({ clearSelection, selectedRows, filteredData })
 </script>
 
 <template>
-  <div ref="tableCardRef" class="glass-card ct-table-card">
+  <div ref="tableCardRef" class="glass-card ct-table-card"
+    :class="{ 'ct-table-card--shrink': shrinkActive }">
 
     <!-- Toolbar — sticky with blur. Layout:
          [name] [Строк в окне: 5|25|Все] [row/col counts] [Колонки] [Выгрузить]
@@ -529,12 +617,24 @@ defineExpose({ clearSelection, selectedRows, filteredData })
       <span class="ct-sep"></span>
       <span class="ct-meta">Строк в окне</span>
       <select v-model.number="visibleRows" class="ct-rows-select">
-        <option v-for="opt in VISIBLE_ROWS_OPTIONS" :key="opt.value" :value="opt.value">
+        <option v-for="opt in visibleRowsOptions" :key="opt.value" :value="opt.value">
           {{ opt.label }}
         </option>
       </select>
       <span class="ct-sep"></span>
       <span class="ct-meta">{{ filteredData.length }} строк × {{ columnCount }} столбцов</span>
+
+      <!-- Selection-only lens — appears only while ≥1 row is selected -->
+      <template v-if="selectedRows.size > 0">
+        <span class="ct-sep"></span>
+        <button
+          type="button"
+          class="ct-selection-toggle"
+          :class="{ 'is-active': selectionOnly }"
+          :title="selectionOnly ? 'Показать все строки' : 'Показать только выбранные строки'"
+          @click="selectionOnly = !selectionOnly"
+        >Выбрано: {{ selectedRows.size }} — {{ selectionOnly ? 'все строки' : 'показать' }}</button>
+      </template>
 
       <!-- Column visibility — per-user, persisted to localStorage -->
       <div class="ct-export-wrap" ref="columnsBtnRef">
@@ -600,7 +700,9 @@ defineExpose({ clearSelection, selectedRows, filteredData })
       resizableColumns
       columnResizeMode="expand"
       reorderableColumns
+      :tableStyle="tableStyleComputed"
       :rowClass="(data) => selectedRows.has(getRowId(data)) ? 'ct-row-selected' : ''"
+      @columnResizeEnd="onColumnResizeEnd"
       @rowClick="({ originalEvent, data, index }) => onRowClick(originalEvent, data, index)"
       @rowContextmenu="({ originalEvent, data, index }) => onRowContextMenu(originalEvent, data, index)"
       class="tvel-table"
@@ -756,6 +858,14 @@ defineExpose({ clearSelection, selectedRows, filteredData })
   overflow: clip;
   padding: 0;
 }
+/* Shrink-to-fit mode (≥1 column hidden): the table gets an explicit
+   px width via :tableStyle, and the card collapses around it. The card
+   never gets narrower than the toolbar needs (fit-content = max of
+   children's content widths) and never wider than its container. */
+.ct-table-card--shrink {
+  width: fit-content;
+  max-width: 100%;
+}
 
 /* ── Toolbar — sticky below PageHeader ── */
 .ct-toolbar {
@@ -849,6 +959,32 @@ defineExpose({ clearSelection, selectedRows, filteredData })
 }
 .ct-spacer {
   flex: 1;
+}
+
+/* ── Selection-only toggle («Выбрано: N — показать») ── */
+/* Styled after .ct-rows-select: same height, border tint and 12px type
+   so it reads as a sibling toolbar control. Active state = filled. */
+.ct-selection-toggle {
+  height: 24px;
+  padding: 2px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  color: #003274;
+  background: transparent;
+  border: 1px solid rgba(0, 50, 116, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.ct-selection-toggle:hover {
+  border-color: rgba(0, 50, 116, 0.30);
+}
+.ct-selection-toggle.is-active {
+  background: rgba(0, 50, 116, 0.10);
+  border-color: rgba(0, 50, 116, 0.35);
+  font-weight: 600;
 }
 
 /* ── Export dropdown ── */

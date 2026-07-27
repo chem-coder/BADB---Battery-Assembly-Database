@@ -47,7 +47,23 @@ if (process.env.VUE_HTML_REDIRECTS === 'true') {
   });
 }
 
+// ── Front door: the built Vue app owns the root ────────────────────
+// Explicit routes beat the static middlewares below, so `/` serves the
+// Vue SPA even though public/index.html exists. Vanilla stays fully
+// functional at /index.html (all of its internal links already point
+// there explicitly), with /vanilla as the memorable alias.
+app.get('/', (req, res, next) => {
+  res.sendFile(path.join(__dirname, 'public-vue', 'index.html'), (err) => {
+    if (err) next(); // Vue not built yet → fall through to vanilla
+  });
+});
+app.get('/vanilla', (req, res) => res.redirect(302, '/index.html'));
+
 app.use(express.static('public'));
+// Built Vue SPA (client-web → `npm run build:web`). Served AFTER public/
+// so vanilla wins remaining file conflicts (e.g. /index.html stays
+// vanilla); Vue assets live under /assets/*.
+app.use(express.static('public-vue'));
 // Uploaded lab files are private. Serve them only through authenticated
 // API download routes (e.g. GET /api/batteries/battery_electrochem/:id/download),
 // never as public static files — the old `/uploads` static mount let anyone
@@ -82,6 +98,20 @@ app.use('/api', (req, res, next) => {
 });
 
 registerRoutes(app);
+
+// ── SPA history fallback for the built Vue app ─────────────────────
+// Vue Router uses createWebHistory, so direct loads/refreshes of routes
+// like /tapes or /reference/projects must serve the Vue index.html.
+// Only extensionless GET paths that nothing above matched land here:
+// /api/* and /uploads/* are excluded, and vanilla pages are real .html
+// files in public/ that the static middleware already served. If the
+// build is missing (public-vue not built yet), falls through to 404.
+app.get(/^\/(?!api\/|uploads\/)[^.]*$/, (req, res, next) => {
+  res.sendFile(path.join(__dirname, 'public-vue', 'index.html'), (err) => {
+    if (err) next();
+  });
+});
+
 app.use(errorHandler);
 
 module.exports = app;

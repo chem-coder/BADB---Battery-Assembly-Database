@@ -22,6 +22,29 @@
         color: #8a8f99;
       }
 
+      .stack_table th.row-index,
+      .stack_table td.row-index {
+        color: #999;
+        text-align: right;
+        padding-right: 8px;
+        user-select: none;
+        width: 32px;
+      }
+
+      .stack_table th[data-sort-key] {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+      }
+
+      .stack_table th[data-sort-key] .sort-arrow {
+        display: inline-block;
+        min-width: 1em;
+        margin-left: 3px;
+        font-size: 0.85em;
+        color: #5e6572;
+      }
+
       .stack_cathode_block,
       .stack_anode_block {
         margin-top: 14px;
@@ -676,9 +699,10 @@
                   <table class="stack_table">
                     <thead>
                       <tr>
-                        <th>№</th>
-                        <th>ID электрода</th>
-                        <th>m, g</th>
+                        <th class="row-index"></th>
+                        <th data-sort-key="number" title="Номер электрода в партии (как в Excel). Нажмите для сортировки">№</th>
+                        <th data-sort-key="id" title="Нажмите для сортировки">ID электрода</th>
+                        <th data-sort-key="mass" title="Нажмите для сортировки">m, g</th>
                         <th title="Расчётная ёмкость по фактически введённой массе и составу; не измерение после циклирования">Расч. ёмк., мАч</th>
                         <th>Выбрать</th>
                       </tr>
@@ -695,9 +719,10 @@
                   <table class="stack_table">
                     <thead>
                       <tr>
-                        <th>№</th>
-                        <th>ID электрода</th>
-                        <th>m, g</th>
+                        <th class="row-index"></th>
+                        <th data-sort-key="number" title="Номер электрода в партии (как в Excel). Нажмите для сортировки">№</th>
+                        <th data-sort-key="id" title="Нажмите для сортировки">ID электрода</th>
+                        <th data-sort-key="mass" title="Нажмите для сортировки">m, g</th>
                         <th title="Расчётная ёмкость по фактически введённой массе и составу; не измерение после циклирования">Расч. ёмк., мАч</th>
                         <th title="Ёмкость этого анода минус целевая ёмкость одного анода">A − средн.</th>
                         <th>Выбрать</th>
@@ -716,6 +741,7 @@
                     <tr>
                       <th>Позиция</th>
                       <th>ID электрода</th>
+                      <th title="Номер электрода в партии (как в Excel)">№</th>
                       <th>Роль</th>
                       <th>m, g</th>
                       <th title="Расчётная ёмкость по фактически введённой массе и составу; не измерение после циклирования">Расч. ёмк., мАч</th>

@@ -1,7 +1,7 @@
 # Electrodes
 
 Created: 2026-05-06
-Edited: 2026-06-09
+Edited: 2026-07-17
 Status: current
 Verified against code: 2026-06-09
 
@@ -100,12 +100,33 @@ Important fields:
 
 - `electrode_id`;
 - `cut_batch_id`;
-- `number_in_batch`;
+- `number_in_batch` — the stable per-batch entry number (assigned
+  server-side as MAX+1 on insert, never renumbered on delete, so it stays
+  in step with the tech's Excel sheet; deletions leave honest gaps).
+  Since 2026-07-17 electrode lists are served in `number_in_batch` order
+  and both frontends show it as the default `№` sort, with click-sortable
+  mass/status headers; the Vue bulk paste commits rows sequentially in
+  paste order so assigned numbers always match the pasted sheet;
 - `electrode_mass_g`;
 - `include_in_capacity_average`;
 - `status_code`;
 - `used_in_battery_id`;
-- `scrapped_reason`.
+- `scrapped_reason`;
+- `cup_number` — DEPRECATED. Removed from all UI (vanilla and Vue,
+  including the batch print report and bulk paste) on 2026-07-17: nobody
+  records cup numbers in practice, the comments field replaces it. The
+  DB column is retained per the forward-only migration policy and the
+  backend still accepts the field; frontends simply no longer show it or
+  send it in payloads. Bulk-paste sheets that still contain a cup column
+  have that column recognised by header and ignored.
+
+The Vue electrode panel additionally supports checkbox multi-select on
+saved electrode rows (header checkbox = select all visible) with a bulk
+delete action: one confirm dialog listing the selected №s, then
+sequential per-row `DELETE /api/electrodes/:id` calls (no bulk endpoint
+exists). Rows rejected by the backend (e.g. the used-in-battery guard)
+are skipped and reported in a single toast with the server error text;
+the list reloads once at the end.
 
 Current status values:
 
