@@ -44,6 +44,8 @@ in-progress replacement.
 | Multi-stage workflow editing | DONE (different UX) | Vue uses a multi-select **Constructor**; vanilla uses row-open. Same data, different interaction model. |
 | Recipe actual masses entry | DONE | `RecipeActualsEditor` |
 | Active material select on tape (d047: grouped by family, role-filtered vs recipe; slot line instances from tape's material) | DONE | implemented in both frontends together 2026-07-16 |
+| Wet-mixing auto-select from DB windows (d048) | DONE | was vanilla-only hardcoded thresholds; both frontends now read auto_min/max_volume_ml — Vue gained the auto-select 2026-07-17 |
+| Mixing container + milling balls + ⅓-volume suggestion (d048, Vilitek) | DONE | implemented in both frontends together 2026-07-17; shown only for methods with uses_containers/uses_balls |
 | Dry-box place / return / remove / deplete | DONE | `TapeDryBoxPanel` (audit #6 closed) |
 | Tape export (Excel/CSV/JSON, multi-select) | DONE | `useExportTapes`, context menu |
 | Duplicate (client-side draft) | DONE | `duplicateTape` → create dialog |

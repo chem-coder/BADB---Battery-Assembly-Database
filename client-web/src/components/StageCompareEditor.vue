@@ -16,6 +16,7 @@ import EntityMeta from '@/components/EntityMeta.vue'
 import DateTimeWithNow from '@/components/parity/DateTimeWithNow.vue'
 import SequentialDateField from '@/components/parity/SequentialDateField.vue'
 import DateInputISO from '@/components/parity/DateInputISO.vue'
+import MixingBallsEditor from '@/components/MixingBallsEditor.vue'
 import { useNotify } from '@/composables/useNotify'
 import { useAuthStore } from '@/stores/auth'
 
@@ -59,14 +60,44 @@ const activeFormFactors = computed(() => {
   return factors
 })
 
+// ── Schema-driven conditional visibility ──
+// A field may carry `visibleIf(general, steps, refs)` (d048 — the mixing
+// container/balls fields show only when the selected wet method has the
+// matching capability flag). In the multi-column editor a row is shown
+// when AT LEAST ONE tape in view satisfies the predicate — same "any
+// tape" semantics as showIfFormFactor above. Per-CELL applicability is
+// re-checked with the same hook (see fieldVisibleForTape below).
+function fieldVisibleForTape(tid, field) {
+  if (typeof field.visibleIf !== 'function') return true
+  const ts = props.tapeStates[String(tid)]
+  return !!field.visibleIf(ts?.general || {}, ts?.steps || {}, props.refs)
+}
+
+// Extra props for compound-widget fields (type 'mixing-balls'): the
+// schema's `componentProps(general, steps, refs)` hook resolves sibling
+// state (slurry volume, selected container's working limit) without the
+// editor knowing tape-specific field names.
+function fieldComponentProps(tid, field) {
+  if (typeof field.componentProps !== 'function') return {}
+  const ts = props.tapeStates[String(tid)]
+  return field.componentProps(ts?.general || {}, ts?.steps || {}, props.refs)
+}
+
 const visibleFields = computed(() => {
-  if (activeFormFactors.value.size === 0) return fields.value
   return fields.value.filter(field => {
-    if (!field.showIfFormFactor) return true
-    const allowed = Array.isArray(field.showIfFormFactor)
-      ? field.showIfFormFactor
-      : [field.showIfFormFactor]
-    return allowed.some(ff => activeFormFactors.value.has(ff))
+    if (typeof field.visibleIf === 'function'
+        && !props.tabOrder.some(tid => fieldVisibleForTape(tid, field))) {
+      return false
+    }
+    // Form-factor filter only applies once at least one tape declares a
+    // form factor (a brand-new entity still gets a full editor).
+    if (field.showIfFormFactor && activeFormFactors.value.size > 0) {
+      const allowed = Array.isArray(field.showIfFormFactor)
+        ? field.showIfFormFactor
+        : [field.showIfFormFactor]
+      if (!allowed.some(ff => activeFormFactors.value.has(ff))) return false
+    }
+    return true
   })
 })
 
@@ -87,7 +118,7 @@ const _defaultIdFields = {
   wetMixingMethods: 'wet_mixing_id', foils: 'foil_id', coatingMethods: 'coating_id',
   separators: 'sep_id', electrolytes: 'electrolyte_id', tapes: 'tape_id',
   cathodeTapes: 'tape_id', anodeTapes: 'tape_id',
-  electrodeBatches: 'cut_batch_id',
+  electrodeBatches: 'cut_batch_id', mixingContainers: 'container_id',
 }
 const _defaultNameFields = {
   users: 'name', projects: 'name', recipes: 'name',
@@ -95,7 +126,7 @@ const _defaultNameFields = {
   wetMixingMethods: 'description', foils: 'type', coatingMethods: 'comments',
   separators: 'name', electrolytes: 'name', tapes: 'name',
   cathodeTapes: 'name', anodeTapes: 'name',
-  electrodeBatches: 'cut_batch_id',
+  electrodeBatches: 'cut_batch_id', mixingContainers: 'name',
 }
 
 function getRefOptions(field, tapeId = null) {
@@ -144,7 +175,19 @@ function getValue(tapeId, fieldKey) {
 
 function setValue(tapeId, fieldKey, value) {
   const ts = props.tapeStates[String(tapeId)]
-  if (ts) ts.setFieldValue(props.stageCode, fieldKey, value)
+  if (!ts) return
+  ts.setFieldValue(props.stageCode, fieldKey, value)
+  // Cross-field logic inside the composable may change OTHER fields of
+  // the same tape (d048: slurry volume → wet-mixing-method auto-select;
+  // d047: recipe ↔ material compat reset). Re-resolve the local
+  // AutoComplete display models so those selects don't show stale
+  // labels. The edited field itself is skipped — for selects its model
+  // is owned by the AC interaction, for text inputs it has no AC model.
+  for (const f of fields.value) {
+    if (f.type === 'select' && f.key !== fieldKey) {
+      acModels[acKey(String(tapeId), f.key)] = resolveAcOption(tapeId, f)
+    }
+  }
 }
 
 // Get the tape ID immediately to the left of the given tape in tabOrder
@@ -295,7 +338,10 @@ function copyField(sourceTapeId, fieldKey, destTapeId) {
     const val = getValue(sourceTapeId, fieldKey)
     // Deep-copy arrays so the dest tape gets its own multiselect state —
     // a shared reference would mutate the source on next user edit.
-    setValue(dest, fieldKey, Array.isArray(val) ? [...val] : val)
+    // Object items (d048 mixing `balls` rows) are cloned one level deep.
+    setValue(dest, fieldKey, Array.isArray(val)
+      ? val.map(x => (x && typeof x === 'object' ? { ...x } : x))
+      : val)
   }
   // Sync local AC models for destination tape — re-sync all currently visible
   // select fields because cascades (e.g. form_factor → config_code) may clear
@@ -703,6 +749,19 @@ function onColDragEnd(e) {
               :model-value="getValue(tid, field.key) || ''"
               @update:model-value="setValue(tid, field.key, $event)"
             />
+            <div v-else-if="field.type === 'mixing-balls'" class="ce-balls-cell">
+              <!-- d048 — compound widget (checkbox+count per diameter +
+                   suggestion hint). Per-CELL applicability: the row is
+                   visible when ANY tape's method uses balls; a tape whose
+                   method doesn't gets a dash instead of the editor. -->
+              <MixingBallsEditor
+                v-if="fieldVisibleForTape(tid, field)"
+                :model-value="Array.isArray(getValue(tid, field.key)) ? getValue(tid, field.key) : []"
+                v-bind="fieldComponentProps(tid, field)"
+                @update:model-value="setValue(tid, field.key, $event)"
+              />
+              <span v-else class="ce-cell-na">—</span>
+            </div>
             <div v-else-if="field.type === 'boolean'" class="ce-bool-cell">
               <Checkbox
                 :model-value="!!getValue(tid, field.key)"
@@ -1177,6 +1236,7 @@ function onColDragEnd(e) {
 .cell-wrap > .time-cell,
 .cell-wrap > .datetime-cell,
 .cell-wrap > .ce-bool-cell,
+.cell-wrap > .ce-balls-cell,
 /* `.dtwn` is the root of DateTimeWithNow / DateInputISO when used
    directly (no wrapper). Without this it sizes to content (183.5px) and
    leaves the right side of the cell empty — visual inconsistency vs
@@ -1185,6 +1245,22 @@ function onColDragEnd(e) {
 .cell-wrap > .dtwn {
   flex: 1;
   min-width: 0;
+}
+
+/* d048 — mixing-balls cell: the compound widget stacks vertically and
+   fills the cell; the em-dash placeholder (method without balls) aligns
+   with neighbouring inputs. */
+.ce-balls-cell {
+  width: 100%;
+  min-width: 0;
+}
+.ce-cell-na {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 4px;
+  color: rgba(0, 50, 116, 0.28);
+  font-size: 13px;
 }
 
 /* Boolean cell — Checkbox left-aligned with a 32px height to match the

@@ -78,6 +78,7 @@ const tapePageState = window.tapePageState = {
     coatingMethods: [],
     dryMixingMethods: [],
     wetMixingMethods: [],
+    mixingContainers: [],
     dryingAtmospheres: []
   },
   tapes: {
@@ -112,7 +113,9 @@ const tapePageState = window.tapePageState = {
     panels: {
       mixing: {
         dryParamsVisible: false,
-        wetParamsVisible: false
+        wetParamsVisible: false,
+        containerVisible: false,
+        ballsVisible: false
       }
     },
     delays: {
@@ -235,6 +238,21 @@ function renderPanelState() {
   const wetParams = document.getElementById('mix-wet-params');
   if (wetParams) {
     wetParams.hidden = !state.ui.panels.mixing.wetParamsVisible;
+  }
+
+  const containerRow = document.getElementById('mix-container-row');
+  if (containerRow) {
+    containerRow.hidden = !state.ui.panels.mixing.containerVisible;
+  }
+
+  const ballsFieldset = document.getElementById('mix-balls-fieldset');
+  if (ballsFieldset) {
+    ballsFieldset.hidden = !state.ui.panels.mixing.ballsVisible;
+  }
+
+  const ballHintBlock = document.getElementById('mix-ball-hint-block');
+  if (ballHintBlock) {
+    ballHintBlock.hidden = !state.ui.panels.mixing.ballsVisible;
   }
 
   const coatingParams = document.getElementById('2-coating-params');
@@ -449,10 +467,12 @@ function setNameEditing(isEditing, { render = true } = {}) {
   if (render) applyNameStateToDom();
 }
 
-function setMixingParamsVisibility({ dryParamsVisible, wetParamsVisible }) {
+function setMixingParamsVisibility({ dryParamsVisible, wetParamsVisible, containerVisible, ballsVisible }) {
   state.ui.panels.mixing = {
     dryParamsVisible: Boolean(dryParamsVisible),
-    wetParamsVisible: Boolean(wetParamsVisible)
+    wetParamsVisible: Boolean(wetParamsVisible),
+    containerVisible: Boolean(containerVisible),
+    ballsVisible: Boolean(ballsVisible)
   };
   renderPanelState();
 }
@@ -801,6 +821,10 @@ function setReferenceDryMixingMethods(items) {
 
 function setReferenceWetMixingMethods(items) {
   state.reference.wetMixingMethods = Array.isArray(items) ? items : [];
+}
+
+function setReferenceMixingContainers(items) {
+  state.reference.mixingContainers = Array.isArray(items) ? items : [];
 }
 
 function setReferenceDryingAtmospheres(items) {
@@ -1230,7 +1254,9 @@ function getDefaultWorkflowState() {
       wet_end_time: '',
       wet_rpm: '',
       viscosity_cP: '',
-      viscosity_conditions: ''
+      viscosity_conditions: '',
+      container_id: '',
+      balls: []
     },
     coating: {
       performed_by: '',
@@ -1700,6 +1726,8 @@ function renderMixingStep() {
   setElValue('wet-rpm', step.wet_rpm);
   setElValue('wet-viscosity_cP', step.viscosity_cP);
   setElValue('wet-viscosity-conditions', step.viscosity_conditions);
+  setElValue('1-mixing-container_id', step.container_id);
+  renderMixingBallRows(step.balls);
   updateMixParamsVisibility();
 }
 
@@ -2224,6 +2252,29 @@ async function loadWetMixingMethods(selectEl, selectedId = '') {
     selectEl.appendChild(opt);
   });
   
+  if (selectedId) selectEl.value = String(selectedId);
+}
+
+async function loadMixingContainers(selectEl, selectedId = '') {
+  if (!selectEl) return;
+
+  const res = await fetch('/api/reference/mixing-containers');
+  if (!res.ok) throw new Error('Ошибка загрузки стаканов/ёмкостей');
+
+  const items = await res.json();
+  setReferenceMixingContainers(items);
+
+  selectEl.innerHTML = '<option value="">— не выбрано —</option>';
+
+  items.forEach(item => {
+    const opt = document.createElement('option');
+    opt.value = String(item.container_id);
+    opt.textContent = item.max_working_volume_ml != null
+      ? `${item.name} — до ${formatBallMl(Number(item.max_working_volume_ml))} мл с шарами`
+      : item.name;
+    selectEl.appendChild(opt);
+  });
+
   if (selectedId) selectEl.value = String(selectedId);
 }
 
@@ -4027,7 +4078,11 @@ function normalizeTapeRestoreDataIntoState(restoreData, options = {}) {
       wet_duration_min: stepsByCode.mixing.wet_duration_min ?? '',
       wet_rpm: stepsByCode.mixing.wet_rpm ?? '',
       viscosity_cP: stepsByCode.mixing.viscosity_cp ?? '',
-      viscosity_conditions: stepsByCode.mixing.viscosity_conditions ?? ''
+      viscosity_conditions: stepsByCode.mixing.viscosity_conditions ?? '',
+      container_id: stepsByCode.mixing.container_id != null
+        ? String(stepsByCode.mixing.container_id)
+        : '',
+      balls: normalizeMixingBalls(stepsByCode.mixing.mixing_balls)
     };
     setWorkflowStep('mixing', {
       ...restoredMixing,
@@ -4835,6 +4890,28 @@ function attachWorkflowStateSync() {
   bindValueField('wet-rpm', 'mixing', 'wet_rpm');
   bindValueField('wet-viscosity_cP', 'mixing', 'viscosity_cP');
   bindValueField('wet-viscosity-conditions', 'mixing', 'viscosity_conditions');
+  bindValueField('1-mixing-container_id', 'mixing', 'container_id');
+
+  const containerSelect = document.getElementById('1-mixing-container_id');
+  if (containerSelect) {
+    containerSelect.addEventListener('change', updateBallSuggestionHint);
+  }
+
+  document.querySelectorAll('#mix-balls-fieldset .mix-ball-row').forEach((row) => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    const countInput = row.querySelector('input[type="number"]');
+    if (!checkbox || !countInput) return;
+    const syncBalls = () => {
+      updateWorkflowStepField('mixing', 'balls', readMixingBallsFromDom());
+    };
+    checkbox.addEventListener('change', () => {
+      countInput.disabled = !checkbox.checked;
+      if (!checkbox.checked) countInput.value = '';
+      syncBalls();
+    });
+    countInput.addEventListener('input', syncBalls);
+    countInput.addEventListener('change', syncBalls);
+  });
 
   bindValueField('2-coating-operator', 'coating', 'performed_by');
   bindValueField('2-coating-date', 'coating', 'date');
@@ -4883,6 +4960,8 @@ function attachWorkflowStateSync() {
   if (slurryVolumeInput) {
     slurryVolumeInput.addEventListener('input', applyWetMixingMethodAutoSelection);
     slurryVolumeInput.addEventListener('change', applyWetMixingMethodAutoSelection);
+    slurryVolumeInput.addEventListener('input', updateBallSuggestionHint);
+    slurryVolumeInput.addEventListener('change', updateBallSuggestionHint);
   }
 }
 
@@ -5438,19 +5517,162 @@ function updateMixParamsVisibility() {
 
   setMixingParamsVisibility({
     dryParamsVisible: !hideDry,
-    wetParamsVisible: !hideWet
+    wetParamsVisible: !hideWet,
+    containerVisible: Boolean(wetMethod?.uses_containers),
+    ballsVisible: Boolean(wetMethod?.uses_balls)
   });
+  updateBallSuggestionHint();
 }
 
 function getWetMixingMethodIdForVolume(slurryVolumeMl) {
   const volume = Number(slurryVolumeMl);
   if (!Number.isFinite(volume) || volume <= 0) return '';
-  if (volume < 15) return '1';
-  if (volume <= 150) return '2';
-  if (volume <= 450) return '3';
-  if (volume <= 750) return '4';
-  if (volume >= 1500 && volume <= 3500) return '5';
-  return '';
+
+  const match = state.reference.wetMixingMethods
+    .filter((item) =>
+      item.auto_min_volume_ml != null &&
+      item.auto_max_volume_ml != null &&
+      volume >= Number(item.auto_min_volume_ml) &&
+      volume <= Number(item.auto_max_volume_ml))
+    .sort((a, b) => Number(b.auto_min_volume_ml) - Number(a.auto_min_volume_ml))[0] || null;
+
+  return match ? String(match.wet_mixing_id) : '';
+}
+
+// ---- Milling-ball suggestion (agate balls, planetary mixers) ----
+// Lab rule: total ball volume ~ 1/3 of the slurry volume. Same math as
+// client-web/src/utils/ballSuggestion.js (unit-tested there) — the two
+// frontends share no modules by design, keep both copies in sync.
+const BALL_VOLUME_FRACTION_OF_SLURRY = 1 / 3;
+const BALL_DIAMETERS_CM = [0.25, 0.5, 0.75, 1.0];
+function ballVolumeMl(diameterCm) { return (Math.PI * Math.pow(diameterCm, 3)) / 6; }
+function suggestBalls(slurryVolumeMl, opts = {}) {
+  const volume = Number(slurryVolumeMl);
+  if (!Number.isFinite(volume) || volume <= 0) return null;
+  const fraction = Number.isFinite(opts.fraction) && opts.fraction > 0 ? opts.fraction : BALL_VOLUME_FRACTION_OF_SLURRY;
+  const diameters = (Array.isArray(opts.diametersCm) && opts.diametersCm.length ? opts.diametersCm.slice() : BALL_DIAMETERS_CM.slice()).sort((a, b) => b - a);
+  const targetVolumeMl = volume * fraction;
+  const items = [];
+  let remaining = targetVolumeMl;
+  diameters.forEach((diameterCm, index) => {
+    const oneBall = ballVolumeMl(diameterCm);
+    const isSmallest = index === diameters.length - 1;
+    const count = isSmallest ? Math.round(remaining / oneBall) : Math.floor(remaining / oneBall);
+    if (count > 0) { items.push({ diameter_cm: diameterCm, ball_count: count, volume_ml: count * oneBall }); remaining -= count * oneBall; }
+  });
+  if (!items.length) { const smallest = diameters[diameters.length - 1]; items.push({ diameter_cm: smallest, ball_count: 1, volume_ml: ballVolumeMl(smallest) }); }
+  const totalBallVolumeMl = items.reduce((sum, item) => sum + item.volume_ml, 0);
+  const totalWithSlurryMl = volume + totalBallVolumeMl;
+  const maxWorking = Number(opts.maxWorkingVolumeMl);
+  const overfill = Number.isFinite(maxWorking) && maxWorking > 0 ? totalWithSlurryMl > maxWorking : false;
+  return { targetVolumeMl, items, totalBallVolumeMl, overfill, totalWithSlurryMl };
+}
+
+function formatBallMl(value) {
+  return (Math.round(value * 10) / 10).toLocaleString('ru-RU');
+}
+
+function formatBallDiameter(value) {
+  return value.toLocaleString('ru-RU');
+}
+
+function formatBallSuggestion(suggestion, slurryVolumeMl) {
+  if (!suggestion) return '';
+
+  const combo = suggestion.items
+    .map((item) => `${item.ball_count}×${formatBallDiameter(item.diameter_cm)} см`)
+    .join(' + ');
+
+  return `Рекомендация: ≈${formatBallMl(suggestion.targetVolumeMl)} мл шаров ` +
+    `(⅓ объёма пасты ${formatBallMl(Number(slurryVolumeMl))} мл) — ${combo} ` +
+    `(итого ≈${formatBallMl(suggestion.totalBallVolumeMl)} мл)`;
+}
+
+function formatOverfillWarning(suggestion, maxWorkingVolumeMl) {
+  if (!suggestion || !suggestion.overfill) return '';
+
+  return `Внимание: паста + шары ≈${formatBallMl(suggestion.totalWithSlurryMl)} мл — ` +
+    `больше рабочего объёма стакана (${formatBallMl(Number(maxWorkingVolumeMl))} мл)`;
+}
+
+function getSelectedMixingContainer() {
+  const containerId = String(state.workflow?.mixing?.container_id || '');
+  if (!containerId) return null;
+  return state.reference.mixingContainers.find(
+    (item) => String(item.container_id) === containerId
+  ) || null;
+}
+
+function updateBallSuggestionHint() {
+  const hintEl = document.getElementById('mix-ball-hint');
+  const warningEl = document.getElementById('mix-ball-overfill');
+  if (!hintEl && !warningEl) return;
+
+  const step = state.workflow?.mixing || getDefaultWorkflowState().mixing;
+  const container = getSelectedMixingContainer();
+  const maxWorkingVolumeMl = container?.max_working_volume_ml != null
+    ? Number(container.max_working_volume_ml)
+    : null;
+  const suggestion = state.ui.panels.mixing.ballsVisible
+    ? suggestBalls(step.slurry_volume_ml, { maxWorkingVolumeMl })
+    : null;
+
+  if (hintEl) {
+    hintEl.textContent = suggestion
+      ? formatBallSuggestion(suggestion, step.slurry_volume_ml)
+      : '';
+  }
+  if (warningEl) {
+    const warningText = suggestion
+      ? formatOverfillWarning(suggestion, maxWorkingVolumeMl)
+      : '';
+    warningEl.textContent = warningText;
+    warningEl.hidden = !warningText;
+  }
+}
+
+function normalizeMixingBalls(rawBalls) {
+  if (!Array.isArray(rawBalls)) return [];
+  return rawBalls
+    .map((item) => ({
+      diameter_cm: Number(item?.diameter_cm),
+      ball_count: Math.trunc(Number(item?.ball_count))
+    }))
+    .filter((item) =>
+      Number.isFinite(item.diameter_cm) &&
+      item.diameter_cm > 0 &&
+      Number.isFinite(item.ball_count) &&
+      item.ball_count > 0)
+    .sort((a, b) => a.diameter_cm - b.diameter_cm);
+}
+
+function readMixingBallsFromDom() {
+  const balls = [];
+  document.querySelectorAll('#mix-balls-fieldset .mix-ball-row').forEach((row) => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    const countInput = row.querySelector('input[type="number"]');
+    if (!checkbox || !countInput || !checkbox.checked) return;
+    balls.push({
+      diameter_cm: Number(checkbox.dataset.diameter),
+      ball_count: Number(countInput.value)
+    });
+  });
+  return normalizeMixingBalls(balls);
+}
+
+function renderMixingBallRows(balls) {
+  const countByDiameter = new Map(
+    normalizeMixingBalls(balls).map((item) => [item.diameter_cm, item.ball_count])
+  );
+  document.querySelectorAll('#mix-balls-fieldset .mix-ball-row').forEach((row) => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    const countInput = row.querySelector('input[type="number"]');
+    if (!checkbox || !countInput) return;
+    const count = countByDiameter.get(Number(checkbox.dataset.diameter));
+    checkbox.checked = count != null;
+    countInput.disabled = count == null;
+    countInput.value = count != null ? String(count) : '';
+  });
 }
 
 function canAutoUpdateWetMixingMethod(currentId) {
@@ -5527,7 +5749,9 @@ document.getElementById('1-mixing-save-btn').onclick = () => trackPendingSave(wi
     wet_end_time: combineDateAndTime(derived.wet_end_date, derived.wet_end_time),
     wet_rpm: step.wet_rpm || null,
     viscosity_cP: step.viscosity_cP || null,
-    viscosity_conditions: step.viscosity_conditions || null
+    viscosity_conditions: step.viscosity_conditions || null,
+    container_id: step.container_id ? Number(step.container_id) : null,
+    balls: normalizeMixingBalls(step.balls)
   };
   
   const res = await fetch(
@@ -6021,6 +6245,10 @@ loadDryMixingMethods(document.getElementById('1-mixing-dry_mixing_id'))
 
 loadWetMixingMethods(document.getElementById('1-mixing-wet_mixing_id'))
 .then(updateMixParamsVisibility)
+.catch(console.error);
+
+loadMixingContainers(document.getElementById('1-mixing-container_id'))
+.then(updateBallSuggestionHint)
 .catch(console.error);
 
 loadFoils(document.getElementById('2-coating-foil_id'))

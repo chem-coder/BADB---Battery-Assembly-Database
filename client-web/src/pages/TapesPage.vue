@@ -386,17 +386,24 @@ const refData = reactive({
   materials: [],
   atmospheres: [],
   dryMixingMethods: [],
+  // d048 — rows now also carry auto_min_volume_ml / auto_max_volume_ml
+  // (volume → method auto-selection window) + uses_balls /
+  // uses_containers capability flags. Stored as returned by the API.
   wetMixingMethods: [],
+  // d048 — Vilitek mixing cups for the «Стакан/ёмкость» select in the
+  // mixing stage (container_id, name, nominal/max working volume).
+  mixingContainers: [],
   foils: [],
   coatingMethods: [],
 })
 
 async function loadRefData() {
-  const keys = ['users', 'projects', 'recipes', 'materials', 'atmospheres', 'dryMixingMethods', 'wetMixingMethods', 'foils', 'coatingMethods']
+  const keys = ['users', 'projects', 'recipes', 'materials', 'atmospheres', 'dryMixingMethods', 'wetMixingMethods', 'mixingContainers', 'foils', 'coatingMethods']
   const urls = [
     '/api/users', '/api/projects', '/api/recipes', '/api/materials',
     '/api/reference/drying-atmospheres', '/api/reference/dry-mixing-methods',
-    '/api/reference/wet-mixing-methods', '/api/reference/foils', '/api/reference/coating-methods',
+    '/api/reference/wet-mixing-methods', '/api/reference/mixing-containers',
+    '/api/reference/foils', '/api/reference/coating-methods',
   ]
   const results = await Promise.allSettled(urls.map(u => api.get(u)))
   results.forEach((r, i) => {

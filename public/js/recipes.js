@@ -397,7 +397,7 @@ async function populateMaterialSelect(row) {
   const isActiveSlot = recipeRole === 'cathode_active' || recipeRole === 'anode_active';
 
   if (isActiveSlot) {
-    select.innerHTML = '<option value="">x — выбирается на ленте</option>';
+    select.innerHTML = '<option value="">АМ — выбирается на ленте</option>';
     select.value = '';
     select.disabled = true;
     select.required = false;

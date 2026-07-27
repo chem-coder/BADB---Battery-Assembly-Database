@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-07-16:
+Current migration file state as of 2026-07-17:
 
-- `migrations/` has 56 SQL files.
-- `migrations_ASCII/` has 56 SQL files.
+- `migrations/` has 59 SQL files.
+- `migrations_ASCII/` has 59 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d047_recipe_active_material_slot.sql`.
+- Dalia's `dNNN` stream exists through `d050_recipe_slot_marker_am.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 35` after `d047` is applied.
+  counts of `dima = 21` and `dalia = 38` after `d050` is applied.
 
 ## How to apply
 
@@ -161,12 +161,30 @@ Full timeline is in the git log. High-level:
   per role with a surrogate row ID, `sort_order`, and exactly one primary row
   per role.
 - `d047_recipe_active_material_slot` — decouples recipes from their active
-  material: recipes become reusable formulations ("96 x : 2.2 Super P :
+  material: recipes become reusable formulations ("96 АМ : 2.2 Super P :
   1.8 PVDF") whose active line is an open slot (`material_id IS NULL`);
   tapes carry the chosen chemistry in the new `tapes.active_material_id`;
   `materials.family` groups pickers. One-off guarded data step dedups
   identical recipes (remapping tapes + actuals) and renames all recipes
   from their composition, preserving old names in notes.
+- `d048_vilitek_mixer_containers_and_balls` — adds the Vilitek V-ITT-300s
+  vacuum planetary centrifugal mixer; wet_mixing_methods gains DB-driven
+  auto-selection windows (`auto_min/max_volume_ml`, previously hardcoded in
+  the vanilla JS) and `uses_balls`/`uses_containers` capability flags; new
+  `mixing_containers` reference (Vilitek cups 30/80/250 ml) with
+  `tape_step_mixing.container_id`; new `tape_step_mixing_balls`
+  (step_id, diameter_cm, ball_count) for the agate milling balls. The
+  magnetic stirrer stays selectable but is no longer auto-suggested.
+- `d049_fix_vilitek_cup_sizes` — corrects the d048 cup seeds to the
+  confirmed lab set (30/100/375 ml, was 30/80/250): renames the 80 ml cup
+  to 100 ml and the 250 ml cup to 375 ml (references survive), resets the
+  375 ml working volume to NULL (the 125 ml estimate belonged to the wrong
+  250 ml guess). Ball diameters confirmed as 0.25/0.5/0.75/1.0 cm (UI-side
+  list only, no schema change).
+- `d050_recipe_slot_marker_am` — renames the active-slot marker in
+  composition-derived recipe names from "x" to "АМ" (активный материал):
+  "96 АМ : 2.2 Super P : 1.8 PVDF". Cosmetic; only d047-shaped names are
+  touched, so hand-renamed recipes are left alone.
 
 ## Check migration ledger
 
@@ -182,10 +200,10 @@ Rows with `source = 'd032_baseline'` are historical backfill rows.
 Future migrations should insert their own row with a real `applied_at`
 as part of the migration file.
 
-Expected stream counts for a current migrated database (after `d047`):
+Expected stream counts for a current migrated database (after `d049`):
 
 ```text
-dalia = 35
+dalia = 37
 dima = 21
 ```
 

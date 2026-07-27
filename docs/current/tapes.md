@@ -170,10 +170,26 @@ actual values in reports, and live slurry solids summary from the selected
 instances and actual values.
 
 The mixing section stores `slurry_volume_ml` and the selected wet mixing method.
-When slurry volume changes, the vanilla UI can auto-fill the wet mixing method
+When slurry volume changes, the UI can auto-fill the wet mixing method
 while the field is blank or still auto-selected. The user can override the
 method manually; manual selection stops further auto-overwrite until the field
 is cleared.
+
+Since migration `d048_vilitek_mixer_containers_and_balls`, the auto-selection
+windows live in `wet_mixing_methods.auto_min_volume_ml/auto_max_volume_ml`
+(no longer hardcoded in the frontend). The Vilitek V-ITT-300s vacuum
+planetary centrifugal mixer owns the 15–150 мл window; the magnetic stirrer
+stays selectable but is never auto-suggested. Methods flagged
+`uses_containers`/`uses_balls` additionally record the cup
+(`tape_step_mixing.container_id` → `mixing_containers`) and the agate
+milling balls used (`tape_step_mixing_balls`: one row per diameter with a
+count, e.g. 10×0,5 см + 3×1,0 см). The UI shows a text-only suggestion for
+the ball set — target ball volume = ⅓ of the slurry volume (lab convention,
+see `client-web/src/utils/ballSuggestion.js`; the same math is inlined in
+vanilla), greedy largest-first combo, with a warning when slurry + balls
+exceed the cup's `max_working_volume_ml`. The suggestion never fills the
+inputs automatically; recorded ball data is also the future calibration set
+for this coefficient.
 
 The same section stores viscosity in `мПа·с` and an optional viscosity
 conditions note, such as spindle and speed (`#3, 6 об/мин`). The conditions

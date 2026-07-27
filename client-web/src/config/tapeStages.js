@@ -25,6 +25,33 @@ export const MATERIAL_ROLE_TO_RECIPE_ROLE = {
   anode_active: 'anode',
 }
 
+// ── d048: wet-mixing method capabilities ─────────────────────────────
+// wet_mixing_methods rows now carry `uses_balls` / `uses_containers`
+// flags (planetary-centrifugal mixers like the Vilitek V-ITT-300s use
+// agate milling balls inside dedicated cups). The container select and
+// the balls editor in the mixing stage are only shown when the selected
+// method has the matching flag.
+function _selectedWetMethodHas(steps, refs, flag) {
+  const id = steps?.mixing?.wetMixingId
+  if (!id && id !== 0) return false
+  const m = (refs?.wetMixingMethods || []).find(
+    (x) => String(x.wet_mixing_id) === String(id)
+  )
+  return !!m?.[flag]
+}
+
+// max_working_volume_ml of the currently selected mixing container
+// (slurry + balls working limit; null when no container or no limit).
+function _selectedContainerMaxMl(steps, refs) {
+  const cid = steps?.mixing?.containerId
+  if (!cid && cid !== 0) return null
+  const c = (refs?.mixingContainers || []).find(
+    (x) => String(x.container_id) === String(cid)
+  )
+  const v = Number(c?.max_working_volume_ml)
+  return Number.isFinite(v) && v > 0 ? v : null
+}
+
 export const TAPE_STAGES = [
   {
     code: 'general_info',
@@ -134,6 +161,32 @@ export const TAPE_STAGES = [
       { key: 'wetMixingId',    label: 'Метод',                  type: 'select', ref: 'wetMixingMethods', group: 'wet_mixing' },
       { key: 'wetDurationMin', label: 'Длительность, мин',      type: 'number', group: 'wet_mixing' },
       { key: 'wetRpm',         label: 'RPM',                    type: 'text',   group: 'wet_mixing' },
+      // d048 — mixing cup for planetary-centrifugal mixers. Shown only
+      // when the selected wet method uses containers (Vilitek). Label
+      // includes the working limit WITH balls when the row has one
+      // (e.g. «Стакан 375 мл — до 200 мл с шарами»).
+      { key: 'containerId',    label: 'Стакан/ёмкость',         type: 'select', ref: 'mixingContainers', group: 'wet_mixing',
+        refConfig: { idField: 'container_id', nameField: 'name' },
+        optionLabel: (c) => {
+          const max = Number(c.max_working_volume_ml)
+          return Number.isFinite(max) && max > 0
+            ? `${c.name} — до ${max.toLocaleString('ru-RU')} мл с шарами`
+            : (c.name || '')
+        },
+        visibleIf: (general, steps, refs) => _selectedWetMethodHas(steps, refs, 'uses_containers'),
+      },
+      // d048 — agate milling balls: three fixed diameters, checkbox +
+      // count each. Rendered by MixingBallsEditor.vue (compound widget —
+      // the generic field types can't express checkbox+count rows with a
+      // live suggestion hint). State: steps.mixing.balls =
+      // [{diameter_cm, ball_count}], checked rows with count>0 only.
+      { key: 'balls',          label: 'Шары (агат)',            type: 'mixing-balls', group: 'wet_mixing',
+        visibleIf: (general, steps, refs) => _selectedWetMethodHas(steps, refs, 'uses_balls'),
+        componentProps: (general, steps, refs) => ({
+          slurryVolumeMl: steps?.mixing?.slurryVolumeMl ?? '',
+          maxWorkingVolumeMl: _selectedContainerMaxMl(steps, refs),
+        }),
+      },
       { key: 'viscosityCp',    label: 'Вязкость, cP',          type: 'number', group: 'wet_mixing' },
       { key: 'viscosity_conditions', label: 'Условия измерения вязкости', type: 'text', group: 'wet_mixing' },
       { key: 'notes',          label: 'Примечания',             type: 'textarea' },

@@ -359,6 +359,28 @@ function renderRecipeSection(report) {
   `;
 }
 
+function formatMixingBallsText(mixingBalls) {
+  let balls = mixingBalls;
+  if (typeof balls === 'string') {
+    try {
+      balls = JSON.parse(balls);
+    } catch (err) {
+      return null;
+    }
+  }
+  if (!Array.isArray(balls) || !balls.length) return null;
+
+  return balls
+    .map((item) => {
+      const diameter = Number(item?.diameter_cm);
+      const count = Number(item?.ball_count);
+      if (!Number.isFinite(diameter) || !Number.isFinite(count)) return null;
+      return `${count}×${diameter.toLocaleString('ru-RU')} см`;
+    })
+    .filter(Boolean)
+    .join(' + ') || null;
+}
+
 function renderStepDetails(step) {
   const code = step.code;
 
@@ -383,6 +405,7 @@ function renderStepDetails(step) {
   }
 
   if (code === 'mixing') {
+    const ballsText = formatMixingBallsText(step.mixing_balls);
     const dryLabel = [
       step.dry_mixing_label || '—',
       step.dry_duration_min != null ? `${step.dry_duration_min} мин` : '—',
@@ -398,6 +421,8 @@ function renderStepDetails(step) {
     return `
       ${renderStepSpacer()}
       ${renderStepMetaRow('Объём суспензии', step.slurry_volume_ml != null ? `${step.slurry_volume_ml} мл` : '—')}
+      ${renderStepMetaRow('Стакан', step.container_name, { hideIfEmpty: true })}
+      ${renderStepMetaRow('Шары', ballsText, { hideIfEmpty: true })}
       ${renderStepSpacer()}
       ${renderStepLine('Сухое смешивание:')}
       ${renderStepLine(dryLabel)}

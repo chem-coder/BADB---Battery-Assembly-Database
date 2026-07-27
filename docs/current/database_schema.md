@@ -48,7 +48,7 @@ NOT tied to a project.
   (`active line <=> material_id IS NULL`). The concrete chemistry is chosen
   per tape via `tapes.active_material_id` (FK → materials, ON DELETE
   RESTRICT). Recipe names are composition-derived
-  ("96 x : 2.2 Super P : 1.8 PVDF", "x" = the active slot) but editable.
+  ("96 АМ : 2.2 Super P : 1.8 PVDF", «АМ» = the active slot) but editable.
   The solution concentration (e.g. 5% vs 7% PVDF in NMP) is NOT part of the
   recipe — it's a `material_instance` picked when recording actuals
   (`tape_recipe_line_actuals`); for the active-slot line the instance must
@@ -56,6 +56,13 @@ NOT tied to a project.
 - **electrolytes**, **separators**, **separator_structure** — component catalogs.
 - **reference lookups** — `coating_methods`, `wet_mixing_methods`,
   `dry_mixing_methods`, `drying_atmospheres`, foils, etc.
+  `wet_mixing_methods` carries the volume window for auto-selection
+  (`auto_min_volume_ml`/`auto_max_volume_ml`, NULL = manual-only) and
+  `uses_balls`/`uses_containers` capability flags (d048).
+  `mixing_containers` (d048) lists the mixer cups (nominal + realistic
+  working volume incl. balls); `tape_step_mixing.container_id` references
+  it and `tape_step_mixing_balls` records the milling balls used per
+  mixing step (diameter_cm, ball_count).
 - **users**, **departments** — people and org units.
 
 ### Project-scoped lab items (the data R1 access control protects)

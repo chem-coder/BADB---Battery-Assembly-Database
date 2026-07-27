@@ -107,7 +107,7 @@ function isActiveSlotLine(line) {
 
 function formatRecipeLineMaterial(line) {
   if (line.material_name) return line.material_name;
-  if (isActiveSlotLine(line)) return 'x — активный материал (выбирается на ленте)';
+  if (isActiveSlotLine(line)) return 'АМ — активный материал (выбирается на ленте)';
   return '—';
 }
 
