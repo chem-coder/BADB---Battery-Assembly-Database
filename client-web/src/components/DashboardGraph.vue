@@ -422,7 +422,9 @@ function initCytoscape() {
     layout: { name: 'grid' },
     minZoom: 0.15,
     maxZoom: 4,
-    wheelSensitivity: 0.25,
+    // No custom wheelSensitivity — Cytoscape warns that a non-default value
+    // zooms unnaturally on other mice/trackpads (a real risk on shared lab
+    // machines). Explicit −/+ toolbar buttons give precise zoom instead.
   })
 
   // Apply layout (getLayoutConfig fills cyOrphanIds), tag orphans, then fit to
@@ -719,6 +721,17 @@ function relayout() {
   }
 }
 
+// Step zoom toward the viewport centre. Cytoscape clamps to minZoom/maxZoom.
+function zoomBy(factor) {
+  if (!cy) return
+  cy.zoom({
+    level: cy.zoom() * factor,
+    renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 },
+  })
+}
+function zoomIn()  { zoomBy(1.25) }
+function zoomOut() { zoomBy(0.8) }
+
 function fitGraph() {
   if (cy) cy.fit(undefined, 30)
 }
@@ -776,6 +789,10 @@ onUnmounted(() => {
       <button :class="['graph-btn', pathMode ? 'graph-btn--active' : '']" @click="togglePathMode" title="Найти путь между двумя нодами">
         <i class="pi pi-directions"></i>
       </button>
+      <div class="graph-zoom">
+        <button class="graph-btn" @click="zoomOut" title="Уменьшить"><i class="pi pi-minus"></i></button>
+        <button class="graph-btn" @click="zoomIn" title="Увеличить"><i class="pi pi-plus"></i></button>
+      </div>
 
       <div class="graph-search">
         <i class="pi pi-search"></i>
@@ -938,6 +955,8 @@ onUnmounted(() => {
   gap: 0.4rem;
   flex-wrap: wrap;
 }
+
+.graph-zoom { display: flex; gap: 4px; }
 
 .graph-btn {
   width: 30px;

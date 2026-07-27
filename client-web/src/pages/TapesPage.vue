@@ -6,14 +6,13 @@
  * The old TapeFormPage is replaced by the inline Constructor.
  * Table has a checkbox column "В конструктор" to add tapes to the Constructor zone.
  */
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
 import { toastApiError } from '@/utils/errorClassifier'
 import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 // StatusBadge removed — status column replaced by project/operator
 import TapeConstructor from '@/components/TapeConstructor.vue'
@@ -23,6 +22,11 @@ import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
 import Checkbox from 'primevue/checkbox'
 import { useExportTapes } from '@/composables/useExportTapes'
 import { todayIsoMsk } from '@/utils/dateFormat'
+import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue'
+import { useDeleteCheck } from '@/composables/useDeleteCheck'
+import { tapeDeletePhrase, tapeDeleteBlockers } from '@/utils/tapeDelete'
+import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
+import { tapePrintUrl } from '@/utils/tapePrint'
 // Button removed — undo/redo now in TapeConstructor
 
 const router = useRouter()
@@ -102,6 +106,9 @@ const columns = [
   { field: 'project_name',  header: 'Проект',     minWidth: '80px',  width: '115px' },
   { field: 'role',          header: 'Тип',        minWidth: '80px',  width: '115px' },
   { field: 'recipe_name',   header: 'Рецепт',     minWidth: '80px',  width: '115px' },
+  // d047 — the tape's chemistry for the recipe's open active-material
+  // slot (tapes.active_material_id → materials.name via the API join).
+  { field: 'active_material_name', header: 'Активный материал', minWidth: '90px', width: '130px' },
   // d024 — coating sidedness as a list-visible attribute. Filter via the
   // header overlay (sortable: true keeps the column predictable too).
   { field: 'coating_sidedness', header: 'Стороны', minWidth: '70px', width: '90px', sortable: true },
@@ -232,44 +239,87 @@ async function onCreateDialogSubmit(payload) {
   }
 }
 
-// ── Save indicator (delete flow) ──────────────────────────────────────
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
+// ── Guided delete (mirrors Batteries/Electrodes + vanilla 1-tapes.js) ──
+// admin/lead gate → delete-check preflight → blockers OR typed «DELETE TAPE
+// <id>» → DELETE. Per-tape only. The backend (requireRole admin/lead) is the
+// real gate and enforces the dependency blockers; the UI pre-check just gives
+// a friendly message instead of a raw 403.
+const { check: tapeDeleteCheck } = useDeleteCheck('tapes')
+const deleteFlow = reactive({ visible: false, tape: null, phrase: '', blockers: [], busy: false })
 
-function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
-}
-
-async function confirmSave() {
-  try {
-    // Handle delete flow (the only action requiring explicit confirmation)
-    if (pendingDelete.value.length) {
-      for (const item of pendingDelete.value) {
-        await api.delete(`/api/tapes/${item.tape_id}`)
-      }
-      pendingDelete.value = []
-      crudTable.value?.clearSelection()
-      await loadTapes()
-    }
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
-  } catch (err) {
-    toastApiError(toast, err, 'Не удалось сохранить')
+async function onDelete(items) {
+  if (!items || items.length === 0) return
+  if (!authStore.isLead) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Недостаточно прав',
+      detail: 'Удаление ленты доступно администратору или руководителю.',
+      life: 4000,
+    })
+    crudTable.value?.clearSelection()
+    return
   }
-}
-
-function discardChanges() {
-  if (pendingDelete.value.length) {
-    pendingDelete.value = []
+  if (items.length > 1) {
+    toast.add({
+      severity: 'info',
+      summary: 'Удаляйте ленты по одной',
+      detail: 'Управляемое удаление выполняется для одной ленты за раз.',
+      life: 4000,
+    })
+    crudTable.value?.clearSelection()
+    return
+  }
+  const tape = items[0]
+  const id = tape.tape_id
+  try {
+    const res = await tapeDeleteCheck(id)
+    deleteFlow.tape = tape
+    deleteFlow.phrase = tapeDeletePhrase(id)
+    deleteFlow.blockers = res.canDelete ? [] : tapeDeleteBlockers(res.dependencies)
+    deleteFlow.visible = true
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось проверить удаление ленты')
     crudTable.value?.clearSelection()
   }
-  saveState.value = 'idle'
 }
 
-onUnmounted(() => clearTimeout(saveTimer))
+async function onDeleteConfirmed() {
+  const tape = deleteFlow.tape
+  if (!tape || deleteFlow.busy) return
+  deleteFlow.busy = true
+  const id = tape.tape_id
+  try {
+    await api.delete(`/api/tapes/${id}`)
+    deleteFlow.visible = false
+    const idx = constructorIds.value.indexOf(id)
+    if (idx >= 0) constructorIds.value.splice(idx, 1)
+    crudTable.value?.clearSelection()
+    await loadTapes()
+    toast.add({ severity: 'success', summary: 'Лента удалена', detail: `#${id}`, life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось удалить ленту')
+  } finally {
+    deleteFlow.busy = false
+  }
+}
+
+function onDeleteCancelled() {
+  deleteFlow.visible = false
+  deleteFlow.tape = null
+  crudTable.value?.clearSelection()
+}
+
+// ── Print report (opens vanilla /workflow/tape-print.html in-app) ──────
+// Mirrors ElectrodesPage.openBatchPrint / AssemblyPage.openBatteryPrint.
+const printDialog = ref({ visible: false, url: '', title: '' })
+function openTapePrint(tapeId) {
+  if (!tapeId) return
+  printDialog.value = {
+    visible: true,
+    url: tapePrintUrl(tapeId),
+    title: `Печать · Лента #${tapeId}`,
+  }
+}
 
 // ── Constructor: selected tapes ───────────────────────────────────────
 const constructorIds = ref([])
@@ -331,6 +381,9 @@ const refData = reactive({
   users: [],
   projects: [],
   recipes: [],
+  // d047 — materials feed the «Активный материал» select in the
+  // constructor's general_info stage (rows carry role + family).
+  materials: [],
   atmospheres: [],
   dryMixingMethods: [],
   wetMixingMethods: [],
@@ -339,9 +392,9 @@ const refData = reactive({
 })
 
 async function loadRefData() {
-  const keys = ['users', 'projects', 'recipes', 'atmospheres', 'dryMixingMethods', 'wetMixingMethods', 'foils', 'coatingMethods']
+  const keys = ['users', 'projects', 'recipes', 'materials', 'atmospheres', 'dryMixingMethods', 'wetMixingMethods', 'foils', 'coatingMethods']
   const urls = [
-    '/api/users', '/api/projects', '/api/recipes',
+    '/api/users', '/api/projects', '/api/recipes', '/api/materials',
     '/api/reference/drying-atmospheres', '/api/reference/dry-mixing-methods',
     '/api/reference/wet-mixing-methods', '/api/reference/foils', '/api/reference/coating-methods',
   ]
@@ -366,16 +419,7 @@ function formatDate(dt) {
 <template>
   <div class="tapes-page">
 
-    <PageHeader title="Подготовка лент" icon="pi pi-bars">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
-        />
-      </template>
-    </PageHeader>
+    <PageHeader title="Подготовка лент" icon="pi pi-bars" />
 
     <!-- ── Table (collapsible via max-height) ── -->
     <CrudTable
@@ -389,11 +433,13 @@ function formatDate(dt) {
       :export-badge="exportBadge"
       show-add
       show-duplicate
+      show-print
       row-clickable
       @add="createNewTape"
       @delete="onDelete"
       @export="onExportTapes"
       @duplicate="duplicateTape"
+      @print="(item) => openTapePrint(item.tape_id)"
       @header-click="(field) => field === '_constructor' && toggleAllConstructor()"
       @row-click="(data) => toggleConstructor(data.tape_id)"
     >
@@ -443,6 +489,11 @@ function formatDate(dt) {
       <!-- Custom cell: Рецепт -->
       <template #col-recipe_name="{ data }">
         <span>{{ data.recipe_name || '' }}</span>
+      </template>
+
+      <!-- Custom cell: Активный материал (d047) -->
+      <template #col-active_material_name="{ data }">
+        <span>{{ data.active_material_name || '' }}</span>
       </template>
 
       <!-- Custom cell: coating sidedness (audit #11) -->
@@ -522,6 +573,26 @@ function formatDate(dt) {
       :initial-values="createInitialValues"
       :submit-label="dialogSubmitLabel"
       @create="onCreateDialogSubmit"
+    />
+
+    <!-- Guided delete — admin/lead only; delete-check blockers OR typed
+         «DELETE TAPE <id>». Mirrors Electrodes/Batteries. -->
+    <TypedDeleteConfirm
+      :visible="deleteFlow.visible"
+      :phrase="deleteFlow.phrase"
+      :blockers="deleteFlow.blockers"
+      :title="`Удаление ленты #${deleteFlow.tape?.tape_id ?? ''}`"
+      description="Будут удалены данные ленты и связанные шаги процесса. Это действие необратимо."
+      @update:visible="(v) => { if (!v) onDeleteCancelled() }"
+      @confirmed="onDeleteConfirmed"
+      @cancelled="onDeleteCancelled"
+    />
+
+    <!-- Tape print report (vanilla /workflow/tape-print.html) opened in-app. -->
+    <PrintPreviewDialog
+      v-model:visible="printDialog.visible"
+      :url="printDialog.url"
+      :title="printDialog.title"
     />
 
   </div>

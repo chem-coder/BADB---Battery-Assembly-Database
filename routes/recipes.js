@@ -100,7 +100,7 @@ async function getRecipeReport(db, recipeId) {
       rl.slurry_percent,
       rl.line_notes
     FROM tape_recipe_lines rl
-    JOIN materials m ON m.material_id = rl.material_id
+    LEFT JOIN materials m ON m.material_id = rl.material_id
     WHERE rl.tape_recipe_id = $1
     ORDER BY
       CASE rl.recipe_role
@@ -205,7 +205,15 @@ router.post('/', auth, async (req, res) => {
           ? null
           : Number(slurry_percent);
 
-      const matId = Number(material_id);
+      // Active line is an open slot: the material is chosen on the tape
+      // (tapes.active_material_id), so material_id must be NULL here.
+      const isActiveSlot =
+        recipe_role === 'cathode_active' || recipe_role === 'anode_active';
+
+      const matId =
+        material_id === null || material_id === undefined || material_id === ''
+          ? null
+          : Number(material_id);
 
       const includeInPct =
         include_in_pct === false || include_in_pct === 'false'
@@ -215,8 +223,15 @@ router.post('/', auth, async (req, res) => {
       // If excluded (solvent), percent must be NULL to satisfy the new CHECK constraint
       const pctFinal = includeInPct ? pct : null;
 
+      if (isActiveSlot && matId !== null) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Активная строка рецепта не указывает материал — он выбирается на ленте'
+        });
+      }
+
       if (
-        !Number.isInteger(matId) ||
+        (!isActiveSlot && !Number.isInteger(matId)) ||
         !recipe_role ||
         (includeInPct && (pctFinal === null || !Number.isFinite(pctFinal) || pctFinal < 0 || pctFinal > 100)) ||
         (!includeInPct && pctFinal !== null)
@@ -358,7 +373,6 @@ router.get('/', auth, async (req, res) => {
         r.notes,
         r.created_by,
         r.created_at,
-        act.active_material_name,
         act.active_percent,
         mats.material_names,
         u_created.name AS created_by_name,
@@ -369,11 +383,8 @@ router.get('/', auth, async (req, res) => {
       LEFT JOIN users u_created ON u_created.user_id = r.created_by
       LEFT JOIN users u_updated ON u_updated.user_id = r.updated_by
       LEFT JOIN LATERAL (
-        SELECT
-          m.name AS active_material_name,
-          rl.slurry_percent AS active_percent
+        SELECT rl.slurry_percent AS active_percent
         FROM tape_recipe_lines rl
-        JOIN materials m ON m.material_id = rl.material_id
         WHERE rl.tape_recipe_id = r.tape_recipe_id
           AND rl.recipe_role IN ('cathode_active','anode_active')
         LIMIT 1
@@ -501,7 +512,7 @@ router.get('/:id/lines', auth, async (req, res) => {
         rl.slurry_percent,
         rl.line_notes
       FROM tape_recipe_lines rl
-      JOIN materials m ON m.material_id = rl.material_id
+      LEFT JOIN materials m ON m.material_id = rl.material_id
       WHERE rl.tape_recipe_id = $1
       ORDER BY rl.recipe_line_id;
       `,
@@ -601,7 +612,15 @@ router.put('/:id', auth, async (req, res) => {
         line_notes
       } = line;
 
-      const matId = Number(material_id);
+      // Active line is an open slot: the material is chosen on the tape
+      // (tapes.active_material_id), so material_id must be NULL here.
+      const isActiveSlot =
+        recipe_role === 'cathode_active' || recipe_role === 'anode_active';
+
+      const matId =
+        material_id === null || material_id === undefined || material_id === ''
+          ? null
+          : Number(material_id);
 
       const includeInPct =
         include_in_pct === false || include_in_pct === 'false'
@@ -616,8 +635,15 @@ router.put('/:id', auth, async (req, res) => {
       // If excluded, percent must be NULL to satisfy the CHECK constraint
       const pctFinal = includeInPct ? pct : null;
 
+      if (isActiveSlot && matId !== null) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: 'Активная строка рецепта не указывает материал — он выбирается на ленте'
+        });
+      }
+
       if (
-        !Number.isInteger(matId) ||
+        (!isActiveSlot && !Number.isInteger(matId)) ||
         !recipe_role ||
         (includeInPct && (pctFinal === null || !Number.isFinite(pctFinal) || pctFinal < 0 || pctFinal > 100)) ||
         (!includeInPct && pctFinal !== null)

@@ -56,6 +56,10 @@ export function useRowOpenForm(options) {
     hasDeleteCheck = false,
     beforeDelete = null,
     deleteMessages = {},
+    // Optional extra unsaved-state signal (a ref/computed<boolean>). Lets a page
+    // fold in state that lives OUTSIDE the form — e.g. a project's members table
+    // that has its own Save — so the exit/navigation guard catches it too.
+    extraDirty = null,
   } = options;
 
   // ── Required-args guard ────────────────────────────────────────────
@@ -81,19 +85,22 @@ export function useRowOpenForm(options) {
 
   // ── Composables ────────────────────────────────────────────────────
   const dirty = useDirtyTracking(form);
+  // Exit/navigation guard fires when the form OR any external surface
+  // (extraDirty — e.g. the members table) has unsaved changes.
+  const guardDirty = computed(() => dirty.isDirty.value || !!(extraDirty && extraDirty.value));
   const deleteCheckHook = hasDeleteCheck ? useDeleteCheck(entityType) : null;
   // useUnsavedGuard requires component context (onBeforeRouteLeave, onBeforeUnmount).
   // It is initialized below inside a guarded try so that consumers without a
   // router (e.g. isolated tests) can still use the composable.
   let unsavedGuardApi;
   try {
-    unsavedGuardApi = useUnsavedGuard({ isDirty: dirty.isDirty });
+    unsavedGuardApi = useUnsavedGuard({ isDirty: guardDirty });
   } catch {
     // Fallback for environments without router context (e.g. isolated tests).
     // Mirrors the async signature so callers can await it uniformly.
     unsavedGuardApi = {
       confirmExit: async () =>
-        !dirty.isDirty.value ||
+        !guardDirty.value ||
         window.confirm('Есть несохранённые изменения. Выйти без сохранения?'),
     };
   }

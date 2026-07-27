@@ -4,26 +4,36 @@
  * Shows ALL batteries with CrudTable + inline TapeConstructor (battery mode).
  * Follows TapesPage / ElectrodesPage pattern.
  */
-import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
 import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 import TapeConstructor from '@/components/TapeConstructor.vue'
 import BatteryElectrochemEditor from '@/components/BatteryElectrochemEditor.vue'
 import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
+import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue'
 import { todayIsoMsk } from '@/utils/dateFormat'
 import CapacityHint from '@/components/CapacityHint.vue'
 import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
 import Checkbox from 'primevue/checkbox'
+import RadioButton from 'primevue/radiobutton'
+import InputText from 'primevue/inputtext'
 import { BATTERY_STAGES } from '@/config/batteryStages'
 import { useBatteryState } from '@/composables/useBatteryState'
 import { useBackendCache } from '@/composables/useBackendCache'
+import { useDeleteCheck } from '@/composables/useDeleteCheck'
 import { errorMessageRu, toastApiError } from '@/utils/errorClassifier'
 import { fmtCapacity } from '@/utils/formatCapacity'
+import { BATTERY_OPEN_STATUS_LABEL, isBatteryOpenStatus, batteryStatusCode } from '@/utils/batteryStatus'
+import {
+  batteryDeletePhrase,
+  mapBatteryDeleteCheck,
+  batteryDeleteConfirmEnabled,
+  buildBatteryDeletePayload,
+} from '@/utils/batteryDelete'
 
 const router = useRouter()
 const route = useRoute()
@@ -76,7 +86,16 @@ async function loadRefData() {
 }
 
 const ffLabels = { coin: 'Монета', pouch: 'Пакет', cylindrical: 'Цилиндр' }
-const statusLabels = { draft: 'Черновик', assembled: 'Собран', testing: 'Тест', completed: 'Готов', failed: 'Брак' }
+
+// Compact labels for the post-assembly selectable statuses (the «Статус»
+// column is narrow). The blank/NULL/`disassembled` → «Открыт» normalization
+// lives in @/utils/batteryStatus — `draft`/«Черновик» is NOT a battery
+// status (docs/rules/battery_lifecycle_rules.md).
+const activeStatusLabels = { assembled: 'Собран', testing: 'Тест', completed: 'Готов', failed: 'Брак' }
+function batteryStatusLabel(status) {
+  if (isBatteryOpenStatus(status)) return BATTERY_OPEN_STATUS_LABEL
+  return activeStatusLabels[status] || status || BATTERY_OPEN_STATUS_LABEL
+}
 
 // ── Columns ──
 const columns = [
@@ -108,7 +127,7 @@ const columns = [
 const tableData = computed(() =>
   batteries.value.map(b => ({
     ...b,
-    status_display: statusLabels[b.status] || b.status || 'Черновик',
+    status_display: batteryStatusLabel(b.status),
   }))
 )
 
@@ -434,36 +453,96 @@ watch(() => [...constructorIds.value], (ids, oldIds) => {
   }
 })
 
-// ── Delete flow ──
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
+// ── Guided delete flow ──────────────────────────────────────────────
+// Mirrors vanilla 3-batteries.js (docs/rules/battery_lifecycle_rules.md):
+// preflight delete-check → blockers OR (electrode disposition + typed
+// `DELETE BATTERY <id>` confirmation). The dialog and its contract logic
+// reuse the shared parity primitives (TypedDeleteConfirm, useDeleteCheck)
+// and @/utils/batteryDelete so the exact request body is single-sourced.
+const { check: runBatteryDeleteCheck } = useDeleteCheck('batteries')
+const deleteFlow = reactive({
+  visible: false,
+  battery: null,
+  phrase: '',
+  blockers: [],
+  ownedData: [],
+  linkedElectrodes: [],
+  disposition: 'available',
+  scrappedReason: '',
+  busy: false,
+})
 
-function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
-}
-
-async function confirmSave() {
-  try {
-    for (const item of pendingDelete.value) {
-      await api.delete(`/api/batteries/${item.battery_id}`)
-    }
-    pendingDelete.value = []
+// The «Удалить» context-menu action. Guided delete is per-battery (the typed
+// phrase and electrode disposition are per record), so a multi-selection is
+// declined with a hint rather than silently deleting the wrong thing.
+async function onDelete(items) {
+  if (!items || items.length === 0) return
+  if (items.length > 1) {
+    toast.add({
+      severity: 'info',
+      summary: 'Удаляйте аккумуляторы по одному',
+      detail: 'Управляемое удаление выполняется для одного аккумулятора за раз.',
+      life: 4000,
+    })
     crudTable.value?.clearSelection()
-    await loadBatteries()
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
+    return
+  }
+  const battery = items[0]
+  const id = battery.battery_id
+  try {
+    const { raw } = await runBatteryDeleteCheck(id)
+    const mapped = mapBatteryDeleteCheck(raw)
+    deleteFlow.battery = battery
+    deleteFlow.phrase = batteryDeletePhrase(id)
+    deleteFlow.blockers = mapped.blockers
+    deleteFlow.ownedData = mapped.ownedData
+    deleteFlow.linkedElectrodes = mapped.linkedElectrodes
+    deleteFlow.disposition = 'available'
+    deleteFlow.scrappedReason = ''
+    deleteFlow.visible = true
   } catch (err) {
-    toastApiError(toast, err, 'Не удалось удалить')
+    toastApiError(toast, err, 'Не удалось проверить удаление аккумулятора')
+    crudTable.value?.clearSelection()
   }
 }
 
-function discardChanges() {
-  pendingDelete.value = []
+const deleteConfirmEnabled = computed(() =>
+  batteryDeleteConfirmEnabled(deleteFlow.linkedElectrodes, deleteFlow.disposition)
+)
+
+async function onDeleteConfirmed() {
+  const battery = deleteFlow.battery
+  if (!battery || deleteFlow.busy) return
+  const id = battery.battery_id
+  deleteFlow.busy = true
+  try {
+    const body = buildBatteryDeletePayload({
+      batteryId: id,
+      linkedElectrodes: deleteFlow.linkedElectrodes,
+      disposition: deleteFlow.disposition,
+      scrappedReason: deleteFlow.scrappedReason,
+    })
+    // axios DELETE carries a body via the `data` option.
+    await api.delete(`/api/batteries/${id}`, { data: body })
+    deleteFlow.visible = false
+    // Close the deleted battery in the constructor if it was open.
+    const idx = constructorIds.value.indexOf(id)
+    if (idx >= 0) constructorIds.value.splice(idx, 1)
+    crudTable.value?.clearSelection()
+    await loadBatteries()
+    toast.add({ severity: 'success', summary: 'Аккумулятор удалён', detail: `#${id}`, life: 3000 })
+  } catch (err) {
+    // Backend re-runs blockers/electrode checks inside the txn and may 409.
+    toastApiError(toast, err, 'Не удалось удалить аккумулятор')
+  } finally {
+    deleteFlow.busy = false
+  }
+}
+
+function onDeleteCancelled() {
+  deleteFlow.visible = false
+  deleteFlow.battery = null
   crudTable.value?.clearSelection()
-  saveState.value = 'idle'
 }
 
 // ── Init ──
@@ -474,21 +553,11 @@ onMounted(async () => {
     constructorIds.value = [batteryId]
   }
 })
-onUnmounted(() => clearTimeout(saveTimer))
 </script>
 
 <template>
   <div class="assembly-page">
-    <PageHeader title="Аккумуляторы" icon="pi pi-box">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
-        />
-      </template>
-    </PageHeader>
+    <PageHeader title="Аккумуляторы" icon="pi pi-box" />
 
     <CrudTable
       ref="crudTable"
@@ -542,7 +611,7 @@ onUnmounted(() => clearTimeout(saveTimer))
         <span v-else class="text-muted">—</span>
       </template>
       <template #col-status_display="{ data }">
-        <span :class="['status-badge', `status-badge--${data.status || 'draft'}`]">
+        <span :class="['status-badge', `status-badge--${batteryStatusCode(data.status)}`]">
           {{ data.status_display }}
         </span>
       </template>
@@ -706,6 +775,57 @@ onUnmounted(() => clearTimeout(saveTimer))
       :submit-label="dialogSubmitLabel"
       @create="onCreateDialogSubmit"
     />
+
+    <!-- Guided battery delete (battery_lifecycle_rules.md). When the
+         preflight finds hard blockers, TypedDeleteConfirm shows them and
+         hides the confirm button. Otherwise the #extra-fields slot carries
+         the owned-data summary and, when electrodes are linked, the
+         disposition choice; the typed «DELETE BATTERY <id>» phrase gates
+         the actual delete. -->
+    <TypedDeleteConfirm
+      :visible="deleteFlow.visible"
+      :phrase="deleteFlow.phrase"
+      :blockers="deleteFlow.blockers"
+      :confirm-enabled="deleteConfirmEnabled"
+      :title="`Удаление аккумулятора #${deleteFlow.battery?.battery_id ?? ''}`"
+      description="Будут удалены только данные, принадлежащие записи аккумулятора. Это действие необратимо."
+      @update:visible="(v) => { if (!v) onDeleteCancelled() }"
+      @confirmed="onDeleteConfirmed"
+      @cancelled="onDeleteCancelled"
+    >
+      <template #extra-fields>
+        <div v-if="deleteFlow.ownedData.length" class="bd-owned">
+          <p class="bd-owned-intro">Будут удалены данные аккумулятора:</p>
+          <ul>
+            <li v-for="(d, i) in deleteFlow.ownedData" :key="i">
+              {{ d.label }}<span v-if="d.count"> — {{ d.count }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="deleteFlow.linkedElectrodes.length" class="bd-disposition">
+          <p class="bd-disposition-intro">
+            Связанные электроды: {{ deleteFlow.linkedElectrodes.length }} шт. Выберите, что с ними сделать:
+          </p>
+          <label class="bd-radio">
+            <RadioButton v-model="deleteFlow.disposition" inputId="bd-disp-available" value="available" />
+            <span>Вернуть электроды в партию как доступные</span>
+          </label>
+          <label class="bd-radio">
+            <RadioButton v-model="deleteFlow.disposition" inputId="bd-disp-scrapped" value="scrapped" />
+            <span>Вернуть электроды в партию как списанные</span>
+          </label>
+          <div v-if="deleteFlow.disposition === 'scrapped'" class="bd-reason">
+            <label for="bd-scrap-reason">Причина списания</label>
+            <InputText
+              id="bd-scrap-reason"
+              v-model="deleteFlow.scrappedReason"
+              :placeholder="`возвращен из аккумулятора #${deleteFlow.battery?.battery_id ?? ''} при удалении записи`"
+            />
+          </div>
+        </div>
+      </template>
+    </TypedDeleteConfirm>
   </div>
 </template>
 
@@ -747,7 +867,50 @@ onUnmounted(() => clearTimeout(saveTimer))
   font-size: 12px;
   font-weight: 600;
 }
-.status-badge--draft { background: rgba(107, 114, 128, 0.12); color: #6B7280; }
+.status-badge--open { background: rgba(107, 114, 128, 0.12); color: #6B7280; }
+
+/* ── Guided-delete dialog (#extra-fields slot) ── */
+.bd-owned {
+  font-size: 13px;
+  color: #4B5563;
+}
+.bd-owned-intro {
+  margin: 0 0 4px;
+  font-weight: 500;
+}
+.bd-owned ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.bd-disposition {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 0.5px solid rgba(0, 50, 116, 0.1);
+}
+.bd-disposition-intro {
+  margin: 0;
+  font-size: 14px;
+  color: #4B5563;
+}
+.bd-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.bd-reason {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #4B5563;
+}
+.bd-reason :deep(.p-inputtext) {
+  width: 100%;
+}
 .status-badge--assembled { background: rgba(0, 50, 116, 0.08); color: #003274; }
 .status-badge--testing { background: rgba(211, 167, 84, 0.15); color: #9a7030; }
 .status-badge--completed { background: rgba(82, 201, 166, 0.15); color: #1a8a64; }

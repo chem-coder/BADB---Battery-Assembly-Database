@@ -274,6 +274,13 @@ function buildMixtureComputationOrder(rows, expandedComponentsByLineId, targetDr
   return ordered;
 }
 
+// material_id can be NULL on the active slot line when the tape has not
+// chosen its active material yet (d047) — Number(null) would be 0, so map
+// NULL explicitly to NaN to keep the isFinite guards honest.
+function toMaterialId(value) {
+  return value === null || value === undefined ? NaN : Number(value);
+}
+
 function computeTapeMixtureRows({ tape, recipeLines, componentsByInstanceId }) {
   const rows = Array.isArray(recipeLines) ? recipeLines : [];
   const inputValue = Number(tape?.target_mass_g);
@@ -322,7 +329,7 @@ function computeTapeMixtureRows({ tape, recipeLines, componentsByInstanceId }) {
     if (line.slurry_percent === null || line.slurry_percent === undefined || line.slurry_percent === '') return;
 
     const pct = Number(line.slurry_percent);
-    const materialId = Number(line.material_id);
+    const materialId = toMaterialId(line.material_id);
     if (!isPositiveFiniteNumber(pct) || !Number.isFinite(materialId)) return;
 
     const dryMass = totalDryMass * (pct / 100);
@@ -336,7 +343,7 @@ function computeTapeMixtureRows({ tape, recipeLines, componentsByInstanceId }) {
   const expandedComponentsByLineId = new Map();
   rows.forEach((line) => {
     const selectedInstanceId = Number(line.material_instance_id);
-    const lineMaterialId = Number(line.material_id);
+    const lineMaterialId = toMaterialId(line.material_id);
 
     if (!Number.isFinite(selectedInstanceId) || !Number.isFinite(lineMaterialId)) return;
 
@@ -364,7 +371,7 @@ function computeTapeMixtureRows({ tape, recipeLines, componentsByInstanceId }) {
   computationOrder.forEach((rowIndex) => {
     const line = rows[rowIndex];
     const selectedInstanceId = Number(line.material_instance_id);
-    const lineMaterialId = Number(line.material_id);
+    const lineMaterialId = toMaterialId(line.material_id);
     let targetQuantity = null;
 
     if (Number.isFinite(selectedInstanceId) && Number.isFinite(lineMaterialId)) {

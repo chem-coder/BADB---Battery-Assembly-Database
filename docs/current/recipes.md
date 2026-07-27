@@ -1,9 +1,9 @@
 # Recipes
 
 Created: 2026-05-09
-Edited: 2026-05-14
+Edited: 2026-07-16
 Status: current
-Verified against code: 2026-05-09
+Verified against code: 2026-07-16 (d047 active-material slot)
 
 Source paths:
 
@@ -17,6 +17,16 @@ Source paths:
 This document describes the current vanilla Recipes reference page and API
 behavior. Recipes define formulation intent for tapes; tape execution selects
 concrete material instances separately on the Tapes page.
+
+Since migration `d047_recipe_active_material_slot`, a recipe is a reusable
+formulation decoupled from any specific active material. The active line
+(`recipe_role` = `cathode_active`/`anode_active`) is an **open slot**: its
+`material_id` is NULL (DB CHECK enforced). The concrete chemistry (NMC 811,
+LFP S19, ...) is chosen per tape via `tapes.active_material_id`. Recipe names
+are composition-derived by convention — `96 x : 2.2 Super P : 1.8 PVDF`,
+where `x` stands for the active slot — but remain freely editable. Solution
+concentration (5% vs 7% PVDF in NMP) is NOT part of the recipe; it is a
+material-instance choice made when recording tape actuals.
 
 ## Data Model
 
@@ -55,7 +65,10 @@ Current line roles:
 
 The page filters available materials by the selected line role. `additive`
 maps to material role `conductive_additive`. Solvent lines are excluded from
-the required 100 percent dry-solids sum.
+the required 100 percent dry-solids sum. Active lines (`cathode_active` /
+`anode_active`) carry no material: the material select is disabled and shows
+`x — выбирается на ленте`; the percent is still required and counts toward
+the 100 percent sum.
 
 Included line percentages are used downstream by the Tapes page to calculate
 planned masses-to-weigh for slurry preparation. Excluded rows, including the
@@ -86,7 +99,9 @@ Create and update require:
 - non-empty `name`;
 - recipe `role`;
 - at least one line;
-- every saved line to have a material and line role;
+- every saved line to have a line role;
+- every non-active line to have a material; active lines must have
+  `material_id` NULL (a provided material is rejected with 400);
 - every included line to have a percent between 0 and 100.
 
 The vanilla page also checks that included non-solvent line percentages sum to
@@ -161,4 +176,6 @@ delete.
 ## Current Boundaries
 
 Recipes describe intended formulation. Do not store tape-specific material
-instance selections or actual weighing values on recipe rows.
+instance selections or actual weighing values on recipe rows. The active
+material is tape-level data (`tapes.active_material_id`) — never store it on
+the recipe; the recipe's active line stays an open slot.

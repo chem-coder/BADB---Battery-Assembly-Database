@@ -25,7 +25,7 @@
  * Scrolling: when `currentId` transitions from null → non-null, the
  * document scrolls to top (vanilla's BADB_UI.scrollToTop equivalent).
  */
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import PageHeader from '@/components/PageHeader.vue';
 import TopAddInput from './TopAddInput.vue';
 import PageFilterBar from './PageFilterBar.vue';
@@ -49,6 +49,11 @@ const props = defineProps({
   emptyMessage: { type: String, default: 'Список пуст' },
   // Optional: surface-supplied function returning a string for text search.
   textHaystack: { type: Function, default: null },
+  // When true, hide the add-input, filter bar, and list while a record is open
+  // (currentId set or create mode) — so the page focuses on the open record and
+  // nothing distracting sits below it. Opt-in; off by default so other pages are
+  // unchanged. The user returns to the list by exiting the record.
+  focusWhenOpen: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -92,6 +97,11 @@ const filteredList = computed(() => {
   return props.list.filter((row) => rowMatchesFilter(row, filterState.value));
 });
 
+// A record is "open" in edit mode (currentId set) or create mode.
+const recordOpen = computed(() => props.currentId != null || props.mode === 'create');
+// The list/add/filter surfaces are visible unless focus-mode hides them while open.
+const listSurfaceVisible = computed(() => !(props.focusWhenOpen && recordOpen.value));
+
 function onFilterState(s) {
   filterState.value = s;
   emit('filters-changed', { state: s, shown: filteredList.value.length, total: props.list.length });
@@ -115,19 +125,42 @@ function onRowDuplicate(id) {
   emit('row-duplicate', row ?? { [props.idField]: id });
 }
 
-// Scroll to top when a record is opened.
+const rootEl = ref(null);
+
+// Scroll the opened record into view. The app scrolls inside a nested container
+// (`.app-content`, overflow-y:auto in AppLayout), NOT the document — so
+// document.scrollingElement never moves. Walk up to the nearest scrollable
+// ancestor and scroll that. Runs on nextTick (after the opened-record area
+// renders) with instant behaviour — a smooth scroll gets fought by the browser's
+// scroll-anchoring when the form is inserted above the current position.
+function scrollOpenedIntoView() {
+  nextTick(() => {
+    let el = rootEl.value?.parentElement;
+    while (el && el !== document.body) {
+      const oy = getComputedStyle(el).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) {
+        el.scrollTo({ top: 0 });
+        return;
+      }
+      el = el.parentElement;
+    }
+    const fallback = document.querySelector('.app-content') || document.scrollingElement || document.documentElement;
+    if (fallback) fallback.scrollTo({ top: 0 });
+  });
+}
+
+// Scroll to top when a record is opened (null → set), in either edit or create.
 watch(
   () => props.currentId,
   (next, prev) => {
-    if (next != null && prev == null) {
-      // Match vanilla BADB_UI.scrollToTop(): use document.scrollingElement
-      // with immediate behaviour for destructive/guided flows. Smooth is
-      // fine for ordinary opening.
-      const scroller = document.scrollingElement || document.documentElement || document.body;
-      if (scroller) scroller.scrollTo({ top: 0, behavior: 'smooth' });
-      else window.scrollTo(0, 0);
-    }
-  }
+    if (next != null && prev == null) scrollOpenedIntoView();
+  },
+);
+watch(
+  () => props.mode,
+  (next, prev) => {
+    if (next === 'create' && prev !== 'create') scrollOpenedIntoView();
+  },
 );
 
 function getCellValue(row, column) {
@@ -136,11 +169,11 @@ function getCellValue(row, column) {
 </script>
 
 <template>
-  <div class="row-open-page">
+  <div ref="rootEl" class="row-open-page">
     <PageHeader :title="title" :icon="icon" />
 
     <TopAddInput
-      v-if="addPlaceholder"
+      v-if="addPlaceholder && listSurfaceVisible"
       :placeholder="addPlaceholder"
       @create="onCreate"
     />
@@ -152,16 +185,16 @@ function getCellValue(row, column) {
     </div>
 
     <PageFilterBar
-      v-if="filters.length > 0"
+      v-if="filters.length > 0 && listSurfaceVisible"
       :filters="filters"
       :total="list.length"
       :shown="filteredList.length"
       @update:state="onFilterState"
     />
 
-    <slot name="list-extra" />
+    <slot v-if="listSurfaceVisible" name="list-extra" />
 
-    <div class="list-wrap">
+    <div v-if="listSurfaceVisible" class="list-wrap">
       <table v-if="filteredList.length > 0" class="parity-list-table">
         <thead>
           <tr>

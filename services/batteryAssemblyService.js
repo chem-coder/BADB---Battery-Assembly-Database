@@ -408,6 +408,7 @@ async function fetchBatteryReport(queryable, batteryId) {
             p.name AS tape_project_name,
             tr.name AS tape_recipe_name,
             tr.role AS tape_recipe_role,
+            m_act.name AS tape_active_material_name,
             cb.target_form_factor,
             cb.target_config_code,
             cb.target_config_other,
@@ -425,6 +426,8 @@ async function fetchBatteryReport(queryable, batteryId) {
             ON p.project_id = t.project_id
           LEFT JOIN tape_recipes tr
             ON tr.tape_recipe_id = t.tape_recipe_id
+          LEFT JOIN materials m_act
+            ON m_act.material_id = t.active_material_id
           LEFT JOIN electrode_cut_batches cb
             ON cb.cut_batch_id = es.cut_batch_id
           LEFT JOIN users ub

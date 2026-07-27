@@ -383,12 +383,12 @@ async function listBatteries(pool) {
       b.form_factor,
       b.status,
       cc.coin_size_code,
-      cathode_materials.active_material_names AS cathode_active_materials,
+      cathode_active_mat.name AS cathode_active_materials,
       cathode_batch.shape AS cathode_batch_shape,
       cathode_batch.diameter_mm AS cathode_batch_diameter_mm,
       cathode_batch.length_mm AS cathode_batch_length_mm,
       cathode_batch.width_mm AS cathode_batch_width_mm,
-      anode_materials.active_material_names AS anode_active_materials,
+      anode_active_mat.name AS anode_active_materials,
       anode_batch.shape AS anode_batch_shape,
       anode_batch.diameter_mm AS anode_batch_diameter_mm,
       anode_batch.length_mm AS anode_batch_length_mm,
@@ -416,15 +416,8 @@ async function listBatteries(pool) {
      AND cathode_src.is_primary
     LEFT JOIN tapes cathode_tape
       ON cathode_tape.tape_id = cathode_src.tape_id
-    LEFT JOIN LATERAL (
-      SELECT STRING_AGG(DISTINCT m.name, ', ' ORDER BY m.name) AS active_material_names
-      FROM tape_recipe_lines trl
-      JOIN materials m
-        ON m.material_id = trl.material_id
-      WHERE trl.tape_recipe_id = cathode_tape.tape_recipe_id
-        AND trl.recipe_role = 'cathode_active'
-    ) cathode_materials
-      ON TRUE
+    LEFT JOIN materials cathode_active_mat
+      ON cathode_active_mat.material_id = cathode_tape.active_material_id
     LEFT JOIN electrode_cut_batches cathode_batch
       ON cathode_batch.cut_batch_id = cathode_src.cut_batch_id
     LEFT JOIN battery_electrode_sources anode_src
@@ -433,15 +426,8 @@ async function listBatteries(pool) {
      AND anode_src.is_primary
     LEFT JOIN tapes anode_tape
       ON anode_tape.tape_id = anode_src.tape_id
-    LEFT JOIN LATERAL (
-      SELECT STRING_AGG(DISTINCT m.name, ', ' ORDER BY m.name) AS active_material_names
-      FROM tape_recipe_lines trl
-      JOIN materials m
-        ON m.material_id = trl.material_id
-      WHERE trl.tape_recipe_id = anode_tape.tape_recipe_id
-        AND trl.recipe_role = 'anode_active'
-    ) anode_materials
-      ON TRUE
+    LEFT JOIN materials anode_active_mat
+      ON anode_active_mat.material_id = anode_tape.active_material_id
     LEFT JOIN electrode_cut_batches anode_batch
       ON anode_batch.cut_batch_id = anode_src.cut_batch_id
     ORDER BY b.item_created_at DESC, b.created_at DESC, b.battery_id DESC
@@ -461,12 +447,12 @@ async function getBattery(pool, batteryId) {
       b.form_factor,
       b.status,
       cc.coin_size_code,
-      cathode_materials.active_material_names AS cathode_active_materials,
+      cathode_active_mat.name AS cathode_active_materials,
       cathode_batch.shape AS cathode_batch_shape,
       cathode_batch.diameter_mm AS cathode_batch_diameter_mm,
       cathode_batch.length_mm AS cathode_batch_length_mm,
       cathode_batch.width_mm AS cathode_batch_width_mm,
-      anode_materials.active_material_names AS anode_active_materials,
+      anode_active_mat.name AS anode_active_materials,
       anode_batch.shape AS anode_batch_shape,
       anode_batch.diameter_mm AS anode_batch_diameter_mm,
       anode_batch.length_mm AS anode_batch_length_mm,
@@ -490,15 +476,8 @@ async function getBattery(pool, batteryId) {
      AND cathode_src.is_primary
     LEFT JOIN tapes cathode_tape
       ON cathode_tape.tape_id = cathode_src.tape_id
-    LEFT JOIN LATERAL (
-      SELECT STRING_AGG(DISTINCT m.name, ', ' ORDER BY m.name) AS active_material_names
-      FROM tape_recipe_lines trl
-      JOIN materials m
-        ON m.material_id = trl.material_id
-      WHERE trl.tape_recipe_id = cathode_tape.tape_recipe_id
-        AND trl.recipe_role = 'cathode_active'
-    ) cathode_materials
-      ON TRUE
+    LEFT JOIN materials cathode_active_mat
+      ON cathode_active_mat.material_id = cathode_tape.active_material_id
     LEFT JOIN electrode_cut_batches cathode_batch
       ON cathode_batch.cut_batch_id = cathode_src.cut_batch_id
     LEFT JOIN battery_electrode_sources anode_src
@@ -507,15 +486,8 @@ async function getBattery(pool, batteryId) {
      AND anode_src.is_primary
     LEFT JOIN tapes anode_tape
       ON anode_tape.tape_id = anode_src.tape_id
-    LEFT JOIN LATERAL (
-      SELECT STRING_AGG(DISTINCT m.name, ', ' ORDER BY m.name) AS active_material_names
-      FROM tape_recipe_lines trl
-      JOIN materials m
-        ON m.material_id = trl.material_id
-      WHERE trl.tape_recipe_id = anode_tape.tape_recipe_id
-        AND trl.recipe_role = 'anode_active'
-    ) anode_materials
-      ON TRUE
+    LEFT JOIN materials anode_active_mat
+      ON anode_active_mat.material_id = anode_tape.active_material_id
     LEFT JOIN electrode_cut_batches anode_batch
       ON anode_batch.cut_batch_id = anode_src.cut_batch_id
     WHERE b.battery_id = $1

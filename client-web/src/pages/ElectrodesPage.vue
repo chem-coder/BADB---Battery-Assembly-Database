@@ -4,7 +4,7 @@
  * Shows ALL electrode cut batches with optional filters (Role, Project, Tape).
  * Follows TapesPage pattern: CrudTable + TapeConstructor.
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
@@ -12,7 +12,6 @@ import { fmtCapacity } from '@/utils/formatCapacity'
 import { toastApiError } from '@/utils/errorClassifier'
 import { useBackendCache } from '@/composables/useBackendCache'
 import PageHeader from '@/components/PageHeader.vue'
-import SaveIndicator from '@/components/SaveIndicator.vue'
 import CrudTable from '@/components/CrudTable.vue'
 import TapeConstructor from '@/components/TapeConstructor.vue'
 import ElectrodeBatchPanel from '@/components/ElectrodeBatchPanel.vue'
@@ -23,6 +22,9 @@ import { useAuthStore } from '@/stores/auth'
 import Checkbox from 'primevue/checkbox'
 import { ELECTRODE_STAGES } from '@/config/electrodeStages'
 import { useElectrodeState } from '@/composables/useElectrodeState'
+import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue'
+import { useDeleteCheck } from '@/composables/useDeleteCheck'
+import { electrodeBatchDeletePhrase, electrodeDeleteBlockers } from '@/utils/electrodeDelete'
 
 const router = useRouter()
 const route = useRoute()
@@ -377,36 +379,65 @@ function electrodeStateFactory(id) {
   return useElectrodeState({ batchId: id })
 }
 
-// ── Delete flow ──
-const pendingDelete = ref([])
-const saveState = ref('idle')
-let saveTimer = null
+// ── Guided delete (mirrors Batteries + vanilla 2-electrodes.js) ──
+// delete-check preflight → blockers OR typed «DELETE BATCH <id>» → DELETE.
+// Per-batch only; the backend enforces the dependency blockers. There is no
+// electrode-disposition step — that is battery-specific.
+const { check: electrodeDeleteCheck } = useDeleteCheck('electrodes', {
+  checkUrl: (id) => `/api/electrodes/electrode-cut-batches/${id}/delete-check`,
+})
+const deleteFlow = reactive({ visible: false, batch: null, phrase: '', blockers: [], busy: false })
 
-function onDelete(items) {
-  pendingDelete.value = items
-  saveState.value = 'idle'
-}
-
-async function confirmSave() {
-  try {
-    for (const item of pendingDelete.value) {
-      await api.delete(`/api/electrodes/electrode-cut-batches/${item.cut_batch_id}`)
-    }
-    pendingDelete.value = []
+async function onDelete(items) {
+  if (!items || items.length === 0) return
+  if (items.length > 1) {
+    toast.add({
+      severity: 'info',
+      summary: 'Удаляйте партии по одному',
+      detail: 'Управляемое удаление выполняется для одной партии за раз.',
+      life: 4000,
+    })
     crudTable.value?.clearSelection()
-    await loadAllBatches()
-    saveState.value = 'saved'
-    clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => { saveState.value = 'idle' }, 2000)
+    return
+  }
+  const batch = items[0]
+  const id = batch.cut_batch_id
+  try {
+    const res = await electrodeDeleteCheck(id)
+    deleteFlow.batch = batch
+    deleteFlow.phrase = electrodeBatchDeletePhrase(id)
+    deleteFlow.blockers = res.canDelete ? [] : electrodeDeleteBlockers(res.dependencies)
+    deleteFlow.visible = true
   } catch (err) {
-    toastApiError(toast, err, 'Не удалось удалить')
+    toastApiError(toast, err, 'Не удалось проверить удаление партии')
+    crudTable.value?.clearSelection()
   }
 }
 
-function discardChanges() {
-  pendingDelete.value = []
+async function onDeleteConfirmed() {
+  const batch = deleteFlow.batch
+  if (!batch || deleteFlow.busy) return
+  deleteFlow.busy = true
+  const id = batch.cut_batch_id
+  try {
+    await api.delete(`/api/electrodes/electrode-cut-batches/${id}`)
+    deleteFlow.visible = false
+    const idx = constructorIds.value.indexOf(id)
+    if (idx >= 0) constructorIds.value.splice(idx, 1)
+    crudTable.value?.clearSelection()
+    await loadAllBatches()
+    toast.add({ severity: 'success', summary: 'Партия удалена', detail: `#${id}`, life: 3000 })
+  } catch (err) {
+    toastApiError(toast, err, 'Не удалось удалить партию')
+  } finally {
+    deleteFlow.busy = false
+  }
+}
+
+function onDeleteCancelled() {
+  deleteFlow.visible = false
+  deleteFlow.batch = null
   crudTable.value?.clearSelection()
-  saveState.value = 'idle'
 }
 
 // ── Deep link: /electrodes/:id ──
@@ -418,21 +449,11 @@ onMounted(async () => {
     constructorIds.value = [batchId]
   }
 })
-onUnmounted(() => clearTimeout(saveTimer))
 </script>
 
 <template>
   <div class="electrodes-page">
-    <PageHeader title="Электроды" icon="pi pi-stop-circle">
-      <template #actions>
-        <SaveIndicator
-          :visible="pendingDelete.length > 0 || saveState === 'saved'"
-          :saved="saveState === 'saved'"
-          @save="confirmSave"
-          @cancel="discardChanges"
-        />
-      </template>
-    </PageHeader>
+    <PageHeader title="Электроды" icon="pi pi-stop-circle" />
 
     <!-- Filters live in column headers — click «Тип» / «Проект» / «Лента»
          in the table below to open the Excel-style filter overlay. -->
@@ -579,6 +600,19 @@ onUnmounted(() => clearTimeout(saveTimer))
       :initial-values="createInitialValues"
       @create="onCreateDialogSubmit"
       @create-project="onCreateProjectFromDialog"
+    />
+
+    <!-- Guided delete — delete-check blockers OR typed «DELETE BATCH <id>».
+         Mirrors AssemblyPage's battery delete; no electrode-disposition step. -->
+    <TypedDeleteConfirm
+      :visible="deleteFlow.visible"
+      :phrase="deleteFlow.phrase"
+      :blockers="deleteFlow.blockers"
+      :title="`Удаление партии #${deleteFlow.batch?.cut_batch_id ?? ''}`"
+      description="Будут удалены данные партии (нарезка, сушка, массы фольги, связи с проектами). Это действие необратимо."
+      @update:visible="(v) => { if (!v) onDeleteCancelled() }"
+      @confirmed="onDeleteConfirmed"
+      @cancelled="onDeleteCancelled"
     />
   </div>
 </template>

@@ -23,10 +23,12 @@
  *   - GET /api/batteries/battery_electrochem/:battery_id → array or null.
  *   - No DELETE endpoint (add-only, for now — entry in Dalia PR backlog).
  *
- * Download: file_link is `/uploads/electrochem/...`, served by
- * `express.static` in app.js:21 without auth (pre-existing Dalia
- * behavior — flagged separately in the Dalia PR backlog, not fixed
- * here).
+ * Download/preview (R1, 2026-07): files are PRIVATE — the public
+ * /uploads static mount is gone. Every file is fetched through the
+ * authenticated API route (`download_url` on each row, falls back to
+ * building it from the id) as a blob via axios (JWT rides the
+ * interceptor), then shown/saved through an object URL. Object URLs
+ * are cached per file and revoked on unmount.
  */
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { useToast } from 'primevue/usetoast'
@@ -252,25 +254,69 @@ function previewKind(fileName) {
   return null
 }
 
+// ── Authenticated file access (R1) ────────────────────────────────
+// Blob-fetch through the API (token via axios interceptor) because a
+// plain <a href> carries no Authorization header. Object URLs are
+// cached per file id and revoked on unmount.
+const blobUrls = ref({}) // battery_electrochem_id → object URL
+
+function downloadUrlOf(f) {
+  return f.download_url
+    || `/api/batteries/battery_electrochem/${f.battery_electrochem_id}/download`
+}
+
+async function fetchFileObjectUrl(f) {
+  const cached = blobUrls.value[f.battery_electrochem_id]
+  if (cached) return cached
+  const { data } = await api.get(downloadUrlOf(f), { responseType: 'blob' })
+  const url = URL.createObjectURL(data)
+  blobUrls.value = { ...blobUrls.value, [f.battery_electrochem_id]: url }
+  return url
+}
+
+async function downloadFile(f) {
+  try {
+    const url = await fetchFileObjectUrl(f)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = f.file_name || `electrochem_${f.battery_electrochem_id}`
+    a.click()
+  } catch (err) {
+    toastApiError(toast, err)
+  }
+}
+
 // ── Preview Dialog state ──────────────────────────────────────────
 // `previewFile` holds the currently-previewed file object (or null
 // for "closed"). The Dialog's v-model:visible derives from this via
 // a computed proxy so opening/closing is just a single ref write.
+// `previewUrl` is the blob object URL for the opened file (fetched
+// through the authenticated route; empty string while loading).
 const previewFile = ref(null)
+const previewUrl = ref('')
 const previewVisible = computed({
   get: () => previewFile.value !== null,
-  set: (v) => { if (!v) previewFile.value = null },
+  set: (v) => { if (!v) { previewFile.value = null; previewUrl.value = '' } },
 })
 
-function openPreview(f) {
+async function openPreview(f) {
   if (!previewKind(f.file_name)) return
   previewFile.value = f
+  previewUrl.value = ''
+  try {
+    previewUrl.value = await fetchFileObjectUrl(f)
+  } catch (err) {
+    previewFile.value = null
+    toastApiError(toast, err)
+  }
 }
 
 // Warn (don't block) when the card unmounts with unsent files — the
 // user most likely didn't mean to discard them. Vue can't block
 // unmount from a confirm() cleanly, so a toast is the honest UX.
+// Also revoke all cached blob object URLs (leak hygiene).
 onBeforeUnmount(() => {
+  for (const url of Object.values(blobUrls.value)) URL.revokeObjectURL(url)
   if (staged.value.length > 0) {
     toast.add({
       severity: 'warn',
@@ -333,14 +379,14 @@ onBeforeUnmount(() => {
           >
             <i class="pi pi-eye"></i>
           </button>
-          <a
-            :href="f.file_link"
-            :download="f.file_name"
+          <button
+            type="button"
             class="ec-action-btn ec-action-btn--download"
             :title="`Скачать «${f.file_name}»`"
+            @click="downloadFile(f)"
           >
             <i class="pi pi-download"></i>
-          </a>
+          </button>
           <button
             type="button"
             class="ec-action-btn ec-action-btn--delete"
@@ -433,38 +479,41 @@ onBeforeUnmount(() => {
   >
     <div class="ec-preview-shell">
       <iframe
-        v-if="previewFile && previewKind(previewFile.file_name) === 'pdf'"
-        :src="previewFile.file_link"
+        v-if="previewFile && previewUrl && previewKind(previewFile.file_name) === 'pdf'"
+        :src="previewUrl"
         class="ec-preview-frame"
         :title="previewFile.file_name"
       ></iframe>
       <iframe
-        v-else-if="previewFile && previewKind(previewFile.file_name) === 'text'"
-        :src="previewFile.file_link"
+        v-else-if="previewFile && previewUrl && previewKind(previewFile.file_name) === 'text'"
+        :src="previewUrl"
         class="ec-preview-frame ec-preview-frame--text"
         :title="previewFile.file_name"
       ></iframe>
       <div
-        v-else-if="previewFile && previewKind(previewFile.file_name) === 'image'"
+        v-else-if="previewFile && previewUrl && previewKind(previewFile.file_name) === 'image'"
         class="ec-preview-image-wrap"
       >
         <img
-          :src="previewFile.file_link"
+          :src="previewUrl"
           :alt="previewFile.file_name"
           class="ec-preview-image"
         />
       </div>
+      <div v-else class="ec-preview-loading">
+        <i class="pi pi-spin pi-spinner"></i> Загрузка файла…
+      </div>
     </div>
     <template #footer>
-      <a
+      <button
         v-if="previewFile"
-        :href="previewFile.file_link"
-        :download="previewFile.file_name"
+        type="button"
         class="ec-preview-download"
+        @click="downloadFile(previewFile)"
       >
         <i class="pi pi-download"></i>
         Скачать
-      </a>
+      </button>
       <Button
         label="Закрыть"
         severity="secondary"
@@ -476,6 +525,16 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.ec-preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+  color: rgba(0, 50, 116, 0.5);
+  font-size: 13px;
+}
+
 .electrochem-card {
   border: 1px solid rgba(0, 50, 116, 0.12);
   border-radius: 10px;

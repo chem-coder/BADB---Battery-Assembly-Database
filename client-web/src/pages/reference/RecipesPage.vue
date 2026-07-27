@@ -57,6 +57,15 @@ const ROLE_TO_MATERIAL = {
   solvent:        'solvent',
 };
 
+// d047 — active-material lines are open slots: the recipe stores NO
+// material for them (material_id null); the tape picks the chemistry
+// via tapes.active_material_id. The material select on such lines is
+// disabled and shows the «x» placeholder instead.
+const ACTIVE_LINE_ROLES = new Set(['cathode_active', 'anode_active']);
+function isActiveLine(line) {
+  return ACTIVE_LINE_ROLES.has(line.recipe_role);
+}
+
 // ── List state ───────────────────────────────────────────────────────
 const recipes = ref([]);
 const loading = ref(false);
@@ -140,8 +149,10 @@ async function loadOne(id) {
 async function saveOne(form, mode, currentId) {
   // Solvent lines are excluded from the dry-solids sum and have
   // include_in_pct=false by default.
+  // d047 — active lines MUST send material_id: null (open slot); the
+  // backend rejects a non-null material on cathode_active/anode_active.
   const lines = form.lines.map((l) => ({
-    material_id: Number(l.material_id),
+    material_id: isActiveLine(l) ? null : Number(l.material_id),
     recipe_role: l.recipe_role,
     include_in_pct: l.recipe_role === 'solvent' ? false : Boolean(l.include_in_pct),
     slurry_percent: l.slurry_percent === '' || l.slurry_percent == null
@@ -177,7 +188,11 @@ function validate(form) {
   }
   for (const line of form.lines) {
     if (!line.recipe_role) return 'Укажите функциональную роль для каждого компонента';
-    if (line.material_id == null) return 'Выберите материал для каждого компонента';
+    // d047 — active lines are open slots: null material is the ONLY
+    // valid state for them; all other roles still require a material.
+    if (line.material_id == null && !isActiveLine(line)) {
+      return 'Выберите материал для каждого компонента';
+    }
   }
 
   // Sum-to-100 check for included non-solvent lines.
@@ -221,6 +236,12 @@ const ctx = useRowOpenForm({
 const filteredMaterialsCache = ref({}); // keyed by line._key
 
 async function refreshLineMaterials(line) {
+  // d047 — slot lines have no material picker (select disabled), so
+  // there is nothing to offer.
+  if (isActiveLine(line)) {
+    filteredMaterialsCache.value[line._key] = [];
+    return;
+  }
   const materials = await fetchMaterials();
   const targetRole = ROLE_TO_MATERIAL[line.recipe_role];
   filteredMaterialsCache.value[line._key] = targetRole
@@ -267,11 +288,12 @@ watch(
 );
 
 // ── List columns and filter config ───────────────────────────────────
+// d047 — recipes are chemistry-agnostic formulations now: the list no
+// longer carries active_material_name (the tape chooses the material).
 const columns = [
   { field: 'name', header: 'Название' },
   { field: 'role', header: 'Электрод', width: '110px' },
-  { field: 'active_percent', header: '% АМ', width: '80px' },
-  { field: 'active_material_name', header: 'Активный материал', width: '200px' },
+  { field: 'active_percent', header: '% активного', width: '110px' },
   { field: 'variant_label', header: 'Версия', width: '120px' },
   { field: 'created_by_name', header: 'Оператор', width: '140px' },
 ];
@@ -292,7 +314,7 @@ function textHaystack(row) {
     row.name,
     row.variant_label,
     row.notes,
-    row.active_material_name,
+    row.material_names,
     row.created_by_name,
     row.updated_by_name,
   ].filter(Boolean).join(' ');
@@ -346,9 +368,6 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('recipes', ctx);
     </template>
     <template #col-active_percent="{ data }">
       {{ data.active_percent != null ? `${data.active_percent}%` : '' }}
-    </template>
-    <template #col-active_material_name="{ data }">
-      <span class="meta-text">{{ data.active_material_name || '' }}</span>
     </template>
     <template #col-variant_label="{ data }">
       <span class="meta-text">{{ data.variant_label || '' }}</span>
@@ -425,13 +444,16 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('recipes', ctx);
                   />
                 </td>
                 <td>
+                  <!-- d047 — active lines are open slots: material is
+                       chosen on the tape, so the select is disabled and
+                       shows the «x» placeholder. -->
                   <Select
                     v-model="line.material_id"
                     :options="filteredMaterialsCache[line._key] || []"
                     option-label="name"
                     option-value="material_id"
-                    placeholder="— материал —"
-                    :disabled="!line.recipe_role"
+                    :placeholder="isActiveLine(line) ? 'x — выбирается на ленте' : '— материал —'"
+                    :disabled="!line.recipe_role || isActiveLine(line)"
                   />
                 </td>
                 <td class="col-include">

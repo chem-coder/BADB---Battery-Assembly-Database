@@ -1,0 +1,219 @@
+// Unit tests for src/utils/projectAccess.js
+//
+// Project access (confidentiality) vocabulary. Matches vanilla
+// public/js/projects.js: only `public` (открытый) and `confidential`
+// (ограниченный) are selectable; legacy `department` is treated as ограниченный
+// and is NOT offered as a new choice. Labels are lowercase to match the app's
+// option-label convention.
+
+import { describe, it, expect } from 'vitest';
+import {
+  ACCESS_OPTIONS,
+  accessLabel,
+  normalizeAccess,
+  resolveProjectAccess,
+  GRANT_LEVEL_OPTIONS,
+  DEFAULT_GRANT_LEVEL,
+  grantLevelLabel,
+} from '@/utils/projectAccess';
+
+describe('GRANT_LEVEL_OPTIONS (per-member access level)', () => {
+  it('offers the four levels, strongest first', () => {
+    expect(GRANT_LEVEL_OPTIONS).toEqual([
+      { value: 'admin', label: 'Администратор' },
+      { value: 'edit', label: 'Обычный' },
+      { value: 'view', label: 'Просмотр' },
+      { value: 'none', label: 'Нет доступа' },
+    ]);
+  });
+  it('defaults a new member to Обычный (edit)', () => {
+    expect(DEFAULT_GRANT_LEVEL).toBe('edit');
+  });
+});
+
+describe('grantLevelLabel', () => {
+  it('labels each level', () => {
+    expect(grantLevelLabel('admin')).toBe('Администратор');
+    expect(grantLevelLabel('edit')).toBe('Обычный');
+    expect(grantLevelLabel('view')).toBe('Просмотр');
+    expect(grantLevelLabel('none')).toBe('Нет доступа');
+  });
+  it('falls back gracefully', () => {
+    expect(grantLevelLabel(undefined)).toBe('Обычный');
+    expect(grantLevelLabel('weird')).toBe('weird');
+  });
+});
+
+describe('ACCESS_OPTIONS', () => {
+  it('offers exactly public + confidential (department dropped)', () => {
+    expect(ACCESS_OPTIONS.map((o) => o.value)).toEqual(['public', 'confidential']);
+  });
+  it('uses the lowercase открытый / ограниченный labels', () => {
+    expect(ACCESS_OPTIONS).toEqual([
+      { value: 'public', label: 'открытый' },
+      { value: 'confidential', label: 'ограниченный' },
+    ]);
+  });
+});
+
+describe('accessLabel', () => {
+  it('maps public → открытый, confidential → ограниченный', () => {
+    expect(accessLabel('public')).toBe('открытый');
+    expect(accessLabel('confidential')).toBe('ограниченный');
+  });
+  it('maps legacy department → ограниченный (no longer a separate label)', () => {
+    expect(accessLabel('department')).toBe('ограниченный');
+  });
+  it('falls back to открытый for blank/unknown', () => {
+    expect(accessLabel('')).toBe('открытый');
+    expect(accessLabel(null)).toBe('открытый');
+    expect(accessLabel('weird')).toBe('weird');
+  });
+});
+
+describe('normalizeAccess', () => {
+  it('normalizes legacy department → confidential (so it groups under ограниченный)', () => {
+    expect(normalizeAccess('department')).toBe('confidential');
+  });
+  it('leaves public and confidential unchanged', () => {
+    expect(normalizeAccess('public')).toBe('public');
+    expect(normalizeAccess('confidential')).toBe('confidential');
+  });
+});
+
+describe('resolveProjectAccess', () => {
+  // Minimal fixtures. A "plain" user/project triggers none of the override
+  // rules, so each test can layer one signal on top to isolate that branch.
+  const plainUser = { user_id: 1, role: 'employee', position: 'инженер' };
+  const confidentialProject = {
+    project_id: 10,
+    confidentiality_level: 'confidential',
+    lead_id: 999,
+    created_by: 999,
+  };
+  const publicProject = { ...confidentialProject, confidentiality_level: 'public' };
+  const grant = (access_level, is_expired = false) => ({ access_level, is_expired });
+
+  it('admin role → admin/admin', () => {
+    const u = { ...plainUser, role: 'admin' };
+    expect(resolveProjectAccess(u, confidentialProject, null, false, false)).toEqual({
+      level: 'admin',
+      source: 'admin',
+      is_expired: false,
+    });
+  });
+
+  it('director by position → admin/director', () => {
+    const u = { ...plainUser, position: 'Генеральный директор' };
+    expect(resolveProjectAccess(u, confidentialProject, null, false, false)).toEqual({
+      level: 'admin',
+      source: 'director',
+      is_expired: false,
+    });
+  });
+
+  it('project lead → admin/lead', () => {
+    const p = { ...confidentialProject, lead_id: 1 };
+    expect(resolveProjectAccess(plainUser, p, null, false, false)).toEqual({
+      level: 'admin',
+      source: 'lead',
+      is_expired: false,
+    });
+  });
+
+  it('project owner (created_by) → admin/owner', () => {
+    const p = { ...confidentialProject, lead_id: null, created_by: 1 };
+    expect(resolveProjectAccess(plainUser, p, null, false, false)).toEqual({
+      level: 'admin',
+      source: 'owner',
+      is_expired: false,
+    });
+  });
+
+  it('direct grant of each level → that level, source direct', () => {
+    for (const level of ['view', 'edit', 'admin']) {
+      expect(
+        resolveProjectAccess(plainUser, confidentialProject, grant(level), false, false),
+      ).toEqual({ level, source: 'direct', is_expired: false });
+    }
+  });
+
+  it('team participant on a restricted project (no grant) → null — membership alone grants nothing', () => {
+    expect(resolveProjectAccess(plainUser, confidentialProject, null, true, false)).toBeNull();
+  });
+
+  it('team participant on a public project (no grant) → view/participant', () => {
+    expect(resolveProjectAccess(plainUser, publicProject, null, true, false)).toEqual({
+      level: 'view',
+      source: 'participant',
+      is_expired: false,
+    });
+  });
+
+  it('public project → view/public', () => {
+    expect(resolveProjectAccess(plainUser, publicProject, null, false, false)).toEqual({
+      level: 'view',
+      source: 'public',
+      is_expired: false,
+    });
+  });
+
+  it('no signal at all → null', () => {
+    expect(resolveProjectAccess(plainUser, confidentialProject, null, false, false)).toBeNull();
+  });
+
+  // --- Priority ordering (strongest-access-first; first match wins) ---
+
+  it('lead beats a view grant', () => {
+    const p = { ...confidentialProject, lead_id: 1 };
+    expect(
+      resolveProjectAccess(plainUser, p, grant('view'), false, false).source,
+    ).toBe('lead');
+  });
+
+  it('admin role beats participant/public', () => {
+    const u = { ...plainUser, role: 'admin' };
+    expect(resolveProjectAccess(u, publicProject, null, true, false).source).toBe('admin');
+  });
+
+  it('an admin grant beats participant and public', () => {
+    const res = resolveProjectAccess(plainUser, publicProject, grant('admin'), true, false);
+    expect(res).toEqual({ level: 'admin', source: 'direct', is_expired: false });
+  });
+
+  // --- Expiry = auto-downgrade to the project baseline (not membership) ---
+
+  it('expired grant on a restricted project → null, even for a participant', () => {
+    const res = resolveProjectAccess(plainUser, confidentialProject, grant('edit', true), true, false);
+    expect(res).toBeNull();
+  });
+
+  it('expired grant on a public project → downgraded to view (open baseline)', () => {
+    const res = resolveProjectAccess(plainUser, publicProject, grant('edit', true), false, false);
+    expect(res).toEqual({ level: 'view', source: 'public', is_expired: false });
+  });
+
+  it('expired grant + showExpired=true → returns the grant with is_expired:true', () => {
+    const res = resolveProjectAccess(plainUser, confidentialProject, grant('edit', true), false, true);
+    expect(res).toEqual({ level: 'edit', source: 'direct', is_expired: true });
+  });
+
+  // --- 'none' = explicit deny (4-level model) ---
+
+  it("a 'none' grant denies access — even on a public project", () => {
+    expect(resolveProjectAccess(plainUser, publicProject, grant('none'), true, false)).toBeNull();
+    expect(resolveProjectAccess(plainUser, confidentialProject, grant('none'), false, false)).toBeNull();
+  });
+
+  it('admin role still wins over a none grant (role is checked before the grant)', () => {
+    const adminU = { ...plainUser, role: 'admin' };
+    expect(resolveProjectAccess(adminU, publicProject, grant('none'), false, false).source).toBe('admin');
+  });
+
+  // --- Inactive user ---
+
+  it('inactive user → null, regardless of grant or role', () => {
+    const dead = { ...plainUser, active: false, role: 'admin' };
+    expect(resolveProjectAccess(dead, publicProject, grant('admin'), true, false)).toBeNull();
+  });
+});

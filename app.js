@@ -48,7 +48,10 @@ if (process.env.VUE_HTML_REDIRECTS === 'true') {
 }
 
 app.use(express.static('public'));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Uploaded lab files are private. Serve them only through authenticated
+// API download routes (e.g. GET /api/batteries/battery_electrochem/:id/download),
+// never as public static files — the old `/uploads` static mount let anyone
+// on the network fetch experiment files without logging in (closed for R1).
 
 // ── IP allowlist (optional, controlled by ALLOWED_IPS env var) ─────
 // If configured, rejects /api/* requests from IPs outside the allowlist.

@@ -1,0 +1,50 @@
+# Dependencies / build output
+node_modules/
+client-web/node_modules/
+dist/
+build/
+coverage/
+.vite/
+client-web/.vite/
+client-web/dist/
+client-web/coverage/
+client-web/client-web/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+.e2e-session.json
+.mcp.json
+
+# Runtime/generated user data
+uploads/
+sql_backups/
+sql_backups/**
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.log
+*.tmp
+
+# Generated or bulky artifacts
+public-vue/
+outputs/
+scripts/cycling-ref-import/combined_import.sql
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+~$*.xl*
+
+# Old/archive material: keep out of normal coding context
+client/archive/
+docs/archive/superseded/
+docs/archive/external_generated/
+
+# Keep inbox visible if you're actively adding raw notes there
+# docs/archive/inbox/

@@ -589,7 +589,15 @@ const clientProduction = computed(() => {
   padding: 4px;
   border-radius: 10px;
   width: fit-content;
+  /* Phones: the 4 tabs are wider than the viewport — scroll the strip
+     itself, never the page (max-width keeps it inside .app-content). */
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.tab-switcher::-webkit-scrollbar { display: none; }
+.tab-switcher .tab-btn { flex-shrink: 0; }
 .tab-btn {
   display: flex;
   align-items: center;

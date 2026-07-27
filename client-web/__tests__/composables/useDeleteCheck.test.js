@@ -83,4 +83,14 @@ describe('useDeleteCheck', () => {
     await checkSeparators(11);
     expect(api.get).toHaveBeenCalledWith('/api/separators/11/delete-check');
   });
+
+  it('supports a custom check-URL builder for nested entity paths (electrode batches)', async () => {
+    api.get.mockResolvedValue({ data: { can_delete: true, dependencies: [] } });
+    const { check } = useDeleteCheck('electrodes', {
+      checkUrl: (id) => `/api/electrodes/electrode-cut-batches/${id}/delete-check`,
+    });
+    const result = await check(7);
+    expect(api.get).toHaveBeenCalledWith('/api/electrodes/electrode-cut-batches/7/delete-check');
+    expect(result.canDelete).toBe(true);
+  });
 });

@@ -93,7 +93,6 @@ function getRecipeSearchText(recipe) {
     recipe.name,
     recipe.variant_label,
     recipe.notes,
-    recipe.active_material_name,
     recipe.material_names,
     recipe.created_by_name,
     recipe.updated_by_name
@@ -392,6 +391,22 @@ async function populateMaterialSelect(row) {
 
   const roleSelect = row.querySelector('.role-select');
   const recipeRole = roleSelect.value;
+
+  // The active line is an open slot: the concrete material (NMC 811,
+  // LFP S19, ...) is chosen on the tape, not in the recipe (d047).
+  const isActiveSlot = recipeRole === 'cathode_active' || recipeRole === 'anode_active';
+
+  if (isActiveSlot) {
+    select.innerHTML = '<option value="">x — выбирается на ленте</option>';
+    select.value = '';
+    select.disabled = true;
+    select.required = false;
+    return;
+  }
+
+  select.disabled = false;
+  select.required = true;
+
   const materials = await fetchMaterials();
 
   select.innerHTML = '<option value="">— выбрать —</option>';
@@ -408,13 +423,6 @@ async function populateMaterialSelect(row) {
     }
 
     if (recipeRole === 'solvent' && m.role === 'solvent') {
-      allowed = true;
-    }
-
-    if (
-      (recipeRole === 'cathode_active' && m.role === 'cathode_active') ||
-      (recipeRole === 'anode_active' && m.role === 'anode_active')
-    ) {
       allowed = true;
     }
 
@@ -628,10 +636,14 @@ function collectRecipeLinesFromDOM() {
     const lineNotes =
       row.querySelector('[data-field="line_notes"]').value || null;
 
-    if (!materialId) return;
+    const isActiveSlot =
+      recipeRole === 'cathode_active' || recipeRole === 'anode_active';
+
+    if (!recipeRole) return;
+    if (!isActiveSlot && !materialId) return;
 
     lines.push({
-      material_id: materialId,
+      material_id: isActiveSlot ? null : materialId,
       recipe_role: recipeRole,
       include_in_pct: recipeRole !== 'solvent',
       slurry_percent: slurryPercent,
@@ -681,9 +693,8 @@ function renderRecipes(recipes, options = {}) {
     metaLine.textContent = [
       RECIPE_ROLE_LABELS[recipe.role] || recipe.role || '',
       recipe.active_percent !== null && recipe.active_percent !== undefined
-        ? `${recipe.active_percent}%`
+        ? `${recipe.active_percent}% активного`
         : '',
-      recipe.active_material_name || '',
       recipe.variant_label || ''
     ].filter(Boolean).join(' — ');
 
@@ -897,16 +908,18 @@ function validateRecipeLines() {
     const percent =
       row.querySelector('[data-field="slurry_percent"]')?.value;
 
-    if (!materialId) {
-      showStatus('Выберите материал для каждого компонента', true);
-      return false;
-    }
-
     const role =
       row.querySelector('[data-field="recipe_role"]')?.value;
 
     if (!role) {
       showStatus('Выберите функциональную роль для каждого компонента', true);
+      return false;
+    }
+
+    const isActiveSlot = role === 'cathode_active' || role === 'anode_active';
+
+    if (!isActiveSlot && !materialId) {
+      showStatus('Выберите материал для каждого компонента', true);
       return false;
     }
 

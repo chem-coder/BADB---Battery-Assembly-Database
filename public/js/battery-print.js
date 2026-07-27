@@ -369,7 +369,7 @@ function renderElectrochemSection(report) {
           <tbody>
             ${entries.map(entry => `
               <tr>
-                <td>${entry.file_link ? `<a href="${escapeHtml(entry.file_link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(entry.file_name || entry.file_link)}</a>` : escapeHtml(entry.file_name || '—')}</td>
+                <td>${escapeHtml(entry.file_name || '—')}</td><!-- R1: имя файла без ссылки — /uploads приватный, в печатной форме ссылка не работает -->
                 <td>${escapeHtml(entry.electrochem_notes || '—')}</td>
                 <td class="report_number">${escapeHtml(formatDateTime(entry.uploaded_at))}</td>
               </tr>

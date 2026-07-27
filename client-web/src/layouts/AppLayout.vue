@@ -14,7 +14,16 @@ provide('sidebarOpen', sidebarOpen)
 function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value }
 function closeSidebar() { sidebarOpen.value = false }
 
-/* ── Scroll handler ── */
+/* ── Scroll handler ──
+   Fades cards out as they slide up under the sticky page-header.
+
+   PERF: this runs once per animation frame while scrolling, over every
+   card on the page. The old version interleaved getBoundingClientRect()
+   READS with style.maskImage WRITES in one loop — each write invalidates
+   layout, so the next read forced a synchronous reflow (layout thrash,
+   the main scroll-lag cause). Now split into two passes: read ALL rects
+   first (one layout flush), then write ALL masks (no reads to force
+   another reflow). Same visual, no thrash. */
 function handleScroll () {
   const el = contentEl.value
   if (!el) return
@@ -31,13 +40,17 @@ function handleScroll () {
   const fullyHiddenY = containerTop - 20
   const fadeZone = fadeStartY - fullyHiddenY
 
-  const allEls = el.querySelectorAll('.glass-card, section, .p-card')
-  for (const card of allEls) {
+  // ── Pass 1: reads only (batched — single layout flush) ──
+  const cards = el.querySelectorAll('.glass-card, section, .p-card')
+  const work = []
+  for (const card of cards) {
     if (card.classList.contains('page-header')) continue
     if (card.parentElement && card.parentElement.closest('.glass-card')) continue
+    work.push({ card, rect: card.getBoundingClientRect() })
+  }
 
-    const rect = card.getBoundingClientRect()
-
+  // ── Pass 2: writes only (no reads → no forced reflow) ──
+  for (const { card, rect } of work) {
     if (rect.top >= fadeStartY) {
       card.style.removeProperty('mask-image')
       card.style.removeProperty('-webkit-mask-image')
@@ -139,6 +152,7 @@ onUnmounted(() => {
 .app-layout {
   --frame: 0.5rem;
   --inset: 1.75rem;
+  --page-header-h: 46px; /* thin one-line nav bar; opened-record header sticks below it */
 }
 
 /* ── Outer frame ── */
@@ -183,7 +197,8 @@ onUnmounted(() => {
 /* ── Scroll container ── */
 .app-content {
   flex: 1;
-  padding: var(--inset);
+  /* No top padding — the thin nav-bar header sits flush to the top. */
+  padding: 0 var(--inset) var(--inset);
   background: transparent;
   height: 100%;
   overflow-y: auto;
@@ -191,9 +206,9 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* ── PageHeader: pinned in place ── */
+/* ── PageHeader: pinned flush to the top ── */
 .app-content :deep(.page-header) {
-  top: var(--inset);
+  top: 0;
   transition: box-shadow 0.4s ease;
 }
 .app-content.scrolled :deep(.page-header) {
@@ -350,9 +365,10 @@ onUnmounted(() => {
     padding: 0.5rem;
   }
   /* PrimeVue DataTable — horizontal scroll instead of cropping/wrapping
-     cells. PrimeVue already makes the inner table scroll inside its
-     wrapper; we just make sure the wrapper's overflow is honored. */
-  :deep(.p-datatable-wrapper) {
+     cells. PrimeVue 4 scrolls the table inside .p-datatable-table-container
+     (the old .p-datatable-wrapper class is gone); we add momentum
+     scrolling for touch. */
+  :deep(.p-datatable-table-container) {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }

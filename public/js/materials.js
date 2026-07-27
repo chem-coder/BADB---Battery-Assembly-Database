@@ -1,4 +1,5 @@
 const newNameInput = document.getElementById('new-material-name');
+const newFamilyInput = document.getElementById('new-material-family');
 const newRoleSelect = document.getElementById('new-material-role');
 const createMaterialBtn = document.getElementById('createMaterialBtn');
 const sortByNameBtn = document.getElementById('sortByNameBtn');
@@ -14,6 +15,12 @@ const roleMap = {
   solvent: 'растворитель',
   other: 'другое'
 };
+
+function formatMaterialRowMeta(family, role) {
+  const roleLabel = roleMap[role] || role;
+  const trimmedFamily = String(family || '').trim();
+  return trimmedFamily ? `${trimmedFamily} — ${roleLabel}` : roleLabel;
+}
 
 const toggleInstancesBtn = document.getElementById('toggleInstancesBtn');
 const toggleCompositionsBtn = document.getElementById('toggleCompositionsBtn');
@@ -196,28 +203,30 @@ function openMaterialSourceInfoPage(materialInstanceId) {
 
 createMaterialBtn.addEventListener('click', async () => {
   const name = newNameInput.value.trim();
+  const family = newFamilyInput.value.trim();
   const role = newRoleSelect.value;
-  
+
   if (!name) {
     alert('Название обязательно');
     return;
   }
-  
+
   if (!role) {
     alert('Роль обязательна');
     return;
   }
-  
+
   try {
     if (editingMaterialId) {
-      await updateMaterial(editingMaterialId, { name, role });
+      await updateMaterial(editingMaterialId, { name, role, family: family || null });
       editingMaterialId = null;
       createMaterialBtn.textContent = 'Добавить';
     } else {
-      await createMaterial({ name, role });
+      await createMaterial({ name, role, family: family || null });
     }
-    
+
     newNameInput.value = '';
+    newFamilyInput.value = '';
     newRoleSelect.value = '';
     loadMaterials();
   } catch (err) {
@@ -505,6 +514,7 @@ function renderMaterials(materials) {
     details.dataset.type = 'material';
     details.dataset.id = material.material_id;
     details.dataset.role = material.role;
+    details.dataset.family = material.family || '';
     
     // collapsed by default
     details.open = false;
@@ -518,7 +528,7 @@ function renderMaterials(materials) {
     
     const role = document.createElement('span');
     role.classList.add('row-meta');
-    role.textContent = `${roleMap[material.role] || material.role}`;
+    role.textContent = formatMaterialRowMeta(material.family, material.role);
     role.style = "display:inline-block; width:25vw;";
     role.dataset.role = material.role;
     
@@ -768,6 +778,7 @@ function enterEditMode(row, type, id) {
   const currentText = titleSpan ? titleSpan.textContent : '';
   const input = document.createElement('input');
   let roleSelect = null;
+  let familyInput = null;
   if (type === 'component') {
     input.type = 'number';
     input.step = '0.01';
@@ -780,6 +791,12 @@ function enterEditMode(row, type, id) {
   }
 
   if (type === 'material') {
+    familyInput = document.createElement('input');
+    familyInput.type = 'text';
+    familyInput.placeholder = 'Семейство (необязательно)';
+    familyInput.value = row.dataset.family || '';
+    familyInput.style.marginLeft = '0.5rem';
+
     roleSelect = document.createElement('select');
     roleSelect.style.marginLeft = '0.5rem';
 
@@ -817,6 +834,10 @@ function enterEditMode(row, type, id) {
   
   summary.appendChild(input);
 
+  if (familyInput) {
+    summary.appendChild(familyInput);
+  }
+
   if (roleSelect) {
     summary.appendChild(roleSelect);
   }
@@ -841,18 +862,21 @@ function enterEditMode(row, type, id) {
       
       if (type === 'material') {
         const selectedRole = roleSelect ? roleSelect.value : row.dataset.role;
+        const familyValue = familyInput ? familyInput.value.trim() : (row.dataset.family || '');
 
         await updateMaterial(Number(id), {
           name: newValue,
-          role: selectedRole
+          role: selectedRole,
+          family: familyValue || null
         });
-        
+
         exitEditMode(row);
         row.querySelector('.row-title').textContent = newValue;
-        row.querySelector('.row-meta').textContent = roleMap[selectedRole] || selectedRole;
+        row.querySelector('.row-meta').textContent = formatMaterialRowMeta(familyValue, selectedRole);
         row.querySelector('.row-meta').dataset.role = selectedRole;
         row.dataset.role = selectedRole;
-        
+        row.dataset.family = familyValue;
+
         return;
       }
       
@@ -924,6 +948,19 @@ function enterEditMode(row, type, id) {
       cancelBtn.click();
     }
   });
+
+  if (familyInput) {
+    familyInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        saveBtn.click();
+      }
+      if (e.key === 'Escape') {
+        cancelBtn.click();
+      }
+    });
+  }
 }
 
 // -------- Event listeners --------

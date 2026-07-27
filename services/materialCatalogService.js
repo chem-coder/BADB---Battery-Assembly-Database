@@ -16,11 +16,11 @@ async function createMaterial(pool, payload, userId) {
 
     const result = await client.query(
       `
-      INSERT INTO materials (name, role)
-      VALUES ($1, $2)
-      RETURNING material_id, name, role
+      INSERT INTO materials (name, role, family)
+      VALUES ($1, $2, $3)
+      RETURNING material_id, name, role, family
       `,
-      [payload.name, payload.role]
+      [payload.name, payload.role, payload.family || null]
     );
 
     const instanceResult = await client.query(
@@ -76,7 +76,7 @@ async function createMaterial(pool, payload, userId) {
 async function listMaterials(pool) {
   const result = await pool.query(
     `
-    SELECT m.material_id, m.name, m.role,
+    SELECT m.material_id, m.name, m.role, m.family,
            m.updated_by,
            m.updated_at,
            u_updated.name AS updated_by_name
@@ -90,21 +90,21 @@ async function listMaterials(pool) {
 }
 
 async function updateMaterial(pool, materialId, payload, userId) {
-  const current = await pool.query('SELECT name, role FROM materials WHERE material_id = $1', [materialId]);
+  const current = await pool.query('SELECT name, role, family FROM materials WHERE material_id = $1', [materialId]);
   if (current.rowCount === 0) {
     throw statusError('Материал не найден', 404);
   }
 
-  const newVals = { name: payload.name, role: payload.role };
+  const newVals = { name: payload.name, role: payload.role, family: payload.family || null };
 
   const result = await pool.query(
     `
     UPDATE materials
-    SET name = $1, role = $2, updated_by = $3, updated_at = now()
-    WHERE material_id = $4
-    RETURNING material_id, name, role, updated_by, updated_at
+    SET name = $1, role = $2, family = $3, updated_by = $4, updated_at = now()
+    WHERE material_id = $5
+    RETURNING material_id, name, role, family, updated_by, updated_at
     `,
-    [newVals.name, newVals.role, userId, materialId]
+    [newVals.name, newVals.role, newVals.family, userId, materialId]
   );
 
   if (result.rowCount === 0) {
@@ -144,6 +144,18 @@ async function deleteMaterial(pool, materialId) {
           JOIN tape_recipes tr ON tr.tape_recipe_id = trl.tape_recipe_id
           WHERE trl.material_id = $1
           ORDER BY tr.tape_recipe_id
+          LIMIT 25
+        `,
+        params: [materialId]
+      },
+      {
+        key: 'tapes_active_material',
+        label: 'ленты, где это активный материал',
+        query: `
+          SELECT tape_id AS id, name
+          FROM tapes
+          WHERE active_material_id = $1
+          ORDER BY tape_id
           LIMIT 25
         `,
         params: [materialId]

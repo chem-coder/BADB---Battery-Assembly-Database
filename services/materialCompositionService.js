@@ -87,31 +87,65 @@ async function fetchMaterialInstanceComponents(queryable, parentId) {
 }
 
 async function addMaterialInstanceComponent(pool, parentId, componentMaterialInstanceId, massFraction) {
-  const result = await pool.query(
-    `
-    WITH ins AS (
-      INSERT INTO material_instance_components
-        (parent_material_instance_id, component_material_instance_id, mass_fraction)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    )
-    SELECT
-      ins.material_instance_component_id,
-      ins.parent_material_instance_id,
-      ins.component_material_instance_id,
-      ins.mass_fraction,
-      mi.name AS component_name,
-      mi.material_id,
-      m.name AS material_name,
-      ins.notes
-    FROM ins
-    JOIN material_instances mi
-      ON ins.component_material_instance_id = mi.material_instance_id
-    JOIN materials m
-      ON mi.material_id = m.material_id;
-    `,
-    [parentId, componentMaterialInstanceId, massFraction]
-  );
+  // Per-row validation for the incremental "add one component" path. Mirrors the
+  // per-row checks in normalizeCompositionPayload (id / fraction / self-reference),
+  // but deliberately WITHOUT the whole-composition sum-to-100 rule — like the
+  // sibling per-component update/delete endpoints, adding one component must not
+  // require the running total to equal 100%.
+  const componentId = Number(componentMaterialInstanceId);
+  const normalizedMassFraction = normalizeMassFraction(Number(massFraction));
+
+  if (!Number.isInteger(componentId) || componentId <= 0) {
+    throw new MaterialCompositionValidationError('Некорректные данные состава');
+  }
+
+  if (
+    !Number.isFinite(normalizedMassFraction) ||
+    normalizedMassFraction <= 0 ||
+    normalizedMassFraction > 1
+  ) {
+    throw new MaterialCompositionValidationError('Некорректные данные состава');
+  }
+
+  if (componentId === parentId) {
+    throw new MaterialCompositionValidationError('Экземпляр не может содержать сам себя');
+  }
+
+  let result;
+  try {
+    result = await pool.query(
+      `
+      WITH ins AS (
+        INSERT INTO material_instance_components
+          (parent_material_instance_id, component_material_instance_id, mass_fraction)
+        VALUES ($1, $2, $3)
+        RETURNING *
+      )
+      SELECT
+        ins.material_instance_component_id,
+        ins.parent_material_instance_id,
+        ins.component_material_instance_id,
+        ins.mass_fraction,
+        mi.name AS component_name,
+        mi.material_id,
+        m.name AS material_name,
+        ins.notes
+      FROM ins
+      JOIN material_instances mi
+        ON ins.component_material_instance_id = mi.material_instance_id
+      JOIN materials m
+        ON mi.material_id = m.material_id;
+      `,
+      [parentId, componentId, normalizedMassFraction]
+    );
+  } catch (err) {
+    // The DB already enforces UNIQUE(parent, component). Surface that violation as
+    // a clean 400 with the same message the replace-all path uses, not a 500.
+    if (err && err.code === '23505') {
+      throw new MaterialCompositionValidationError('Один и тот же экземпляр нельзя добавить дважды');
+    }
+    throw err;
+  }
 
   return result.rows[0];
 }

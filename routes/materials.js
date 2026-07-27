@@ -60,8 +60,9 @@ router.get('/test', async (req, res) => {
 
 // CREATE
 router.post('/', auth, async (req, res) => {
-  const { name, role } = req.body;
+  const { name, role, family } = req.body;
   const cleanName = typeof name === 'string' ? name.trim() : '';
+  const cleanFamily = typeof family === 'string' && family.trim() ? family.trim() : null;
 
   if (!cleanName) {
     return res.status(400).json({ error: 'Название обязательно' });
@@ -73,7 +74,7 @@ router.post('/', auth, async (req, res) => {
   }
 
   try {
-    res.status(201).json(await createMaterial(pool, { name: cleanName, role }, req.user.userId));
+    res.status(201).json(await createMaterial(pool, { name: cleanName, role, family: cleanFamily }, req.user.userId));
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Материал с таким названием уже существует' });
@@ -96,7 +97,8 @@ router.get('/', auth, async (req, res) => {
 // UPDATE
 router.put('/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
-  const { name, role } = req.body;
+  const { name, role, family } = req.body;
+  const cleanFamily = typeof family === 'string' && family.trim() ? family.trim() : null;
 
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Некорректный material_id' });
@@ -111,7 +113,7 @@ router.put('/:id', auth, async (req, res) => {
   }
 
   try {
-    res.json(await updateMaterial(pool, id, { name: name.trim(), role }, req.user.userId));
+    res.json(await updateMaterial(pool, id, { name: name.trim(), role, family: cleanFamily }, req.user.userId));
   } catch (err) {
     if (err.statusCode === 404) {
       return res.status(404).json({ error: err.message });
@@ -523,9 +525,17 @@ router.get('/instances/:id/components', auth, async (req, res) => {
 router.post('/instances/:id/components', auth, async (req, res) => {
   const parentId = Number(req.params.id);
   const { component_material_instance_id, mass_fraction } = req.body;
+
+  if (!Number.isInteger(parentId)) {
+    return res.status(400).json({ error: 'Некорректный material_instance_id' });
+  }
+
   try {
     res.json(await addMaterialInstanceComponent(pool, parentId, component_material_instance_id, mass_fraction));
   } catch (err) {
+    if (err instanceof MaterialCompositionValidationError) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Ошибка добавления компонента' });
   }

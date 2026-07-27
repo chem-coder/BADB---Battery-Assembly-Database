@@ -1,7 +1,7 @@
 # Tapes
 
 Created: 2026-05-09
-Edited: 2026-06-09
+Edited: 2026-07-16
 Status: current
 Verified against code: 2026-06-09
 
@@ -45,12 +45,22 @@ The tape row stores identity and planning fields such as `name`, `notes`,
 canonically in `tape_projects`; the legacy `tapes.project_id` remains a
 compatibility/fallback value.
 
+Since migration `d047_recipe_active_material_slot`, the tape also stores its
+chemistry in `active_material_id` (FK → materials, ON DELETE RESTRICT). The
+recipe's active line is an open slot (`material_id` NULL); creating a tape
+means choosing an active material AND a recipe. The backend validates that the
+material's role matches the recipe's electrode role (cathode recipe ↔
+`cathode_active` material). Tape-scoped queries resolve the slot with
+`COALESCE(line.material_id, tapes.active_material_id)`, so reports and
+downstream capacity/battery views see a filled line.
+
 ## Workflow Order
 
 The visible workflow is progressive:
 
 1. create or open the tape;
-2. save general info with at least one project and one recipe;
+2. save general info with at least one project, an active material, and a
+   recipe (the material's role must match the recipe's electrode role);
 3. choose concrete material instances for recipe lines;
    material-instance dropdowns refresh on open (`focus`) through
    `GET /api/materials/:material_id/instances`; the current selection is
@@ -109,6 +119,13 @@ Current coating/drying UI details:
 Recipe composition comes from `tape_recipes` and `tape_recipe_lines`. The tape
 execution selects concrete `material_instances` per recipe line and stores those
 selections in `tape_recipe_line_actuals`.
+
+For the active slot line the instance list is drawn from the tape's
+`active_material_id` (the recipe line itself has no material). Saving an
+actual validates the instance belongs to the line's material — or, on the
+slot line, to the tape's active material; choosing the active material is a
+precondition for slot actuals. The solution concentration (5% vs 7% PVDF in
+NMP) is exactly this instance choice and is not part of the recipe.
 
 The same actuals table stores weighing values:
 

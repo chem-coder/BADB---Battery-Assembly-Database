@@ -270,7 +270,7 @@ router.get('/graph', auth, async (req, res) => {
         ${projectFilter ? 'WHERE p.project_id = $1' : ''} ORDER BY p.project_id
       `, projectFilter ? [projectFilter] : []),
       pool.query(`
-        SELECT t.tape_id, t.name, t.project_id, t.tape_recipe_id, t.created_by,
+        SELECT t.tape_id, t.name, t.project_id, t.tape_recipe_id, t.active_material_id, t.created_by,
                t.created_at, t.item_created_at, u.name AS operator_name
         FROM tapes t LEFT JOIN users u ON u.user_id = t.created_by
         ${graphTapeWhere}
@@ -372,6 +372,11 @@ router.get('/graph', auth, async (req, res) => {
     // Tape → Recipe edges
     for (const t of tapes.rows) {
       if (t.tape_recipe_id) edges.push({ source: `recipe-${t.tape_recipe_id}`, target: `tape-${t.tape_id}`, type: 'uses_recipe' })
+      // The tape's chemistry (d047): active material is chosen on the tape,
+      // not inside the recipe (whose active line is an open slot).
+      if (t.active_material_id && nodeSet.has(`material-${t.active_material_id}`)) {
+        edges.push({ source: `material-${t.active_material_id}`, target: `tape-${t.tape_id}`, type: 'active_material' })
+      }
     }
 
     // Electrode batches
@@ -457,9 +462,10 @@ router.get('/materials-usage', auth, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT m.material_id, m.name, m.role,
-             count(rl.tape_recipe_id) AS usage_count
+             count(DISTINCT rl.recipe_line_id) + count(DISTINCT t.tape_id) AS usage_count
       FROM materials m
       LEFT JOIN tape_recipe_lines rl ON rl.material_id = m.material_id
+      LEFT JOIN tapes t ON t.active_material_id = m.material_id
       GROUP BY m.material_id, m.name, m.role
       ORDER BY m.role, usage_count DESC
     `)

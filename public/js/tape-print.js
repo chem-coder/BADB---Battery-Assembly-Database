@@ -588,7 +588,11 @@ function renderReport(report) {
       ${renderRow('Название', tape.name || '—', { wide: true })}
       ${renderRow('Проект', tape.project_names || tape.project_name || '—')}
       ${renderRow('Тип', formatRole(tape.role))}
-      ${renderRow('Рецепт', tape.recipe_name || '—')}
+      ${renderRow('Рецепт', tape.recipe_name
+        ? (tape.active_material_name
+          ? `${tape.active_material_name} — ${tape.recipe_name}`
+          : tape.recipe_name)
+        : '—')}
       ${renderRow('Оператор', tape.created_by_name || '—')}
       ${renderRow('Расчёт', formatCalcMode(tape.calc_mode))}
       ${renderRow('Цель АМ', tape.target_mass_g != null ? formatMass(tape.target_mass_g) : '—', { numeric: true })}

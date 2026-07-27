@@ -1031,13 +1031,27 @@ async function downloadExcel() {
 }
 
 async function deleteSession(items) {
+  const list = Array.isArray(items) ? items : [items]
+  if (!list.length) return
+
+  // Confirm before an irreversible delete (was: instant delete, no prompt).
+  const label = list.length === 1
+    ? `сессию #${list[0].session_id ?? list[0]}`
+    : `сессии (${list.length} шт.)`
+  if (!window.confirm(`Удалить ${label}? Действие необратимо.`)) return
+
   const deletedIds = []
-  for (const item of items) {
+  const failures = []
+  for (const item of list) {
     const id = item.session_id ?? item
     try {
       await api.delete(`/api/cycling/sessions/${id}`)
       deletedIds.push(id)
-    } catch { /* silent */ }
+    } catch (err) {
+      // Surface failures (e.g. 403 with the new project-access rules)
+      // instead of swallowing them, so the user knows what happened.
+      failures.push(err)
+    }
   }
   await loadData()
   // Purge any deleted session from the active overlay + per-session caches.
@@ -1054,6 +1068,13 @@ async function deleteSession(items) {
     loadingCyclesBy.value = { ...loadingCyclesBy.value }
     // If no active sessions remain, clear cycle selection too.
     if (!activeSessionIds.value.length) selectedCycles.value = []
+  }
+
+  // Feedback: success toast, or surface the first failure.
+  if (failures.length) {
+    toastApiError(toast, failures[0], `Не удалось удалить: ${failures.length} из ${list.length}`, { life: 4500 })
+  } else if (deletedIds.length) {
+    toast.add({ severity: 'success', summary: `Удалено сессий: ${deletedIds.length}`, life: 2500 })
   }
 }
 
@@ -1298,7 +1319,7 @@ const batteryOptions = computed(() =>
 
     <!-- Upload dialog — multi-file -->
     <Dialog v-model:visible="showUpload" header="Загрузить файлы циклирования"
-            :modal="true" style="width: 760px" :closable="!uploading">
+            :modal="true" style="width: min(760px, 96vw)" :closable="!uploading">
       <div class="upload-form">
 
         <!-- File picker: hidden native <input>, custom Button triggers it -->
@@ -1480,7 +1501,7 @@ const batteryOptions = computed(() =>
       v-model:visible="showMassEditor"
       header="Масса активного материала"
       :modal="true"
-      style="width: 760px"
+      style="width: min(760px, 96vw)"
     >
       <div class="mass-editor">
         <p class="mass-editor-hint">
@@ -1491,10 +1512,10 @@ const batteryOptions = computed(() =>
         <table class="mass-table">
           <thead>
             <tr>
-              <th style="width:70px">Сессия</th>
+              <th class="mass-th-sid">Сессия</th>
               <th>Аккумулятор</th>
               <th>Файл</th>
-              <th style="width:160px">Масса, мг</th>
+              <th class="mass-th-mass">Масса, мг</th>
             </tr>
           </thead>
           <tbody>
@@ -2253,4 +2274,14 @@ const batteryOptions = computed(() =>
 }
 /* Скролл-щит: канвасы не ловят мышь во время прокрутки */
 .cycling-page.is-scrolling :deep(canvas) { pointer-events: none; }
+
+/* Mass-editor column widths (were inline styles; classes so the phone
+   breakpoint can shrink them — inline styles can't be overridden). */
+.mass-th-sid { width: 70px; }
+.mass-th-mass { width: 160px; }
+@media (max-width: 768px) {
+  .mass-th-sid { width: 52px; }
+  .mass-th-mass { width: 104px; }
+  .mass-cell-file { max-width: 90px; }
+}
 </style>

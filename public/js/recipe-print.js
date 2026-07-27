@@ -100,6 +100,17 @@ function renderFieldGrid(rows) {
   return `<div class="report_field_grid">${rows.join('')}</div>`;
 }
 
+function isActiveSlotLine(line) {
+  return line.material_id == null &&
+    (line.recipe_role === 'cathode_active' || line.recipe_role === 'anode_active');
+}
+
+function formatRecipeLineMaterial(line) {
+  if (line.material_name) return line.material_name;
+  if (isActiveSlotLine(line)) return 'x — активный материал (выбирается на ленте)';
+  return '—';
+}
+
 function renderCompositionSection(lines) {
   const rows = Array.isArray(lines) ? lines : [];
 
@@ -123,7 +134,7 @@ function renderCompositionSection(lines) {
               <tr>
                 <td class="report_number">${escapeHtml(line.recipe_line_id ?? '—')}</td>
                 <td>${escapeHtml(formatRecipeLineRole(line.recipe_role))}</td>
-                <td>${escapeHtml(line.material_name || '—')}</td>
+                <td>${escapeHtml(formatRecipeLineMaterial(line))}</td>
                 <td>${escapeHtml(formatMaterialRole(line.material_role))}</td>
                 <td class="report_number">${escapeHtml(formatPercent(line.slurry_percent))}</td>
                 <td>${escapeHtml(line.line_notes || '—')}</td>

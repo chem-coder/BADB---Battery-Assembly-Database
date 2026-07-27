@@ -218,8 +218,9 @@ async function fetchCutBatchCapacityContext(queryable, cutBatchId) {
       ON t.tape_id = b.tape_id
     JOIN tape_recipe_lines rl
       ON rl.tape_recipe_id = t.tape_recipe_id
-    JOIN materials m
-      ON m.material_id = rl.material_id
+    -- Active line is an open slot (d047): filled by the tape's material.
+    LEFT JOIN materials m
+      ON m.material_id = COALESCE(rl.material_id, t.active_material_id)
     LEFT JOIN tape_recipe_line_actuals a
       ON a.tape_id = t.tape_id
      AND a.recipe_line_id = rl.recipe_line_id

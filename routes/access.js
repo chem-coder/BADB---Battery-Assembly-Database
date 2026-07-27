@@ -13,22 +13,21 @@ const { auth, requireRole } = require('../middleware/auth');
 // ─────────────────────────────────────────────────────────────────────
 router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
   try {
-    const [users, projects, userGrants, deptGrants, participants, departments] = await Promise.all([
+    // Project-based access model: departments confer no access. The matrix
+    // computes effective access per cell from project lead/creator, explicit
+    // user grants, participants, and public visibility (see GET /api/access/my).
+    const [users, projects, userGrants, participants] = await Promise.all([
       pool.query(`
-        SELECT u.user_id, u.name, u.login, u.role, u.position,
-               u.department_id, d.name AS department_name, u.active
+        SELECT u.user_id, u.name, u.login, u.role, u.position, u.active
         FROM users u
-        LEFT JOIN departments d ON d.department_id = u.department_id
         WHERE u.active = true
-        ORDER BY d.name NULLS LAST, u.name
+        ORDER BY u.name
       `),
       pool.query(`
         SELECT p.project_id, p.name, p.confidentiality_level,
-               p.department_id, d.name AS project_dept_name,
-               p.created_by, u.name AS created_by_name,
+               p.lead_id, p.created_by, u.name AS created_by_name,
                p.status
         FROM projects p
-        LEFT JOIN departments d ON d.department_id = p.department_id
         LEFT JOIN users u ON u.user_id = p.created_by
         ORDER BY p.name
       `),
@@ -39,22 +38,9 @@ router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
         FROM user_project_access upa
       `),
       pool.query(`
-        SELECT pda.department_id, pda.project_id, pda.access_level,
-               pda.granted_at, pda.expires_at,
-               (pda.expires_at IS NOT NULL AND pda.expires_at <= now()) AS is_expired
-        FROM project_department_access pda
-      `),
-      pool.query(`
         SELECT pp.user_id, pp.project_id, pp.participant_id,
                pp.role_in_team, pp.display_order, pp.created_at
         FROM project_participants pp
-      `),
-      pool.query(`
-        SELECT d.department_id, d.name, d.head_user_id,
-               u.name AS head_name
-        FROM departments d
-        LEFT JOIN users u ON u.user_id = d.head_user_id
-        ORDER BY d.name
       `),
     ]);
 
@@ -62,9 +48,7 @@ router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
       users: users.rows,
       projects: projects.rows,
       user_grants: userGrants.rows,
-      dept_grants: deptGrants.rows,
       participants: participants.rows,
-      departments: departments.rows,
     });
   } catch (err) {
     console.error(err);
@@ -73,115 +57,40 @@ router.get('/matrix', auth, requireRole('admin', 'lead'), async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// GET /api/access/graph — nodes + edges for Cytoscape graph view
-// Nodes: users, departments, projects
-// Edges: current access relationships plus legacy department grants for cleanup.
+// GET /api/access/graph — raw rows for the membership constellation.
+// Returns the data the client's buildAccessGraph() (utils/accessGraphModel.js)
+// turns into nodes + edges, mirroring the /matrix raw-rows pattern so the
+// graph logic stays unit-tested on the client. Project-based membership model:
+// no departments. Edges are derived client-side from:
+//   - participants        → member (CRUD the data)
+//   - lead / owner / admin → manager (runs the project)
+// Blanket access (public visibility, admin role, director) is not represented —
+// it connects to everyone/everything and would saturate the map.
 // ─────────────────────────────────────────────────────────────────────
 router.get('/graph', auth, requireRole('admin', 'lead'), async (req, res) => {
   try {
-    const [users, projects, userGrants, deptGrants, participants, departments] = await Promise.all([
-      pool.query(`SELECT user_id, name, department_id, active FROM users WHERE active = true`),
-      pool.query(`SELECT project_id, name, confidentiality_level, department_id, created_by FROM projects`),
+    const [users, projects, participants, adminGrants] = await Promise.all([
+      pool.query(`SELECT user_id, name FROM users WHERE active = true ORDER BY name`),
       pool.query(`
-        SELECT user_id, project_id, access_level,
-               (expires_at IS NOT NULL AND expires_at <= now()) AS is_expired
-        FROM user_project_access
+        SELECT project_id, name, confidentiality_level, lead_id, created_by
+        FROM projects
+        ORDER BY name
       `),
-      pool.query(`
-        SELECT department_id, project_id, access_level,
-               (expires_at IS NOT NULL AND expires_at <= now()) AS is_expired
-        FROM project_department_access
-      `),
+      pool.query(`SELECT user_id, project_id FROM project_participants`),
       pool.query(`
         SELECT user_id, project_id
-        FROM project_participants
+        FROM user_project_access
+        WHERE access_level = 'admin'
+          AND (expires_at IS NULL OR expires_at > now())
       `),
-      pool.query(`SELECT department_id, name, head_user_id FROM departments`),
     ]);
 
-    const nodes = [];
-    const edges = [];
-
-    // Department nodes
-    for (const d of departments.rows) {
-      nodes.push({
-        id: `dept-${d.department_id}`,
-        type: 'department',
-        label: d.name,
-        data: { department_id: d.department_id, head_user_id: d.head_user_id },
-      });
-    }
-
-    // User nodes + user→department membership edges
-    for (const u of users.rows) {
-      nodes.push({
-        id: `user-${u.user_id}`,
-        type: 'user',
-        label: u.name,
-        data: { user_id: u.user_id, department_id: u.department_id },
-      });
-      if (u.department_id) {
-        edges.push({
-          source: `user-${u.user_id}`,
-          target: `dept-${u.department_id}`,
-          type: 'member_of',
-        });
-      }
-    }
-
-    // Project nodes
-    for (const p of projects.rows) {
-      nodes.push({
-        id: `project-${p.project_id}`,
-        type: 'project',
-        label: p.name,
-        data: {
-          project_id: p.project_id,
-          confidentiality_level: p.confidentiality_level,
-          department_id: p.department_id,
-          created_by: p.created_by,
-        },
-      });
-
-      // Open/public projects are visible to everyone by default. We do not add a
-      // virtual "all users" edge here because it overwhelms the access graph.
-    }
-
-    // Explicit user grants
-    for (const g of userGrants.rows) {
-      if (g.is_expired) continue;
-      edges.push({
-        source: `user-${g.user_id}`,
-        target: `project-${g.project_id}`,
-        type: 'grant_user',
-        access_level: g.access_level,
-      });
-    }
-
-    // Project participant view access
-    for (const p of participants.rows) {
-      edges.push({
-        source: `user-${p.user_id}`,
-        target: `project-${p.project_id}`,
-        type: 'project_participant',
-        access_level: 'view',
-      });
-    }
-
-    // Legacy explicit department grants. These rows can exist in old data, but
-    // they no longer determine current project visibility.
-    for (const g of deptGrants.rows) {
-      if (g.is_expired) continue;
-      edges.push({
-        source: `dept-${g.department_id}`,
-        target: `project-${g.project_id}`,
-        type: 'grant_dept_legacy',
-        access_level: g.access_level,
-        legacy: true,
-      });
-    }
-
-    res.json({ nodes, edges });
+    res.json({
+      users: users.rows,
+      projects: projects.rows,
+      participants: participants.rows,
+      adminGrants: adminGrants.rows,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -220,32 +129,22 @@ router.get('/timeline', auth, requireRole('admin', 'lead'), async (req, res) => 
       return { ...r, payload };
     });
 
-    // Enrich user/dept names in payloads (batch query)
+    // Enrich user names in payloads (batch query). Project-based model: the
+    // timeline does not surface departments, so legacy `deptIds` are ignored.
     const userIds = new Set();
-    const deptIds = new Set();
     for (const r of rows) {
       if (r.payload?.userIds) r.payload.userIds.forEach(id => userIds.add(id));
-      if (r.payload?.deptIds) r.payload.deptIds.forEach(id => deptIds.add(id));
     }
 
-    const [usersLookup, deptsLookup] = await Promise.all([
-      userIds.size
-        ? pool.query(`SELECT user_id, name FROM users WHERE user_id = ANY($1::int[])`, [[...userIds]])
-        : Promise.resolve({ rows: [] }),
-      deptIds.size
-        ? pool.query(`SELECT department_id, name FROM departments WHERE department_id = ANY($1::int[])`, [[...deptIds]])
-        : Promise.resolve({ rows: [] }),
-    ]);
+    const usersLookup = userIds.size
+      ? await pool.query(`SELECT user_id, name FROM users WHERE user_id = ANY($1::int[])`, [[...userIds]])
+      : { rows: [] };
 
     const userNames = Object.fromEntries(usersLookup.rows.map(r => [r.user_id, r.name]));
-    const deptNames = Object.fromEntries(deptsLookup.rows.map(r => [r.department_id, r.name]));
 
     for (const r of rows) {
       if (r.payload?.userIds) {
         r.payload.user_names = r.payload.userIds.map(id => userNames[id] || `#${id}`);
-      }
-      if (r.payload?.deptIds) {
-        r.payload.dept_names = r.payload.deptIds.map(id => deptNames[id] || `#${id}`);
       }
     }
 

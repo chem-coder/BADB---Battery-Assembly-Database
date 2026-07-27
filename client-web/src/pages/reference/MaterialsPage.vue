@@ -8,6 +8,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
 import { toastApiError } from '@/utils/errorClassifier'
+import { validateComposition, sumPercent, COMPOSITION_TOLERANCE } from '@/utils/materialComposition'
 import PageHeader from '@/components/PageHeader.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
@@ -66,29 +67,31 @@ onMounted(loadMaterials)
 function selectMaterial(m) {
   if (selectedMaterialId.value === m.material_id) return
   selectedMaterialId.value = m.material_id
-  editForm.value = { name: m.name, role: m.role }
+  editForm.value = { name: m.name, role: m.role, family: m.family || '' }
   instances.value = []
   openInstances.value = new Set()
   componentsMap.value = {}
   componentsLoaded.value = {}
   cancelAllEdits()
   resetInstanceCreate()
-  resetComponentCreate()
+  cancelComposition()
   loadInstances(m.material_id)
 }
 
 // ── Create material (inline in left panel) ────────────────────────────
+// `family` (d047) — optional free-text chemistry family (NMC, LFP,
+// Graphite, …) used to group active-material pickers on the tape form.
 const creatingMaterial = ref(false)
-const newMaterialForm = ref({ name: '', role: '' })
+const newMaterialForm = ref({ name: '', role: '', family: '' })
 
 function startMaterialCreate() {
   creatingMaterial.value = true
-  newMaterialForm.value = { name: '', role: '' }
+  newMaterialForm.value = { name: '', role: '', family: '' }
 }
 
 function cancelMaterialCreate() {
   creatingMaterial.value = false
-  newMaterialForm.value = { name: '', role: '' }
+  newMaterialForm.value = { name: '', role: '', family: '' }
 }
 
 async function saveNewMaterial() {
@@ -96,7 +99,11 @@ async function saveNewMaterial() {
   if (!name) { toast.add({ severity: 'warn', summary: 'Название обязательно', life: 3000 }); return }
   if (!newMaterialForm.value.role) { toast.add({ severity: 'warn', summary: 'Роль обязательна', life: 3000 }); return }
   try {
-    const { data } = await api.post('/api/materials', { name, role: newMaterialForm.value.role })
+    const { data } = await api.post('/api/materials', {
+      name,
+      role: newMaterialForm.value.role,
+      family: newMaterialForm.value.family.trim() || null,
+    })
     toast.add({ severity: 'success', summary: 'Материал создан', life: 3000 })
     cancelMaterialCreate()
     await loadMaterials()
@@ -109,7 +116,7 @@ async function saveNewMaterial() {
 }
 
 // ── Edit material (right panel metadata) ──────────────────────────────
-const editForm = ref({ name: '', role: '' })
+const editForm = ref({ name: '', role: '', family: '' })
 
 async function saveMaterialEdit() {
   const name = editForm.value.name.trim()
@@ -118,6 +125,7 @@ async function saveMaterialEdit() {
     await api.put(`/api/materials/${selectedMaterialId.value}`, {
       name,
       role: editForm.value.role,
+      family: (editForm.value.family || '').trim() || null,
     })
     toast.add({ severity: 'success', summary: 'Материал обновлён', life: 3000 })
     await loadMaterials()
@@ -520,14 +528,18 @@ const editingComponentId = ref(null)
 const editComponentForm = ref({ mass_fraction: '', notes: '' })
 const creatingInstance = ref(false)
 const newInstanceForm = ref({ name: '', notes: '' })
-const creatingComponentFor = ref(null)
-const newComponentForm = ref({ instance_id: '', percent: '', notes: '' })
+// Full-composition editor (vanilla-parity): edits/replaces the WHOLE
+// composition at once via the canonical replace-all endpoint with client-side
+// sum-to-100 validation. Replaces the old single-component POST add.
+const compositionEditorFor = ref(null)   // instance id whose composition is open
+const compositionRows = ref([])          // [{ component_material_instance_id, percent, notes }]
+const compositionSaving = ref(false)
 
 function cancelAllEdits() {
   editingInstanceId.value = null
   editingComponentId.value = null
   creatingInstance.value = false
-  creatingComponentFor.value = null
+  compositionEditorFor.value = null
 }
 
 // ── Instance CRUD ─────────────────────────────────────────────────────
@@ -635,37 +647,86 @@ async function deleteComponent(comp, instanceId) {
   }
 }
 
-async function startComponentCreate(instanceId) {
+// ── Full-composition editor (vanilla "Состав" parity) ─────────────────
+// Mirrors vanilla public/js/materials.js openCompositionEditor: a multi-row
+// editor seeded with the current components, with client-side sum-to-100
+// validation, saved via the canonical replace-all PUT (which re-validates
+// server-side). Replaces the old per-component POST add, which carried no
+// whole-composition validation. Inline ✏️/🗑 per-component edit/delete stay
+// as-is — vanilla leaves those un-revalidated too.
+function blankCompositionRow() {
+  return { component_material_instance_id: '', percent: '', notes: '' }
+}
+
+const compositionSum = computed(() => sumPercent(compositionRows.value))
+const compositionSumOk = computed(
+  () => Math.abs(compositionSum.value / 100 - 1) <= COMPOSITION_TOLERANCE
+)
+
+async function openCompositionEditor(instanceId) {
   cancelAllEdits()
-  creatingComponentFor.value = instanceId
-  newComponentForm.value = { instance_id: '', percent: '', notes: '' }
   await loadAllInstances()
+  const current = componentsMap.value[instanceId] || []
+  compositionRows.value = current.length
+    ? current.map(c => ({
+        component_material_instance_id: c.component_material_instance_id,
+        percent: (Number(c.mass_fraction) * 100).toFixed(2),
+        notes: c.notes || '',
+      }))
+    : [blankCompositionRow()]
+  compositionEditorFor.value = instanceId
 }
 
-function resetComponentCreate() {
-  creatingComponentFor.value = null
-  newComponentForm.value = { instance_id: '', percent: '', notes: '' }
+function cancelComposition() {
+  compositionEditorFor.value = null
+  compositionRows.value = []
 }
 
-async function saveNewComponent(instanceId) {
-  const matInstId = newComponentForm.value.instance_id
-  const pct = Number(newComponentForm.value.percent)
-  if (!matInstId) { toast.add({ severity: 'warn', summary: 'Выберите экземпляр', life: 3000 }); return }
-  if (isNaN(pct) || pct <= 0 || pct > 100) {
-    toast.add({ severity: 'warn', summary: 'Некорректный % (0-100)', life: 3000 })
+function addCompositionRow() {
+  compositionRows.value.push(blankCompositionRow())
+}
+
+function removeCompositionRow(idx) {
+  compositionRows.value.splice(idx, 1)
+  if (compositionRows.value.length === 0) compositionRows.value.push(blankCompositionRow())
+}
+
+// Per-row dropdown options: exclude the parent instance (no self-reference)
+// and disable instances already chosen in another row (no duplicates) —
+// matches vanilla's refreshCompositionOptionAvailability.
+function compositionOptionsForRow(rowIndex) {
+  const chosenElsewhere = new Set(
+    compositionRows.value
+      .filter((_, i) => i !== rowIndex)
+      .map(r => Number(r.component_material_instance_id))
+      .filter(n => Number.isInteger(n) && n > 0)
+  )
+  return allInstances.value
+    .filter(inst => inst.material_instance_id !== compositionEditorFor.value)
+    .map(inst => ({ ...inst, _disabled: chosenElsewhere.has(inst.material_instance_id) }))
+}
+
+async function saveComposition(instanceId) {
+  const result = validateComposition(compositionRows.value, instanceId)
+  if (!result.ok) {
+    toast.add({ severity: 'warn', summary: 'Состав', detail: result.error, life: 4000 })
     return
   }
+  compositionSaving.value = true
   try {
-    await api.post(`/api/materials/instances/${instanceId}/components`, {
-      component_material_instance_id: Number(matInstId),
-      mass_fraction: pct / 100,
-      notes: newComponentForm.value.notes.trim() || null,
-    })
-    toast.add({ severity: 'success', summary: 'Компонент добавлен', life: 3000 })
-    resetComponentCreate()
+    await api.put(`/api/materials/instances/${instanceId}/components`, { components: result.components })
+    toast.add({ severity: 'success', summary: 'Состав сохранён', life: 3000 })
+    cancelComposition()
     await loadComponents(instanceId)
+    // Replace-all always leaves ≥1 component, so the instance is now composite
+    // (not pure) — reflect that locally so the source-info form hides without a
+    // full reload.
+    const inst = instances.value.find(i => i.material_instance_id === instanceId)
+    if (inst) inst.is_pure = false
   } catch (err) {
-    toastApiError(toast, err, 'Не удалось добавить компонент')
+    toastApiError(toast, err, 'Не удалось сохранить состав')
+  } finally {
+    compositionSaving.value = false
   }
 }
 
@@ -703,6 +764,13 @@ function onEditKeydown(e, saveFn, cancelFn) {
             placeholder="-- роль --"
             class="w-full"
           />
+          <InputText
+            v-model="newMaterialForm.family"
+            placeholder="Семейство (NMC, LFP…)"
+            class="w-full"
+            @keydown.enter.prevent="saveNewMaterial"
+            @keydown.escape="cancelMaterialCreate"
+          />
           <div class="create-material-actions">
             <Button label="Создать" @click="saveNewMaterial" />
             <Button label="Отмена" severity="secondary" outlined @click="cancelMaterialCreate" />
@@ -732,7 +800,7 @@ function onEditKeydown(e, saveFn, cancelFn) {
           >
             <div class="material-item-info">
               <span class="material-item-name">{{ m.name }}</span>
-              <span class="material-item-role">{{ roleMap[m.role] || m.role }}</span>
+              <span class="material-item-role">{{ roleMap[m.role] || m.role }}<template v-if="m.family"> · {{ m.family }}</template></span>
             </div>
             <Button
               icon="pi pi-trash"
@@ -762,6 +830,12 @@ function onEditKeydown(e, saveFn, cancelFn) {
                 optionLabel="label"
                 optionValue="value"
                 class="meta-role"
+              />
+              <InputText
+                v-model="editForm.family"
+                placeholder="Семейство"
+                v-tooltip.top="'Семейство химии (NMC, LFP, Graphite…) — группирует материалы в выборе активного материала ленты'"
+                class="meta-family"
               />
               <Button label="Сохранить" @click="saveMaterialEdit" />
             </div>
@@ -859,40 +933,70 @@ function onEditKeydown(e, saveFn, cancelFn) {
                     </table>
                     <div v-else class="empty-text">Нет компонентов</div>
 
-                    <!-- Create component inline -->
-                    <div v-if="creatingComponentFor === inst.material_instance_id" class="create-comp-row">
-                      <Select
-                        v-model="newComponentForm.instance_id"
-                        :options="allInstances"
-                        optionLabel="name"
-                        optionValue="material_instance_id"
-                        placeholder="-- экземпляр --"
-                        class="comp-select"
-                      />
-                      <InputText
-                        v-model="newComponentForm.percent"
-                        placeholder="%"
-                        class="input-narrow"
-                        @keydown.enter.prevent="saveNewComponent(inst.material_instance_id)"
-                        @keydown.escape="resetComponentCreate"
-                      />
-                      <InputText
-                        v-model="newComponentForm.notes"
-                        placeholder="Комментарий"
-                        class="input-flex"
-                        @keydown.enter.prevent="saveNewComponent(inst.material_instance_id)"
-                        @keydown.escape="resetComponentCreate"
-                      />
-                      <Button icon="pi pi-check" text @click="saveNewComponent(inst.material_instance_id)" />
-                      <Button icon="pi pi-times" text severity="secondary" @click="resetComponentCreate" />
+                    <!-- Full-composition editor (vanilla "Состав" parity):
+                         edits/replaces the whole composition at once, validated
+                         to sum to 100% before the canonical replace-all PUT. -->
+                    <div v-if="compositionEditorFor === inst.material_instance_id" class="composition-editor">
+                      <div class="comp-editor-head">Состав — сумма должна быть ровно 100%</div>
+                      <div
+                        v-for="(crow, idx) in compositionRows"
+                        :key="idx"
+                        class="comp-editor-row"
+                      >
+                        <Select
+                          v-model="crow.component_material_instance_id"
+                          :options="compositionOptionsForRow(idx)"
+                          optionLabel="name"
+                          optionValue="material_instance_id"
+                          optionDisabled="_disabled"
+                          filter
+                          placeholder="— экземпляр —"
+                          class="comp-select"
+                        />
+                        <InputText
+                          v-model="crow.percent"
+                          placeholder="%"
+                          class="input-narrow"
+                          @keydown.enter.prevent="addCompositionRow"
+                        />
+                        <InputText
+                          v-model="crow.notes"
+                          placeholder="Комментарий"
+                          class="input-flex"
+                        />
+                        <Button
+                          icon="pi pi-times"
+                          text
+                          severity="secondary"
+                          title="Удалить строку"
+                          @click="removeCompositionRow(idx)"
+                        />
+                      </div>
+                      <div class="comp-editor-foot">
+                        <span :class="['comp-sum', { 'comp-sum--bad': !compositionSumOk }]">
+                          Σ {{ compositionSum.toFixed(2) }}%
+                        </span>
+                        <div class="comp-editor-actions">
+                          <Button label="Ингредиент" icon="pi pi-plus" text size="small" @click="addCompositionRow" />
+                          <Button
+                            label="Сохранить состав"
+                            icon="pi pi-check"
+                            size="small"
+                            :loading="compositionSaving"
+                            :disabled="compositionSaving"
+                            @click="saveComposition(inst.material_instance_id)"
+                          />
+                          <Button label="Отмена" severity="secondary" outlined size="small" @click="cancelComposition" />
+                        </div>
+                      </div>
                     </div>
                     <Button
                       v-else
-                      label="Состав"
-                      icon="pi pi-plus"
+                      :label="(componentsMap[inst.material_instance_id] || []).length ? 'Изменить состав' : 'Задать состав'"
+                      icon="pi pi-sliders-h"
                       text
                       severity="secondary"
-                      @click="startComponentCreate(inst.material_instance_id)"
+                      @click="openCompositionEditor(inst.material_instance_id)"
                     />
                   </template>
                   <div v-else class="loading-text">Загрузка...</div>
@@ -1334,6 +1438,7 @@ function onEditKeydown(e, saveFn, cancelFn) {
 }
 .meta-name { flex: 1; }
 .meta-role { width: 160px; flex-shrink: 0; }
+.meta-family { width: 130px; flex-shrink: 0; }
 
 /* ── Shared form styles ── */
 .w-full { width: 100%; }
@@ -1591,13 +1696,53 @@ function onEditKeydown(e, saveFn, cancelFn) {
 .comp-table th:nth-child(2), .comp-table td:nth-child(2) { width: 80px; }
 .comp-table th:nth-child(4), .comp-table td:nth-child(4) { width: 70px; }
 
-.create-comp-row, .create-inst-row {
+.create-inst-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0;
 }
-.create-comp-row .pv-select { max-width: 250px; }
+
+/* ── Full-composition editor (vanilla "Состав" parity) ── */
+.composition-editor {
+  margin: 0.5rem 0 0.25rem;
+  padding: 0.6rem 0.75rem;
+  background: rgba(0, 50, 116, 0.02);
+  border: 0.5px solid rgba(0, 50, 116, 0.1);
+  border-radius: 6px;
+}
+.comp-editor-head {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(0, 50, 116, 0.7);
+  margin-bottom: 0.5rem;
+}
+.comp-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.comp-editor-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+.comp-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.comp-sum {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2f8f5b;
+  font-variant-numeric: tabular-nums;
+}
+.comp-sum--bad { color: #E74C3C; }
 
 /* ── PrimeVue overrides for compact areas ── */
 .instance-row :deep(.p-button-icon-only) {
@@ -1634,5 +1779,6 @@ function onEditKeydown(e, saveFn, cancelFn) {
   }
   .meta-name { flex: 1 1 100%; }
   .meta-role { width: 100%; }
+  .meta-family { width: 100%; }
 }
 </style>

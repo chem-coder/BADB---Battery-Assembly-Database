@@ -3,6 +3,27 @@ const router = express.Router();
 const pool = require('../db');
 const { auth, requireRole } = require('../middleware/auth');
 const {
+  requireEntityView,
+  requireEntityModify,
+  requireCreateInProjects,
+  filterRowsByEntityAccess
+} = require('../middleware/projectAccess');
+
+// R1: creating a tape targets the project(s) from the body — the user needs
+// edit/admin access there. Accepts project_ids[] or single project_id;
+// empty = unlinked tape (falls under UNLINKED_ITEM_POLICY).
+function tapeCreateProjects(req) {
+  const body = req.body || {};
+  const raw = Array.isArray(body.project_ids) && body.project_ids.length
+    ? body.project_ids
+    : (body.project_id != null && body.project_id !== '' ? [body.project_id] : []);
+  const ids = raw.map(Number);
+  if (ids.some((n) => !Number.isInteger(n))) {
+    return { error: { status: 400, message: 'Некорректный project_id' } };
+  }
+  return { projectIds: ids };
+}
+const {
   sendDependencyConflict,
   sendForeignKeyConflict
 } = require('../utils/dependencyConflicts');
@@ -55,7 +76,7 @@ router.get('/test', async (req, res) => {
 // --------  RECIPE LINE ACTUALS -------- 
 
 // CREATE
-router.post('/:id/actuals', auth, async (req, res) => {
+router.post('/:id/actuals', auth, requireEntityModify('tape'), async (req, res) => {
   const tapeId = Number(req.params.id);
 
   if (!Number.isInteger(tapeId)) {
@@ -65,13 +86,16 @@ router.post('/:id/actuals', auth, async (req, res) => {
   try {
     res.json(await saveTapeActual(pool, tapeId, req.body));
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: 'Ошибка сохранения фактических данных' });
   }
 });
 
 // READ
-router.get('/:id/actuals', auth, async (req, res) => {
+router.get('/:id/actuals', auth, requireEntityView('tape'), async (req, res) => {
   const tapeId = Number(req.params.id);
 
   if (!Number.isInteger(tapeId)) {
@@ -91,7 +115,7 @@ router.get('/:id/actuals', auth, async (req, res) => {
 // -------- TAPES --------
 
 // CREATE tape
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireCreateInProjects(tapeCreateProjects), async (req, res) => {
   const {
     project_id,
     tape_recipe_id
@@ -124,7 +148,9 @@ router.get('/', auth, async (req, res) => {
   const { role } = req.query;
 
   try {
-    res.json(await listTapes(pool, role));
+    // R1: users only see tapes belonging to projects they can access.
+    const rows = await listTapes(pool, role);
+    res.json(await filterRowsByEntityAccess(req, 'tape', rows, 'tape_id'));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -132,7 +158,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // EDIT
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireEntityModify('tape'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Некорректный ID' });
@@ -149,7 +175,7 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
-router.get('/:id/delete-check', auth, requireRole('admin', 'lead'), async (req, res) => {
+router.get('/:id/delete-check', auth, requireRole('admin', 'lead'), requireEntityModify('tape'), async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -172,7 +198,7 @@ router.get('/:id/delete-check', auth, requireRole('admin', 'lead'), async (req, 
 // arbitrary tapes owned by other users. Before this guard, any authenticated
 // user could DELETE /api/tapes/:id and the only barrier was the schema-level
 // dependency check.
-router.delete('/:id', auth, requireRole('admin', 'lead'), async (req, res) => {
+router.delete('/:id', auth, requireRole('admin', 'lead'), requireEntityModify('tape'), async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -211,7 +237,7 @@ router.delete('/:id', auth, requireRole('admin', 'lead'), async (req, res) => {
 // --------- GENERAL/GENERIC STEP READING (for any operation type) --------
 
 // WRITE (dispatcher): POST /:id/steps/by-code/:code
-router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
+router.post('/:id/steps/by-code/:code', auth, requireEntityModify('tape'), async (req, res) => {
   const tapeId = Number(req.params.id);
   const code = String(req.params.code || '').trim();
 
@@ -235,7 +261,7 @@ router.post('/:id/steps/by-code/:code', auth, async (req, res) => {
 });
 
 // READ
-router.get('/:id/steps/drying', auth, async (req, res) => {
+router.get('/:id/steps/drying', auth, requireEntityView('tape'), async (req, res) => {
   const tapeId = Number(req.params.id);
   const code = normalizeDryingOperationCode(req.query.operation_code);
 
@@ -256,7 +282,7 @@ router.get('/:id/steps/drying', auth, async (req, res) => {
   }
 });
 
-router.get('/:id/steps/by-code/:code', auth, async (req, res) => {
+router.get('/:id/steps/by-code/:code', auth, requireEntityView('tape'), async (req, res) => {
   const tapeId = Number(req.params.id);
   const code = String(req.params.code || '').trim();
 
@@ -280,7 +306,9 @@ router.get('/:id/steps/by-code/:code', auth, async (req, res) => {
 router.get('/for-electrodes', auth, async (req, res) => {
 
   try {
-    res.json(await listTapesForElectrodes(pool));
+    // R1: dropdown only offers tapes from projects the user can access.
+    const rows = await listTapesForElectrodes(pool);
+    res.json(await filterRowsByEntityAccess(req, 'tape', rows, 'tape_id'));
 
   } catch (err) {
 
@@ -296,7 +324,7 @@ router.get('/for-electrodes', auth, async (req, res) => {
 // -------- ELECTRODE CUT BATCHES BY TAPE --------
 
 // GET cut batches by tape
-router.get('/:id/electrode-cut-batches', auth, async (req, res) => {
+router.get('/:id/electrode-cut-batches', auth, requireEntityView('tape'), async (req, res) => {
   const tapeId = Number(req.params.id);
 
   if (!Number.isInteger(tapeId)) {
@@ -312,7 +340,7 @@ router.get('/:id/electrode-cut-batches', auth, async (req, res) => {
 });
 
 
-router.get('/:id/report', auth, async (req, res) => {
+router.get('/:id/report', auth, requireEntityView('tape'), async (req, res) => {
   const tapeId = Number(req.params.id);
 
   if (!Number.isInteger(tapeId)) {
@@ -333,7 +361,7 @@ router.get('/:id/report', auth, async (req, res) => {
 
 
 // READ ONE — must be after /for-electrodes to avoid /:id catching "for-electrodes"
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireEntityView('tape'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Некорректный ID' });
@@ -350,7 +378,7 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-router.get('/:id/dry-box-state', auth, async (req, res) => {
+router.get('/:id/dry-box-state', auth, requireEntityView('tape'), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     return res.status(400).json({ error: 'Некорректный ID' });
@@ -370,7 +398,7 @@ router.get('/:id/dry-box-state', auth, async (req, res) => {
   }
 });
 
-router.put('/:id/dry-box-state', auth, async (req, res) => {
+router.put('/:id/dry-box-state', auth, requireEntityModify('tape'), async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -388,7 +416,7 @@ router.put('/:id/dry-box-state', auth, async (req, res) => {
   }
 });
 
-router.post('/:id/dry-box-state/return-now', auth, async (req, res) => {
+router.post('/:id/dry-box-state/return-now', auth, requireEntityModify('tape'), async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -406,7 +434,7 @@ router.post('/:id/dry-box-state/return-now', auth, async (req, res) => {
   }
 });
 
-router.post('/:id/dry-box-state/place-now', auth, async (req, res) => {
+router.post('/:id/dry-box-state/place-now', auth, requireEntityModify('tape'), async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -424,7 +452,7 @@ router.post('/:id/dry-box-state/place-now', auth, async (req, res) => {
   }
 });
 
-router.post('/:id/dry-box-state/remove-now', auth, async (req, res) => {
+router.post('/:id/dry-box-state/remove-now', auth, requireEntityModify('tape'), async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {
@@ -442,7 +470,7 @@ router.post('/:id/dry-box-state/remove-now', auth, async (req, res) => {
   }
 });
 
-router.post('/:id/dry-box-state/deplete', auth, async (req, res) => {
+router.post('/:id/dry-box-state/deplete', auth, requireEntityModify('tape'), async (req, res) => {
   const id = Number(req.params.id);
 
   if (!Number.isInteger(id)) {

@@ -3,6 +3,38 @@ const router = express.Router();
 const pool = require('../db');
 const { auth } = require('../middleware/auth');
 const {
+  requireEntityView,
+  requireEntityModify,
+  requireCreateInProjects,
+  filterRowsByEntityAccess
+} = require('../middleware/projectAccess');
+const { getEntityProjectIds } = require('../services/projectAccessService');
+
+// R1: creating a battery targets the project(s) from the body.
+function batteryCreateProjects(req) {
+  const body = req.body || {};
+  const raw = Array.isArray(body.project_ids) && body.project_ids.length
+    ? body.project_ids
+    : (body.project_id != null && body.project_id !== '' ? [body.project_id] : []);
+  const ids = raw.map(Number);
+  if (ids.some((n) => !Number.isInteger(n))) {
+    return { error: { status: 400, message: 'Некорректный project_id' } };
+  }
+  return { projectIds: ids };
+}
+
+// R1: the battery_* config POST routes carry battery_id in the BODY —
+// writing a config requires edit/admin on the battery's project(s).
+async function batteryFromBodyProjects(req, db) {
+  const batteryId = Number(req.body && req.body.battery_id);
+  if (!Number.isInteger(batteryId)) {
+    return { error: { status: 400, message: 'Некорректный battery_id' } };
+  }
+  const { exists, projectIds } = await getEntityProjectIds(db, 'battery', batteryId);
+  if (!exists) return { error: { status: 404, message: 'Аккумулятор не найден' } };
+  return { projectIds };
+}
+const {
   sendDependencyConflict,
   sendForeignKeyConflict
 } = require('../utils/dependencyConflicts');
@@ -63,8 +95,11 @@ const {
 const {
   deleteBatteryElectrochem,
   fetchBatteryElectrochem,
+  getBatteryElectrochemFile,
+  resolveElectrochemAbsolutePath,
   saveBatteryElectrochem
 } = require('../services/batteryElectrochemService');
+const fsSync = require('fs');
 
 router.get('/test', async (req, res) => {
   const result = await pool.query('SELECT 1 as ok');
@@ -76,7 +111,7 @@ router.get('/test', async (req, res) => {
 // ---------- BATTERIES ----------
 
 // Create a new battery header
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireCreateInProjects(batteryCreateProjects), async (req, res) => {
 
   try {
     res.status(201).json(await createBattery(pool, req.body, req.user.userId));
@@ -96,7 +131,9 @@ router.post('/', auth, async (req, res) => {
 // List batteries
 router.get('/', auth, async (req, res) => {
   try {
-    res.json(await listBatteries(pool));
+    // R1: users only see batteries belonging to projects they can access.
+    const rows = await listBatteries(pool);
+    res.json(await filterRowsByEntityAccess(req, 'battery', rows, 'battery_id'));
 
   } catch (err) {
 
@@ -106,7 +143,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-router.get('/:id/electrode-cut-batches', auth, async (req, res) => {
+router.get('/:id/electrode-cut-batches', auth, requireEntityView('battery'), async (req, res) => {
 
   const batteryId = Number(req.params.id);
   const tapeId =
@@ -138,7 +175,7 @@ router.get('/:id/electrode-cut-batches', auth, async (req, res) => {
 });
 
 // Read battery header
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireEntityView('battery'), async (req, res) => {
 
   const batteryId = Number(req.params.id);
 
@@ -162,7 +199,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Update battery header
-router.patch('/:id', auth, async (req, res) => {
+router.patch('/:id', auth, requireEntityModify('battery'), async (req, res) => {
 
   const batteryId = Number(req.params.id);
 
@@ -185,7 +222,7 @@ router.patch('/:id', auth, async (req, res) => {
 
 });
 
-router.post('/:id/disassemble', auth, async (req, res) => {
+router.post('/:id/disassemble', auth, requireEntityModify('battery'), async (req, res) => {
   const batteryId = Number(req.params.id);
 
   if (!Number.isInteger(batteryId)) {
@@ -206,7 +243,7 @@ router.post('/:id/disassemble', auth, async (req, res) => {
   }
 });
 
-router.get('/:id/delete-check', auth, async (req, res) => {
+router.get('/:id/delete-check', auth, requireEntityModify('battery'), async (req, res) => {
   const batteryId = Number(req.params.id);
 
   if (!Number.isInteger(batteryId)) {
@@ -224,7 +261,7 @@ router.get('/:id/delete-check', auth, async (req, res) => {
   }
 });
 
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireEntityModify('battery'), async (req, res) => {
   const batteryId = Number(req.params.id);
 
   if (!Number.isInteger(batteryId)) {
@@ -251,7 +288,7 @@ router.delete('/:id', auth, async (req, res) => {
 
 
 // Save coin-cell configuration
-router.post('/battery_coin_config', auth, async (req, res) => {
+router.post('/battery_coin_config', auth, requireCreateInProjects(batteryFromBodyProjects), async (req, res) => {
 
   try {
     res.status(201).json(await saveCoinConfig(pool, req.body));
@@ -269,7 +306,7 @@ router.post('/battery_coin_config', auth, async (req, res) => {
 });
 
 // Read coin-cell configuration
-router.get('/battery_coin_config/:battery_id', auth, async (req, res) => {
+router.get('/battery_coin_config/:battery_id', auth, requireEntityView('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -290,7 +327,7 @@ router.get('/battery_coin_config/:battery_id', auth, async (req, res) => {
 });
 
 // Update coin-cell configuration
-router.patch('/battery_coin_config/:battery_id', auth, async (req, res) => {
+router.patch('/battery_coin_config/:battery_id', auth, requireEntityModify('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -315,7 +352,7 @@ router.patch('/battery_coin_config/:battery_id', auth, async (req, res) => {
 
 
 // Save pouch/prism-cell configuration
-router.post('/battery_pouch_config', auth, async (req, res) => {
+router.post('/battery_pouch_config', auth, requireCreateInProjects(batteryFromBodyProjects), async (req, res) => {
 
   const batteryId = Number(req.body.battery_id);
 
@@ -339,7 +376,7 @@ router.post('/battery_pouch_config', auth, async (req, res) => {
 });
 
 // Read pouch/prism-cell configuration
-router.get('/battery_pouch_config/:battery_id', auth, async (req, res) => {
+router.get('/battery_pouch_config/:battery_id', auth, requireEntityView('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -360,7 +397,7 @@ router.get('/battery_pouch_config/:battery_id', auth, async (req, res) => {
 });
 
 // Update pouch/prism-cell configuration
-router.patch('/battery_pouch_config/:battery_id', auth, async (req, res) => {
+router.patch('/battery_pouch_config/:battery_id', auth, requireEntityModify('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -386,7 +423,7 @@ router.patch('/battery_pouch_config/:battery_id', auth, async (req, res) => {
 
 
 // Save cylindrical-cell configuration
-router.post('/battery_cyl_config', auth, async (req, res) => {
+router.post('/battery_cyl_config', auth, requireCreateInProjects(batteryFromBodyProjects), async (req, res) => {
 
   const batteryId = Number(req.body.battery_id);
 
@@ -407,7 +444,7 @@ router.post('/battery_cyl_config', auth, async (req, res) => {
 });
 
 // Read cylindrical-cell configuration
-router.get('/battery_cyl_config/:battery_id', auth, async (req, res) => {
+router.get('/battery_cyl_config/:battery_id', auth, requireEntityView('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -428,7 +465,7 @@ router.get('/battery_cyl_config/:battery_id', auth, async (req, res) => {
 });
 
 // Update cylindrical-cell configuration
-router.patch('/battery_cyl_config/:battery_id', auth, async (req, res) => {
+router.patch('/battery_cyl_config/:battery_id', auth, requireEntityModify('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -455,7 +492,7 @@ router.patch('/battery_cyl_config/:battery_id', auth, async (req, res) => {
 
 // Save electrode sources for a battery
 
-router.post('/battery_electrode_sources', auth, async (req, res) => {
+router.post('/battery_electrode_sources', auth, requireCreateInProjects(batteryFromBodyProjects), async (req, res) => {
   const batteryId = Number(req.body.battery_id);
 
   if (!Number.isInteger(batteryId)) {
@@ -475,7 +512,7 @@ router.post('/battery_electrode_sources', auth, async (req, res) => {
 });
 
 // Read electrode sources for a battery
-router.get('/battery_electrode_sources/:battery_id', auth, async (req, res) => {
+router.get('/battery_electrode_sources/:battery_id', auth, requireEntityView('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -496,7 +533,7 @@ router.get('/battery_electrode_sources/:battery_id', auth, async (req, res) => {
 });
 
 // Update electrode sources for a battery
-router.patch('/battery_electrode_sources/:battery_id', auth, async (req, res) => {
+router.patch('/battery_electrode_sources/:battery_id', auth, requireEntityModify('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -526,7 +563,7 @@ router.patch('/battery_electrode_sources/:battery_id', auth, async (req, res) =>
 
 
 // Update electrode stack
-router.put('/battery_electrodes/:battery_id', auth, async (req, res) => {
+router.put('/battery_electrodes/:battery_id', auth, requireEntityModify('battery', { idParam: 'battery_id' }), async (req, res) => {
   const batteryId = Number(req.params.battery_id);
   const stack = req.body;
 
@@ -555,7 +592,7 @@ router.put('/battery_electrodes/:battery_id', auth, async (req, res) => {
 });
 
 // Read electrode stack for a battery
-router.get('/battery_electrodes/:battery_id', auth, async (req, res) => {
+router.get('/battery_electrodes/:battery_id', auth, requireEntityView('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -574,7 +611,7 @@ router.get('/battery_electrodes/:battery_id', auth, async (req, res) => {
 
 
 // Save separator configuration
-router.post('/battery_sep_config', auth, async (req, res) => {
+router.post('/battery_sep_config', auth, requireCreateInProjects(batteryFromBodyProjects), async (req, res) => {
 
   const batteryId = Number(req.body.battery_id);
 
@@ -595,7 +632,7 @@ router.post('/battery_sep_config', auth, async (req, res) => {
 });
 
 // Read separator configuration
-router.get('/battery_sep_config/:battery_id', auth, async (req, res) => {
+router.get('/battery_sep_config/:battery_id', auth, requireEntityView('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -616,7 +653,7 @@ router.get('/battery_sep_config/:battery_id', auth, async (req, res) => {
 });
 
 // Update separator configuration
-router.patch('/battery_sep_config/:battery_id', auth, async (req, res) => {
+router.patch('/battery_sep_config/:battery_id', auth, requireEntityModify('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -642,7 +679,7 @@ router.patch('/battery_sep_config/:battery_id', auth, async (req, res) => {
 
 
 // Save electrolyte configuration
-router.post('/battery_electrolyte', auth, async (req, res) => {
+router.post('/battery_electrolyte', auth, requireCreateInProjects(batteryFromBodyProjects), async (req, res) => {
 
   const batteryId = Number(req.body.battery_id);
 
@@ -663,7 +700,7 @@ router.post('/battery_electrolyte', auth, async (req, res) => {
 });
 
 // Read electrolyte configuration
-router.get('/battery_electrolyte/:battery_id', auth, async (req, res) => {
+router.get('/battery_electrolyte/:battery_id', auth, requireEntityView('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -684,7 +721,7 @@ router.get('/battery_electrolyte/:battery_id', auth, async (req, res) => {
 });
 
 // Update electrolyte configuration
-router.patch('/battery_electrolyte/:battery_id', auth, async (req, res) => {
+router.patch('/battery_electrolyte/:battery_id', auth, requireEntityModify('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -710,7 +747,7 @@ router.patch('/battery_electrolyte/:battery_id', auth, async (req, res) => {
 
 
 // Save battery QC data
-router.post('/battery_qc', auth, async (req, res) => {
+router.post('/battery_qc', auth, requireCreateInProjects(batteryFromBodyProjects), async (req, res) => {
 
   const batteryId = Number(req.body.battery_id);
 
@@ -731,7 +768,7 @@ router.post('/battery_qc', auth, async (req, res) => {
 });
 
 // Read battery QC data
-router.get('/battery_qc/:battery_id', auth, async (req, res) => {
+router.get('/battery_qc/:battery_id', auth, requireEntityView('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -752,7 +789,7 @@ router.get('/battery_qc/:battery_id', auth, async (req, res) => {
 });
 
 // Update battery QC data
-router.patch('/battery_qc/:battery_id', auth, async (req, res) => {
+router.patch('/battery_qc/:battery_id', auth, requireEntityModify('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -777,7 +814,7 @@ router.patch('/battery_qc/:battery_id', auth, async (req, res) => {
 
 
 // Save battery electrochem data
-router.post('/battery_electrochem', auth, async (req, res) => {
+router.post('/battery_electrochem', auth, requireCreateInProjects(batteryFromBodyProjects), async (req, res) => {
 
   const {
     battery_id,
@@ -816,7 +853,7 @@ router.post('/battery_electrochem', auth, async (req, res) => {
 });
 
 // Read battery electrochem data
-router.get('/battery_electrochem/:battery_id', auth, async (req, res) => {
+router.get('/battery_electrochem/:battery_id', auth, requireEntityView('battery', { idParam: 'battery_id' }), async (req, res) => {
 
   const batteryId = Number(req.params.battery_id);
 
@@ -843,6 +880,34 @@ router.patch('/battery_electrochem/:battery_id', auth, async (req, res) => {
 });
 
 
+// Download a single battery_electrochem file through an AUTHENTICATED
+// route (the public /uploads static mount is gone — see app.js). Access
+// follows the battery's project(s), same as reading the battery itself.
+// 400 = row exists but is notes-only (no file); 404 = row or disk file gone.
+router.get('/battery_electrochem/:electrochem_id/download', auth, requireEntityView('batteryElectrochem', { idParam: 'electrochem_id' }), async (req, res) => {
+  const electrochemId = Number(req.params.electrochem_id);
+
+  try {
+    const file = await getBatteryElectrochemFile(pool, electrochemId);
+    if (!file) {
+      return res.status(404).json({ error: 'Файл не найден' });
+    }
+    if (!file.file_link) {
+      return res.status(400).json({ error: 'К этой записи не прикреплён файл' });
+    }
+
+    const absolutePath = resolveElectrochemAbsolutePath(file.file_link);
+    if (!absolutePath || !fsSync.existsSync(absolutePath)) {
+      return res.status(404).json({ error: 'Файл не найден на диске' });
+    }
+
+    res.download(absolutePath, file.file_name || `electrochem_${electrochemId}`);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка скачивания файла электрохимических испытаний' });
+  }
+});
+
 // Delete a single battery_electrochem file (DB row + file on disk).
 //
 // Route shape matches /battery_electrochem/* sibling routes (POST/GET/PATCH
@@ -851,7 +916,7 @@ router.patch('/battery_electrochem/:battery_id', auth, async (req, res) => {
 //
 // Disk cleanup is best-effort and lives inside the service: a missing file
 // behind a deleted row is harmless. Returns 404 if no row matched the id.
-router.delete('/battery_electrochem/:electrochem_id', auth, async (req, res) => {
+router.delete('/battery_electrochem/:electrochem_id', auth, requireEntityModify('batteryElectrochem', { idParam: 'electrochem_id' }), async (req, res) => {
   const electrochemId = Number(req.params.electrochem_id);
 
   if (!Number.isInteger(electrochemId)) {
@@ -874,7 +939,7 @@ router.delete('/battery_electrochem/:electrochem_id', auth, async (req, res) => 
 // ---------- LOAD THE FULL BATTERY RECORD ----------
 
 // Generates JSON
-router.get('/:id/assembly', auth, async (req, res) => {
+router.get('/:id/assembly', auth, requireEntityView('battery'), async (req, res) => {
   const batteryId = Number(req.params.id);
 
   if (!Number.isInteger(batteryId)) {
@@ -895,7 +960,7 @@ router.get('/:id/assembly', auth, async (req, res) => {
   }
 });
 
-router.get('/:id/report', auth, async (req, res) => {
+router.get('/:id/report', auth, requireEntityView('battery'), async (req, res) => {
   const batteryId = Number(req.params.id);
 
   if (!Number.isInteger(batteryId)) {

@@ -992,6 +992,64 @@ router.put('/:id/participants/:participantId', auth, requireModify, async (req, 
   }
 });
 
+// ── Helper: lab entities a user created on a project ──────────────────
+// Gates the admin-only HARD delete of a participant: a person who produced lab
+// records on a project must not be erased (soft-disable instead). Returns a
+// dependency list (empty = safe to hard-delete). `modules` track no creator, so
+// they don't count.
+async function countUserProjectEntities(db, projectId, userId) {
+  const r = await db.query(
+    `
+    SELECT
+      (SELECT COUNT(*) FROM tapes WHERE created_by = $2 AND project_id = $1) AS tapes,
+      (SELECT COUNT(*) FROM batteries WHERE created_by = $2 AND project_id = $1) AS batteries,
+      (SELECT COUNT(*) FROM electrode_cut_batches ecb
+         JOIN electrode_cut_batch_projects j ON j.cut_batch_id = ecb.cut_batch_id
+       WHERE ecb.created_by = $2 AND j.project_id = $1) AS electrode_batches
+    `,
+    [projectId, userId]
+  );
+  const c = r.rows[0];
+  const dependencies = [];
+  if (Number(c.tapes) > 0) dependencies.push({ type: 'tapes', label: 'ленты', count: Number(c.tapes) });
+  if (Number(c.electrode_batches) > 0) dependencies.push({ type: 'electrode_batches', label: 'партии электродов', count: Number(c.electrode_batches) });
+  if (Number(c.batteries) > 0) dependencies.push({ type: 'batteries', label: 'аккумуляторы', count: Number(c.batteries) });
+  return dependencies;
+}
+
+// GET /api/projects/:id/participants/:participantId/delete-check
+// Is an admin-only HARD delete allowed? Only when the user created no lab
+// entities on this project; otherwise soft-disable (set «Нет доступа» / expiry).
+router.get('/:id/participants/:participantId/delete-check', auth, requireModify, async (req, res) => {
+  const projectId = Number(req.params.id);
+  const participantId = Number(req.params.participantId);
+  if (!Number.isInteger(projectId) || !Number.isInteger(participantId)) {
+    return res.status(400).json({ error: 'Некорректный ID участника проекта' });
+  }
+  try {
+    const pr = await pool.query(
+      'SELECT user_id FROM project_participants WHERE project_id = $1 AND participant_id = $2',
+      [projectId, participantId]
+    );
+    if (pr.rowCount === 0) return res.status(404).json({ error: 'Участник проекта не найден' });
+
+    const dependencies = await countUserProjectEntities(pool, projectId, pr.rows[0].user_id);
+    const can_delete = dependencies.length === 0;
+    res.json({
+      can_delete,
+      message: can_delete
+        ? null
+        : 'Участник создал лабораторные записи на этом проекте (' +
+          dependencies.map((d) => `${d.label}: ${d.count}`).join(', ') +
+          '). Его нельзя удалить — отключите доступ вместо удаления.',
+      dependencies,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка проверки удаления участника' });
+  }
+});
+
 router.delete('/:id/participants/:participantId', auth, requireModify, async (req, res) => {
   const projectId = Number(req.params.id);
   const participantId = Number(req.params.participantId);
@@ -1024,6 +1082,18 @@ router.delete('/:id/participants/:participantId', auth, requireModify, async (re
       await client.query('ROLLBACK');
       return res.status(409).json({
         error: 'Руководителя нельзя убрать из команды; сначала измените руководителя проекта'
+      });
+    }
+
+    // Hard delete only when the user left no lab records on this project;
+    // otherwise the person must be soft-disabled, not erased (traceability).
+    const dependencies = await countUserProjectEntities(client, projectId, current.rows[0].user_id);
+    if (dependencies.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error:
+          'Участник создал лабораторные записи на этом проекте; его нельзя удалить — отключите доступ вместо удаления.',
+        dependencies,
       });
     }
 
