@@ -680,12 +680,66 @@ async function openCompositionEditor(inst, instChildren, addComponentBtn) {
   }
 }
 
+// Grouped rendering (mirrors Vue MaterialsPage): role section -> family
+// sub-header -> products, so all NMC products sit under ONE «NMC» header.
+// Materials without a family land under a red «Без семейства» bucket on
+// active roles; roles without families render a single flat section.
+const GROUP_ROLE_ORDER = ['cathode_active', 'anode_active', 'active', 'binder', 'conductive_additive', 'solvent', 'other'];
+const GROUP_FAMILY_ROLES = new Set(['cathode_active', 'anode_active', 'active']);
+
+function makeGroupHeader(text, cls) {
+  const el = document.createElement('div');
+  el.classList.add(cls);
+  el.textContent = text;
+  return el;
+}
+
 function renderMaterials(materials) {
   materialsList.innerHTML = '';
-  
-  sortMaterials(materials)
-  .forEach(material => {
-    
+
+  const byRole = new Map();
+  materials.forEach(m => {
+    const role = GROUP_ROLE_ORDER.includes(m.role) ? m.role : 'other';
+    if (!byRole.has(role)) byRole.set(role, []);
+    byRole.get(role).push(m);
+  });
+
+  GROUP_ROLE_ORDER.forEach(role => {
+    const inRole = byRole.get(role);
+    if (!inRole || !inRole.length) return;
+
+    materialsList.appendChild(makeGroupHeader(roleMap[role] || role, 'material-group-role'));
+
+    if (GROUP_FAMILY_ROLES.has(role)) {
+      const byFamily = new Map();
+      inRole.forEach(m => {
+        const key = m.family || '';
+        if (!byFamily.has(key)) byFamily.set(key, []);
+        byFamily.get(key).push(m);
+      });
+      [...byFamily.keys()]
+        .sort((a, b) => {
+          if (!a) return 1;
+          if (!b) return -1;
+          return a.localeCompare(b, 'ru');
+        })
+        .forEach(family => {
+          const header = makeGroupHeader(family || 'Без семейства', 'material-group-family');
+          if (!family) header.classList.add('material-group-family--missing');
+          materialsList.appendChild(header);
+          byFamily.get(family)
+            .sort((x, y) => x.name.localeCompare(y.name, 'ru'))
+            .forEach(m => materialsList.appendChild(buildMaterialNode(m)));
+        });
+    } else {
+      inRole
+        .sort((x, y) => x.name.localeCompare(y.name, 'ru'))
+        .forEach(m => materialsList.appendChild(buildMaterialNode(m)));
+    }
+  });
+}
+
+function buildMaterialNode(material) {
     const details = document.createElement('details');
     details.classList.add('tree-row', 'level-material');
     details.dataset.type = 'material';
@@ -948,8 +1002,7 @@ function renderMaterials(materials) {
       }
     });
     
-    materialsList.appendChild(details);
-  });
+    return details;
 }
 
 
