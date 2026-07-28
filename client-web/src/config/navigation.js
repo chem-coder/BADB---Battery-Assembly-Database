@@ -17,7 +17,7 @@
 export const workflowSections = [
   {
     key: 'tapes',
-    label: 'Подготовка лент',           // Дали: "Ленты | Подготовка новой ленты"
+    label: 'Ленты',           // Дали: "Ленты | Подготовка новой ленты"
     shortLabel: 'Ленты',                // короткое для KPI-карточки
     path: '/tapes',
     apiPath: '/api/tapes',

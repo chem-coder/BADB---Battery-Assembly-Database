@@ -123,22 +123,22 @@ function _resolveCapacityHint(summary, context, extra = {}) {
     }
     if (cathodeNull && !anodeNull) {
       return {
-        message: 'Для фактического N/P не хватает массы катода. Откройте катодную ленту в «Подготовка лент» → «Фактические навески рецепта».',
+        message: 'Для фактического N/P не хватает массы катода. Откройте катодную ленту в «Ленты» → «Фактические навески рецепта».',
         action: { kind: 'open-tape-recipe', label: 'Открыть катодную ленту', payload: { tapeId: cathodeTapeId } },
       }
     }
     if (anodeNull && !cathodeNull) {
       return {
-        message: 'Для фактического N/P не хватает массы анода. Откройте анодную ленту в «Подготовка лент» → «Фактические навески рецепта».',
+        message: 'Для фактического N/P не хватает массы анода. Откройте анодную ленту в «Ленты» → «Фактические навески рецепта».',
         action: { kind: 'open-tape-recipe', label: 'Открыть анодную ленту', payload: { tapeId: anodeTapeId } },
       }
     }
     // Both null (or an unexpected edge where np is null despite both
     // actuals being set — be explicit but generic).
     return {
-      message: 'Для фактического N/P нужны заполненные массы в рецептах обеих лент. Откройте ленты катода и анода в «Подготовка лент» → «Фактические навески рецепта».',
+      message: 'Для фактического N/P нужны заполненные массы в рецептах обеих лент. Откройте ленты катода и анода в «Ленты» → «Фактические навески рецепта».',
       // No single tape to open — bare /tapes navigation; user picks which.
-      action: { kind: 'open-tape-recipe', label: 'Открыть «Подготовка лент»', payload: { tapeId: null } },
+      action: { kind: 'open-tape-recipe', label: 'Открыть «Ленты»', payload: { tapeId: null } },
     }
   }
   if (context === 'battery-cathode') {
@@ -149,7 +149,7 @@ function _resolveCapacityHint(summary, context, extra = {}) {
       }
     }
     return {
-      message: 'Часть навесок в рецепте катодной ленты не заполнена. Откройте ленту в «Подготовка лент» → «Фактические навески рецепта».',
+      message: 'Часть навесок в рецепте катодной ленты не заполнена. Откройте ленту в «Ленты» → «Фактические навески рецепта».',
       action: { kind: 'open-tape-recipe', label: 'Открыть катодную ленту', payload: { tapeId: cathodeTapeId } },
     }
   }
@@ -161,7 +161,7 @@ function _resolveCapacityHint(summary, context, extra = {}) {
       }
     }
     return {
-      message: 'Часть навесок в рецепте анодной ленты не заполнена. Откройте ленту в «Подготовка лент» → «Фактические навески рецепта».',
+      message: 'Часть навесок в рецепте анодной ленты не заполнена. Откройте ленту в «Ленты» → «Фактические навески рецепта».',
       action: { kind: 'open-tape-recipe', label: 'Открыть анодную ленту', payload: { tapeId: anodeTapeId } },
     }
   }
@@ -172,13 +172,13 @@ function _resolveCapacityHint(summary, context, extra = {}) {
   const status = summary.actual_fraction_status
   if (status === 'unavailable') {
     return {
-      message: 'Фактические массы в рецепте ленты не заполнены. Откройте «Подготовка лент» → выберите нужную ленту → таблица «Фактические навески рецепта».',
-      action: { kind: 'open-tape-recipe', label: 'Открыть «Подготовка лент»', payload: { tapeId } },
+      message: 'Фактические массы в рецепте ленты не заполнены. Откройте «Ленты» → выберите нужную ленту → таблица «Фактические навески рецепта».',
+      action: { kind: 'open-tape-recipe', label: 'Открыть «Ленты»', payload: { tapeId } },
     }
   }
   if (status === 'incomplete') {
     return {
-      message: 'Часть навесок в рецепте ленты не заполнена. Откройте ленту в «Подготовка лент» и проверьте все строки рецепта.',
+      message: 'Часть навесок в рецепте ленты не заполнена. Откройте ленту в «Ленты» и проверьте все строки рецепта.',
       action: { kind: 'open-tape-recipe', label: 'Открыть ленту', payload: { tapeId } },
     }
   }
