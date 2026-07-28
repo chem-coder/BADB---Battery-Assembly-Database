@@ -1,7 +1,7 @@
 # Future Ideas
 
 Created: 2026-05-06
-Edited: 2026-06-20
+Edited: 2026-07-28
 Status: future idea
 
 This folder is for ideas and proposals that are not implemented yet and are not
@@ -21,6 +21,7 @@ instead of keeping it here as future work.
 - [Dashboard Future Work](dashboard_next.md)
 - [Feature Backlog](feature_backlog.md)
 - [Materials And Capacity Future Work](materials_capacity_next.md)
+- [Materials Model Cleanup — Design Spec](materials_model_cleanup.md) — PROPOSAL, pre-launch candidate
 - [Project Member-Add Flow + Access Vocabulary](project_member_flow.md)
 - [Projects View — Session Handoff](projects_view_handoff.md)
 - [Project-Based Access Control (R1 security item)](project_access_control.md)
