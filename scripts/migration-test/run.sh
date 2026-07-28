@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Migration rehearsal — proves d041 -> d042 -> d043 apply cleanly on top of a
+# Migration rehearsal — proves d041 … d050 apply cleanly on top of a
 # faithful d040 baseline WITH DATA, lose nothing, and land on the same schema a
 # fresh install produces.
 #
@@ -36,7 +36,14 @@ THRU_D040=(
   d038_add_electrode_capacity_average_flag d039_add_electrode_test_batch_flag
   d040_add_coated_thickness_fields
 )
-UPGRADE=( d041_project_participants d042_project_leads_as_team_members d043_enable_multi_battery_electrode_sources )
+UPGRADE=(
+  d041_project_participants d042_project_leads_as_team_members
+  d043_enable_multi_battery_electrode_sources
+  d044_access_level_none d045_material_instance_components_ddl
+  d046_indexes_and_timestamps d047_recipe_active_material_slot
+  d048_vilitek_mixer_containers_and_balls d049_fix_vilitek_cup_sizes
+  d050_recipe_slot_marker_am d051_backfill_ledger_rows_d044_d046
+)
 
 q() { psql -d "$1" -tAqc "$2"; }                 # quiet scalar query
 apply() { psql -d "$1" -q -v ON_ERROR_STOP=1 -f "$ROOT/migrations/$2.sql" >/dev/null 2>&1; }
@@ -61,13 +68,13 @@ PROJ_WITH_LEAD=$(q "$TEST_DB" "SELECT count(*) FROM projects WHERE lead_id IS NO
 BES_BEFORE=$(q "$TEST_DB" "SELECT count(*) FROM battery_electrode_sources")
 echo "  baseline+fixtures: projects_with_lead=$PROJ_WITH_LEAD, battery_electrode_sources=$BES_BEFORE"
 
-echo "### 2. Apply the upgrade under test: d041 -> d042 -> d043"
+echo "### 2. Apply the upgrade under test: d041 ... d051"
 for m in "${UPGRADE[@]}"; do
   if apply "$TEST_DB" "$m"; then echo "  applied $m"; else echo "  [FAIL] $m errored"; FAILS=$((FAILS+1)); fi
 done
 
 echo "### 3. Verify ledger + data integrity"
-check "ledger dalia (28->31)" "$(q "$TEST_DB" "SELECT count(*) FROM schema_migrations WHERE migration_stream='dalia'")" 31
+check "ledger dalia (28->39)" "$(q "$TEST_DB" "SELECT count(*) FROM schema_migrations WHERE migration_stream='dalia'")" 39
 check "ledger dima (unchanged)" "$(q "$TEST_DB" "SELECT count(*) FROM schema_migrations WHERE migration_stream='dima'")" 21
 # d042: one participant per lead-bearing project; NULL-lead project skipped
 check "project_participants = projects_with_lead" "$(q "$TEST_DB" "SELECT count(*) FROM project_participants")" "$PROJ_WITH_LEAD"
@@ -98,16 +105,16 @@ check "duplicate (battery,role,batch) rejected" "$DUP_BLOCKED" blocked
 TWO_PRIMARY_BLOCKED=$(psql -d "$TEST_DB" -tAqc "BEGIN; INSERT INTO battery_electrode_sources(battery_id,role,cut_batch_id,is_primary) VALUES (1,'anode',NULL,true); SELECT 'ok'; ROLLBACK;" 2>/dev/null || echo "blocked")
 check "second is_primary per (battery,role) rejected" "$TWO_PRIMARY_BLOCKED" blocked
 
-echo "### 5. Idempotency — re-apply d041..d043, expect clean no-op"
+echo "### 5. Idempotency — re-apply d041..d051, expect clean no-op"
 PP1=$(q "$TEST_DB" "SELECT count(*) FROM project_participants")
 BES1=$(q "$TEST_DB" "SELECT count(*) FROM battery_electrode_sources")
 RERUN_OK=yes; for m in "${UPGRADE[@]}"; do apply "$TEST_DB" "$m" || RERUN_OK=no; done
 check "re-run applied without error" "$RERUN_OK" yes
 check "project_participants unchanged after re-run" "$(q "$TEST_DB" "SELECT count(*) FROM project_participants")" "$PP1"
 check "battery_electrode_sources unchanged after re-run" "$(q "$TEST_DB" "SELECT count(*) FROM battery_electrode_sources")" "$BES1"
-check "ledger still 31 dalia after re-run" "$(q "$TEST_DB" "SELECT count(*) FROM schema_migrations WHERE migration_stream='dalia'")" 31
+check "ledger still 39 dalia after re-run" "$(q "$TEST_DB" "SELECT count(*) FROM schema_migrations WHERE migration_stream='dalia'")" 39
 
-echo "### 6. Schema equivalence — upgraded-from-d040 vs fresh d043"
+echo "### 6. Schema equivalence — upgraded-from-d040 vs fresh"
 build_baseline "$FRESH_DB"
 for m in "${UPGRADE[@]}"; do apply "$FRESH_DB" "$m"; done
 # Strip pg_dump's random \restrict/\unrestrict anti-injection tokens (they

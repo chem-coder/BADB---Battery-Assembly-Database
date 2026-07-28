@@ -157,7 +157,7 @@ these questions once teaches the taxonomy, which is a deliberate side benefit.
 
 ## 5. Schema changes (PRE-LAUNCH)
 
-All forward-only, in one migration (proposed `d051`).
+All forward-only, in one migration (proposed `d052` — `d051` is taken by the ledger backfill).
 
 1. **`materials.manufacturer`** (text, nullable) — who makes the product (D2).
    Distinct from `material_sources.supplier`, which stays on the instance and
