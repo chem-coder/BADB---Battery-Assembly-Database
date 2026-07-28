@@ -114,17 +114,21 @@ const columns = [
   // would read as duplicate. Cell renders as '#42' so the header
   // word + '#' prefix together carry the meaning ("Аккум. #42").
   { field: 'battery_id', header: 'Аккум.', minWidth: '70px', width: '85px' },
-  { field: 'project_name', header: 'Проект', minWidth: '120px' },
-  { field: 'form_factor', header: 'Форм-фактор', minWidth: '90px', width: '110px' },
+  // Identification block, kept together directly after the id: chemistry
+  // pair + who + when is how a user recognises their own cell while
+  // scanning. The id stays first because a same-day series of identical
+  // chemistry made by one person is otherwise indistinguishable.
   // audit #15 — backend returns the joined active-material strings; show
   // them as compact columns so the user can scan electrochemistry at a
   // glance without opening the constructor.
   { field: 'cathode_active_materials', header: 'Катод AM', minWidth: '100px', width: '130px', sortable: true },
   { field: 'anode_active_materials',   header: 'Анод AM',  minWidth: '100px', width: '130px', sortable: true },
-  { field: 'cathode_batch_shape',      header: 'Форма катода', minWidth: '90px', width: '110px', sortable: true },
-  { field: 'status_display', header: 'Статус', minWidth: '80px', width: '100px' },
   { field: 'created_by_name', header: 'Оператор', minWidth: '100px' },
   { field: 'created_at', header: 'Создан', minWidth: '80px', width: '110px' },
+  // Grouping / filtering context after the identity block.
+  { field: 'project_name', header: 'Проект', minWidth: '120px' },
+  { field: 'form_factor', header: 'Форм-фактор', minWidth: '90px', width: '110px' },
+  { field: 'status_display', header: 'Статус', minWidth: '80px', width: '100px' },
   { field: 'notes', header: 'Заметки', minWidth: '120px', sortable: false, filterable: false },
 ]
 
