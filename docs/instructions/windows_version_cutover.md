@@ -62,13 +62,21 @@ safely.
    Apply any migrations newer than `d043` after these, in order. The general
    catch-up procedure and the protective `d032` caveat are in
    `windows_migration_catchup.md`.
-7. **Verify the ledger** — expect `dalia=31`, `dima=21`:
+7. **Verify the ledger** — expect `dalia=40`, `dima=21` (as of `d052`;
+   the repo-side expectation lives in `migrations/README.md`):
    ```powershell
    psql -U Dalia -d badb_app_v1 -c "SELECT migration_stream, count(*) FROM schema_migrations GROUP BY 1 ORDER BY 1;"
    ```
 8. **Optional:** run the `d031` trigger-behavior check from `apply_migrations.md`
    (closes the last outstanding lab-proof item in release_readiness.md).
-9. **Restart the app server** and smoke-check: log in, open Tapes / Electrodes /
+9. **After any manual materials cleanup** (re-pointing a tape's active
+   material to a corrected product entry), run the read-only consistency
+   report — empty result = OK; each listed tape needs its weighing step
+   re-opened and the active-line instance re-selected:
+   ```powershell
+   psql -U Dalia -d badb_app_v1 -f scripts/check_slot_actual_consistency.sql
+   ```
+10. **Restart the app server** and smoke-check: log in, open Tapes / Electrodes /
    Batteries, confirm data loads and a save works.
 10. **Record evidence** (date, ledger counts, machine) in
     `docs/current/release_readiness.md`.

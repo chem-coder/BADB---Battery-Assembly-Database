@@ -133,10 +133,19 @@ const columns = [
 ]
 
 // ── Computed: enriched data ──
+// Half-cell Li flags (materials_model_cleanup.md §6.2 «missing vs not
+// applicable»): in a half cell one side is the lithium counter-electrode,
+// so its AM cell is legitimately empty — render a calm muted
+// «Li (полуячейка)» instead of a blank that reads like missing data.
+// half_cell_type 'cathode_vs_li' = lab cathode vs Li → the ANODE side is
+// Li; 'anode_vs_li' = lab anode vs Li → the CATHODE side is Li. A
+// genuinely missing material on a full cell stays empty as before.
 const tableData = computed(() =>
   batteries.value.map(b => ({
     ...b,
     status_display: batteryStatusLabel(b.status),
+    _cathode_is_li: b.coin_cell_mode === 'half_cell' && b.half_cell_type === 'anode_vs_li',
+    _anode_is_li:   b.coin_cell_mode === 'half_cell' && b.half_cell_type === 'cathode_vs_li',
   }))
 )
 
@@ -613,6 +622,17 @@ onMounted(async () => {
       </template>
       <template #col-battery_id="{ data }">
         <strong class="battery-id">#{{ data.battery_id }}</strong>
+      </template>
+      <!-- AM cells: on a half cell the Li counter-electrode side shows a
+           muted (not red) «Li (полуячейка)» — correct data, not missing
+           (spec §6.2). Full-cell blanks stay blank as before. -->
+      <template #col-cathode_active_materials="{ data }">
+        <span v-if="data._cathode_is_li" class="text-muted">Li (полуячейка)</span>
+        <template v-else>{{ data.cathode_active_materials }}</template>
+      </template>
+      <template #col-anode_active_materials="{ data }">
+        <span v-if="data._anode_is_li" class="text-muted">Li (полуячейка)</span>
+        <template v-else>{{ data.anode_active_materials }}</template>
       </template>
       <template #col-form_factor="{ data }">
         <span v-if="data.form_factor" class="ff-badge">

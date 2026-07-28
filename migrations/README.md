@@ -5,12 +5,12 @@ Forward-only SQL migrations applied in alphabetical order to
 
 Current migration file state as of 2026-07-28:
 
-- `migrations/` has 60 SQL files.
-- `migrations_ASCII/` has 60 SQL files.
+- `migrations/` has 61 SQL files.
+- `migrations_ASCII/` has 61 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d051_backfill_ledger_rows_d044_d046.sql`.
+- Dalia's `dNNN` stream exists through `d052_materials_manufacturer_families.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 39` after `d051` is applied.
+  counts of `dima = 21` and `dalia = 40` after `d052` is applied.
 
 ## How to apply
 
@@ -191,6 +191,16 @@ Full timeline is in the git log. High-level:
   up 3 rows short. Each row is gated on that migration's verified effect, so
   a database that never ran d045 is not told that it did. Found by
   `scripts/migration-test/run.sh`, 2026-07-28.
+- `d052_materials_manufacturer_families` — materials model cleanup, data
+  part (spec: docs/future/materials_model_cleanup.md): adds
+  `materials.manufacturer` (maker of the product, vs
+  `material_sources.supplier` = seller of the bag), the
+  `material_families` vocabulary (role-scoped, seeded incl. future
+  families), backfills family/manufacturer for known products (fills
+  blanks only — lab-safe), and renames auto-generated
+  `<material> (чистый)` instances to plain `<material>`: the suffix froze
+  a computed leaf/mixture state into a stored name and read as a purity
+  claim. Unknown data is left untouched for manual cleanup.
 
 ## Check migration ledger
 

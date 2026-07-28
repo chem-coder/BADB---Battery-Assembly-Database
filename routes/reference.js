@@ -70,6 +70,24 @@ router.get('/wet-mixing-methods', auth, async (req, res) => {
   }
 });
 
+// READ: material families (d052) — role-scoped controlled vocabulary
+// feeding the family pickers; materials.family stores the `code`.
+router.get('/material-families', auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT family_id, code, label, role, sort_order, notes
+      FROM material_families
+      ORDER BY role ASC, sort_order ASC, code ASC
+      `
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки семейств материалов' });
+  }
+});
+
 // READ: mixing containers (cups for the planetary centrifugal mixer etc.)
 router.get('/mixing-containers', auth, async (req, res) => {
   try {

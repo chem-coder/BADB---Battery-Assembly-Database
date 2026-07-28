@@ -1150,7 +1150,75 @@ function computeSlurrySolidsSummary() {
   };
 }
 
+// -------- Solvent compatibility check (materials_model_cleanup.md §8, D6) --------
+// No new fields: each chosen instance's solvent system is derived from the
+// composition data this page already loads for planned-mass math. One level of
+// the instance's own component list is enough («1.5% CMC в воде» → Вода).
+// Solvents are compared by material_id, never by name string.
+
+function collectSelectedSolventMaterials() {
+  const solventNamesByMaterialId = new Map();
+
+  const addSolvent = (materialId, materialName) => {
+    const id = Number(materialId);
+    if (!Number.isFinite(id)) return;
+    if (!solventNamesByMaterialId.has(id)) {
+      solventNamesByMaterialId.set(id, materialName || `ID ${id}`);
+    }
+  };
+
+  state.recipe.currentLines.forEach((line) => {
+    if (!line) return;
+
+    const selectedInstanceId = state.recipe.selectedInstancesByLineId[line.recipe_line_id];
+    if (!selectedInstanceId) return;
+
+    // The recipe's own solvent line counts once an instance is chosen for it.
+    if (line.recipe_role === 'solvent') {
+      addSolvent(line.material_id, line.material_name);
+    }
+
+    // One-level walk of the chosen instance's own components. If the
+    // composition is not cached client-side yet, skip silently — no extra
+    // fetches just for this warning.
+    if (!hasCachedInstanceComponents(selectedInstanceId)) return;
+
+    const components = state.recipe.instanceComponentsCache[String(selectedInstanceId)];
+    if (!Array.isArray(components)) return;
+
+    components.forEach((component) => {
+      if (component.material_role !== 'solvent') return;
+      addSolvent(
+        component.material_id ?? component.component_material_id,
+        component.material_name || component.component_name
+      );
+    });
+  });
+
+  return solventNamesByMaterialId;
+}
+
+function renderSolventCompatibilityWarning() {
+  const hosts = document.querySelectorAll('.solvent-compat-warning');
+  if (!hosts.length) return;
+
+  const solventNames = Array.from(collectSelectedSolventMaterials().values());
+  const hasMismatch = solventNames.length > 1;
+  const text = hasMismatch
+    ? `Внимание: выбраны материалы с разными растворителями: ${solventNames.join(' и ')} — проверьте совместимость связующего и растворителя.`
+    : '';
+
+  hosts.forEach((el) => {
+    el.textContent = text;
+    el.hidden = !hasMismatch;
+  });
+}
+
 function renderSlurrySolidsSummary() {
+  // Non-blocking solvent mismatch warning (§8): recomputed on the same
+  // triggers as the solids summary (instance changes, cache loads, re-render).
+  renderSolventCompatibilityWarning();
+
   const el = document.getElementById('slurry-solids-summary');
   if (!el) return;
 
@@ -2387,6 +2455,7 @@ function renderRecipeLines() {
       setSelectedInstanceForLine(recipeLineId, value);
       syncInstanceSelectsForLine(recipeLineId);
       recalculatePlannedMasses();
+      renderSolventCompatibilityWarning();
     }
     
     instanceSelect.addEventListener('change', () => {

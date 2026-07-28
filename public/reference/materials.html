@@ -52,6 +52,24 @@
   margin-left: 3rem;
 }
 
+      .instance-kind-badge {
+        display: inline-block;
+        margin-left: 0.5rem;
+        padding: 0.05rem 0.45rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 400;
+        border: 1px solid #c7cdd6;
+        color: #556070;
+        background: #f2f4f7;
+        vertical-align: middle;
+      }
+
+      .instance-kind-badge.is-prepared {
+        border-color: #b9cdea;
+        color: #2f5c9e;
+        background: #e9f0fa;
+      }
     </style>
   </head>
 
@@ -72,12 +90,6 @@
           required
         >
 
-        <input
-          type="text"
-          id="new-material-family"
-          placeholder="Семейство (например NMC, LFP; необязательно)"
-        >
-
         <select id="new-material-role" required>
           <option value="">— выбрать роль —</option>
           <option value="cathode_active">катодный активный материал</option>
@@ -87,6 +99,16 @@
           <option value="solvent">растворитель</option>
           <option value="other">другое</option>
         </select>
+
+        <select id="new-material-family" hidden>
+          <option value="">— выбрать семейство —</option>
+        </select>
+
+        <input
+          type="text"
+          id="new-material-manufacturer"
+          placeholder="Производитель (необязательно)"
+        >
 
         <button id="createMaterialBtn" type="button">
           Добавить
