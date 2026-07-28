@@ -296,23 +296,11 @@ async function loadInstances(materialId) {
   try {
     const { data } = await api.get(`/api/materials/${materialId}/instances`)
     instances.value = data.sort((a, b) => a.name.localeCompare(b.name))
-    // Auto-expand all instances and load their components
-    openInstances.value = new Set(instances.value.map(i => i.material_instance_id))
-    instances.value.forEach(inst => {
-      const id = inst.material_instance_id
-      if (!componentsLoaded.value[id]) loadComponents(id)
-      // source-info is only meaningful for pure instances — backend
-      // rejects non-pure with 400. Skip the load for composites (they
-      // get a friendly "N/A" message in the template instead of a
-      // spinner-forever + error toast). File lists share the pure-only
-      // guard because they live under the source row.
-      if (inst.is_pure) {
-        if (!sourceInfoLoaded.value[id])   loadSourceInfo(id)
-        if (!sourceFilesLoaded.value[id])  loadSourceFiles(id)
-      }
-      if (!propertiesLoaded.value[id])   loadProperties(id)
-      if (!propertyFilesLoaded.value[id]) loadPropertyFiles(id)
-    })
+    // Instances start COLLAPSED (Dalia, 2026-07-28): a wall of expanded
+    // instances hid how many there even were. Collapsing also removes the
+    // eager ~5-requests-per-instance fan-out this loop used to fire —
+    // toggleInstance() lazy-loads components/source/properties on expand.
+    openInstances.value = new Set()
   } finally {
     instancesLoading.value = false
   }
