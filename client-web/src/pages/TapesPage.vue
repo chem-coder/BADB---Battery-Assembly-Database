@@ -1,6 +1,6 @@
 <script setup>
 /**
- * TapesPage — "Подготовка лент"
+ * TapesPage — "Ленты"
  * Unified view: CrudTable (with constructor checkboxes) + TapeConstructor.
  *
  * The old TapeFormPage is replaced by the inline Constructor.
@@ -102,6 +102,10 @@ onMounted(async () => {
 // since the slot supplies its own tooltip.
 const columns = [
   { field: '_constructor',  header: 'Конструктор', minWidth: '95px',  width: '110px', sortable: false, filterable: false, required: true },
+  // The tape's own id — matches «Лента #N» in headers, print reports and
+  // delete confirmations, so a row can be identified unambiguously
+  // (the leading № column is just the row position in the current view).
+  { field: 'tape_id',       header: 'Лента №',    minWidth: '70px',  width: '85px', sortable: true },
   { field: 'name',          header: 'Название',   minWidth: '100px' },
   { field: 'project_name',  header: 'Проект',     minWidth: '80px',  width: '115px' },
   { field: 'role',          header: 'Тип',        minWidth: '80px',  width: '115px' },
@@ -426,7 +430,7 @@ function formatDate(dt) {
 <template>
   <div class="tapes-page">
 
-    <PageHeader title="Подготовка лент" icon="pi pi-bars" />
+    <PageHeader title="Ленты" icon="pi pi-bars" />
 
     <!-- ── Table (collapsible via max-height) ── -->
     <CrudTable
