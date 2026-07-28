@@ -91,6 +91,48 @@ const filteredMaterials = computed(() => {
   return result
 })
 
+// Grouped view of the list (the visible hierarchy Dalia asked for):
+// role section → family sub-group → products. All NMC products sit
+// under ONE «NMC» header; materials without a family collect under
+// «Без семейства» (red — it is a to-fill gap on active roles). Roles
+// without families (binders/solvents/…) get a single flat section.
+const ROLE_ORDER = ['cathode_active', 'anode_active', 'active', 'binder', 'conductive_additive', 'solvent', 'other']
+const groupedMaterials = computed(() => {
+  const sections = []
+  for (const role of ROLE_ORDER) {
+    const inRole = filteredMaterials.value.filter(m => m.role === role)
+    if (!inRole.length) continue
+    if (familyApplies(role)) {
+      const byFamily = new Map()
+      for (const m of inRole) {
+        const key = m.family || ''
+        if (!byFamily.has(key)) byFamily.set(key, [])
+        byFamily.get(key).push(m)
+      }
+      const famOrder = [...byFamily.keys()].sort((a, b) => {
+        if (!a) return 1
+        if (!b) return -1
+        return a.localeCompare(b, 'ru')
+      })
+      sections.push({
+        role,
+        label: roleMap[role] || role,
+        families: famOrder.map(f => ({
+          family: f,
+          items: byFamily.get(f).sort((x, y) => x.name.localeCompare(y.name, 'ru')),
+        })),
+      })
+    } else {
+      sections.push({
+        role,
+        label: roleMap[role] || role,
+        families: [{ family: null, items: inRole.sort((x, y) => x.name.localeCompare(y.name, 'ru')) }],
+      })
+    }
+  }
+  return sections
+})
+
 const selectedMaterial = computed(() =>
   materials.value.find(m => m.material_id === selectedMaterialId.value) || null
 )
@@ -894,12 +936,20 @@ function onEditKeydown(e, saveFn, cancelFn) {
           </div>
         </div>
 
-        <!-- Material list -->
+        <!-- Material list — grouped: role → family → products, so all NMC
+             products sit under one «NMC» header (the agreed hierarchy). -->
         <div class="material-list">
+          <template v-for="section in groupedMaterials" :key="section.role">
+            <div class="material-group-role">{{ section.label }}</div>
+            <template v-for="fam in section.families" :key="section.role + ':' + (fam.family ?? '')">
+              <div
+                v-if="fam.family !== null"
+                :class="['material-group-family', { 'missing-attr': !fam.family }]"
+              >{{ fam.family || 'Без семейства' }}</div>
           <div
-            v-for="m in filteredMaterials"
+            v-for="m in fam.items"
             :key="m.material_id"
-            :class="['material-item', { active: selectedMaterialId === m.material_id }]"
+            :class="['material-item', 'material-item--grouped', { active: selectedMaterialId === m.material_id }]"
             @click="selectMaterial(m)"
           >
             <div class="material-item-info">
@@ -909,14 +959,15 @@ function onEditKeydown(e, saveFn, cancelFn) {
                    manufacturer is rendered as a red placeholder so the
                    incompleteness stays uncomfortable. For other roles
                    family is "not applicable" — no nag, render nothing. -->
+              <!-- Role and family now live in the group headers above;
+                   the item meta carries only the manufacturer (red when
+                   missing on active roles — D4). -->
               <span class="material-item-role">
-                <template v-if="familyApplies(m.role)">{{ roleMap[m.role] || m.role }} ·
-                  <span v-if="m.family">{{ m.family }}</span>
-                  <span v-else class="missing-attr">Семейство: не указано</span> ·
+                <template v-if="familyApplies(m.role)">
                   <span v-if="m.manufacturer">{{ m.manufacturer }}</span>
                   <span v-else class="missing-attr">Производитель: неизвестен</span>
                 </template>
-                <template v-else>{{ roleMap[m.role] || m.role }}<template v-if="m.family"> · {{ m.family }}</template><template v-if="m.manufacturer"> · {{ m.manufacturer }}</template></template>
+                <template v-else><template v-if="m.manufacturer">{{ m.manufacturer }}</template></template>
               </span>
             </div>
             <Button
@@ -927,6 +978,8 @@ function onEditKeydown(e, saveFn, cancelFn) {
               @click.stop="deleteMaterial(m)"
             />
           </div>
+            </template>
+          </template>
           <div v-if="filteredMaterials.length === 0" class="empty-text">
             {{ filterText ? 'Ничего не найдено' : 'Нет материалов' }}
           </div>
@@ -1520,6 +1573,27 @@ function onEditKeydown(e, saveFn, cancelFn) {
 .material-list {
   flex: 1;
   overflow-y: auto;
+}
+
+.material-group-role {
+  padding: 10px 8px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(0, 50, 116, 0.55);
+}
+
+.material-group-family {
+  padding: 6px 8px 2px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #003274;
+}
+
+/* Products sit indented under their family header. */
+.material-item--grouped {
+  margin-left: 14px;
 }
 
 .material-item {
