@@ -228,7 +228,7 @@ creation:
 The same helper serves the recipe duplicate-detection designed earlier — one
 function, two callers.
 
-### 6.4 Three moments, not one form — PRE-LAUNCH (routing), POST-LAUNCH (polish)
+### 6.4 Three moments, not one form — «bag arrival» IMPLEMENTED 2026-07-28; evaluation prompt still future
 
 Today every question is asked at material-creation time — when the user knows
 least and cares least — and the question the lab actually wants answered is

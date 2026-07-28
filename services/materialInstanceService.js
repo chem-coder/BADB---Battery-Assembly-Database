@@ -168,6 +168,29 @@ async function createMaterialInstance(pool, materialId, payload, userId) {
         ...createdRow,
         source_id: context.source_id
       };
+
+      // «Bag arrival» flow (materials_model_cleanup.md §6.4): supplier /
+      // lot / receipt date are captured at the moment the instance (a
+      // physical bag) is created, in the same transaction — instead of
+      // being buried behind the source-info page and staying empty.
+      // All optional; blanks stay blank («уточню позже» is legitimate).
+      const supplier = typeof payload.supplier === 'string' && payload.supplier.trim() ? payload.supplier.trim() : null;
+      const lotNumber = typeof payload.lot_number === 'string' && payload.lot_number.trim() ? payload.lot_number.trim() : null;
+      const dateReceived = payload.date_received || null;
+
+      if (supplier || lotNumber || dateReceived) {
+        await client.query(
+          `
+          UPDATE material_sources
+          SET supplier      = COALESCE($2, supplier),
+              lot_number    = COALESCE($3, lot_number),
+              date_received = COALESCE($4, date_received),
+              updated_by    = $5
+          WHERE source_id = $1
+          `,
+          [context.source_id, supplier, lotNumber, dateReceived, userId]
+        );
+      }
     }
 
     await client.query('COMMIT');

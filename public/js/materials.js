@@ -932,9 +932,53 @@ function buildMaterialNode(material) {
           const pureCheckbox = document.createElement('input');
           pureCheckbox.type = 'checkbox';
           pureCheckbox.style.marginRight = '0.4rem';
+          // Bag is the common case; unchecked = a prepared mixture to be
+          // composed later (no supplier questions).
+          pureCheckbox.checked = true;
 
           pureLabel.appendChild(pureCheckbox);
-          pureLabel.append('100% чистый экземпляр');
+          pureLabel.append('исходный — мешок/партия от поставщика (иначе: приготовленная смесь)');
+
+          // «Приход мешка» (materials_model_cleanup.md §6.4): supplier /
+          // lot / receipt date captured at the moment the bag enters the
+          // lab. All optional — blanks stay blank.
+          const bagRow = document.createElement('div');
+          bagRow.style.marginTop = '0.4rem';
+
+          const supplierInput = document.createElement('input');
+          supplierInput.type = 'text';
+          supplierInput.placeholder = 'Поставщик (у кого куплено)';
+          supplierInput.title = 'Продавец этого мешка. Производитель продукта указывается на материале.';
+          supplierInput.style.marginRight = '0.5rem';
+
+          const lotInput = document.createElement('input');
+          lotInput.type = 'text';
+          lotInput.placeholder = '№ партии (lot)';
+          lotInput.style.marginRight = '0.5rem';
+
+          const dateInput = document.createElement('input');
+          dateInput.type = 'date';
+          dateInput.title = 'Дата получения';
+          dateInput.valueAsDate = new Date();
+
+          bagRow.appendChild(supplierInput);
+          bagRow.appendChild(lotInput);
+          bagRow.appendChild(dateInput);
+
+          // Auto-suggest the instance name from the lot until the user
+          // edits the name themselves: «<материал> — партия <lot>».
+          let nameTouched = false;
+          input.addEventListener('input', () => { nameTouched = true; });
+          input.value = material.name;
+          lotInput.addEventListener('input', () => {
+            if (nameTouched) return;
+            const lot = lotInput.value.trim();
+            input.value = lot ? `${material.name} — партия ${lot}` : material.name;
+          });
+
+          pureCheckbox.addEventListener('change', () => {
+            bagRow.style.display = pureCheckbox.checked ? '' : 'none';
+          });
           
           const saveBtn = document.createElement('button');
           saveBtn.type = 'button';
@@ -947,6 +991,7 @@ function buildMaterialNode(material) {
           createRow.appendChild(input);
           createRow.appendChild(notesInput);
           createRow.appendChild(pureLabel);
+          createRow.appendChild(bagRow);
           createRow.appendChild(saveBtn);
           createRow.appendChild(cancelBtn);
           
@@ -965,7 +1010,10 @@ function buildMaterialNode(material) {
               await createInstance(material.material_id, {
                 name,
                 notes: notesInput.value.trim() || null,
-                is_pure: pureCheckbox.checked
+                is_pure: pureCheckbox.checked,
+                supplier: pureCheckbox.checked ? (supplierInput.value.trim() || null) : null,
+                lot_number: pureCheckbox.checked ? (lotInput.value.trim() || null) : null,
+                date_received: pureCheckbox.checked ? (dateInput.value || null) : null
               });
               
               childrenContainer.dataset.loaded = '';
