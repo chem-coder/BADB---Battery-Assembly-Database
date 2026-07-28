@@ -276,7 +276,7 @@ the work is filling `family` and `manufacturer`.
 | `NMC 811` | 0 | `NMC` | неизвестен | **unused** — free to restructure |
 | `NMC 811 ETI` | 0 | `NMC` | ETI | **unused** |
 | `NMC 811 BTR M2C2` | 0 | `NMC` | BTR | **unused** |
-| `LFP S19` | 6 | `LFP` | ? | load-bearing — name stays, add manufacturer |
+| `LFP S19` | 6 | `LFP` | Gelon *(probable)* | load-bearing — name stays. «LFP S19» is a Gelon catalogue code (verified 2026-07-28); vendor = Gelon is certain, but Gelon both manufactures and trades, so mark the manufacturer unconfirmed until the CoA/packaging says otherwise. NOT BTR — BTR makes the anode graphites |
 | `NMC C85E` | 1 | `NMC` | ? | load-bearing — name stays, add manufacturer |
 | `NCA`, `NVP` | 1 / 0 | `NCA`, `NVP` | неизвестен | honest placeholders until a real grade is bought |
 
@@ -323,7 +323,8 @@ Warn, do not block: unusual formulations are legitimate research.
 
 ## 10. Open questions
 
-1. `LFP S19` and `NMC C85E` — manufacturers?
+1. `NMC C85E` — manufacturer? (`LFP S19` resolved 2026-07-28: Gelon catalogue code,
+   manufacturer probable-Gelon pending confirmation from the certificate of analysis.)
 2. Should the generic placeholders (`LTO`, `NCA`, `NVP`, `HC`) be renamed now,
    or left honest until a specific grade is purchased?
 3. Anything to add to the family lists for materials likely to be bought in the
