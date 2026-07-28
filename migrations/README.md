@@ -3,14 +3,14 @@
 Forward-only SQL migrations applied in alphabetical order to
 `badb_app_v1` (Dalia's PostgreSQL database).
 
-Current migration file state as of 2026-07-17:
+Current migration file state as of 2026-07-28:
 
-- `migrations/` has 59 SQL files.
-- `migrations_ASCII/` has 59 SQL files.
+- `migrations/` has 60 SQL files.
+- `migrations_ASCII/` has 60 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d050_recipe_slot_marker_am.sql`.
+- Dalia's `dNNN` stream exists through `d051_backfill_ledger_rows_d044_d046.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 38` after `d050` is applied.
+  counts of `dima = 21` and `dalia = 39` after `d051` is applied.
 
 ## How to apply
 
@@ -185,6 +185,12 @@ Full timeline is in the git log. High-level:
   composition-derived recipe names from "x" to "АМ" (активный материал):
   "96 АМ : 2.2 Super P : 1.8 PVDF". Cosmetic; only d047-shaped names are
   touched, so hand-renamed recipes are left alone.
+- `d051_backfill_ledger_rows_d044_d046` — records `d044`, `d045` and `d046`
+  in `schema_migrations`; those three apply their DDL but never insert a
+  ledger row, so every database except the hand-patched local dev one ended
+  up 3 rows short. Each row is gated on that migration's verified effect, so
+  a database that never ran d045 is not told that it did. Found by
+  `scripts/migration-test/run.sh`, 2026-07-28.
 
 ## Check migration ledger
 
