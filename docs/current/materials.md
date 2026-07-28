@@ -1,7 +1,7 @@
 # Materials
 
 Created: 2026-05-06
-Edited: 2026-07-16
+Edited: 2026-07-28
 Status: current
 Verified against code: 2026-05-06
 
@@ -28,9 +28,13 @@ lives in `docs/current/capacity_calculations.md`.
 
 The current materials model has three main levels:
 
-- `materials`: abstract material identities used in recipes; since d047 each
-  material can carry an optional free-text `family` label (NMC, LFP, NCA,
-  Graphite, ...) used to group material pickers;
+- `materials`: the PRODUCTS used in recipes ("LFP S19", "AML 403"). Since
+  d052 each active material carries `family` (picked from the role-scoped
+  `material_families` vocabulary — free text deprecated in place) and an
+  optional `manufacturer` (who makes the product; distinct from
+  `material_sources.supplier` = who sold a particular bag). Missing
+  family/manufacturer on active materials render red in the UI; families
+  do not apply to binders/additives/solvents and are hidden there;
 - `material_instances`: concrete usable lab things, such as a purchased batch,
   powder, solution, dispersion, or prepared mixture;
 - `material_instance_components`: instance-level composition rows that define
@@ -68,8 +72,12 @@ abstract material row.
 Current service behavior:
 
 1. insert `materials(name, role)`;
-2. auto-create one material instance named from the material name as the pure
-   instance;
+2. auto-create one material instance named plainly after the material —
+   since d052 WITHOUT the old «(чистый)» suffix: leaf-vs-mixture is a
+   computed state shown as an «исходный»/«приготовленный» badge, never
+   stored in names (d052 also renamed existing auto-generated instances);
+   duplicate material names are caught at creation by a homoglyph-folding
+   fingerprint (warn, never block);
 3. auto-create a blank `material_sources` row with `quality_rating_label =
    'tbd'` and `is_evaluated = false`;
 4. link the auto-created instance to that source through

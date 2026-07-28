@@ -2,7 +2,11 @@
 
 Created: 2026-07-28
 Edited: 2026-07-28
-Status: future idea (PROPOSAL — awaiting Dalia's review; not implemented)
+Status: PRE-LAUNCH PART IMPLEMENTED 2026-07-28 (d052 + backend + both
+frontends: §5, §6.1-6.3, §7 backfill, §8 compat warning, Li half-cell
+display). Remaining here = post-launch items (§6.5 wizard, §9) and the
+manual lab-data cleanup pass (Dalia, with
+scripts/check_slot_actual_consistency.sql afterwards).
 
 Source paths:
 
