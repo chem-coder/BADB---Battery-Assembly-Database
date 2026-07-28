@@ -10,6 +10,25 @@
     <link rel="stylesheet" type="text/css" href="/css/styles.css">
     
     <style>
+      /* Grouped materials list (role -> family -> products), mirrors Vue. */
+      .material-group-role {
+        padding: 12px 6px 4px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: rgba(0, 50, 116, 0.55);
+      }
+      .material-group-family {
+        padding: 6px 6px 2px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #003274;
+      }
+      .material-group-family--missing {
+        color: #c0392b;
+      }
+
       details > summary {
         list-style: none; /* remove default marker */
         cursor: pointer;
