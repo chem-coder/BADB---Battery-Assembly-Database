@@ -7,11 +7,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
+import { todayIsoMsk } from '@/utils/dateFormat'
 import { toastApiError } from '@/utils/errorClassifier'
 import { validateComposition, sumPercent, COMPOSITION_TOLERANCE } from '@/utils/materialComposition'
 import { nameFingerprint } from '@/utils/nameFingerprint'
 import PageHeader from '@/components/PageHeader.vue'
 import InputText from 'primevue/inputtext'
+import Checkbox from 'primevue/checkbox'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
@@ -660,7 +662,23 @@ const editInstanceForm = ref({ name: '', notes: '' })
 const editingComponentId = ref(null)
 const editComponentForm = ref({ mass_fraction: '', notes: '' })
 const creatingInstance = ref(false)
-const newInstanceForm = ref({ name: '', notes: '' })
+// «Bag arrival» flow (spec §6.4): an instance is usually a physical bag —
+// supplier / lot / receipt date are asked right here, at the moment it
+// enters the lab, instead of hiding behind the source-info page. All
+// optional («уточню позже» = leave blank). isRaw unchecked = a prepared
+// mixture to be composed later (no source questions).
+const newInstanceForm = ref({ name: '', notes: '', isRaw: true, supplier: '', lotNumber: '', dateReceived: '' })
+const instanceNameTouched = ref(false)
+
+function suggestedInstanceName() {
+  const base = selectedMaterial.value?.name || ''
+  const lot = newInstanceForm.value.lotNumber.trim()
+  return lot ? `${base} — партия ${lot}` : base
+}
+
+function syncSuggestedInstanceName() {
+  if (!instanceNameTouched.value) newInstanceForm.value.name = suggestedInstanceName()
+}
 // Full-composition editor (vanilla-parity): edits/replaces the WHOLE
 // composition at once via the canonical replace-all endpoint with client-side
 // sum-to-100 validation. Replaces the old single-component POST add.
@@ -714,21 +732,31 @@ async function deleteInstance(inst) {
 function startInstanceCreate() {
   cancelAllEdits()
   creatingInstance.value = true
-  newInstanceForm.value = { name: '', notes: '' }
+  instanceNameTouched.value = false
+  newInstanceForm.value = { name: '', notes: '', isRaw: true, supplier: '', lotNumber: '', dateReceived: todayIsoMsk() }
+  syncSuggestedInstanceName()
 }
 
 function resetInstanceCreate() {
   creatingInstance.value = false
-  newInstanceForm.value = { name: '', notes: '' }
+  newInstanceForm.value = { name: '', notes: '', isRaw: true, supplier: '', lotNumber: '', dateReceived: '' }
+  instanceNameTouched.value = false
 }
 
 async function saveNewInstance() {
   const name = newInstanceForm.value.name.trim()
   if (!name) return
   try {
+    const f = newInstanceForm.value
     await api.post(`/api/materials/${selectedMaterialId.value}/instances`, {
       name,
-      notes: newInstanceForm.value.notes.trim() || null,
+      notes: f.notes.trim() || null,
+      // isRaw → is_pure: a leaf/bag gets a source row (supplier/lot live
+      // there); a prepared mixture gets none until composed.
+      is_pure: f.isRaw === true,
+      supplier: f.isRaw ? (f.supplier.trim() || null) : null,
+      lot_number: f.isRaw ? (f.lotNumber.trim() || null) : null,
+      date_received: f.isRaw ? (f.dateReceived || null) : null,
     })
     toast.add({ severity: 'success', summary: 'Экземпляр создан', life: 3000 })
     resetInstanceCreate()
@@ -1421,22 +1449,48 @@ function onEditKeydown(e, saveFn, cancelFn) {
               <div v-if="instances.length === 0 && !instancesLoading" class="empty-text">Нет экземпляров</div>
 
               <!-- Create instance inline -->
-              <div v-if="creatingInstance" class="create-inst-row">
-                <InputText
-                  v-model="newInstanceForm.name"
-                  placeholder="Название экземпляра"
-                  @keydown.enter.prevent="saveNewInstance"
-                  @keydown.escape="resetInstanceCreate"
-                />
-                <InputText
-                  v-model="newInstanceForm.notes"
-                  placeholder="Комментарий"
-                  class="input-flex"
-                  @keydown.enter.prevent="saveNewInstance"
-                  @keydown.escape="resetInstanceCreate"
-                />
-                <Button icon="pi pi-check" text @click="saveNewInstance" />
-                <Button icon="pi pi-times" text severity="secondary" @click="resetInstanceCreate" />
+              <div v-if="creatingInstance" class="create-inst-block">
+                <div class="create-inst-row">
+                  <InputText
+                    v-model="newInstanceForm.name"
+                    placeholder="Название экземпляра"
+                    @input="instanceNameTouched = true"
+                    @keydown.enter.prevent="saveNewInstance"
+                    @keydown.escape="resetInstanceCreate"
+                  />
+                  <InputText
+                    v-model="newInstanceForm.notes"
+                    placeholder="Комментарий"
+                    class="input-flex"
+                    @keydown.enter.prevent="saveNewInstance"
+                    @keydown.escape="resetInstanceCreate"
+                  />
+                  <Button icon="pi pi-check" text @click="saveNewInstance" />
+                  <Button icon="pi pi-times" text severity="secondary" @click="resetInstanceCreate" />
+                </div>
+                <label class="create-inst-raw">
+                  <Checkbox v-model="newInstanceForm.isRaw" binary />
+                  <span>исходный — мешок/партия от поставщика (иначе: приготовленная смесь)</span>
+                </label>
+                <!-- «Приход мешка» — supplier/lot/date at the moment the bag
+                     enters the lab (spec §6.4). Optional; blanks stay blank. -->
+                <div v-if="newInstanceForm.isRaw" class="create-inst-row create-inst-bag">
+                  <InputText
+                    v-model="newInstanceForm.supplier"
+                    placeholder="Поставщик (у кого куплено)"
+                    v-tooltip.top="'Продавец этого мешка. Производитель продукта указывается на материале.'"
+                  />
+                  <InputText
+                    v-model="newInstanceForm.lotNumber"
+                    placeholder="№ партии (lot)"
+                    @input="syncSuggestedInstanceName()"
+                  />
+                  <InputText
+                    v-model="newInstanceForm.dateReceived"
+                    type="date"
+                    v-tooltip.top="'Дата получения'"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1635,6 +1689,23 @@ function onEditKeydown(e, saveFn, cancelFn) {
    isn't («Производитель: неизвестен», «Семейство: не указано»).
    UI-only — NULL in DB stays the single "unknown" representation.
    Never applied to not-applicable fields (e.g. a solvent's family). */
+.create-inst-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.create-inst-raw {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #345;
+  cursor: pointer;
+}
+.create-inst-bag :deep(input[type='date']) {
+  padding: 6px 8px;
+}
+
 .missing-attr {
   color: #c0392b;
 }

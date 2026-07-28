@@ -84,7 +84,13 @@ Current service behavior:
    `material_instances.source_id`.
 
 Additional instances are created under a material with
-`POST /api/materials/:id/instances`.
+`POST /api/materials/:id/instances`. Since the «bag arrival» flow
+(2026-07-28) the add-instance form in both frontends asks, for raw
+(«исходный») instances, the supplier, lot number and receipt date at the
+moment the bag enters the lab — written to the ensured `material_sources`
+row in the same transaction; all optional. The instance name is
+auto-suggested as «<материал> — партия <lot>» until edited. Unchecking
+«исходный» creates a prepared-mixture instance with no source questions.
 
 If an additional instance is created with `is_pure: true`, the service creates
 or ensures a linked material source for it. Composite or derived instances
