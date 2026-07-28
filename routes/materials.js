@@ -60,7 +60,8 @@ router.get('/test', async (req, res) => {
 
 // CREATE
 router.post('/', auth, async (req, res) => {
-  const { name, role, family } = req.body;
+  const { name, role, family, manufacturer } = req.body;
+  const cleanManufacturer = typeof manufacturer === 'string' && manufacturer.trim() ? manufacturer.trim() : null;
   const cleanName = typeof name === 'string' ? name.trim() : '';
   const cleanFamily = typeof family === 'string' && family.trim() ? family.trim() : null;
 
@@ -74,7 +75,7 @@ router.post('/', auth, async (req, res) => {
   }
 
   try {
-    res.status(201).json(await createMaterial(pool, { name: cleanName, role, family: cleanFamily }, req.user.userId));
+    res.status(201).json(await createMaterial(pool, { name: cleanName, role, family: cleanFamily, manufacturer: cleanManufacturer }, req.user.userId));
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Материал с таким названием уже существует' });
@@ -97,7 +98,8 @@ router.get('/', auth, async (req, res) => {
 // UPDATE
 router.put('/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
-  const { name, role, family } = req.body;
+  const { name, role, family, manufacturer } = req.body;
+  const cleanManufacturer = typeof manufacturer === 'string' && manufacturer.trim() ? manufacturer.trim() : null;
   const cleanFamily = typeof family === 'string' && family.trim() ? family.trim() : null;
 
   if (!Number.isInteger(id)) {
@@ -113,7 +115,7 @@ router.put('/:id', auth, async (req, res) => {
   }
 
   try {
-    res.json(await updateMaterial(pool, id, { name: name.trim(), role, family: cleanFamily }, req.user.userId));
+    res.json(await updateMaterial(pool, id, { name: name.trim(), role, family: cleanFamily, manufacturer: cleanManufacturer }, req.user.userId));
   } catch (err) {
     if (err.statusCode === 404) {
       return res.status(404).json({ error: err.message });

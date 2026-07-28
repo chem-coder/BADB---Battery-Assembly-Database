@@ -16,11 +16,11 @@ async function createMaterial(pool, payload, userId) {
 
     const result = await client.query(
       `
-      INSERT INTO materials (name, role, family)
-      VALUES ($1, $2, $3)
-      RETURNING material_id, name, role, family
+      INSERT INTO materials (name, role, family, manufacturer)
+      VALUES ($1, $2, $3, $4)
+      RETURNING material_id, name, role, family, manufacturer
       `,
-      [payload.name, payload.role, payload.family || null]
+      [payload.name, payload.role, payload.family || null, payload.manufacturer || null]
     );
 
     const instanceResult = await client.query(
@@ -35,7 +35,10 @@ async function createMaterial(pool, payload, userId) {
       `,
       [
         result.rows[0].material_id,
-        `${payload.name} (чистый)`,
+        // d052: no '(чистый)' suffix — leaf-vs-mixture is computed state,
+        // shown as a badge; the auto instance is simply the material itself
+        // with no lot recorded yet.
+        payload.name,
         null
       ]
     );
@@ -76,7 +79,7 @@ async function createMaterial(pool, payload, userId) {
 async function listMaterials(pool) {
   const result = await pool.query(
     `
-    SELECT m.material_id, m.name, m.role, m.family,
+    SELECT m.material_id, m.name, m.role, m.family, m.manufacturer,
            m.updated_by,
            m.updated_at,
            u_updated.name AS updated_by_name
@@ -90,21 +93,21 @@ async function listMaterials(pool) {
 }
 
 async function updateMaterial(pool, materialId, payload, userId) {
-  const current = await pool.query('SELECT name, role, family FROM materials WHERE material_id = $1', [materialId]);
+  const current = await pool.query('SELECT name, role, family, manufacturer FROM materials WHERE material_id = $1', [materialId]);
   if (current.rowCount === 0) {
     throw statusError('Материал не найден', 404);
   }
 
-  const newVals = { name: payload.name, role: payload.role, family: payload.family || null };
+  const newVals = { name: payload.name, role: payload.role, family: payload.family || null, manufacturer: payload.manufacturer || null };
 
   const result = await pool.query(
     `
     UPDATE materials
-    SET name = $1, role = $2, family = $3, updated_by = $4, updated_at = now()
+    SET name = $1, role = $2, family = $3, manufacturer = $6, updated_by = $4, updated_at = now()
     WHERE material_id = $5
-    RETURNING material_id, name, role, family, updated_by, updated_at
+    RETURNING material_id, name, role, family, manufacturer, updated_by, updated_at
     `,
-    [newVals.name, newVals.role, newVals.family, userId, materialId]
+    [newVals.name, newVals.role, newVals.family, userId, materialId, newVals.manufacturer]
   );
 
   if (result.rowCount === 0) {
