@@ -277,7 +277,7 @@ the work is filling `family` and `manufacturer`.
 | `NMC 811 ETI` | 0 | `NMC` | ETI | **unused** |
 | `NMC 811 BTR M2C2` | 0 | `NMC` | BTR | **unused** |
 | `LFP S19` | 6 | `LFP` | **BTR (Tianjin) Nano Material Manufacturing Co., Ltd.** | vendor = Gelon (their catalogue lists S13/S19). BTR Tianjin mass-produced the **S series** LFP — verified 2026-07-28. NB: two different BTR entities appear in this catalogue — BTR New Material Group (Shenzhen) makes the anode graphites, BTR (Tianjin) Nano makes this LFP; record full entity names so supplier comparisons do not merge them. Tianjin cathode ownership has since shifted toward Longpan/Liyuan-LBM, so newer packaging branding may differ |
-| `NMC C85E` | 1 | `NMC` | Chengdu B&M (Bamo) *(unconfirmed)* | Chengdu Bamo Technology (subsidiary of Tianjin Bamo) verified as a real NCM cathode producer, but the **C85E grade code itself could not be verified online** (2026-07-28); a similarly-named S85E NCM811 grade exists on the market. Confirm from the CoA |
+| `NMC C85E` | 1 | `NMC` | **Chengdu Bamo Technology Co., Ltd.** (成都巴莫科技; "B&M" = Bamo), subsidiary of Tianjin B&M Science & Technology Joint-Stock Co., Ltd. | per Dalia, 2026-07-28 |
 | `NCA`, `NVP` | 1 / 0 | `NCA`, `NVP` | неизвестен | honest placeholders until a real grade is bought |
 
 Unknown manufacturers are written as `неизвестен` and rendered red (D4), so the
@@ -323,11 +323,10 @@ Warn, do not block: unusual formulations are legitimate research.
 
 ## 10. Open questions
 
-1. Confirm `NMC C85E` = Chengdu B&M from the certificate of analysis (company
-   verified, grade code not verifiable online). `LFP S19` resolved 2026-07-28:
-   manufactured by BTR (Tianjin) Nano, distributed by Gelon — the original
-   «BTR-Gelon» note was manufacturer + vendor compressed into one string
-   because only one field existed. That is the case §5 is built for.
+1. *(resolved 2026-07-28)* Manufacturers: `LFP S19` = BTR (Tianjin) Nano,
+   distributed by Gelon — the original «BTR-Gelon» note was manufacturer +
+   vendor compressed into one string because only one field existed, which is
+   the case §5 is built for. `NMC C85E` = Chengdu Bamo Technology.
 2. Should the generic placeholders (`LTO`, `NCA`, `NVP`, `HC`) be renamed now,
    or left honest until a specific grade is purchased?
 3. Anything to add to the family lists for materials likely to be bought in the
