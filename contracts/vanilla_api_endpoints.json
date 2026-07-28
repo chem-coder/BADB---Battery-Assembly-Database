@@ -514,6 +514,14 @@
       "sources": ["public/js/1-tapes.js"]
     },
     {
+      "path": "/api/reference/material-families",
+      "methods": ["GET"],
+      "auth": "auth",
+      "request": "none",
+      "response": "reference list (family_id, code, label, role, sort_order, notes)",
+      "sources": ["public/js/materials.js"]
+    },
+    {
       "path": "/api/reference/mixing-containers",
       "methods": ["GET"],
       "auth": "auth",

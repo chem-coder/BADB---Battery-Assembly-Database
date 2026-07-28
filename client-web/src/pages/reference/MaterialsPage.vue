@@ -9,10 +9,12 @@ import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
 import { toastApiError } from '@/utils/errorClassifier'
 import { validateComposition, sumPercent, COMPOSITION_TOLERANCE } from '@/utils/materialComposition'
+import { nameFingerprint } from '@/utils/nameFingerprint'
 import PageHeader from '@/components/PageHeader.vue'
 import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
+import Dialog from 'primevue/dialog'
 import DateInputISO from '@/components/parity/DateInputISO.vue'
 
 const toast = useToast()
@@ -34,6 +36,46 @@ const roleOptions = [
   { value: 'solvent', label: 'Растворитель' },
   { value: 'other', label: 'Другое' },
 ]
+
+// ── Family vocabulary (materials_model_cleanup.md §4, D5) ─────────────
+// Controlled per-role vocabulary from /api/reference/material-families.
+// Families only apply to active materials — for binders/additives/
+// solvents the variation axis is preparation, not classification, so
+// the family field is hidden entirely (spec §4: "no family; inventing
+// one would be noise").
+const materialFamilies = ref([])
+
+async function loadFamilies() {
+  try {
+    const { data } = await api.get('/api/reference/material-families')
+    materialFamilies.value = (Array.isArray(data) ? data : [])
+      .slice()
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  } catch {
+    // Non-fatal: the picker degrades to "keep whatever is stored"
+    // (familyOptionsFor always appends the current value).
+  }
+}
+
+function familyApplies(role) {
+  return role === 'cathode_active' || role === 'anode_active'
+}
+
+// Options for the family Select, filtered by the material's role.
+// Option label = human label («синтетический графит»), stored value =
+// code (SG). A stored value not present in the vocabulary (legacy
+// free-text) stays selectable so editing other fields never silently
+// drops it.
+function familyOptionsFor(role, currentValue) {
+  const opts = materialFamilies.value
+    .filter(f => f.role === role)
+    .map(f => ({ value: f.code, label: f.label }))
+  const cur = (currentValue || '').trim()
+  if (cur && !opts.some(o => o.value === cur)) {
+    opts.push({ value: cur, label: cur })
+  }
+  return opts
+}
 
 // ── Materials ─────────────────────────────────────────────────────────
 const materials = ref([])
@@ -62,12 +104,15 @@ async function loadMaterials() {
   }
 }
 
-onMounted(loadMaterials)
+onMounted(() => {
+  loadMaterials()
+  loadFamilies()
+})
 
 function selectMaterial(m) {
   if (selectedMaterialId.value === m.material_id) return
   selectedMaterialId.value = m.material_id
-  editForm.value = { name: m.name, role: m.role, family: m.family || '' }
+  editForm.value = { name: m.name, role: m.role, family: m.family || '', manufacturer: m.manufacturer || '' }
   instances.value = []
   openInstances.value = new Set()
   componentsMap.value = {}
@@ -79,30 +124,57 @@ function selectMaterial(m) {
 }
 
 // ── Create material (inline in left panel) ────────────────────────────
-// `family` (d047) — optional free-text chemistry family (NMC, LFP,
-// Graphite, …) used to group active-material pickers on the tape form.
+// `family` (d047 free text → d052 vocabulary) — chemistry family code
+// (NMC, LFP, SG, …) used to group active-material pickers on the tape
+// form. For active roles the value comes from the controlled vocabulary
+// Select; for other roles the field is hidden and null is stored.
 const creatingMaterial = ref(false)
-const newMaterialForm = ref({ name: '', role: '', family: '' })
+const newMaterialForm = ref({ name: '', role: '', family: '', manufacturer: '' })
 
 function startMaterialCreate() {
   creatingMaterial.value = true
-  newMaterialForm.value = { name: '', role: '', family: '' }
+  newMaterialForm.value = { name: '', role: '', family: '', manufacturer: '' }
 }
 
 function cancelMaterialCreate() {
   creatingMaterial.value = false
-  newMaterialForm.value = { name: '', role: '', family: '' }
+  newMaterialForm.value = { name: '', role: '', family: '', manufacturer: '' }
 }
+
+// Duplicate warning (D3, spec §6.3): warn — never block. Holds the
+// matched existing material while the confirm dialog is open; null =
+// dialog closed.
+const duplicateWarn = ref(null)
 
 async function saveNewMaterial() {
   const name = newMaterialForm.value.name.trim()
   if (!name) { toast.add({ severity: 'warn', summary: 'Название обязательно', life: 3000 }); return }
   if (!newMaterialForm.value.role) { toast.add({ severity: 'warn', summary: 'Роль обязательна', life: 3000 }); return }
+  // D3 duplicate check before POST: fingerprint comparison catches
+  // case/spacing/punctuation variants and Cyrillic/Latin homoglyphs
+  // («СМС» vs "CMC"). On collision we ask, never block.
+  const fp = nameFingerprint(name)
+  const existing = fp
+    ? materials.value.find(m => nameFingerprint(m.name) === fp)
+    : null
+  if (existing) {
+    duplicateWarn.value = { existing }
+    return
+  }
+  await doCreateMaterial()
+}
+
+async function doCreateMaterial() {
+  const name = newMaterialForm.value.name.trim()
+  const role = newMaterialForm.value.role
   try {
-    const { data } = await api.post('/api/materials', {
+    await api.post('/api/materials', {
       name,
-      role: newMaterialForm.value.role,
-      family: newMaterialForm.value.family.trim() || null,
+      role,
+      // Family only applies to active materials (spec §4) — for other
+      // roles the field is hidden in the form and null is stored.
+      family: familyApplies(role) ? ((newMaterialForm.value.family || '').trim() || null) : null,
+      manufacturer: (newMaterialForm.value.manufacturer || '').trim() || null,
     })
     toast.add({ severity: 'success', summary: 'Материал создан', life: 3000 })
     cancelMaterialCreate()
@@ -115,8 +187,24 @@ async function saveNewMaterial() {
   }
 }
 
+// «Использовать существующий» — abandon the create, highlight/select
+// the existing material instead (it is already in the left list).
+function useExistingMaterial() {
+  const existing = duplicateWarn.value?.existing
+  duplicateWarn.value = null
+  cancelMaterialCreate()
+  if (existing) selectMaterial(existing)
+}
+
+// «Нет, это другой материал» — the user insists; proceed with creation
+// exactly as typed (the fingerprint is comparison-only, never stored).
+async function createDuplicateAnyway() {
+  duplicateWarn.value = null
+  await doCreateMaterial()
+}
+
 // ── Edit material (right panel metadata) ──────────────────────────────
-const editForm = ref({ name: '', role: '', family: '' })
+const editForm = ref({ name: '', role: '', family: '', manufacturer: '' })
 
 async function saveMaterialEdit() {
   const name = editForm.value.name.trim()
@@ -125,7 +213,10 @@ async function saveMaterialEdit() {
     await api.put(`/api/materials/${selectedMaterialId.value}`, {
       name,
       role: editForm.value.role,
-      family: (editForm.value.family || '').trim() || null,
+      family: familyApplies(editForm.value.role)
+        ? ((editForm.value.family || '').trim() || null)
+        : null,
+      manufacturer: (editForm.value.manufacturer || '').trim() || null,
     })
     toast.add({ severity: 'success', summary: 'Материал обновлён', life: 3000 })
     await loadMaterials()
@@ -764,9 +855,22 @@ function onEditKeydown(e, saveFn, cancelFn) {
             placeholder="-- роль --"
             class="w-full"
           />
-          <InputText
+          <!-- Family — controlled vocabulary, active materials only
+               (spec §4): for binders/additives/solvents the field is
+               hidden entirely, families don't apply there. -->
+          <Select
+            v-if="familyApplies(newMaterialForm.role)"
             v-model="newMaterialForm.family"
-            placeholder="Семейство (NMC, LFP…)"
+            :options="familyOptionsFor(newMaterialForm.role, newMaterialForm.family)"
+            optionLabel="label"
+            optionValue="value"
+            placeholder="— семейство —"
+            showClear
+            class="w-full"
+          />
+          <InputText
+            v-model="newMaterialForm.manufacturer"
+            placeholder="Производитель"
             class="w-full"
             @keydown.enter.prevent="saveNewMaterial"
             @keydown.escape="cancelMaterialCreate"
@@ -800,7 +904,20 @@ function onEditKeydown(e, saveFn, cancelFn) {
           >
             <div class="material-item-info">
               <span class="material-item-name">{{ m.name }}</span>
-              <span class="material-item-role">{{ roleMap[m.role] || m.role }}<template v-if="m.family"> · {{ m.family }}</template></span>
+              <!-- Meta line: роль · семейство · производитель.
+                   D4 (spec §6.2): for active materials a missing family/
+                   manufacturer is rendered as a red placeholder so the
+                   incompleteness stays uncomfortable. For other roles
+                   family is "not applicable" — no nag, render nothing. -->
+              <span class="material-item-role">
+                <template v-if="familyApplies(m.role)">{{ roleMap[m.role] || m.role }} ·
+                  <span v-if="m.family">{{ m.family }}</span>
+                  <span v-else class="missing-attr">Семейство: не указано</span> ·
+                  <span v-if="m.manufacturer">{{ m.manufacturer }}</span>
+                  <span v-else class="missing-attr">Производитель: неизвестен</span>
+                </template>
+                <template v-else>{{ roleMap[m.role] || m.role }}<template v-if="m.family"> · {{ m.family }}</template><template v-if="m.manufacturer"> · {{ m.manufacturer }}</template></template>
+              </span>
             </div>
             <Button
               icon="pi pi-trash"
@@ -831,11 +948,26 @@ function onEditKeydown(e, saveFn, cancelFn) {
                 optionValue="value"
                 class="meta-role"
               />
-              <InputText
+              <!-- Family — controlled vocabulary Select (spec §4), only
+                   for active materials; hidden for other roles where the
+                   family axis doesn't apply. A legacy stored value not in
+                   the vocabulary stays selectable via familyOptionsFor. -->
+              <Select
+                v-if="familyApplies(editForm.role)"
                 v-model="editForm.family"
-                placeholder="Семейство"
-                v-tooltip.top="'Семейство химии (NMC, LFP, Graphite…) — группирует материалы в выборе активного материала ленты'"
+                :options="familyOptionsFor(editForm.role, editForm.family)"
+                optionLabel="label"
+                optionValue="value"
+                placeholder="— семейство —"
+                showClear
+                v-tooltip.top="'Семейство химии (NMC, LFP, SG…) — группирует материалы в выборе активного материала ленты'"
                 class="meta-family"
+              />
+              <InputText
+                v-model="editForm.manufacturer"
+                placeholder="Производитель"
+                v-tooltip.top="'Кто производит продукт (BTR, Solvay…). Поставщик конкретной партии вводится в карточке экземпляра'"
+                class="meta-manufacturer"
               />
               <Button label="Сохранить" @click="saveMaterialEdit" />
             </div>
@@ -876,6 +1008,15 @@ function onEditKeydown(e, saveFn, cancelFn) {
 
                   <template v-else>
                     <span class="inst-name">{{ inst.name }}</span>
+                    <!-- Composition state as a computed badge, never part
+                         of the stored name (spec §6.1, the d047 lesson):
+                         «исходный» = leaf (as-received/as-purchased),
+                         «приготовленный» = composed of other instances.
+                         is_pure is backend-computed leaf-vs-mixture and
+                         is kept in sync locally by saveComposition. -->
+                    <span :class="['inst-badge', inst.is_pure ? 'inst-badge--raw' : 'inst-badge--prepared']">
+                      {{ inst.is_pure ? 'исходный' : 'приготовленный' }}
+                    </span>
                     <span v-if="inst.notes" class="inst-notes">{{ inst.notes }}</span>
                     <div class="actions">
                       <Button icon="pi pi-pencil" text @click.stop="startEditInstance(inst)" />
@@ -1255,6 +1396,36 @@ function onEditKeydown(e, saveFn, cancelFn) {
         </div>
       </div>
     </div>
+
+    <!-- Duplicate warning on create (D3, spec §6.3): the typed name's
+         fingerprint collides with an existing material. Warn — never
+         block: primary action selects the existing entry, the escape
+         hatch proceeds with creation as typed. Closing the dialog (✕)
+         returns to the create form unchanged. -->
+    <Dialog
+      :visible="!!duplicateWarn"
+      modal
+      header="Похожий материал"
+      :style="{ width: '26rem' }"
+      @update:visible="(v) => { if (!v) duplicateWarn = null }"
+    >
+      <p class="dup-warn-text">
+        Похоже на существующий «{{ duplicateWarn?.existing?.name }}» — использовать его?
+      </p>
+      <template #footer>
+        <Button
+          label="Использовать существующий"
+          icon="pi pi-check"
+          @click="useExistingMaterial"
+        />
+        <Button
+          label="Нет, это другой материал"
+          severity="secondary"
+          outlined
+          @click="createDuplicateAnyway"
+        />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -1386,6 +1557,14 @@ function onEditKeydown(e, saveFn, cancelFn) {
   color: #6B7280;
 }
 
+/* D4 (spec §6.2): red placeholder for data that SHOULD be filled but
+   isn't («Производитель: неизвестен», «Семейство: не указано»).
+   UI-only — NULL in DB stays the single "unknown" representation.
+   Never applied to not-applicable fields (e.g. a solvent's family). */
+.missing-attr {
+  color: #c0392b;
+}
+
 .material-item-delete {
   opacity: 0;
   transition: opacity 0.15s;
@@ -1438,7 +1617,16 @@ function onEditKeydown(e, saveFn, cancelFn) {
 }
 .meta-name { flex: 1; }
 .meta-role { width: 160px; flex-shrink: 0; }
-.meta-family { width: 130px; flex-shrink: 0; }
+.meta-family { width: 150px; flex-shrink: 0; }
+.meta-manufacturer { width: 140px; flex-shrink: 0; }
+
+/* Duplicate-warning dialog (D3) */
+.dup-warn-text {
+  margin: 0;
+  font-size: 14px;
+  color: #003274;
+  line-height: 1.5;
+}
 
 /* ── Shared form styles ── */
 .w-full { width: 100%; }
@@ -1489,6 +1677,28 @@ function onEditKeydown(e, saveFn, cancelFn) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Composition-state badge (spec §6.1): computed, never stored in the
+   name. «исходный» = calm gray leaf; «приготовленный» = green-tinted
+   mixture (matches the app's teal accent used for positive states). */
+.inst-badge {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 20px;
+  font-size: 10.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.inst-badge--raw {
+  background: rgba(107, 114, 128, 0.10);
+  color: #6B7280;
+  border: 0.5px solid rgba(107, 114, 128, 0.25);
+}
+.inst-badge--prepared {
+  background: rgba(82, 201, 166, 0.14);
+  color: #1a8a64;
+  border: 0.5px solid rgba(82, 201, 166, 0.35);
 }
 .inst-name-input { flex: 0 0 200px; }
 .inst-notes-input { flex: 1; }
@@ -1780,5 +1990,6 @@ function onEditKeydown(e, saveFn, cancelFn) {
   .meta-name { flex: 1 1 100%; }
   .meta-role { width: 100%; }
   .meta-family { width: 100%; }
+  .meta-manufacturer { width: 100%; }
 }
 </style>

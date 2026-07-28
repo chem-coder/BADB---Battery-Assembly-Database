@@ -1,6 +1,7 @@
 const newNameInput = document.getElementById('new-material-name');
-const newFamilyInput = document.getElementById('new-material-family');
+const newFamilySelect = document.getElementById('new-material-family');
 const newRoleSelect = document.getElementById('new-material-role');
+const newManufacturerInput = document.getElementById('new-material-manufacturer');
 const createMaterialBtn = document.getElementById('createMaterialBtn');
 const sortByNameBtn = document.getElementById('sortByNameBtn');
 const sortByRoleBtn = document.getElementById('sortByRoleBtn');
@@ -16,10 +17,126 @@ const roleMap = {
   other: 'другое'
 };
 
-function formatMaterialRowMeta(family, role) {
-  const roleLabel = roleMap[role] || role;
+// Roles whose family is a controlled vocabulary (materials_model_cleanup.md §4)
+// and whose missing family/manufacturer must be rendered in red (D4).
+const ACTIVE_ROLES = new Set(['cathode_active', 'anode_active']);
+
+// Family reference list from /api/reference/material-families
+// ({family_id, code, label, role, sort_order, notes}).
+let materialFamilies = [];
+
+// Last loaded /api/materials list — used for duplicate detection on create (D3).
+let loadedMaterials = [];
+
+// -------- nameFingerprint (D3, §6.3) --------
+// Comparison fingerprint for duplicate detection at material creation.
+// Pipeline: lowercase → trim → collapse whitespace → strip punctuation/hyphens →
+// map confusable Cyrillic letters to their Latin homoglyphs.
+// Keep the algorithm byte-identical to client-web/src/utils/nameFingerprint.js.
+// The fingerprint is for COMPARISON ONLY — never stored, never shown.
+
+// Confusable Cyrillic → Latin homoglyphs (spec list: А В Е К М Н О Р С
+// Т У Х → A B E K M H O P C T Y X). Input is lowercased before this map
+// is applied, so only the lowercase forms are needed here — uppercase
+// Cyrillic arrives already folded (А → а → a).
+const CYR_TO_LAT = {
+  'а': 'a',
+  'в': 'b',
+  'е': 'e',
+  'к': 'k',
+  'м': 'm',
+  'н': 'h',
+  'о': 'o',
+  'р': 'p',
+  'с': 'c',
+  'т': 't',
+  'у': 'y',
+  'х': 'x'
+};
+
+const CYR_CONFUSABLE_RE = /[авекмнорстух]/g;
+
+function nameFingerprint(s) {
+  if (s == null) return '';
+  return String(s)
+    .toLowerCase()
+    .trim()
+    // Strip punctuation and hyphens — keep letters, digits and spaces.
+    // \p{L}/\p{N} (unicode property escapes) so Cyrillic survives.
+    .replace(/[^\p{L}\p{N}\s]+/gu, '')
+    // Strip ALL whitespace entirely: «NMC811» and «NMC 811» are the same
+    // product typed two ways — a classic duplicate pattern.
+    .replace(/\s+/g, '')
+    .trim()
+    .replace(CYR_CONFUSABLE_RE, (ch) => CYR_TO_LAT[ch]);
+}
+
+// Fill a family <select> with the reference families for the given role.
+// A stored value not present in the reference list stays selectable so
+// legacy free-text families survive editing.
+function fillFamilyOptions(selectEl, role, currentValue = '') {
+  selectEl.innerHTML = '';
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = '— выбрать семейство —';
+  selectEl.appendChild(placeholder);
+
+  const families = materialFamilies.filter(f => f.role === role);
+  families.forEach(f => {
+    const option = document.createElement('option');
+    option.value = f.code;
+    option.textContent = f.label;
+    if (f.notes) option.title = f.notes;
+    selectEl.appendChild(option);
+  });
+
+  const value = String(currentValue || '').trim();
+  if (value && !families.some(f => f.code === value)) {
+    const legacyOption = document.createElement('option');
+    legacyOption.value = value;
+    legacyOption.textContent = `${value} (вне справочника)`;
+    selectEl.appendChild(legacyOption);
+  }
+
+  selectEl.value = value;
+  if (selectEl.value !== value) selectEl.value = '';
+}
+
+// Render «роль · семейство · производитель» into a .row-meta span.
+// Active roles show missing family/manufacturer as red placeholders (D4);
+// other roles simply omit what is absent (legitimately not applicable).
+function renderMaterialRowMetaInto(metaSpan, { role, family, manufacturer }) {
+  const isActive = ACTIVE_ROLES.has(role);
   const trimmedFamily = String(family || '').trim();
-  return trimmedFamily ? `${trimmedFamily} — ${roleLabel}` : roleLabel;
+  const trimmedManufacturer = String(manufacturer || '').trim();
+
+  const parts = [{ text: roleMap[role] || role, missing: false }];
+
+  if (trimmedFamily) {
+    parts.push({ text: trimmedFamily, missing: false });
+  } else if (isActive) {
+    parts.push({ text: 'Семейство: не указано', missing: true });
+  }
+
+  if (trimmedManufacturer) {
+    parts.push({ text: trimmedManufacturer, missing: false });
+  } else if (isActive) {
+    parts.push({ text: 'Производитель: неизвестен', missing: true });
+  }
+
+  metaSpan.replaceChildren();
+  parts.forEach((part, index) => {
+    if (index > 0) metaSpan.append(' · ');
+    if (part.missing) {
+      const missingSpan = document.createElement('span');
+      missingSpan.classList.add('record-delete-warning');
+      missingSpan.textContent = part.text;
+      metaSpan.appendChild(missingSpan);
+    } else {
+      metaSpan.append(part.text);
+    }
+  });
 }
 
 const toggleInstancesBtn = document.getElementById('toggleInstancesBtn');
@@ -92,6 +209,12 @@ function sortMaterials(materials) {
 async function fetchMaterials() {
   const res = await fetch('/api/materials');
   if (!res.ok) throw new Error('Ошибка загрузки материалов');
+  return res.json();
+}
+
+async function fetchMaterialFamilies() {
+  const res = await fetch('/api/reference/material-families');
+  if (!res.ok) throw new Error('Ошибка загрузки семейств материалов');
   return res.json();
 }
 
@@ -201,10 +324,27 @@ function openMaterialSourceInfoPage(materialInstanceId) {
     `/reference/material-source-info.html?material_instance_id=${encodeURIComponent(materialInstanceId)}`;
 }
 
+// The family picker only applies to active materials (§4): show a
+// role-filtered select for them, hide the field entirely for other roles.
+function syncCreateFamilyVisibility() {
+  const role = newRoleSelect.value;
+
+  if (ACTIVE_ROLES.has(role)) {
+    fillFamilyOptions(newFamilySelect, role, '');
+    newFamilySelect.hidden = false;
+  } else {
+    newFamilySelect.hidden = true;
+    newFamilySelect.value = '';
+  }
+}
+
+newRoleSelect.addEventListener('change', syncCreateFamilyVisibility);
+
 createMaterialBtn.addEventListener('click', async () => {
   const name = newNameInput.value.trim();
-  const family = newFamilyInput.value.trim();
   const role = newRoleSelect.value;
+  const family = ACTIVE_ROLES.has(role) ? newFamilySelect.value.trim() : '';
+  const manufacturer = newManufacturerInput.value.trim();
 
   if (!name) {
     alert('Название обязательно');
@@ -218,16 +358,42 @@ createMaterialBtn.addEventListener('click', async () => {
 
   try {
     if (editingMaterialId) {
-      await updateMaterial(editingMaterialId, { name, role, family: family || null });
+      await updateMaterial(editingMaterialId, {
+        name,
+        role,
+        family: family || null,
+        manufacturer: manufacturer || null
+      });
       editingMaterialId = null;
       createMaterialBtn.textContent = 'Добавить';
     } else {
-      await createMaterial({ name, role, family: family || null });
+      // Duplicate prevention (D3, §6.3): warn, never block.
+      const fingerprint = nameFingerprint(name);
+      const duplicate = loadedMaterials.find(
+        (material) => nameFingerprint(material.name) === fingerprint
+      );
+
+      if (duplicate) {
+        const createAnyway = confirm(
+          `Похоже на существующий «${duplicate.name}» — использовать его?\n\n` +
+          'OK — нет, это другой материал (создать новый).\n' +
+          'Отмена — не создавать дубликат.'
+        );
+        if (!createAnyway) return;
+      }
+
+      await createMaterial({
+        name,
+        role,
+        family: family || null,
+        manufacturer: manufacturer || null
+      });
     }
 
     newNameInput.value = '';
-    newFamilyInput.value = '';
     newRoleSelect.value = '';
+    newManufacturerInput.value = '';
+    syncCreateFamilyVisibility();
     loadMaterials();
   } catch (err) {
     alert(err.message);
@@ -274,6 +440,13 @@ function renderInstanceComponents(container, components, insertBeforeNode = null
       container.appendChild(node);
     }
   });
+}
+
+function updateInstanceKindBadge(instanceRow, isPrepared) {
+  const badge = instanceRow?.querySelector('.instance-kind-badge');
+  if (!badge) return;
+  badge.textContent = isPrepared ? 'приготовленный' : 'исходный';
+  badge.classList.toggle('is-prepared', Boolean(isPrepared));
 }
 
 function addCompositionEditorRow(rowsHost, allInstances, parentInstanceId, initialData = {}) {
@@ -471,6 +644,10 @@ async function openCompositionEditor(inst, instChildren, addComponentBtn) {
 
         const savedComponents = await res.json();
         renderInstanceComponents(instChildren, savedComponents, addComponentBtn);
+        updateInstanceKindBadge(
+          instChildren.closest('details[data-type="instance"]'),
+          savedComponents.length > 0
+        );
         editor.remove();
       } catch (err) {
         alert(err.message);
@@ -515,20 +692,25 @@ function renderMaterials(materials) {
     details.dataset.id = material.material_id;
     details.dataset.role = material.role;
     details.dataset.family = material.family || '';
-    
+    details.dataset.manufacturer = material.manufacturer || '';
+
     // collapsed by default
     details.open = false;
-    
+
     const summary = document.createElement('summary');
-    
+
     const title = document.createElement('span');
     title.classList.add('row-title');
     title.textContent = material.name;
     title.style = "display:inline-block; width:10vw;";
-    
+
     const role = document.createElement('span');
     role.classList.add('row-meta');
-    role.textContent = formatMaterialRowMeta(material.family, material.role);
+    renderMaterialRowMetaInto(role, {
+      role: material.role,
+      family: material.family,
+      manufacturer: material.manufacturer
+    });
     role.style = "display:inline-block; width:25vw;";
     role.dataset.role = material.role;
     
@@ -581,7 +763,19 @@ function renderMaterials(materials) {
           instTitle.classList.add('row-title');
           instTitle.textContent = inst.name;
           instTitle.style = "display:inline-block; width:35.6vw;";
-          
+
+          // Computed leaf-vs-mixture badge (§6.1): never stored in the name.
+          // is_pure is derived server-side from the absence of components.
+          const kindBadge = document.createElement('span');
+          kindBadge.classList.add('instance-kind-badge');
+          if (inst.is_pure) {
+            kindBadge.textContent = 'исходный';
+          } else {
+            kindBadge.textContent = 'приготовленный';
+            kindBadge.classList.add('is-prepared');
+          }
+
+
           const editBtn = document.createElement('button');
           editBtn.type = 'button';
           editBtn.textContent = '✏️';
@@ -606,6 +800,7 @@ function renderMaterials(materials) {
           sourceInfoBtn.hidden = !inst.is_pure;
           
           instSummary.appendChild(instTitle);
+          instSummary.appendChild(kindBadge);
           instSummary.appendChild(detailsBtn);
           instSummary.appendChild(sourceInfoBtn);
           instSummary.appendChild(editBtn);
@@ -778,7 +973,8 @@ function enterEditMode(row, type, id) {
   const currentText = titleSpan ? titleSpan.textContent : '';
   const input = document.createElement('input');
   let roleSelect = null;
-  let familyInput = null;
+  let familySelect = null;
+  let manufacturerInput = null;
   if (type === 'component') {
     input.type = 'number';
     input.step = '0.01';
@@ -791,12 +987,6 @@ function enterEditMode(row, type, id) {
   }
 
   if (type === 'material') {
-    familyInput = document.createElement('input');
-    familyInput.type = 'text';
-    familyInput.placeholder = 'Семейство (необязательно)';
-    familyInput.value = row.dataset.family || '';
-    familyInput.style.marginLeft = '0.5rem';
-
     roleSelect = document.createElement('select');
     roleSelect.style.marginLeft = '0.5rem';
 
@@ -807,6 +997,29 @@ function enterEditMode(row, type, id) {
       option.selected = value === row.dataset.role;
       roleSelect.appendChild(option);
     });
+
+    familySelect = document.createElement('select');
+    familySelect.style.marginLeft = '0.5rem';
+
+    const syncEditFamilyVisibility = () => {
+      const selectedRole = roleSelect.value;
+      if (ACTIVE_ROLES.has(selectedRole)) {
+        fillFamilyOptions(familySelect, selectedRole, row.dataset.family || '');
+        familySelect.hidden = false;
+      } else {
+        familySelect.hidden = true;
+        familySelect.value = '';
+      }
+    };
+
+    syncEditFamilyVisibility();
+    roleSelect.addEventListener('change', syncEditFamilyVisibility);
+
+    manufacturerInput = document.createElement('input');
+    manufacturerInput.type = 'text';
+    manufacturerInput.placeholder = 'Производитель (необязательно)';
+    manufacturerInput.value = row.dataset.manufacturer || '';
+    manufacturerInput.style.marginLeft = '0.5rem';
   }
   
   summary.innerHTML = '';
@@ -834,14 +1047,18 @@ function enterEditMode(row, type, id) {
   
   summary.appendChild(input);
 
-  if (familyInput) {
-    summary.appendChild(familyInput);
-  }
-
   if (roleSelect) {
     summary.appendChild(roleSelect);
   }
-  
+
+  if (familySelect) {
+    summary.appendChild(familySelect);
+  }
+
+  if (manufacturerInput) {
+    summary.appendChild(manufacturerInput);
+  }
+
   if (notesInput) {
     summary.appendChild(notesInput);
   }
@@ -862,20 +1079,34 @@ function enterEditMode(row, type, id) {
       
       if (type === 'material') {
         const selectedRole = roleSelect ? roleSelect.value : row.dataset.role;
-        const familyValue = familyInput ? familyInput.value.trim() : (row.dataset.family || '');
+        // Family is a controlled vocabulary for active roles only; for other
+        // roles the field is hidden and the stored value passes through
+        // unchanged (never wiped silently).
+        const familyValue = ACTIVE_ROLES.has(selectedRole)
+          ? (familySelect ? familySelect.value.trim() : (row.dataset.family || ''))
+          : (row.dataset.family || '');
+        const manufacturerValue = manufacturerInput
+          ? manufacturerInput.value.trim()
+          : (row.dataset.manufacturer || '');
 
         await updateMaterial(Number(id), {
           name: newValue,
           role: selectedRole,
-          family: familyValue || null
+          family: familyValue || null,
+          manufacturer: manufacturerValue || null
         });
 
         exitEditMode(row);
         row.querySelector('.row-title').textContent = newValue;
-        row.querySelector('.row-meta').textContent = formatMaterialRowMeta(familyValue, selectedRole);
+        renderMaterialRowMetaInto(row.querySelector('.row-meta'), {
+          role: selectedRole,
+          family: familyValue,
+          manufacturer: manufacturerValue
+        });
         row.querySelector('.row-meta').dataset.role = selectedRole;
         row.dataset.role = selectedRole;
         row.dataset.family = familyValue;
+        row.dataset.manufacturer = manufacturerValue;
 
         return;
       }
@@ -949,8 +1180,8 @@ function enterEditMode(row, type, id) {
     }
   });
 
-  if (familyInput) {
-    familyInput.addEventListener('keydown', (e) => {
+  if (manufacturerInput) {
+    manufacturerInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         e.stopPropagation();
@@ -1067,10 +1298,16 @@ materialsList.addEventListener('click', async (e) => {
       }
       
       if (type === 'component') {
+        const instanceRow = row.closest('details[data-type="instance"]');
         await fetch(`/api/materials/instances/components/${id}`, {
           method: 'DELETE'
         });
         row.remove();
+        if (instanceRow) {
+          const remainingComponents =
+            instanceRow.querySelectorAll('.level-component').length;
+          updateInstanceKindBadge(instanceRow, remainingComponents > 0);
+        }
         return;
       }
       
@@ -1088,8 +1325,20 @@ materialsList.addEventListener('click', async (e) => {
 async function loadMaterials() {
   const state = captureOpenState();
   const materials = await fetchMaterials();
+  loadedMaterials = materials;
   renderMaterials(materials);
   restoreOpenState(state);
 }
 
-loadMaterials();
+async function initMaterialsPage() {
+  try {
+    materialFamilies = await fetchMaterialFamilies();
+  } catch (err) {
+    // The picker degrades to stored-value-only options; do not block the page.
+    console.error(err);
+  }
+  syncCreateFamilyVisibility();
+  loadMaterials();
+}
+
+initMaterialsPage();
