@@ -1,7 +1,7 @@
 # BADB Release Readiness
 
 Created: 2026-05-06
-Edited: 2026-06-19
+Edited: 2026-07-28
 Status: current
 
 This file tracks only the current release-control state. Do not use it for future ideas, long worklogs, or archived rationale.
@@ -12,16 +12,25 @@ Vanilla v1 release candidate for internal lab pilot.
 
 ## Current Status
 
-- Vanilla v1 is a release candidate based on the recorded local automated
-  checks and UI spot checks.
-- Windows/lab database ledger proof: **verified 2026-06-19** — the lab DB shows
-  `public.schema_migrations` counts of `dalia = 28` / `dima = 21` (49 rows,
-  through `d040`), matching the v1 baseline (see "Lab Database Verification"
-  below). The `d031_harden_battery_stack_validate_trigger.sql` trigger-behavior
-  boolean query (per `docs/instructions/apply_migrations.md`) has not yet been
-  run on the lab and remains outstanding.
-- Manual destructive battery flow spot-check is still required before pilot use
-  unless a later checkpoint records it as verified.
+- **Release candidate is the merged two-frontend app** (2026-07-28): vanilla
+  + the Vue SPA served from the `:3003` root (`npm run build:web` after every
+  pull). Repo migrations run through `d052`; local dev ledger `dalia = 40` /
+  `dima = 21`. The migration rehearsal (`scripts/migration-test/run.sh`,
+  d041→d052 on a d040 baseline with data) passes ALL CHECKS, and the vanilla
+  smoke harness passes 291 checks.
+- Windows/lab database ledger proof: last verified 2026-06-19 at `d040`
+  (`dalia = 28` / `dima = 21`). At cutover the lab applies d041→d052 and must
+  land on `dalia = 40` (see `windows_version_cutover.md`). A rehearsal against
+  a FRESH lab dump is still required before cutover (the standing rehearsal
+  uses the April dump).
+- The `d031_harden_battery_stack_validate_trigger.sql` trigger-behavior
+  boolean query (per `docs/instructions/apply_migrations.md`) has not yet
+  been run on the lab and remains outstanding — run it at cutover (step 8).
+- Manual destructive battery flow spot-check: **verified 2026-07-28** during
+  Dalia's data-cleanup pass on dev — guided battery delete with electrode
+  disposition (battery #10), tape guided deletes, electrode bulk delete with
+  guard refusals, and batch delete blockers all exercised through the real
+  UI. (Dev data; the flow, not the lab DB, was the subject of the check.)
 
 ## Current Source Of Truth
 
