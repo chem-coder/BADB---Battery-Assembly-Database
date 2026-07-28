@@ -1,7 +1,7 @@
 # Feature Backlog
 
 Created: 2026-05-06
-Edited: 2026-07-17
+Edited: 2026-07-28
 Status: future idea
 Verified against current docs/code: cleanup pass 2026-05-09
 
@@ -19,6 +19,35 @@ itself.
 Implemented behavior from the old backlog has been moved out of this file. For
 current slurry, capacity, print-report, reference-page, and filter behavior,
 use `docs/current/` as source of truth.
+
+## Dalia's priorities, recorded 2026-07-28 evening (decisions, not ideas)
+
+**Front door — DECIDED:** Vue is the app. Vanilla is RETIRED and must be
+HIDDEN — unreachable for normal users; a non-obvious owner-only path stays
+for Dalia. (Today vanilla still answers at /index.html and /vanilla.)
+
+**Next work batch (wanted before the 2026-07-29 team meeting; queued, not
+yet started — explicit go required):**
+
+1. File uploads on TAPES and ELECTRODE BATCHES — like the existing battery
+   electrochem files: attach Excel/docs («Акт сборки» etc.) to a tape or a
+   cut batch. DB-backed files, existing file-route patterns.
+2. Supplier evaluation prompt (materials_model_cleanup.md §6.4, third
+   moment): when a material has accumulated real usage («на этом материале
+   N лент, есть циклирование»), prompt to rate the supplier/source —
+   management's requested feature.
+3. Recipe creation flow: «+ Новая рецептура…» inline from the tape flow +
+   composition-duplicate detection via d047 signatures (design agreed
+   earlier; see session notes).
+
+**Can wait / possibly Dima's territory (Dalia, same date):** Vue filter
+bars on the three workflow pages; perf (open-tape/battery request
+waterfalls; per-batch report flood on Electrodes/Cycling); org-structure
+access parity; «Удалённые элементы» trashcan with restore.
+
+**Standing boundaries:** database CONTENTS (incl. any supplier/CoA
+verification) are Dalia's alone — the app never nags about them beyond the
+red placeholder styling, and neither does the assistant.
 
 ## Intake Rule
 
