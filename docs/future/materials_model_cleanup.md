@@ -276,8 +276,8 @@ the work is filling `family` and `manufacturer`.
 | `NMC 811` | 0 | `NMC` | неизвестен | **unused** — free to restructure |
 | `NMC 811 ETI` | 0 | `NMC` | ETI | **unused** |
 | `NMC 811 BTR M2C2` | 0 | `NMC` | BTR | **unused** |
-| `LFP S19` | 6 | `LFP` | Gelon *(probable)* | load-bearing — name stays. «LFP S19» is a Gelon catalogue code (verified 2026-07-28); vendor = Gelon is certain, but Gelon both manufactures and trades, so mark the manufacturer unconfirmed until the CoA/packaging says otherwise. NOT BTR — BTR makes the anode graphites |
-| `NMC C85E` | 1 | `NMC` | ? | load-bearing — name stays, add manufacturer |
+| `LFP S19` | 6 | `LFP` | **BTR (Tianjin) Nano Material Manufacturing Co., Ltd.** | vendor = Gelon (their catalogue lists S13/S19). BTR Tianjin mass-produced the **S series** LFP — verified 2026-07-28. NB: two different BTR entities appear in this catalogue — BTR New Material Group (Shenzhen) makes the anode graphites, BTR (Tianjin) Nano makes this LFP; record full entity names so supplier comparisons do not merge them. Tianjin cathode ownership has since shifted toward Longpan/Liyuan-LBM, so newer packaging branding may differ |
+| `NMC C85E` | 1 | `NMC` | Chengdu B&M (Bamo) *(unconfirmed)* | Chengdu Bamo Technology (subsidiary of Tianjin Bamo) verified as a real NCM cathode producer, but the **C85E grade code itself could not be verified online** (2026-07-28); a similarly-named S85E NCM811 grade exists on the market. Confirm from the CoA |
 | `NCA`, `NVP` | 1 / 0 | `NCA`, `NVP` | неизвестен | honest placeholders until a real grade is bought |
 
 Unknown manufacturers are written as `неизвестен` and rendered red (D4), so the
@@ -323,8 +323,11 @@ Warn, do not block: unusual formulations are legitimate research.
 
 ## 10. Open questions
 
-1. `NMC C85E` — manufacturer? (`LFP S19` resolved 2026-07-28: Gelon catalogue code,
-   manufacturer probable-Gelon pending confirmation from the certificate of analysis.)
+1. Confirm `NMC C85E` = Chengdu B&M from the certificate of analysis (company
+   verified, grade code not verifiable online). `LFP S19` resolved 2026-07-28:
+   manufactured by BTR (Tianjin) Nano, distributed by Gelon — the original
+   «BTR-Gelon» note was manufacturer + vendor compressed into one string
+   because only one field existed. That is the case §5 is built for.
 2. Should the generic placeholders (`LTO`, `NCA`, `NVP`, `HC`) be renamed now,
    or left honest until a specific grade is purchased?
 3. Anything to add to the family lists for materials likely to be bought in the
