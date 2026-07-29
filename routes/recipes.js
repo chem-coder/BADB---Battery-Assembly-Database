@@ -153,6 +153,67 @@ async function getRecipeReport(db, recipeId) {
 }
 
 // CREATE: new recipe + lines
+// Composition-duplicate check (d047 canonical signature, same algorithm
+// as the d047 dedup): given a candidate line set, return the existing
+// recipe with the identical formulation, if any. Used by the quick-create
+// flow so «96 АМ : 2.2 Super P : 1.8 PVDF» cannot be created twice.
+router.post('/check-duplicate', auth, async (req, res) => {
+  const { role, lines } = req.body;
+  if (role !== 'cathode' && role !== 'anode') {
+    return res.status(400).json({ error: 'Некорректная роль рецептуры' });
+  }
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return res.status(400).json({ error: 'Не переданы строки состава' });
+  }
+  try {
+    const result = await pool.query(
+      `
+      WITH input AS (
+        SELECT string_agg(
+                 (e->>'recipe_role') || '|'
+                   || COALESCE(e->>'material_id', 'x') || '|'
+                   || COALESCE(trim_scale((e->>'slurry_percent')::numeric)::text, '-') || '|'
+                   || COALESCE(e->>'include_in_pct', 'true'),
+                 ';'
+                 ORDER BY (e->>'recipe_role'),
+                          COALESCE((e->>'material_id')::int, -1),
+                          COALESCE((e->>'slurry_percent')::numeric, -1),
+                          COALESCE(e->>'include_in_pct', 'true')
+               ) AS sig
+        FROM jsonb_array_elements($2::jsonb) e
+      ),
+      canon AS (
+        SELECT r.tape_recipe_id, r.name,
+               string_agg(
+                 l.recipe_role::text || '|'
+                   || COALESCE(l.material_id::text, 'x') || '|'
+                   || COALESCE(trim_scale(l.slurry_percent)::text, '-') || '|'
+                   || l.include_in_pct::text,
+                 ';'
+                 ORDER BY l.recipe_role::text,
+                          COALESCE(l.material_id, -1),
+                          COALESCE(l.slurry_percent, -1),
+                          l.include_in_pct
+               ) AS sig
+          FROM tape_recipes r
+          JOIN tape_recipe_lines l ON l.tape_recipe_id = r.tape_recipe_id
+         WHERE r.role = $1
+         GROUP BY r.tape_recipe_id, r.name
+      )
+      SELECT c.tape_recipe_id, c.name
+      FROM canon c
+      JOIN input i ON i.sig = c.sig
+      LIMIT 1
+      `,
+      [role, JSON.stringify(lines)]
+    );
+    res.json({ duplicate: result.rows[0] || null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка проверки дубликата рецептуры' });
+  }
+});
+
 router.post('/', auth, async (req, res) => {
   const {
     role,

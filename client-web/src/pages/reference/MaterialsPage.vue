@@ -929,8 +929,8 @@ function onEditKeydown(e, saveFn, cancelFn) {
           <span class="eval-item-name">{{ c.material_name }}</span>
           <span v-if="c.instance_name !== c.material_name"> · {{ c.instance_name }}</span>
           <span v-if="c.supplier"> · {{ c.supplier }}</span>
-          — {{ c.tapes_used }} {{ c.tapes_used === 1 ? 'лента' : (c.tapes_used < 5 ? 'ленты' : 'лент') }}<template v-if="c.has_cycling">, есть циклирование</template>
-          <Button label="Оценить" size="small" text @click="goEvaluate(c)" />
+          — {{ Number(c.tapes_used) }} {{ Number(c.tapes_used) === 1 ? 'лента' : (Number(c.tapes_used) < 5 ? 'ленты' : 'лент') }}<template v-if="c.has_cycling">, есть циклирование</template>
+          <Button label="Оценить" size="small" text class="eval-item-btn" @click="goEvaluate(c)" />
         </li>
       </ul>
     </div>
@@ -2190,4 +2190,5 @@ function onEditKeydown(e, saveFn, cancelFn) {
 }
 .eval-banner-list li { padding: 2px 0; }
 .eval-item-name { font-weight: 600; }
+.eval-item-btn { margin-left: 6px; }
 </style>

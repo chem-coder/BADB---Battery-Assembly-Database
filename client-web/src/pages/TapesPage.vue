@@ -21,6 +21,7 @@ import TapeDryBoxPanel from '@/components/TapeDryBoxPanel.vue'
 import RecordFiles from '@/components/parity/RecordFiles.vue'
 import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
 import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
+import RecipeQuickCreateDialog from '@/components/RecipeQuickCreateDialog.vue'
 import Checkbox from 'primevue/checkbox'
 import { useExportTapes } from '@/composables/useExportTapes'
 import { todayIsoMsk } from '@/utils/dateFormat'
@@ -134,6 +135,16 @@ const columns = [
 // the API. After success the new tape is auto-added to the constructor
 // below so editing continues without an extra click.
 const createDialogVisible = ref(false)
+const createDialogRef = ref(null)
+const recipeQuickCreateVisible = ref(false)
+
+// «+ Новая рецептура…» from inside the tape-create dialog: quick-create
+// (with d047-signature duplicate detection) → reload recipes → point the
+// dialog's recipe select at the result.
+async function onRecipeQuickCreated(recipeId) {
+  await loadRefData()
+  createDialogRef.value?.setFieldValue('tape_recipe_id', recipeId)
+}
 
 // Schema for the shared EntityCreateDialog. Built as a computed so the
 // Project/Recipe options stay reactive when refData loads asynchronously
@@ -162,6 +173,7 @@ const tapeCreateFields = computed(() => [
       value: r.tape_recipe_id,
       label: r.role ? `${r.name} · ${r.role}` : r.name,
     })),
+    action: { label: '+ Новая рецептура…', onClick: () => { recipeQuickCreateVisible.value = true } },
   },
   // Business date — separate from audit `created_at`. Backend column
   // `item_created_at` (d035). Defaults to today (MSK) on create; can be
@@ -588,6 +600,7 @@ function formatDate(dt) {
     </div>
 
     <EntityCreateDialog
+      ref="createDialogRef"
       v-model:visible="createDialogVisible"
       :eyebrow="dialogEyebrow"
       :title="dialogTitle"
@@ -612,6 +625,12 @@ function formatDate(dt) {
     />
 
     <!-- Tape print report (vanilla /workflow/tape-print.html) opened in-app. -->
+    <RecipeQuickCreateDialog
+      v-model:visible="recipeQuickCreateVisible"
+      :materials="refData.materials || []"
+      @created="onRecipeQuickCreated"
+    />
+
     <PrintPreviewDialog
       v-model:visible="printDialog.visible"
       :url="printDialog.url"
