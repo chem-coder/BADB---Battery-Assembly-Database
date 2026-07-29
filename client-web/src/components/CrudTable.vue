@@ -481,7 +481,31 @@ xmlns:x="urn:schemas-microsoft-com:office:excel"
 xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"/>
 <style>th{background:#e8edf5;font-weight:bold;border:1px solid #ccc;padding:4px 8px}
-td{border:1px solid #ddd;padding:4px 8px}</style></head>
+td{border:1px solid #ddd;padding:4px 8px}
+/* ── Mobile (≤768px): the table becomes a phone data surface ─────────
+   The toolbar wraps instead of overflowing, decorative meta text hides,
+   paddings tighten, and the DataTable scrolls horizontally INSIDE the
+   card (the page itself never scrolls sideways). Touch targets keep a
+   40px minimum. */
+@media (max-width: 768px) {
+  .ct-toolbar {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+    padding: 0.6rem 0.75rem 0.5rem;
+  }
+  /* «N строк × M столбцов» is decoration on a phone. */
+  .ct-meta { display: none; }
+  .ct-sep { display: none; }
+  .ct-table-name { font-size: 12px; }
+  .ct-toolbar-btn,
+  .ct-rows-select {
+    min-height: 40px;
+  }
+  /* The selection lens and Add stay reachable on the wrapped row. */
+  .ct-selection-toggle { order: 5; }
+}
+
+</style></head>
 <body><table>${'<tr>' + headerRow + '</tr>'}\n${bodyRows}</table></body></html>`
 
   downloadBlob(
@@ -1242,6 +1266,30 @@ defineExpose({ clearSelection, selectedRows, filteredData })
   font-size: 12px;
 }
 
+
+/* ── Mobile (≤768px): the table becomes a phone data surface ─────────
+   The toolbar wraps instead of overflowing, decorative meta text hides,
+   paddings tighten, and the DataTable scrolls horizontally INSIDE the
+   card (the page itself never scrolls sideways). Touch targets keep a
+   40px minimum. */
+@media (max-width: 768px) {
+  .ct-toolbar {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+    padding: 0.6rem 0.75rem 0.5rem;
+  }
+  /* «N строк × M столбцов» is decoration on a phone. */
+  .ct-meta { display: none; }
+  .ct-sep { display: none; }
+  .ct-table-name { font-size: 12px; }
+  .ct-toolbar-btn,
+  .ct-rows-select {
+    min-height: 40px;
+  }
+  /* The selection lens and Add stay reachable on the wrapped row. */
+  .ct-selection-toggle { order: 5; }
+}
+
 </style>
 
 <!-- Unscoped styles for Teleport-ed overlays (rendered outside component DOM) -->
@@ -1377,4 +1425,28 @@ defineExpose({ clearSelection, selectedRows, filteredData })
   padding-bottom: 0.35rem;
   color: rgba(0, 50, 116, 0.85);
 }
+
+/* ── Mobile (≤768px): the table becomes a phone data surface ─────────
+   The toolbar wraps instead of overflowing, decorative meta text hides,
+   paddings tighten, and the DataTable scrolls horizontally INSIDE the
+   card (the page itself never scrolls sideways). Touch targets keep a
+   40px minimum. */
+@media (max-width: 768px) {
+  .ct-toolbar {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+    padding: 0.6rem 0.75rem 0.5rem;
+  }
+  /* «N строк × M столбцов» is decoration on a phone. */
+  .ct-meta { display: none; }
+  .ct-sep { display: none; }
+  .ct-table-name { font-size: 12px; }
+  .ct-toolbar-btn,
+  .ct-rows-select {
+    min-height: 40px;
+  }
+  /* The selection lens and Add stay reachable on the wrapped row. */
+  .ct-selection-toggle { order: 5; }
+}
+
 </style>
