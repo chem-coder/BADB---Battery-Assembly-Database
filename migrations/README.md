@@ -18,11 +18,17 @@ No automated runner exists yet — migrations are applied manually from
 `BADB_main`, not the outer `RENERA` workspace:
 
 ```bash
+# Dev machine (Mac): user Dalia, database badb_app_v1
 for f in migrations/*.sql; do
   echo "Applying $(basename $f)..."
   psql -U Dalia -d badb_app_v1 -f "$f"
 done
 ```
+
+**The lab Windows machine uses different credentials** — user `postgres`,
+database `badb_v1`, folder `C:\DB_LabHIT\BADB_v1`, and the ASCII mirror.
+Follow `docs/instructions/windows_version_cutover.md`, which applies them one
+at a time with per-step verification.
 
 Every migration uses `IF NOT EXISTS` / `IF EXISTS` guards where
 possible, so re-running is safe — already-applied steps are no-ops.
