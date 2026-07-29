@@ -5,12 +5,12 @@ Forward-only SQL migrations applied in alphabetical order to
 
 Current migration file state as of 2026-07-28:
 
-- `migrations/` has 61 SQL files.
-- `migrations_ASCII/` has 61 SQL files.
+- `migrations/` has 62 SQL files.
+- `migrations_ASCII/` has 62 SQL files.
 - Dima's numeric stream exists through `020_cycling_active_mass.sql`.
-- Dalia's `dNNN` stream exists through `d052_materials_manufacturer_families.sql`.
+- Dalia's `dNNN` stream exists through `d053_tape_and_batch_files.sql`.
 - Live local `badb_app_v1` has authoritative `public.schema_migrations`
-  counts of `dima = 21` and `dalia = 40` after `d052` is applied.
+  counts of `dima = 21` and `dalia = 41` after `d053` is applied.
 
 ## How to apply
 
@@ -201,6 +201,10 @@ Full timeline is in the git log. High-level:
   `<material> (чистый)` instances to plain `<material>`: the suffix froze
   a computed leaf/mixture state into a stored name and read as a purity
   claim. Unknown data is left untouched for manual cleanup.
+- `d053_tape_and_batch_files` — DB-backed file attachments for tapes and
+  electrode cut batches («Акт сборки», Excel sheets), mirroring the
+  electrolyte_files pattern: bytea rows, authenticated
+  list/upload/download/delete routes, ON DELETE CASCADE with the parent.
 
 ## Check migration ledger
 

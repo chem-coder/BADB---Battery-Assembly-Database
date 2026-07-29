@@ -552,4 +552,134 @@ router.delete('/electrode-drying/:id', auth, requireEntityModify('electrodeDryin
 
 
 
+
+// -------- ELECTRODE CUT BATCH FILES (d053, electrolyte_files pattern) --------
+// DB-backed attachments («Акт сборки», Excel sheets, scans). Base64 upload,
+// authenticated inline download, hard delete.
+
+router.get('/electrode-cut-batches/:id/files', auth, async (req, res) => {
+  const parentId = Number(req.params.id);
+  if (!Number.isInteger(parentId)) {
+    return res.status(400).json({ error: 'Некорректный cut_batch_id' });
+  }
+  try {
+    const result = await pool.query(
+      `
+      SELECT cut_batch_file_id, cut_batch_id, file_name, mime_type, uploaded_at
+      FROM electrode_cut_batch_files
+      WHERE cut_batch_id = $1
+      ORDER BY cut_batch_file_id
+      `,
+      [parentId]
+    );
+    res.json(result.rows.map(row => ({
+      ...row,
+      download_url: `/api/electrodes/electrode-cut-batches/files/${row.cut_batch_file_id}/download`
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки файлов' });
+  }
+});
+
+router.get('/electrode-cut-batches/files/:fileId/download', auth, async (req, res) => {
+  const fileId = Number(req.params.fileId);
+  if (!Number.isInteger(fileId)) {
+    return res.status(400).json({ error: 'Некорректный идентификатор файла' });
+  }
+  try {
+    const result = await pool.query(
+      'SELECT file_name, mime_type, file_data FROM electrode_cut_batch_files WHERE cut_batch_file_id = $1',
+      [fileId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Файл не найден' });
+    }
+    const file = result.rows[0];
+    res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename*=UTF-8''${encodeURIComponent(file.file_name || 'file')}`
+    );
+    res.send(file.file_data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка скачивания файла' });
+  }
+});
+
+router.post('/electrode-cut-batches/:id/files', auth, async (req, res) => {
+  const parentId = Number(req.params.id);
+  const { entries } = req.body;
+  if (!Number.isInteger(parentId)) {
+    return res.status(400).json({ error: 'Некорректный cut_batch_id' });
+  }
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return res.status(400).json({ error: 'Не переданы файлы' });
+  }
+  try {
+    const parentCheck = await pool.query(
+      'SELECT cut_batch_id FROM electrode_cut_batches WHERE cut_batch_id = $1',
+      [parentId]
+    );
+    if (parentCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Партия не найдена' });
+    }
+    for (const entry of entries) {
+      if (!entry.file_content_base64) {
+        throw new Error('Не передано содержимое файла');
+      }
+      await pool.query(
+        `
+        INSERT INTO electrode_cut_batch_files (cut_batch_id, file_name, mime_type, file_data)
+        VALUES ($1,$2,$3,$4)
+        `,
+        [
+          parentId,
+          entry.file_name || 'file',
+          entry.mime_type || 'application/octet-stream',
+          Buffer.from(entry.file_content_base64, 'base64')
+        ]
+      );
+    }
+    const result = await pool.query(
+      `
+      SELECT cut_batch_file_id, cut_batch_id, file_name, mime_type, uploaded_at
+      FROM electrode_cut_batch_files
+      WHERE cut_batch_id = $1
+      ORDER BY cut_batch_file_id
+      `,
+      [parentId]
+    );
+    res.status(200).json(result.rows.map(row => ({
+      ...row,
+      download_url: `/api/electrodes/electrode-cut-batches/files/${row.cut_batch_file_id}/download`
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сохранения файлов' });
+  }
+});
+
+router.delete('/electrode-cut-batches/files/:fileId', auth, async (req, res) => {
+  const fileId = Number(req.params.fileId);
+  if (!Number.isInteger(fileId)) {
+    return res.status(400).json({ error: 'Некорректный идентификатор файла' });
+  }
+  try {
+    const result = await pool.query(
+      'DELETE FROM electrode_cut_batch_files WHERE cut_batch_file_id = $1 RETURNING cut_batch_file_id',
+      [fileId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Файл не найден' });
+    }
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка удаления файла' });
+  }
+});
+
+
 module.exports = router;

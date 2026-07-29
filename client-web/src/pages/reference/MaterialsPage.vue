@@ -4,7 +4,7 @@
  * Master-detail layout: left panel = material list, right panel = instances & components.
  * All CRUD inline, no dialogs.
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import api from '@/services/api'
 import { todayIsoMsk } from '@/utils/dateFormat'
@@ -151,7 +151,31 @@ async function loadMaterials() {
 onMounted(() => {
   loadMaterials()
   loadFamilies()
+  loadEvalCandidates()
 })
+
+// ── Supplier evaluation prompts (§6.4, third moment) ─────────────────
+// Unevaluated sources with real usage — shown as a dismissible banner so
+// the rating question arrives WITH evidence, not at creation time.
+const evalCandidates = ref([])
+const evalBannerDismissed = ref(false)
+
+async function loadEvalCandidates() {
+  try {
+    const { data } = await api.get('/api/materials/evaluation-candidates')
+    evalCandidates.value = data
+  } catch { /* non-critical — banner just stays hidden */ }
+}
+
+async function goEvaluate(c) {
+  const m = materials.value.find(x => x.material_id === c.material_id)
+  if (!m) return
+  selectMaterial(m)
+  // Open the instance so its source-info (rating fields) is visible.
+  await nextTick()
+  const inst = instances.value.find(i => i.material_instance_id === c.material_instance_id)
+  if (inst && !openInstances.value.has(inst.material_instance_id)) toggleInstance(inst)
+}
 
 function selectMaterial(m) {
   if (selectedMaterialId.value === m.material_id) return
@@ -398,6 +422,7 @@ async function saveSourceInfo(instanceId) {
   } finally {
     sourceInfoSaving.value[instanceId] = false
   }
+  loadEvalCandidates()
 }
 
 async function loadProperties(instanceId) {
@@ -888,6 +913,27 @@ function onEditKeydown(e, saveFn, cancelFn) {
 <template>
   <div class="materials-page">
     <PageHeader title="Материалы" icon="pi pi-warehouse" />
+
+    <!-- Оценка поставщиков (§6.4): подсказка появляется, когда есть
+         неоценённые источники с реальным использованием — вопрос задаётся
+         вместе с доказательствами, а не при создании. -->
+    <div v-if="evalCandidates.length && !evalBannerDismissed" class="glass-card eval-banner">
+      <div class="eval-banner-head">
+        <i class="pi pi-star" />
+        <span>Оценка поставщиков — есть материалы с накопленным опытом:</span>
+        <Button icon="pi pi-times" text size="small" class="eval-banner-close"
+          @click="evalBannerDismissed = true" />
+      </div>
+      <ul class="eval-banner-list">
+        <li v-for="c in evalCandidates" :key="c.material_instance_id">
+          <span class="eval-item-name">{{ c.material_name }}</span>
+          <span v-if="c.instance_name !== c.material_name"> · {{ c.instance_name }}</span>
+          <span v-if="c.supplier"> · {{ c.supplier }}</span>
+          — {{ Number(c.tapes_used) }} {{ Number(c.tapes_used) === 1 ? 'лента' : (Number(c.tapes_used) < 5 ? 'ленты' : 'лент') }}<template v-if="c.has_cycling">, есть циклирование</template>
+          <Button label="Оценить" size="small" text class="eval-item-btn" @click="goEvaluate(c)" />
+        </li>
+      </ul>
+    </div>
 
     <div class="materials-content">
       <!-- ── Left Panel: Material List ── -->
@@ -2125,4 +2171,24 @@ function onEditKeydown(e, saveFn, cancelFn) {
   .meta-family { width: 100%; }
   .meta-manufacturer { width: 100%; }
 }
+.eval-banner {
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  border-left: 4px solid #e8a013;
+}
+.eval-banner-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #003274;
+}
+.eval-banner-close { margin-left: auto; }
+.eval-banner-list {
+  margin: 8px 0 0;
+  padding-left: 22px;
+}
+.eval-banner-list li { padding: 2px 0; }
+.eval-item-name { font-weight: 600; }
+.eval-item-btn { margin-left: 6px; }
 </style>

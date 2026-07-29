@@ -96,6 +96,47 @@ router.get('/', auth, async (req, res) => {
 });
 
 // UPDATE
+// Supplier evaluation candidates (materials_model_cleanup.md §6.4, third
+// moment): unevaluated sources whose instance has REAL usage — the prompt
+// asks the question when there is evidence to answer it with.
+router.get('/evaluation-candidates', auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        mi.material_instance_id,
+        mi.name AS instance_name,
+        m.material_id,
+        m.name AS material_name,
+        m.manufacturer,
+        s.source_id,
+        NULLIF(s.supplier, '') AS supplier,
+        count(DISTINCT a.tape_id) AS tapes_used,
+        EXISTS (
+          SELECT 1
+          FROM tape_recipe_line_actuals a2
+          JOIN electrode_cut_batches cb ON cb.tape_id = a2.tape_id
+          JOIN electrodes e ON e.cut_batch_id = cb.cut_batch_id
+          JOIN battery_electrodes be ON be.electrode_id = e.electrode_id
+          JOIN cycling_sessions cs ON cs.battery_id = be.battery_id
+          WHERE a2.material_instance_id = mi.material_instance_id
+        ) AS has_cycling
+      FROM material_instances mi
+      JOIN materials m ON m.material_id = mi.material_id
+      JOIN material_sources s ON s.source_id = mi.source_id AND s.is_evaluated = false
+      JOIN tape_recipe_line_actuals a ON a.material_instance_id = mi.material_instance_id
+      GROUP BY mi.material_instance_id, mi.name, m.material_id, m.name,
+               m.manufacturer, s.source_id, s.supplier
+      ORDER BY count(DISTINCT a.tape_id) DESC, m.name
+      `
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки кандидатов на оценку' });
+  }
+});
+
 router.put('/:id', auth, async (req, res) => {
   const id = Number(req.params.id);
   const { name, role, family, manufacturer } = req.body;

@@ -126,8 +126,13 @@ function onCreate() {
   // Parent decides whether to close on success or keep open on error.
 }
 
-/** Allow parent to reset the dialog after an API error so user can retry. */
-defineExpose({ resetSubmitting() { submitting.value = false; } });
+/** Allow parent to reset the dialog after an API error so user can retry,
+ * and to set a field from outside (e.g. after «+ Новая рецептура…» creates
+ * the record the select should now point at). */
+defineExpose({
+  resetSubmitting() { submitting.value = false; },
+  setFieldValue(key, value) { values.value = { ...values.value, [key]: value }; },
+});
 </script>
 
 <template>
@@ -191,6 +196,17 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
           v-model="values[f.key]"
           :placeholder="f.placeholder || 'дд.мм.гггг'"
           class="ec-input"
+        />
+        <!-- Optional per-field action, e.g. «+ Новая рецептура…» opening a
+             quick-create flow whose result lands back in this field via
+             the exposed setFieldValue(). -->
+        <Button
+          v-if="f.action"
+          :label="f.action.label"
+          text
+          size="small"
+          class="ec-field-action"
+          @click="f.action.onClick()"
         />
       </div>
     </div>
@@ -300,6 +316,11 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
   min-width: 0;
   flex-wrap: nowrap;
 }
+.ec-field-action {
+  align-self: flex-start;
+  padding: 2px 4px;
+  margin-top: 2px;
+}
 </style>
 
 <style>
@@ -338,5 +359,10 @@ defineExpose({ resetSubmitting() { submitting.value = false; } });
 .p-dialog-mask:has(.ec-dialog-root) {
   background: rgba(0, 50, 116, 0.28);
   backdrop-filter: blur(2px);
+}
+.ec-field-action {
+  align-self: flex-start;
+  padding: 2px 4px;
+  margin-top: 2px;
 }
 </style>
