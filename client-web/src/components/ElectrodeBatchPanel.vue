@@ -1157,4 +1157,22 @@ function fmtCap(val) {
   font-size: 14px;
   color: #003274;
 }
+
+/* ── Mobile (≤768px): mass entry is THE phone use-case ───────────────
+   Inputs go to 16px font (below that iOS Safari auto-zooms on focus)
+   and 40px touch height; the dense table keeps its 640px min-width and
+   scrolls horizontally inside its wrapper. */
+@media (max-width: 768px) {
+  .ebp-input input,
+  .ebp-input .p-inputtext,
+  input.p-inputtext {
+    font-size: 16px !important;
+    min-height: 40px !important;
+  }
+  td, th {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+}
+
 </style>

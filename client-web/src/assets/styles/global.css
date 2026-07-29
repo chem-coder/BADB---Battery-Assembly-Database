@@ -880,14 +880,25 @@ h4 { font-size: 16px; font-weight: 700; line-height: 1.4; }
     margin: 1rem auto !important;
   }
 
-  /* Inputs/selects: slightly smaller on mobile */
-  .p-inputtext,
-  .p-select,
-  .p-multiselect,
-  .p-datepicker-input {
-    min-height: 36px !important;
-    height: 36px !important;
-    font-size: 13px !important;
+  /* Inputs/selects on mobile. Two hard rules:
+     1. font-size >= 16px — anything smaller makes iOS Safari auto-zoom
+        the page on focus, which wrecks data entry;
+     2. min-height >= 40px — touch target. No fixed height: AutoComplete
+        and InputNumber wrap their inputs and clip at forced heights. */
+  /* The #app prefix adds id-level specificity so this beats the dense
+     editors' scoped !important rules (StageCompareEditor .ce-td,
+     ElectrodeBatchPanel .ebp-td-mass) without touching each component. */
+  #app .p-inputtext,
+  #app .p-select,
+  #app .p-multiselect,
+  #app .p-datepicker-input,
+  #app .p-autocomplete .p-autocomplete-input,
+  #app .p-inputnumber .p-inputnumber-input,
+  #app .p-textarea,
+  #app select,
+  #app input[type='date'] {
+    min-height: 40px !important;
+    font-size: 16px !important;
   }
 
   /* Buttons: ensure touch-friendly size */
