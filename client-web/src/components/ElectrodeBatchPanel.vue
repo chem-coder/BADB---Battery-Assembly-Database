@@ -26,6 +26,7 @@
  * being phased out". This panel completes that phase for electrodes.
  */
 import { ref, watch, computed } from 'vue';
+import RecordFiles from '@/components/parity/RecordFiles.vue';
 import api from '@/services/api';
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
@@ -825,6 +826,16 @@ function fmtCap(val) {
         />
       </template>
     </Dialog>
+
+    <!-- Файлы партии (d053): документы, привязанные к партии нарезки. -->
+    <div class="ebp-files">
+      <h4 class="ebp-files-title">Файлы партии</h4>
+      <RecordFiles
+        entity-type="electrodes/electrode-cut-batches"
+        :record-id="props.batchId"
+        file-id-field="cut_batch_file_id"
+      />
+    </div>
   </div>
 </template>
 
@@ -1135,5 +1146,15 @@ function fmtCap(val) {
   font-weight: 700;
   color: #003274;
   font-variant-numeric: tabular-nums;
+}
+.ebp-files {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 50, 116, 0.12);
+}
+.ebp-files-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #003274;
 }
 </style>

@@ -18,6 +18,7 @@ import CrudTable from '@/components/CrudTable.vue'
 import TapeConstructor from '@/components/TapeConstructor.vue'
 import RecipeActualsEditor from '@/components/RecipeActualsEditor.vue'
 import TapeDryBoxPanel from '@/components/TapeDryBoxPanel.vue'
+import RecordFiles from '@/components/parity/RecordFiles.vue'
 import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
 import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
 import Checkbox from 'primevue/checkbox'
@@ -575,6 +576,17 @@ function formatDate(dt) {
          at a time. -->
     <TapeDryBoxPanel :tape-id="activeTapeState?.currentTapeId?.value || null" />
 
+    <!-- Файлы ленты (d053): «Акт сборки», Excel и прочие документы,
+         привязанные к активной ленте конструктора. -->
+    <div v-if="activeTapeState?.currentTapeId?.value" class="glass-card tape-files-card">
+      <h3 class="tape-files-title">Файлы ленты #{{ activeTapeState.currentTapeId.value }}</h3>
+      <RecordFiles
+        entity-type="tapes"
+        :record-id="activeTapeState.currentTapeId.value"
+        file-id-field="tape_file_id"
+      />
+    </div>
+
     <EntityCreateDialog
       v-model:visible="createDialogVisible"
       :eyebrow="dialogEyebrow"
@@ -678,5 +690,14 @@ function formatDate(dt) {
 .text-muted {
   color: rgba(0, 50, 116, 0.28);
   font-size: 13px;
+}
+.tape-files-card {
+  margin-top: 16px;
+  padding: 16px 20px;
+}
+.tape-files-title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #003274;
 }
 </style>
