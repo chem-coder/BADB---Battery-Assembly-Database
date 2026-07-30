@@ -28,7 +28,8 @@ function getDefaultMetaState() {
     created_by: null,
     item_created_at: getTodayDateInputValue(),
     form_factor: null,
-    battery_notes: null
+    battery_notes: null,
+    purpose: null
   };
 }
 
@@ -592,7 +593,8 @@ function hasStartedBatterySection(sectionKey) {
     return hasMeaningfulObjectValue({
       created_by: state.meta.created_by,
       form_factor: state.meta.form_factor,
-      battery_notes: state.meta.battery_notes
+      battery_notes: state.meta.battery_notes,
+      purpose: state.meta.purpose
     });
   }
 
@@ -1213,7 +1215,8 @@ function syncMetaStateFromDom() {
     created_by: document.getElementById('battery_created_by')?.value || null,
     item_created_at: itemCreatedAtInput?.value || null,
     form_factor: document.getElementById('battery_form_factor')?.value || null,
-    battery_notes: document.getElementById('battery_notes')?.value || null
+    battery_notes: document.getElementById('battery_notes')?.value || null,
+    purpose: document.getElementById('battery_purpose')?.value || null
   });
 }
 
@@ -1224,9 +1227,26 @@ function formatDateInputValue(value) {
   // through `new Date()` + local getters: a date-only string parses as UTC
   // midnight, and the local getters can shift it across a day boundary on some
   // devices/timezones (the Windows-vs-Mac "future date" bug). Take the leading
-  // YYYY-MM-DD date portion verbatim when present (covers both plain dates and
-  // ISO timestamps from the API).
+  // YYYY-MM-DD date portion verbatim for bare dates.
   const text = String(value).trim();
+
+  // d054: item_created_at is TIMESTAMPTZ — the API returns a UTC instant
+  // (e.g. MSK midnight serialises as 21:00Z of the PREVIOUS day). Slicing
+  // the leading date off a timezone-carrying ISO string would show the
+  // day before the one the operator entered, so re-read those as the
+  // Moscow calendar day instead.
+  if (/T.*(Z|[+-]\d{2}:?\d{2})$/.test(text)) {
+    const instant = new Date(text);
+    if (!Number.isNaN(instant.getTime())) {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Moscow',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(instant);
+    }
+  }
+
   const isoDateMatch = text.match(/^(\d{4}-\d{2}-\d{2})/);
   if (isoDateMatch) {
     return isoDateMatch[1];
@@ -1829,6 +1849,7 @@ function hasMeaningfulValue(value) {
 function isCommentField(el) {
   return Boolean(el?.name) && (
     el.name === 'battery_notes' ||
+    el.name === 'purpose' ||
     el.name === 'qc_notes' ||
     el.name === 'electrochem_notes' ||
     el.name.endsWith('_notes')
@@ -2422,6 +2443,11 @@ function renderMetaForm() {
 
   document.getElementById('battery_notes').value =
     state.meta.battery_notes ?? '';
+
+  const purposeField = document.getElementById('battery_purpose');
+  if (purposeField) {
+    purposeField.value = state.meta.purpose ?? '';
+  }
 }
 
 function getProjectNameById(projectId) {
@@ -5512,7 +5538,8 @@ function applyBatteryMetaToState(data) {
     created_by: battery.created_by ?? null,
     item_created_at: formatDateInputValue(battery.item_created_at || battery.created_at),
     form_factor: battery.form_factor ?? null,
-    battery_notes: battery.battery_notes ?? battery.notes ?? null
+    battery_notes: battery.battery_notes ?? battery.notes ?? null,
+    purpose: battery.purpose ?? null
   });
 
   setCurrentBattery({
@@ -5911,7 +5938,9 @@ function formatBatteryListDate(value, fallbackValue = null) {
     return '';
   }
 
-  return date.toLocaleDateString('ru-RU');
+  // Pin to MSK so the list shows the lab calendar day regardless of the
+  // browser's timezone (item_created_at is TIMESTAMPTZ since d054).
+  return date.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
 }
 
 function getBatteryListProjectLabel(battery) {
@@ -5945,6 +5974,7 @@ function getBatteryListSearchText(battery) {
     sizeInfo,
     battery.notes,
     battery.battery_notes,
+    battery.purpose,
     battery.created_by_name,
     battery.created_by
   ].filter(Boolean).join(' '));
@@ -7138,7 +7168,8 @@ function buildBatteryHeaderPayloadFromState() {
     project_ids: normalizeProjectIds(state.meta.project_ids).map(Number),
     item_created_at: state.meta.item_created_at || null,
     form_factor: state.meta.form_factor || null,
-    battery_notes: state.meta.battery_notes || null
+    battery_notes: state.meta.battery_notes || null,
+    purpose: state.meta.purpose || null
   };
 }
 

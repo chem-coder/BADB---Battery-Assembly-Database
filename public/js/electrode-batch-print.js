@@ -476,11 +476,11 @@ function renderReport(report) {
 }
 
 // Read the same-origin session JWT saved on login. Without this header the auth
-// middleware returns 401 in any build where AUTH_BYPASS is disabled.
+// middleware returns 401.
 function getAuthHeader() {
   try {
     const token = localStorage.getItem('badb_auth_token') || sessionStorage.getItem('badb_auth_token');
-    return token && token !== 'bypass' ? { Authorization: `Bearer ${token}` } : {};
+    return token ? { Authorization: `Bearer ${token}` } : {};
   } catch {
     return {};
   }
