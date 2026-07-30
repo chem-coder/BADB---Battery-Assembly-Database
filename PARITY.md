@@ -7,6 +7,13 @@ Tracks, per page/view, which vanilla v1 (`public/`) features/behaviors exist in
 the Vue frontend (`client-web/`). Vanilla is the source of truth; Vue is the
 in-progress replacement.
 
+> **2026-07-30:** a field-by-field audit of every page pair (11 parallel
+> agents, every input's type/save/load/interconnect compared) lives in
+> `../PARITY_DISCOVERY_2026-07-30.md` (outside the repo). 39 vanilla inputs
+> missing in Vue, 50 Vue-only, 106 mismatches; 15 rated data-loss (8 hand-
+> verified). Treat DONE rows below as claims — the discovery doc supersedes
+> them where they conflict.
+
 ## How this was built (and its limits)
 
 - Vanilla feature source: `docs/current/vanilla_reference_pages.md` (verified
@@ -46,7 +53,7 @@ in-progress replacement.
 | Active material select on tape (d047: grouped by family, role-filtered vs recipe; slot line instances from tape's material) | DONE | implemented in both frontends together 2026-07-16 |
 | Wet-mixing auto-select from DB windows (d048) | DONE | was vanilla-only hardcoded thresholds; both frontends now read auto_min/max_volume_ml — Vue gained the auto-select 2026-07-17 |
 | Mixing container + milling balls + ⅓-volume suggestion (d048, Vilitek) | DONE | implemented in both frontends together 2026-07-17; shown only for methods with uses_containers/uses_balls |
-| Dry-box place / return / remove / deplete | DONE | `TapeDryBoxPanel` (audit #6 closed) |
+| Dry-box place / return / remove / deplete | RETIRED (P2 2026-07-30) | Closet tracking removed per approved plan (`docs/future/drybox_removal_plan.md`): Vue card = storage log (`tapes.storage_notes`, d056) + deplete + read-only archive; cut-batch auto-placement coupling deleted; backend gate no-op |
 | Tape export (Excel/CSV/JSON, multi-select) | DONE | `useExportTapes`, context menu |
 | Duplicate (client-side draft) | DONE | `duplicateTape` → create dialog |
 | Undo/redo | DONE (Vue extra) | Ctrl+Z/Y in `TapeConstructor` |
@@ -81,9 +88,12 @@ in-progress replacement.
 |---|---|---|
 | List (project, form factor, active materials, status, created) | DONE | `AssemblyPage.vue` columns |
 | Create (project + form factor + date) | DONE | `EntityCreateDialog` |
+| «Расчёт состава» + «К добавлению» + сводка твёрдых % + совместимость растворителей + ≈г/мл (tapes weighing) | DONE | 2026-07-30: full vanilla math ported to pure `utils/slurryCalc.js` (15 unit tests) — mixture expansion, computation order, overlap accounting, slot line d047; UPGRADE over vanilla: targets recalc in real time from the ACTUAL weighed AM mass (Dalia's spec); UI in `RecipeActualsEditor` (columns %, «К добавлению», ≈conversion, solids/solvent footer, expandable «Расчёт состава» table) |
+| Rectangle batches interchangeable (pouch/prism/cyl) | DONE | 2026-07-30 deliberate relaxation (Dalia): `batteryCompatibleCutBatchService` + `ElectrodeSourcesEditor` accept any rectangle batch for rectangle form factors; coin stays strict |
+| Цель партии (`batteries.purpose`, d055) | DONE | 2026-07-30, both frontends same day: vanilla general-info textarea + list search + print report; Vue general stage row, create dialog field, duplicate copies it. Paper-protocol parity («Протокол-сборки-v5», часть II) |
 | Form-factor config (coin/pouch/cylindrical/prism) | DONE | constructor stages |
 | Electrode source selection (incl. depleted-tape handling, multi-batch d043) | DONE | per `docs/current/batteries.md` |
-| Electrode stack save (trigger-safe order, stack rules) | DONE | Constructor «Сборка» stage (`batteryStages.js`). Rule enforcement + trigger-safe insert order are backend-authoritative by design (`electrode_stack_rules.md` puts ordering in the service, not the client) |
+| Electrode stack builder («Формирование стека»: exact-electrode picker, target counts + N/N+1 anode mode, N/P helper, sandwich summary, stack save) | DONE | **2026-07-29 — the previous DONE here was FALSE** (it cited a nonexistent «Сборка» stage; no stack UI existed in Vue). Now real: `ElectrodeStackPanel` + `StackElectrodeTable` per battery below the constructor on AssemblyPage; pure logic in `utils/electrodeStack.js` (+ unit tests). Gated on saved sources («Сначала сохраните источники электродов»), read-only after reload of a saved stack, PUT bare-array payload with contiguous 1-based `position_index` in the anode-first mass-desc interleave; auto `assembled` transition attempted post-save (server-gated). Rule enforcement + trigger-safe insert order remain backend-authoritative (`electrode_stack_rules.md`) |
 | Separator + electrolyte config | DONE | constructor stages |
 | Capacity summary (theor/actual, N/P) | DONE | `capacity` panels + `CapacityHint` |
 | Electrochem file attach/list/download/delete | DONE | `BatteryElectrochemEditor` |
@@ -92,7 +102,7 @@ in-progress replacement.
 | Duplicate (client-side draft) | DONE | `duplicateBattery` |
 | Print report (`battery-print.html`) | DONE | `openBatteryPrint` + `PrintPreviewDialog` |
 | Multi-source electrode rows per role (pouch/prism/cyl) | DONE | ElectrodeSourcesEditor 2026-07-17: depleted-tape marking « — списана», shape-compat + sibling-dedup filtering, batch→tape backfill, «— сначала выберите форм-фактор —» hint; saves via ARRAY mode of the electrode-sources PATCH (closed the legacy flat-key data-loss path) |
-| Stack picker: № column + sortable headers | DONE | number_in_batch shown in vanilla pickers/stack summary/battery print 2026-07-17 (data now in assembly payload) |
+| Stack picker: № column + sortable headers | DONE | 2026-07-17 entry covered the VANILLA picker only (mislabelled as Vue parity). Vue picker with №/ID/mass sortable headers (vanilla stackSort semantics: default №-asc, non-finite sink, id tiebreak) shipped 2026-07-29 in `StackElectrodeTable` |
 | Coin layout wording «Схема расположения сепаратора и электролита» (E-S-E/E-S/S-E) | DONE | verbatim from vanilla 2026-07-17; stray «Схема укладки» duplicate field removed (silently nulled coin_layout) |
 | Capacity wording «расч. (по факт. массам)» / «по рецепту» | DONE | ported from vanilla rework 2026-07-17 incl. tooltips |
 | Modules link / membership | N/A | Modules subsystem out of scope (decision 2026-06-19) |

@@ -209,6 +209,14 @@ do not auto-select a wet mixing method.
 
 ## Dry Box State
 
+> **P2 (2026-07-30, approved):** the closet workflow below is RETIRED in the
+> Vue product. Vue shows a «Хранение ленты» card: free-form storage log
+> (`tapes.storage_notes`, d056; preserved when a PUT omits the key) + the
+> terminal deplete action + a read-only archive line of historical
+> `tape_dry_box_state` rows. Creating an electrode cut batch NO LONGER
+> auto-writes dry-box state, and the final-drying gate on the dry-box routes
+> is a no-op. The vanilla section below stays accurate for vanilla only.
+
 After pressed-tape drying, the page exposes the dry-box section.
 
 Current dry-box actions:
