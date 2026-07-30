@@ -28,8 +28,9 @@
  *   <DSMultiSelect v-model="projectIds" :options="projectOptions"
  *                  placeholder="Выберите проекты" />
  */
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import MultiSelect from 'primevue/multiselect';
+import Button from 'primevue/button';
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },
@@ -55,11 +56,22 @@ const value = computed({
 });
 
 const showFilter = computed(() => (props.options || []).length > props.filterThreshold);
+
+// «Готово» in the panel footer — an explicit, discoverable way to close
+// the dropdown after picking. Without it users dismiss the panel by
+// clicking elsewhere in the form, and whatever that click lands on ALSO
+// fires (Dalia hit this in the battery create dialog: the dismissing
+// click hit «Создать» and submitted a half-filled form).
+const msRef = ref(null);
+function closePanel() {
+  msRef.value?.hide?.();
+}
 </script>
 
 <template>
   <MultiSelect
     :id="id"
+    ref="msRef"
     v-model="value"
     :options="options"
     :option-label="optionLabel"
@@ -72,5 +84,29 @@ const showFilter = computed(() => (props.options || []).length > props.filterThr
     selected-items-label="Выбрано: {0}"
     show-clear
     class="ds-multiselect"
-  />
+  >
+    <template #footer>
+      <div class="ds-ms-footer">
+        <span class="ds-ms-count">Выбрано: {{ value.length }}</span>
+        <Button label="Готово" size="small" @click="closePanel" />
+      </div>
+    </template>
+  </MultiSelect>
 </template>
+
+<style scoped>
+/* Footer lives in the teleported overlay panel, but scoped styles still
+   apply because the slot content is compiled in this component's scope. */
+.ds-ms-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(0, 50, 116, 0.08);
+}
+.ds-ms-count {
+  font-size: 12px;
+  color: rgba(0, 50, 116, 0.55);
+}
+</style>

@@ -89,21 +89,9 @@ export const useAuthStore = defineStore('auth', {
       clearToken()
     },
 
-    // Dev bypass: set fake token, then load real user from API
-    async initBypass() {
-      this.token = 'bypass'
-      try {
-        await this.fetchMe()
-      } catch {
-        // Fallback if /api/auth/me fails
-        this.user = { userId: 1, login: 'dev', name: 'Dev Bypass', role: 'admin' }
-        this.projects = []
-      }
-    },
-
     // Restore session on app start (called from App.vue or router guard)
     async tryRestoreSession() {
-      if (!this.token || this.token === 'bypass') return false
+      if (!this.token) return false
       try {
         await this.fetchMe()
         return true

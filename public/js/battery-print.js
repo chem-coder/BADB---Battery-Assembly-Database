@@ -462,11 +462,16 @@ function renderCapacitySection(report) {
 function renderReport(report) {
   const battery = report.battery || {};
   const root = document.getElementById('reportRoot');
-  const batteryNotesSection = battery.battery_notes ? `
+  const batteryNotesSection = (battery.battery_notes || battery.purpose) ? `
     <section class="report_section">
       <h2>Заметки</h2>
       ${renderFieldGrid([
-        renderRow('Комментарий', battery.battery_notes, { wide: true, text: true })
+        ...(battery.purpose
+          ? [renderRow('Цель партии', battery.purpose, { wide: true, text: true })]
+          : []),
+        ...(battery.battery_notes
+          ? [renderRow('Комментарий', battery.battery_notes, { wide: true, text: true })]
+          : [])
       ])}
     </section>
   ` : '';
@@ -503,12 +508,11 @@ function renderReport(report) {
 
 // Read the JWT the Vue SPA saves on login — same pattern as the
 // electrode-batch-print.js auth patch (commit 2cca4b4). Without this
-// header the report endpoint returns 401 in any prod build with
-// config.authBypass disabled.
+// header the report endpoint returns 401.
 function getAuthHeader() {
   try {
     const token = localStorage.getItem('badb_auth_token') || sessionStorage.getItem('badb_auth_token');
-    return token && token !== 'bypass' ? { Authorization: `Bearer ${token}` } : {};
+    return token ? { Authorization: `Bearer ${token}` } : {};
   } catch {
     return {};
   }

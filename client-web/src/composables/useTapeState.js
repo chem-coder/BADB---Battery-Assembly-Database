@@ -44,7 +44,7 @@ function nowParts() {
   return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${min}` }
 }
 
-export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}) {
+export function useTapeState({ tapeId = null, refs = {}, authStore = null, onSaveError } = {}) {
 
   // ── General info ──
   // `projectIds` is an array of project_id values reflecting the M:N
@@ -61,6 +61,8 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     // editable). Backend column `item_created_at` (migration d035).
     itemCreatedAt: '',
     tapeNotes: '',
+    // P2 (2026-07-30) — free-form storage log, replaces dry-box tracking.
+    storageNotes: '',
     tapeType: '',
     tapeRecipeId: '',
     // d047 — the tape's chemistry for the recipe's open active-material
@@ -117,6 +119,10 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       // gap_um — die-gap setting; coated_thickness_um — measured result.
       gap_um: '', gap_um_side2: '',
       coated_thickness_um: '', coated_thickness_um_side2: '',
+      // Parity — vanilla «Комментарий к нанесению и сушке»
+      // (tape_step_coating.method_comments). Separate from `notes`,
+      // which maps to the step-header `comments` column.
+      method_comments: '',
     },
     drying_tape: {
       operator: '', date: '', time: '', notes: '',
@@ -231,7 +237,10 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
         await saveStep(stageCode)
         setDirty(stageCode, false)
       } catch (e) {
+        // NEVER swallow a failed save silently (2026-07-30 battery
+        // incident) — surface it; dirty flag stays true.
         console.error(`Auto-save failed for ${stageCode}:`, e)
+        onSaveError?.(stageCode, e)
       } finally {
         _savingNow[stageCode] = false
       }
@@ -421,6 +430,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       // (see services/tapeCatalogService.js:73,93 COALESCE expression).
       item_created_at: general.itemCreatedAt || null,
       notes: general.tapeNotes,
+      storage_notes: general.storageNotes ?? '',
       tape_type: general.tapeType,
       tape_recipe_id: general.tapeRecipeId || null,
       // d047 — chemistry for the recipe's open active-material slot.
@@ -476,6 +486,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
 
   async function saveAllActuals() {
     if (!currentTapeId.value) return
+    const failedLines = []
     for (const line of currentRecipeLines.value) {
       const lineId = line.recipe_line_id
       const instanceId = selectedInstanceByLineId[lineId]
@@ -488,7 +499,19 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
         if (actual.mode === 'mass') payload.actual_mass_g = value
         if (actual.mode === 'volume') payload.actual_volume_ml = value
       }
-      try { await api.post(`/api/tapes/${currentTapeId.value}/actuals`, payload) } catch {}
+      try {
+        await api.post(`/api/tapes/${currentTapeId.value}/actuals`, payload)
+      } catch (e) {
+        // Was `catch {}` — a failed line vanished silently (weighing
+        // actual never saved, user saw nothing). Collect and throw so
+        // the caller's onSaveError toast fires; successful lines stay
+        // saved (per-line POSTs are independent).
+        failedLines.push(line.material_name || `строка ${lineId}`)
+        console.error('actual line save failed', lineId, e)
+      }
+    }
+    if (failedLines.length) {
+      throw new Error(`Не сохранились строки взвешивания: ${failedLines.join(', ')}`)
     }
   }
 
@@ -616,6 +639,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       gap_um_side2: c.gap_um_side2 || null,
       coated_thickness_um: c.coated_thickness_um || null,
       coated_thickness_um_side2: c.coated_thickness_um_side2 || null,
+      method_comments: c.method_comments || null,
     }
     await api.post(`/api/tapes/${currentTapeId.value}/steps/by-code/coating`, payload)
     setDirty('coating', false)
@@ -716,6 +740,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
       // shows the date the operator actually entered. See its header.
       general.itemCreatedAt = isoDateToMskInput(t.item_created_at)
       general.tapeNotes = t.notes || ''
+      general.storageNotes = t.storage_notes || ''
       general.tapeType = t.role || ''
       general.calcMode = t.calc_mode || ''
       general.targetMassG = t.target_mass_g || ''
@@ -818,6 +843,7 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
           steps.coating.gap_um_side2 = c.gap_um_side2 ?? ''
           steps.coating.coated_thickness_um = c.coated_thickness_um ?? ''
           steps.coating.coated_thickness_um_side2 = c.coated_thickness_um_side2 ?? ''
+          steps.coating.method_comments = c.method_comments || ''
         }
       } catch {}
 
@@ -995,6 +1021,8 @@ export function useTapeState({ tapeId = null, refs = {}, authStore = null } = {}
     instancesByLineId,
     slurryActuals,
     activeMaterialName,
+    instanceComponentsCache,
+    fetchComponents,
 
     // Gantt
     ganttStages,

@@ -65,7 +65,13 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
       (
         ctx.expected_shape IS NOT NULL
         AND b.shape = ctx.expected_shape
-        AND b.target_form_factor = ctx.form_factor
+        AND (
+          b.target_form_factor = ctx.form_factor
+          -- 2026-07-30 (Dalia): rectangle batches are interchangeable in the
+          -- lab — a pouch-cut batch fits a prism battery etc. Shape match
+          -- above stays authoritative; target_form_factor is a hint only.
+          OR ctx.expected_shape = 'rectangle'
+        )
         AND (
           ctx.form_factor <> 'coin'
           OR (
@@ -107,7 +113,13 @@ async function fetchCompatibleElectrodeCutBatches(pool, batteryId, tapeId, selec
         (
           ctx.expected_shape IS NOT NULL
           AND b.shape = ctx.expected_shape
-          AND b.target_form_factor = ctx.form_factor
+          AND (
+          b.target_form_factor = ctx.form_factor
+          -- 2026-07-30 (Dalia): rectangle batches are interchangeable in the
+          -- lab — a pouch-cut batch fits a prism battery etc. Shape match
+          -- above stays authoritative; target_form_factor is a hint only.
+          OR ctx.expected_shape = 'rectangle'
+        )
           AND (
             ctx.form_factor <> 'coin'
             OR (

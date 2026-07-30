@@ -330,63 +330,9 @@ async function createElectrodeCutBatch(pool, payload, createdBy) {
       ]
     );
 
-    await client.query(
-      `
-      INSERT INTO tape_dry_box_state (
-        tape_id,
-        started_at,
-        removed_at,
-        temperature_c,
-        atmosphere,
-        other_parameters,
-        comments,
-        updated_by,
-        updated_at
-      )
-      SELECT
-        $1,
-        COALESCE(ds.started_at, final_dry.started_at, now()),
-        now(),
-        COALESCE(ds.temperature_c, final_dry.temperature_c),
-        COALESCE(ds.atmosphere, final_dry.atmosphere),
-        COALESCE(ds.other_parameters, final_dry.other_parameters),
-        ds.comments,
-        $2,
-        now()
-      FROM (SELECT 1) seed
-      LEFT JOIN tape_dry_box_state ds
-        ON ds.tape_id = $1
-      LEFT JOIN LATERAL (
-        SELECT
-          s.started_at,
-          s.ended_at,
-          d.temperature_c,
-          d.atmosphere,
-          d.other_parameters
-        FROM tape_process_steps s
-        JOIN operation_types ot
-          ON ot.operation_type_id = s.operation_type_id
-        LEFT JOIN tape_step_drying d
-          ON d.step_id = s.step_id
-        WHERE s.tape_id = $1
-          AND ot.code = 'drying_pressed_tape'
-        ORDER BY s.started_at DESC NULLS LAST, s.step_id DESC
-        LIMIT 1
-      ) final_dry ON TRUE
-      WHERE ds.tape_id IS NOT NULL
-         OR final_dry.ended_at IS NOT NULL
-      ON CONFLICT (tape_id)
-      DO UPDATE SET
-        started_at = COALESCE(tape_dry_box_state.started_at, EXCLUDED.started_at),
-        removed_at = EXCLUDED.removed_at,
-        temperature_c = COALESCE(tape_dry_box_state.temperature_c, EXCLUDED.temperature_c),
-        atmosphere = COALESCE(tape_dry_box_state.atmosphere, EXCLUDED.atmosphere),
-        other_parameters = COALESCE(tape_dry_box_state.other_parameters, EXCLUDED.other_parameters),
-        updated_by = EXCLUDED.updated_by,
-        updated_at = now()
-      `,
-      [tapeId, createdBy]
-    );
+    // P2 (2026-07-30, drybox_removal_plan.md, approved): creating a cut
+    // batch no longer auto-marks the tape as removed from the dry box.
+    // Storage events are operator-written free text (tapes.storage_notes).
 
     await replaceElectrodeBatchProjects(client, result.rows[0].cut_batch_id, projectIds, createdBy);
 

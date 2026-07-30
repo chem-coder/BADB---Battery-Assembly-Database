@@ -233,7 +233,8 @@ async function fetchBatteryDeleteAuditSnapshot(queryable, batteryId) {
       b.updated_by,
       u_updated.name AS updated_by_name,
       b.updated_at,
-      b.battery_notes
+      b.battery_notes,
+      b.purpose
     FROM batteries b
     LEFT JOIN projects p
       ON p.project_id = b.project_id

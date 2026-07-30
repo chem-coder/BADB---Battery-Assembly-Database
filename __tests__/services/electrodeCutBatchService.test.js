@@ -48,3 +48,21 @@ describe('getElectrodeCutBatchDeleteCheck', () => {
     expect(res.dependencies[0].key).toBe('electrodes');
   });
 });
+
+// P2 (2026-07-30, drybox_removal_plan.md): creating a cut batch must NOT
+// touch tape_dry_box_state — the auto-«removed from dry box» coupling is
+// retired. Static source pin: no create-path query mentions the table.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+describe('P2 — cut-batch creation is decoupled from dry-box tracking', () => {
+  it('service source contains no tape_dry_box_state INSERT/UPDATE', () => {
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../services/electrodeCutBatchService.js'),
+      'utf-8'
+    );
+    expect(src).not.toMatch(/INSERT INTO tape_dry_box_state/);
+    expect(src).not.toMatch(/UPDATE tape_dry_box_state/);
+  });
+});

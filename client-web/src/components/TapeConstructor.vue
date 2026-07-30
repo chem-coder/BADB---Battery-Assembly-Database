@@ -131,7 +131,15 @@ async function loadTape(id) {
   try {
     const ts = props.stateFactory
       ? props.stateFactory(id, props.refs, props.authStore)
-      : useTapeState({ tapeId: id, refs: props.refs, authStore: props.authStore })
+      : useTapeState({
+          tapeId: id,
+          refs: props.refs,
+          authStore: props.authStore,
+          // Surface auto-save failures (2026-07-30 battery incident) —
+          // a console-only error means silent data loss for the user.
+          onSaveError: (stageCode, err) =>
+            toastApiError(toast, err, `Не сохранилось: лента #${id}, секция «${stageCode}»`),
+        })
     tapeStates[tid] = ts
     await ts.restore()
   } catch (err) {

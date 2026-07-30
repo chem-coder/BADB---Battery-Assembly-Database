@@ -4,8 +4,28 @@ function statusError(message, statusCode) {
   return err;
 }
 
+// d054: batch testing datetime (OCV/ESR measurement moment). Accepts a
+// full ISO datetime or null; anything unparseable is a 400 so a client
+// bug can't silently store garbage.
+function normalizeOptionalTestedAt(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const raw = String(value).trim();
+  const parsed = new Date(raw);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw statusError('Дата тестирования партии должна быть ISO-датой со временем', 400);
+  }
+  return raw;
+}
+
 async function saveBatteryQc(pool, payload) {
   const batteryId = Number(payload.battery_id);
+  // Key ABSENT → preserve the stored value (vanilla's QC form predates
+  // tested_at and must not wipe it). Key present (even null/'') →
+  // explicit set/clear.
+  const hasTestedAt = Object.prototype.hasOwnProperty.call(payload, 'tested_at');
+  const testedAt = hasTestedAt ? normalizeOptionalTestedAt(payload.tested_at) : null;
 
   const result = await pool.query(
     `
@@ -13,21 +33,25 @@ async function saveBatteryQc(pool, payload) {
       battery_id,
       ocv_v,
       esr_mohm,
-      qc_notes
+      qc_notes,
+      tested_at
     )
-    VALUES ($1,$2,$3,$4)
+    VALUES ($1,$2,$3,$4,$5)
     ON CONFLICT (battery_id)
     DO UPDATE SET
       ocv_v = EXCLUDED.ocv_v,
       esr_mohm = EXCLUDED.esr_mohm,
-      qc_notes = EXCLUDED.qc_notes
+      qc_notes = EXCLUDED.qc_notes,
+      tested_at = CASE WHEN $6 THEN EXCLUDED.tested_at ELSE battery_qc.tested_at END
     RETURNING *
     `,
     [
       batteryId,
       payload.ocv_v ?? null,
       payload.esr_mohm ?? null,
-      payload.qc_notes || null
+      payload.qc_notes || null,
+      testedAt,
+      hasTestedAt
     ]
   );
 
@@ -41,7 +65,8 @@ async function getBatteryQc(pool, batteryId) {
       battery_id,
       ocv_v,
       esr_mohm,
-      qc_notes
+      qc_notes,
+      tested_at
     FROM battery_qc
     WHERE battery_id = $1
     `,
@@ -52,24 +77,32 @@ async function getBatteryQc(pool, batteryId) {
 }
 
 async function updateBatteryQc(pool, batteryId, payload) {
+  // Same absent-key semantics as saveBatteryQc — see comment there.
+  const hasTestedAt = Object.prototype.hasOwnProperty.call(payload, 'tested_at');
+  const testedAt = hasTestedAt ? normalizeOptionalTestedAt(payload.tested_at) : null;
+
   const result = await pool.query(
     `
     UPDATE battery_qc
     SET
       ocv_v = $1,
       esr_mohm = $2,
-      qc_notes = $3
-    WHERE battery_id = $4
+      qc_notes = $3,
+      tested_at = CASE WHEN $5 THEN $4 ELSE tested_at END
+    WHERE battery_id = $6
     RETURNING
       battery_id,
       ocv_v,
       esr_mohm,
-      qc_notes
+      qc_notes,
+      tested_at
     `,
     [
       payload.ocv_v ?? null,
       payload.esr_mohm ?? null,
       payload.qc_notes || null,
+      testedAt,
+      hasTestedAt,
       batteryId
     ]
   );

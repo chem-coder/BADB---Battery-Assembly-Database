@@ -91,7 +91,8 @@ The smoke harness:
 - restores a SQL dump into a throwaway database;
 - applies current post-dump migrations needed by the restored dump, including
   `002`, `018`, `019`, `020`, and `d028` through `d040`;
-- starts the Express API against the throwaway database with `AUTH_BYPASS=true`;
+- starts the Express API against the throwaway database and authenticates with
+  a JWT it signs itself for the smoke login (auth bypass was removed 2026-07-29);
 - exercises vanilla-facing GET and write paths;
 - checks selected dependency/conflict behavior;
 - cleans up smoke data and drops the throwaway database unless told to keep it.
@@ -115,9 +116,9 @@ This guard prevents accidental destructive work against the real database.
 Do not point the smoke harness at the Windows/lab pilot database; it is a
 throwaway restored-copy check, not proof that the lab database is migrated.
 
-Smoke uses the documented dev bypass (`AUTH_BYPASS=true`) against a throwaway
-database. It is not a substitute for authenticated E2E/manual runs against the
-real local `badb_app_v1` database.
+Smoke signs its own JWT for the smoke login (`--login=`, default
+`dkmaraulayte`) against a throwaway database. It is not a substitute for
+authenticated E2E/manual runs against the real local `badb_app_v1` database.
 
 ## E2E / AI Manual Test Login
 

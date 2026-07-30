@@ -213,7 +213,7 @@ const filteredProjects = computed(() => {
   return projects.value.filter((p) => {
     if (s.status && p.status !== s.status) return false;
     if (s.confidentiality_level && normalizeAccess(p.confidentiality_level) !== s.confidentiality_level) return false;
-    if (s.lead_id && String(p.lead_id) !== s.lead_id) return false;
+    if (s.lead_id && p.lead_id !== s.lead_id) return false;
     if (s.text) {
       const needle = String(s.text).toLowerCase();
       const haystack = [
@@ -226,7 +226,10 @@ const filteredProjects = computed(() => {
 });
 
 const leadFilterOptions = computed(() =>
-  activeUsers.value.map((u) => ({ value: String(u.user_id), label: u.name }))
+  // Keep numeric values: rows carry numeric lead_id and the filter compare
+  // (both here and in RowOpenPage) is strict (===) — String() values would
+  // never match any row.
+  activeUsers.value.map((u) => ({ value: u.user_id, label: u.name }))
 );
 
 const filters = computed(() => [

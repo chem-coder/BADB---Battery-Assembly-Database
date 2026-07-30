@@ -22,6 +22,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import api from '@/services/api';
 import { usePrintHandlers } from '@/composables/usePrintHandlers';
+import { findDuplicateRecipe } from '@/utils/recipeDuplicate';
 
 import RowOpenPage from '@/components/parity/RowOpenPage.vue';
 import OpenedRecordHeader from '@/components/parity/OpenedRecordHeader.vue';
@@ -131,7 +132,10 @@ async function loadOne(id) {
     _key: lineKeyCounter++,
     recipe_role: l.recipe_role || '',
     material_id: l.material_id ?? null,
-    include_in_pct: l.include_in_pct !== false,
+    // Derived, not user-editable (2026-07-30): non-solvent lines are
+    // always in the dry-% basis — matches vanilla, the DB reality and
+    // the tape slurry math; removes the vanilla-roundtrip data-loss trap.
+    include_in_pct: l.recipe_role !== 'solvent',
     slurry_percent: l.slurry_percent ?? '',
     line_notes: l.line_notes || '',
   }));
@@ -154,7 +158,7 @@ async function saveOne(form, mode, currentId) {
   const lines = form.lines.map((l) => ({
     material_id: isActiveLine(l) ? null : Number(l.material_id),
     recipe_role: l.recipe_role,
-    include_in_pct: l.recipe_role === 'solvent' ? false : Boolean(l.include_in_pct),
+    include_in_pct: l.recipe_role !== 'solvent',
     slurry_percent: l.slurry_percent === '' || l.slurry_percent == null
       ? null
       : Number(l.slurry_percent),
@@ -182,6 +186,19 @@ async function saveOne(form, mode, currentId) {
 // ── Validation ───────────────────────────────────────────────────────
 function validate(form) {
   if (!form.name?.trim()) return 'Заполните название рецепта';
+
+  // Duplicate guard: neither the backend nor the DB enforces uniqueness
+  // of name+variant_label, so a duplicate pair would be created
+  // silently — block here against the loaded list (own id excluded).
+  const dup = findDuplicateRecipe(recipes.value, {
+    name: form.name,
+    variantLabel: form.variant_label,
+    currentId: ctx.currentId.value,
+  });
+  if (dup) {
+    return `Рецепт с таким названием и вариантом уже существует (#${dup.tape_recipe_id})`;
+  }
+
   if (!form.role) return 'Не определена роль электрода (выберите активный материал)';
   if (!Array.isArray(form.lines) || form.lines.length === 0) {
     return 'Добавьте хотя бы один компонент';
@@ -199,7 +216,6 @@ function validate(form) {
   let sum = 0;
   for (const line of form.lines) {
     if (line.recipe_role === 'solvent') continue;
-    if (!line.include_in_pct) continue;
     const pct = Number(line.slurry_percent);
     if (line.slurry_percent === '' || line.slurry_percent == null || Number.isNaN(pct)) {
       return 'Укажите % для каждого включённого компонента';
@@ -259,7 +275,7 @@ async function onLineRoleChange(line) {
   line.material_id = null;
 
   // Solvent lines do not contribute to the dry-solids sum.
-  if (line.recipe_role === 'solvent') line.include_in_pct = false;
+  line.include_in_pct = line.recipe_role !== 'solvent';
 
   await refreshLineMaterials(line);
 }
@@ -425,7 +441,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('recipes', ctx);
               <tr>
                 <th>Функциональная роль</th>
                 <th>Материал</th>
-                <th>В сумму %</th>
+                <th title="Не-растворители всегда входят в сумму 100%">В сумму %</th>
                 <th>% в пасте</th>
                 <th>Заметки</th>
                 <th></th>
@@ -457,19 +473,18 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('recipes', ctx);
                   />
                 </td>
                 <td class="col-include">
-                  <input
-                    type="checkbox"
-                    :checked="line.include_in_pct"
-                    :disabled="line.recipe_role === 'solvent'"
-                    :title="line.recipe_role === 'solvent' ? 'Растворитель не входит в сумму' : 'Учитывать в сумме 100%'"
-                    @change="(e) => { line.include_in_pct = e.target.checked }"
-                  />
+                  <!-- Derived from the role (2026-07-30): shown, not edited. -->
+                  <span :title="line.recipe_role === 'solvent'
+                    ? 'Растворитель не входит в сумму 100%'
+                    : 'Входит в сумму 100% сухих компонентов'"
+                  >{{ line.recipe_role === 'solvent' ? '—' : '✓' }}</span>
                 </td>
                 <td>
                   <InputText
                     v-model="line.slurry_percent"
                     style="width: 80px"
-                    :disabled="!line.include_in_pct && line.recipe_role !== 'solvent'"
+                    :disabled="line.recipe_role === 'solvent'"
+                    :title="line.recipe_role === 'solvent' ? 'Растворитель не входит в сумму — % не задаётся' : ''"
                   />
                 </td>
                 <td>

@@ -8,7 +8,6 @@
 
   const rawFetch = window.fetch.bind(window);
   let currentUser = null;
-  let bypassMode = false;
   let authReady = null;
   let resolveAuthReady = null;
   let authUi = null;
@@ -194,7 +193,7 @@
     const label = getCurrentUserLabel() || '—';
 
     ui.user.textContent = `Пользователь: ${label}`;
-    ui.logout.hidden = bypassMode || !currentUser;
+    ui.logout.hidden = !currentUser;
     scheduleCurrentUserButtonSync();
   }
 
@@ -293,7 +292,6 @@
       const data = await res.json();
       setToken(data.token);
       currentUser = normalizeUser(data.user);
-      bypassMode = false;
       hideLogin();
       renderAuthUi();
       resolveAuthReady?.(currentUser);
@@ -309,7 +307,6 @@
     discardPageChangesForLogout();
     setToken('');
     currentUser = null;
-    bypassMode = false;
     resetAuthGate();
     window.location.reload();
   }
@@ -324,14 +321,12 @@
       if (!res.ok) {
         setToken('');
         currentUser = null;
-        bypassMode = false;
         renderAuthUi();
         showLogin();
         return;
       }
 
       currentUser = normalizeUser(await res.json());
-      bypassMode = !token;
       hideLogin();
       renderAuthUi();
       resolveAuthReady?.(currentUser);
@@ -352,7 +347,6 @@
     if (res.status === 401 || res.status === 403) {
       setToken('');
       currentUser = null;
-      bypassMode = false;
       resetAuthGate();
       renderAuthUi();
       showLogin(res.status === 403 ? 'Недостаточно прав' : 'Сессия истекла');
@@ -458,14 +452,13 @@
     if (!sharedToken) {
       // Another tab logged out (cleared the shared session). Drop this tab's
       // per-tab token mirror so it can no longer authenticate, then reflect the
-      // logged-out state. Dev bypass has no token, so leave it alone.
+      // logged-out state.
       try {
         sessionStorage.removeItem(TOKEN_KEY);
       } catch {}
 
-      if (bypassMode || !currentUser) return;
+      if (!currentUser) return;
       currentUser = null;
-      bypassMode = false;
       resetAuthGate();
       renderAuthUi();
       showLogin('Сессия завершена в другой вкладке');

@@ -22,9 +22,16 @@
  *     doesn't apply to composites).
  *   - Pure instance + mode=volume + no/zero density → density warning.
  */
-import { computed } from 'vue'
+import { computed, watchEffect } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { classifyAxiosError, errorMessageRu } from '@/utils/errorClassifier'
+import {
+  computeSlurryPlan,
+  computeSolidsSummary,
+  collectSolventWarning,
+  deriveConversion,
+  formatMass,
+} from '@/utils/slurryCalc'
 
 const props = defineProps({
   tapeState: { type: Object, default: null },
@@ -52,12 +59,21 @@ const statusMessage = computed(() => {
 })
 
 // ── Helpers ─────────────────────────────────────────────────────────
+// Default measure mode by line role — parity with vanilla
+// getDefaultActualModeForLine (1-tapes.js): solvents are dispensed by
+// volume, everything else is weighed. Applied only when the line has no
+// existing actual — a saved measure_mode always wins (restore()).
+function defaultModeForLine(lineId) {
+  const line = lines.value.find(l => String(l.recipe_line_id) === String(lineId))
+  return line?.recipe_role === 'solvent' ? 'volume' : 'mass'
+}
+
 // Lazy-initialise a slurryActual entry so v-model can bind to .value
-// without tripping over undefined. Same default as existing restore()
-// branch (L521-524 in useTapeState): mode='mass', value=''.
+// without tripping over undefined. value='' like the restore() branch
+// in useTapeState; mode comes from the line's role (see above).
 function ensureActual(lineId) {
   const actuals = props.tapeState.slurryActuals
-  if (!actuals[lineId]) actuals[lineId] = { mode: 'mass', value: '' }
+  if (!actuals[lineId]) actuals[lineId] = { mode: defaultModeForLine(lineId), value: '' }
   return actuals[lineId]
 }
 
@@ -125,6 +141,93 @@ function warningFor(lineId) {
   }
   return null
 }
+
+// ── Slurry plan (vanilla «Расчёт состава» + actual-AM pivot) ─────────
+const densityByLineId = computed(() => {
+  const map = {}
+  for (const l of lines.value) {
+    const inst = selectedInstanceFor(l.recipe_line_id)
+    const d = Number(inst?.density_g_ml)
+    if (Number.isFinite(d) && d > 0) map[l.recipe_line_id] = d
+  }
+  return map
+})
+
+const plan = computed(() => computeSlurryPlan({
+  lines: lines.value,
+  selectedInstanceByLineId: props.tapeState?.selectedInstanceByLineId || {},
+  componentsByInstanceId: props.tapeState?.instanceComponentsCache || {},
+  actualsByLineId: props.tapeState?.slurryActuals || {},
+  densityByLineId: densityByLineId.value,
+  calcMode: props.tapeState?.general?.calcMode || 'from_active_mass',
+  targetMass: props.tapeState?.general?.targetMassG,
+  slotMaterialId: props.tapeState?.general?.activeMaterialId || null,
+}))
+
+const solids = computed(() => computeSolidsSummary({
+  lines: lines.value,
+  selectedInstanceByLineId: props.tapeState?.selectedInstanceByLineId || {},
+  componentsByInstanceId: props.tapeState?.instanceComponentsCache || {},
+  actualsByLineId: props.tapeState?.slurryActuals || {},
+  densityByLineId: densityByLineId.value,
+}))
+
+const solventWarn = computed(() => collectSolventWarning({
+  lines: lines.value,
+  selectedInstanceByLineId: props.tapeState?.selectedInstanceByLineId || {},
+  componentsByInstanceId: props.tapeState?.instanceComponentsCache || {},
+}))
+
+// Compositions load lazily: fetch every selected instance's components
+// that the cache does not know yet (incl. nested ones the expansion
+// reports as pending). The computeds recompute when the cache fills.
+watchEffect(() => {
+  const ts = props.tapeState
+  if (!ts?.fetchComponents) return
+  const cache = ts.instanceComponentsCache || {}
+  for (const l of lines.value) {
+    const instId = ts.selectedInstanceByLineId?.[l.recipe_line_id]
+    if (instId && !(String(instId) in cache)) ts.fetchComponents(instId)
+  }
+  for (const id of plan.value.pendingInstanceIds || []) {
+    if (!(String(id) in cache)) ts.fetchComponents(id)
+  }
+})
+
+function percentFor(lineId) {
+  const p = plan.value.percentByLineId?.[lineId]
+  return p == null ? '—' : `${p}`
+}
+
+function plannedFor(lineId) {
+  const v = plan.value.plannedByLineId?.[lineId]
+  if (v == null) return '—'
+  return formatMass(v)
+}
+
+function plannedTitle(lineId) {
+  const t = plan.value.targetDryByLineId?.[lineId]
+  if (t == null) return ''
+  return `Целевая сухая масса материала: ${formatMass(t)} г`
+}
+
+function conversionFor(lineId) {
+  const actual = ensureActual(lineId)
+  const inst = selectedInstanceFor(lineId)
+  return deriveConversion({
+    mode: actual.mode,
+    value: actual.value,
+    density: Number(inst?.density_g_ml),
+  })
+}
+
+const pivotNote = computed(() => {
+  if (!plan.value.ready && !plan.value.pending) return ''
+  if (plan.value.pivot === 'actual_am') {
+    return `Цели пересчитаны от фактической массы АМ (${formatMass(plan.value.activeActualMass)} г)`
+  }
+  return 'Цели рассчитаны от целевой массы (факт АМ ещё не введён)'
+})
 
 function stepFor(lineId) {
   return ensureActual(lineId).mode === 'mass' ? '0.0001' : '0.001'
@@ -202,6 +305,8 @@ function onValueBlur(lineId) {
         <thead>
           <tr>
             <th class="col-mat">Материал</th>
+            <th class="col-pct">%</th>
+            <th class="col-plan">К добавлению, г</th>
             <th class="col-inst">Экземпляр</th>
             <th class="col-mode">Режим</th>
             <th class="col-val">Значение</th>
@@ -216,6 +321,16 @@ function onValueBlur(lineId) {
               class="ra-cell-name"
               :class="{ 'ra-cell-name--slot-empty': isSlotLine(line) && !hasActiveMaterial }"
             >{{ materialName(line) }}</td>
+
+            <!-- Recipe % (dry basis) -->
+            <td class="ra-cell-pct">{{ percentFor(line.recipe_line_id) }}</td>
+
+            <!-- Planned mass to weigh («К добавлению», vanilla parity;
+                 recalculated from the ACTUAL AM mass once it is entered) -->
+            <td
+              class="ra-cell-plan"
+              :title="plannedTitle(line.recipe_line_id)"
+            >{{ plannedFor(line.recipe_line_id) }}</td>
 
             <!-- Instance dropdown -->
             <td>
@@ -286,6 +401,11 @@ function onValueBlur(lineId) {
                 >
                 <span class="ra-unit">{{ unitFor(line.recipe_line_id) }}</span>
               </div>
+              <small
+                v-if="conversionFor(line.recipe_line_id).text"
+                class="ra-derived"
+                :class="{ 'ra-derived--warn': conversionFor(line.recipe_line_id).tone === 'warning' }"
+              >{{ conversionFor(line.recipe_line_id).text }}</small>
             </td>
 
             <!-- Warning -->
@@ -301,6 +421,37 @@ function onValueBlur(lineId) {
           </tr>
         </tbody>
       </table>
+
+      <div class="ra-footer">
+        <div v-if="pivotNote" class="ra-pivot">{{ pivotNote }}</div>
+        <div class="ra-solids" :class="`ra-solids--${solids.status}`">
+          <div>{{ solids.text }}</div>
+          <small>{{ solids.detail }}</small>
+        </div>
+        <div v-if="solventWarn.mismatch" class="ra-solvent-warn">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>{{ solventWarn.text }}</span>
+        </div>
+        <details v-if="plan.expandedRows.length" class="ra-expanded">
+          <summary>Расчёт состава ({{ plan.expandedRows.length }})</summary>
+          <table class="ra-exp-table">
+            <thead>
+              <tr><th>Материал</th><th>Навеска, г</th><th>Компонент</th><th>Доля</th><th>Масса, г</th></tr>
+            </thead>
+            <tbody>
+              <template v-for="row in plan.expandedRows" :key="row.lineId">
+                <tr v-for="(c, ci) in row.components" :key="ci">
+                  <td v-if="ci === 0" :rowspan="row.components.length" class="ra-exp-mat">{{ row.material }}</td>
+                  <td v-if="ci === 0" :rowspan="row.components.length" class="ra-exp-mass">{{ formatMass(row.instanceMass) }}</td>
+                  <td>{{ c.material_name }}</td>
+                  <td>{{ (c.fraction * 100).toFixed(2) }} %</td>
+                  <td>{{ formatMass(c.mass) }}</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </details>
+      </div>
     </div>
   </section>
 </template>
@@ -508,4 +659,90 @@ function onValueBlur(lineId) {
   color: rgba(0, 50, 116, 0.4);
   padding: 0 8px;
 }
+
+.col-pct  { width: 46px; }
+.col-plan { min-width: 110px; }
+
+.ra-cell-pct {
+  color: rgba(0, 50, 116, 0.6);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ra-cell-plan {
+  color: #003274;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ra-derived {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(0, 50, 116, 0.5);
+}
+
+.ra-derived--warn {
+  color: #b3540e;
+}
+
+.ra-footer {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ra-pivot {
+  font-size: 12px;
+  color: rgba(0, 50, 116, 0.6);
+  font-style: italic;
+}
+
+.ra-solids {
+  font-size: 13px;
+  color: #003274;
+}
+.ra-solids small {
+  color: rgba(0, 50, 116, 0.5);
+}
+.ra-solids--empty,
+.ra-solids--incomplete {
+  color: rgba(0, 50, 116, 0.5);
+}
+
+.ra-solvent-warn {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  color: #b3540e;
+}
+
+.ra-expanded summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: rgba(0, 50, 116, 0.65);
+  user-select: none;
+}
+
+.ra-exp-table {
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.ra-exp-table th,
+.ra-exp-table td {
+  padding: 4px 10px;
+  border: 1px solid rgba(0, 50, 116, 0.12);
+  text-align: left;
+}
+.ra-exp-table th {
+  background: rgba(0, 50, 116, 0.08);
+  color: #003274;
+}
+.ra-exp-mat { font-weight: 600; color: #003274; }
+.ra-exp-mass { font-weight: 600; font-variant-numeric: tabular-nums; }
 </style>

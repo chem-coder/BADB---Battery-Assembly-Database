@@ -141,14 +141,46 @@ change allowed status transitions.
 ## Creation Dates
 
 Battery record `created_at` is automatic audit metadata and is not user-editable.
-The opened battery form exposes date-only `item_created_at` as `Дата создания`
-for the physical battery. It defaults to today and accepts today or past dates
-only, so old lab data can be entered without rewriting the record audit
-timestamp.
+
+Batch times (d054, 2026-07-29 — glovebox workflow): batteries are assembled in
+batches and only two user-facing moments are recorded, both stored per battery:
+
+- `batteries.item_created_at` (TIMESTAMPTZ; was DATE until d054) — «Дата и
+  время создания партии», the batch assembly start. Defaults to now on create,
+  backdatable, never in the future. Pre-d054 values are midnight
+  Europe/Moscow.
+- `battery_qc.tested_at` (TIMESTAMPTZ, nullable) — «Дата и время тестирования
+  партии», the batch OCV/ESR measurement moment, edited in the «Контроль»
+  stage.
+
+Client contract: the Vue SPA sends explicit `+03:00` ISO datetimes and shows
+Moscow wall-clock; vanilla's date-only input still works — a date-only PATCH
+matching the stored MSK calendar day keeps the stored time-of-day, a changed
+day lands as MSK midnight. Absent `tested_at` key on QC saves preserves the
+stored value (vanilla predates the field); explicit null clears it.
 
 The list displays the user-facing physical creation date next to the automatic
 updated date (`item_created_at | updated_at`) and keeps full wording in the
 tooltip.
+
+## Purpose
+
+Since migration `d055_battery_purpose` (2026-07-30) the battery row stores
+`purpose` — the experiment intent («Цель партии»: why the batch was
+assembled, what is being tested), mirroring the mandatory field of the paper
+protocol («Протокол-сборки-v5», часть II). It is separate from
+`battery_notes`, which stays free-form operational notes.
+
+Behavior:
+
+- vanilla general info has a «Цель партии» textarea above «Заметки»; the
+  value round-trips through `POST /api/batteries` and
+  `PATCH /api/batteries/:id`;
+- the list text filter matches `purpose`;
+- the battery print report shows «Цель партии» in the notes section;
+- the Vue create dialog and general stage expose the same field; Vue
+  duplicate copies `purpose` (reusable setup) while `battery_notes` is not
+  copied.
 
 ## Status Workflow
 

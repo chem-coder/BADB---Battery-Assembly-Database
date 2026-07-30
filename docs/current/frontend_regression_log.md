@@ -270,6 +270,99 @@ multi-source architecture beyond the existing source-row behavior.
 Smoke coverage includes a compatible-batch lookup without `tape_id` and a source
 save where cut batches are submitted without tape ids.
 
+## 2026-07-30: Vue Battery Constructor Silently Lost Every Stage Save On Fresh Batteries
+
+### Symptom
+
+A battery created in the Vue assembly page kept only its header fields
+(purpose/notes). Coin config, separator and electrolyte edits vanished on
+reload with no visible error. User re-entered the same data repeatedly.
+
+### Root Cause
+
+Two faults stacked:
+
+1. `useBatteryState.saveStep` called the PATCH section endpoints
+   (`/battery_coin_config/:id`, `/battery_sep_config/:id`,
+   `/battery_electrolyte/:id`). Those endpoints `UPDATE ... WHERE
+   battery_id=...` and throw 404 «Конфигурация не найдена» while the child
+   row does not exist — and a battery created in Vue has NO child rows
+   (vanilla creates them through the main battery PATCH with an insert
+   fallback). Every stage auto-save 404'd.
+2. The auto-save `catch` logged to `console.error` only — no toast, no
+   retry hint. The failure was invisible; the dirty flag alone did not read
+   as "your data is not being saved".
+
+### Fix
+
+- `useBatteryState`: coin config, separator and electrolyte now save via
+  the POST upsert endpoints (`ON CONFLICT (battery_id) DO UPDATE`), same as
+  pouch/cyl/qc already did; `battery_id` goes in the body.
+- `useBatteryState` and `useTapeState` accept `onSaveError`;
+  `AssemblyPage`/`TapeConstructor` wire it to a toast
+  («Не сохранилось: … секция …»). A failed auto-save is now loud.
+
+### Checks
+
+`npx vitest run` (613 passed) including new
+`__tests__/composables/useBatteryState.saveEndpoints.test.js` (POST upsert
+contract + onSaveError + dirty-stays-true); `npm run build:web` redeployed.
+
+### Follow-Up
+
+Full-app audit completed same day: every `api.patch`/`api.put` call site in
+`client-web/src` was checked against its backend endpoint semantics.
+Reference pages PUT already-open rows (safe); dry-box, electrode drying,
+material properties/source-info are server-side upserts. Fixed in the same
+pass: `useElectrodeState` got `onSaveError` (wired in ElectrodesPage), and
+`useTapeState.saveAllActuals` no longer swallows per-line actual failures
+(aggregates and throws → onSaveError toast). Remaining server-side hardening:
+make the PATCH section endpoints upsert so no future client can re-trap.
+
+### Prevention
+
+Regression test pins the POST-upsert endpoints; onSaveError pattern
+documented here — any new auto-saving composable must surface failures.
+
+## 2026-07-30: Half-Cell Type Was Free Text; Empty Batch Dropdown Gave No Reason
+
+### Symptom
+
+On a new Vue coin battery the user selected a tape but the batch dropdown
+offered nothing, with no explanation. DB showed `half_cell_type = 'anode v
+Li'` — a free-typed value.
+
+### Root Cause
+
+1. `batteryStages.js` defined `half_cell_type` as `type: 'text'` while
+   vanilla has a SELECT (`cathode_vs_li` / `anode_vs_li`). Free-typed values
+   break the exact-match role logic (`_cathode_is_li` / `_anode_is_li`) in
+   AssemblyPage. No backend validation existed (no CHECK constraint either).
+2. Independently, the batch list was legitimately empty — the coin
+   compatibility rule (Vue filter, vanilla, and
+   `batteryCompatibleCutBatchService` alike) requires circle batches from a
+   ONE-SIDED tape, and all existing circle batches come from two-sided
+   tapes — but the UI showed a mute empty dropdown with no reason.
+
+### Fix
+
+- `half_cell_type` is a select with vanilla's exact options;
+  `validateHalfCellType` added to `saveCoinConfig`/`updateCoinConfig`
+  (mirrors `validateCoinLayout`).
+- `ElectrodeSourcesEditor` shows an explanatory hint under the batch field
+  when the filtered list is empty (coin: «нужны круглые электроды из
+  односторонней ленты…»).
+- Bad stored value on battery 43 repaired to `anode_vs_li`.
+
+### Checks
+
+613 client tests + 105 backend tests green; `npm run build:web` redeployed.
+
+### Prevention
+
+Enum-backed fields in stage configs must be selects with the vanilla value
+set; service-level validators for enum-ish coin config fields.
+
 ## Entry Template
 
 ```text

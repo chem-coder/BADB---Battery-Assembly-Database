@@ -2,6 +2,8 @@
 // Tape Stage Definitions — shared between Constructor, Navigator, Editor
 // ═══════════════════════════════════════════════════════════════════
 
+import { todayIsoMsk } from '@/utils/dateFormat'
+
 /**
  * Each stage has:
  *  - code: matches API step codes and dirty-flag keys
@@ -61,7 +63,10 @@ export const TAPE_STAGES = [
     fields: [
       { key: 'name',         label: 'Название',       type: 'text' },
       { key: 'projectIds',   label: 'Проекты',         type: 'multiselect', ref: 'projects' },
-      { key: 'itemCreatedAt', label: 'Дата создания партии', type: 'date' },
+      // Business date can be backdated but never lies in the future —
+      // `max` is a function so "today" is evaluated at render time, not
+      // at module load (long-lived tabs cross midnight).
+      { key: 'itemCreatedAt', label: 'Дата создания партии', type: 'date', max: () => todayIsoMsk() },
       { key: 'tapeType',     label: 'Тип',             type: 'select', options: [
         { value: 'cathode', label: 'Катод' }, { value: 'anode', label: 'Анод' },
       ]},
@@ -218,6 +223,10 @@ export const TAPE_STAGES = [
       { key: 'gap_um_side2',             label: 'Зазор сторона 2, мкм',     type: 'number' },
       { key: 'coated_thickness_um',      label: 'Толщина покрытия с1, мкм', type: 'number' },
       { key: 'coated_thickness_um_side2',label: 'Толщина покрытия с2, мкм', type: 'number' },
+      // Parity — vanilla «Комментарий к нанесению и сушке» (payload key
+      // method_comments, column tape_step_coating.method_comments).
+      // Distinct from `notes` → step-header `comments`.
+      { key: 'method_comments', label: 'Комментарий к нанесению и сушке', type: 'textarea' },
       { key: 'notes',      label: 'Примечания',         type: 'textarea' },
     ],
   },

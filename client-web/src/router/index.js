@@ -143,11 +143,6 @@ router.beforeEach(async (to, from, next) => {
   const auth = useAuthStore()
   if (to.meta.public) return next()
 
-  // Dev bypass: auto-authenticate without login screen
-  if (import.meta.env.VITE_AUTH_BYPASS === 'true' && !auth.isAuthenticated) {
-    await auth.initBypass()
-  }
-
   // Restore session from sessionStorage on page refresh
   if (auth.isAuthenticated && !auth.user) {
     await auth.tryRestoreSession()

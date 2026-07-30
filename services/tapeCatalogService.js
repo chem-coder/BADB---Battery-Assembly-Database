@@ -131,9 +131,10 @@ async function createTape(pool, payload, createdBy) {
         item_created_at,
         notes,
         calc_mode,
-        target_mass_g
+        target_mass_g,
+        storage_notes
       )
-      VALUES ($1,$2,$3,$4,$5,now(),now(),COALESCE($6::date, CURRENT_DATE),$7,$8,$9)
+      VALUES ($1,$2,$3,$4,$5,now(),now(),COALESCE($6::date, CURRENT_DATE),$7,$8,$9,$10)
       RETURNING *
       `,
       [
@@ -145,7 +146,8 @@ async function createTape(pool, payload, createdBy) {
         itemCreatedAtDate,
         payload.notes ?? null,
         payload.calc_mode ?? null,
-        payload.target_mass_g ?? null
+        payload.target_mass_g ?? null,
+        payload.storage_notes ?? null
       ]
     );
 
@@ -269,9 +271,10 @@ async function updateTape(pool, id, payload, userId) {
         notes = $7,
         calc_mode = $8,
         target_mass_g = $9,
-        updated_by = $10,
+        storage_notes = CASE WHEN $10 THEN $11 ELSE storage_notes END,
+        updated_by = $12,
         updated_at = now()
-      WHERE tape_id = $11
+      WHERE tape_id = $13
       RETURNING *
       `,
       [
@@ -284,6 +287,8 @@ async function updateTape(pool, id, payload, userId) {
         payload.notes ?? null,
         payload.calc_mode ?? null,
         payload.target_mass_g ?? null,
+        Object.prototype.hasOwnProperty.call(payload, 'storage_notes'),
+        Object.prototype.hasOwnProperty.call(payload, 'storage_notes') ? (payload.storage_notes ?? null) : null,
         userId,
         id
       ]

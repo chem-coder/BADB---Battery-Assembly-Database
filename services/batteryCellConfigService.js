@@ -17,6 +17,14 @@ function statusError(message, statusCode) {
   return err;
 }
 
+const ALLOWED_HALF_CELL_TYPES = new Set(['cathode_vs_li', 'anode_vs_li']);
+
+function validateHalfCellType(halfCellType) {
+  if (halfCellType != null && halfCellType !== '' && !ALLOWED_HALF_CELL_TYPES.has(halfCellType)) {
+    throw new BatteryCellConfigValidationError('Допустимые типы полуячейки: cathode_vs_li, anode_vs_li');
+  }
+}
+
 function validateCoinLayout(coinLayout) {
   if (coinLayout != null && coinLayout !== '' && !ALLOWED_COIN_LAYOUTS.has(coinLayout)) {
     throw new BatteryCellConfigValidationError('Допустимые схемы для coin cell: SE, ES, ESE');
@@ -46,6 +54,7 @@ function hasOwn(payload, key) {
 
 async function saveCoinConfig(pool, payload) {
   validateCoinLayout(payload.coin_layout);
+  validateHalfCellType(payload.half_cell_type);
 
   const result = await pool.query(
     `
@@ -121,6 +130,7 @@ async function updateCoinConfig(pool, batteryId, payload, userId) {
   const hasCoinLayout = hasOwn(payload, 'coin_layout');
 
   if (hasCoinLayout) validateCoinLayout(payload.coin_layout);
+  if (hasHalfCellType) validateHalfCellType(payload.half_cell_type);
 
   const current = await pool.query(
     'SELECT coin_cell_mode, coin_size_code, half_cell_type, li_foil_notes, spacer_thickness_mm, spacer_count, spacer_notes, coin_layout FROM battery_coin_config WHERE battery_id = $1',

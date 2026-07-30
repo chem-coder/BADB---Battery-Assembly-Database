@@ -20,6 +20,7 @@
 import { ref, watch, computed, onMounted } from 'vue';
 import api from '@/services/api';
 import { useAuth } from '@/composables/useAuth';
+import { NO_HEAD_FILTER, filterDepartmentsByHead } from '@/utils/departmentHeadFilter';
 
 import RowOpenPage from '@/components/parity/RowOpenPage.vue';
 import OpenedRecordHeader from '@/components/parity/OpenedRecordHeader.vue';
@@ -28,9 +29,6 @@ import { useRowOpenForm } from '@/composables/useRowOpenForm';
 
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-
-// Sentinel value used in the "head" filter to mean "departments without a head".
-const NO_HEAD_FILTER = '__no_head__';
 
 const { isAdmin } = useAuth();
 
@@ -143,7 +141,10 @@ watch(users, (next) => {
   filterHeadOptions.value = [...next]
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
     .map((u) => ({
-      value: String(u.user_id),
+      // Keep numeric values: rows carry numeric head_user_id and the filter
+      // compare (both here and in RowOpenPage) is strict (===) —
+      // String() values would never match any row.
+      value: u.user_id,
       label: u.active ? u.name : `${u.name} (неактивен)`,
     }));
 });
@@ -184,19 +185,18 @@ function textHaystack(row) {
 // Custom filter logic for head_user_id (because the "no head" sentinel
 // needs special handling that PageFilterBar's generic select match
 // cannot express). We pre-filter the list before passing to RowOpenPage,
-// using a derived ref.
+// using a derived ref. Value/type contract lives in
+// @/utils/departmentHeadFilter (numeric user ids; null = no-head sentinel).
 const headFilterValue = ref('');
-const filteredDepartments = computed(() => {
-  if (!headFilterValue.value) return departments.value;
-  if (headFilterValue.value === NO_HEAD_FILTER) {
-    return departments.value.filter((d) => d.head_user_id == null);
-  }
-  return departments.value.filter((d) => String(d.head_user_id) === headFilterValue.value);
-});
+const filteredDepartments = computed(() =>
+  filterDepartmentsByHead(departments.value, headFilterValue.value)
+);
 
 // Intercept the filter-changed event from RowOpenPage to track head selection.
 function onFiltersChanged({ state }) {
-  headFilterValue.value = state.head_user_id || '';
+  // Keep the raw value — null is the meaningful NO_HEAD_FILTER sentinel,
+  // so no `|| ''` coercion here.
+  headFilterValue.value = state.head_user_id;
 }
 
 // ── Columns ──────────────────────────────────────────────────────────

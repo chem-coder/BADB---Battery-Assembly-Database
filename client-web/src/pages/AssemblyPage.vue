@@ -13,9 +13,10 @@ import PageHeader from '@/components/PageHeader.vue'
 import CrudTable from '@/components/CrudTable.vue'
 import TapeConstructor from '@/components/TapeConstructor.vue'
 import BatteryElectrochemEditor from '@/components/BatteryElectrochemEditor.vue'
+import ElectrodeStackPanel from '@/components/ElectrodeStackPanel.vue'
 import EntityCreateDialog from '@/components/EntityCreateDialog.vue'
 import TypedDeleteConfirm from '@/components/parity/TypedDeleteConfirm.vue'
-import { todayIsoMsk } from '@/utils/dateFormat'
+import { nowMskDateTimeInput, mskDateTimeInputToIso } from '@/utils/dateFormat'
 import CapacityHint from '@/components/CapacityHint.vue'
 import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
 import Checkbox from 'primevue/checkbox'
@@ -90,7 +91,7 @@ async function loadRefData() {
   } catch {}
 }
 
-const ffLabels = { coin: 'Монета', pouch: 'Пакет', cylindrical: 'Цилиндр' }
+const ffLabels = { coin: 'Монета', pouch: 'Пакет', prism: 'Призма', cylindrical: 'Цилиндр' }
 
 // Compact labels for the post-assembly selectable statuses (the «Статус»
 // column is narrow). The blank/NULL/`disassembled` → «Открыт» normalization
@@ -189,26 +190,38 @@ const batteryCreateFields = computed(() => [
     options: [
       { value: 'coin', label: 'Монеточный' },
       { value: 'pouch', label: 'Пакетный' },
+      // Vanilla order + label (3-batteries.html #battery_form_factor);
+      // prism reuses the pouch config downstream (d036).
+      { value: 'prism', label: 'Призматическая' },
       { value: 'cylindrical', label: 'Цилиндрический' },
     ],
   },
-  // Business date (vue-vs-backend-audit-2026-05.md #4). Backend column
-  // `item_created_at` (d035) — defaults to today, operator can backdate.
+  // Batch assembly start (d054 TIMESTAMPTZ — closed the old audit item
+  // vue-vs-backend-audit-2026-05.md #4). Defaults to «now»: the operator
+  // creates the batch's batteries right as the glovebox batch starts, so
+  // consecutive creates share one realistic timestamp. Backdatable.
   {
     key: 'item_created_at',
-    label: 'Дата создания партии',
-    type: 'date',
+    label: 'Дата и время создания партии',
+    type: 'datetime',
     required: false,
-    defaultValue: todayIsoMsk(),
+    defaultValue: nowMskDateTimeInput(),
   },
   // audit #13 — battery_notes was only collected later in the general-info
   // edit. Vanilla collects it up-front; the create dialog now mirrors that.
+  {
+    key: 'purpose',
+    label: 'Цель партии',
+    type: 'text',
+    required: false,
+    placeholder: 'Зачем собрана, что проверяем',
+  },
   {
     key: 'battery_notes',
     label: 'Заметки',
     type: 'text',
     required: false,
-    placeholder: 'Краткое описание / цель сборки',
+    placeholder: 'Общие комментарии по сборке',
   },
 ])
 
@@ -242,6 +255,8 @@ async function duplicateBattery(row) {
     createInitialValues.value = {
       project_ids: projectIds,
       form_factor: b.form_factor || 'coin',
+      // Цель партии — reusable setup, copied; per-build notes are not.
+      purpose: b.purpose || undefined,
       // item_created_at omitted → today; battery_notes omitted → blank.
     }
     createDialogVisible.value = true
@@ -252,7 +267,12 @@ async function duplicateBattery(row) {
 
 async function onCreateDialogSubmit(payload) {
   try {
-    const { data } = await api.post('/api/batteries', payload)
+    // Naive MSK datetime from the dialog → explicit +03:00 ISO (d054).
+    const body = {
+      ...payload,
+      item_created_at: mskDateTimeInputToIso(payload.item_created_at) || undefined,
+    }
+    const { data } = await api.post('/api/batteries', body)
     await loadBatteries()
     constructorIds.value = [data.battery_id]
     createDialogVisible.value = false
@@ -296,7 +316,14 @@ function toggleAllConstructor() {
 }
 
 function batteryStateFactory(id) {
-  return useBatteryState({ batteryId: id })
+  return useBatteryState({
+    batteryId: id,
+    // Surface auto-save failures — silent console-only errors caused
+    // real data loss (2026-07-30): every stage save 404'd unnoticed.
+    onSaveError: (stageCode, err) => {
+      toastApiError(toast, err, `Не сохранилось: аккумулятор #${id}, секция «${stageCode}»`)
+    },
+  })
 }
 
 // Battery print — opens Dalia's /workflow/battery-print.html inside
@@ -305,9 +332,9 @@ function batteryStateFactory(id) {
 // странице а в виде доп окна поверх — чтобы не было ощущения
 // изолированной системы и потери что за данные я открыл». Same
 // pattern as the in-app electrochem PDF preview (commit 352dc03).
-// Auth note: her battery-print.js still lacks the Bearer token (works
-// in dev via config.authBypass). Production needs the same two-line
-// patch precedented by commit 2cca4b4 — pending separate commit.
+// battery-print.js reads the SPA's JWT from storage and sends the
+// Bearer header itself (same pattern as electrode-batch-print.js,
+// commit 2cca4b4) — no special dev handling.
 const printDialog = ref({ visible: false, url: '', title: '' })
 function openBatteryPrint(batteryId) {
   if (!batteryId) return
@@ -469,6 +496,40 @@ watch(() => [...constructorIds.value], (ids, oldIds) => {
   }
   for (const id of ids) {
     if (!electrochemFiles.isLoaded(id)) electrochemFiles.load(id)
+  }
+})
+
+// Stack saved → capacity summary is stale (it is computed from the
+// stack electrodes' actual masses) and the battery status may have
+// auto-advanced to 'assembled'. Reload both.
+async function onStackSaved(batteryId) {
+  capacity.invalidate(batteryId)
+  capacity.load(batteryId)
+  await loadBatteries()
+}
+
+// The stack panel gates on SAVED electrode sources. When the
+// constructor's «Электроды» stage finishes an autosave for a battery
+// (dirty true → false), tell that battery's stack panel to reload so
+// the gate lifts and the electrode pools refresh without a remount.
+const stackPanelRefs = reactive({})
+function setStackPanelRef(id, el) {
+  if (el) stackPanelRefs[id] = el
+  else delete stackPanelRefs[id]
+}
+
+watch(() => {
+  const flags = {}
+  for (const id of constructorIds.value) {
+    flags[id] = tapeConstructorRef.value?.tapeStates?.[String(id)]?.dirtySteps?.electrodes ?? null
+  }
+  return flags
+}, (now, prev) => {
+  if (!prev) return
+  for (const id of Object.keys(now)) {
+    if (prev[id] === true && now[id] === false) {
+      stackPanelRefs[id]?.reload?.()
+    }
   }
 })
 
@@ -778,6 +839,24 @@ onMounted(async () => {
       />
     </div>
 
+    <!-- Electrode stack builder («Формирование стека») — one card per
+         battery in the constructor, directly below it: the workflow is
+         sources (constructor stage «Электроды») → stack (here) →
+         separator/electrolyte/QC. The panel is self-loading (assembly +
+         per-batch electrode pools); `key` includes the battery id so a
+         toggle-out/in remounts and re-evaluates the read-only lock.
+         @saved: the stack changes computed capacity and possibly the
+         battery status (auto 'assembled'), so refresh both. -->
+    <div v-if="constructorIds.length > 0" class="stack-panels">
+      <ElectrodeStackPanel
+        v-for="id in constructorIds"
+        :key="`stack-${id}`"
+        :ref="(el) => setStackPanelRef(id, el)"
+        :batteryId="id"
+        @saved="onStackSaved"
+      />
+    </div>
+
     <!-- Electrochem file uploads (G2) — one card per battery in the
          constructor. Follows the capacity-panels layout pattern above.
          The editor component manages its own staged upload queue and
@@ -876,6 +955,14 @@ onMounted(async () => {
   gap: 1.25rem;
 }
 .assembly-page :deep(.page-header) { margin-bottom: 3px !important; }
+
+/* ── Stack panels: one «Формирование стека» card per battery, same
+   flex-column pattern as .capacity-panels / .electrochem-panels. ── */
+.stack-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
 /* ── Electrochem panels (G2): one card per battery, stacked
    vertically — same flex-column pattern as .capacity-panels. ── */

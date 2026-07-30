@@ -15,8 +15,6 @@
 //
 // The user's access context is computed ONCE per request and cached on
 // `req` — several guards / handler-side filters share it for free.
-// Dev AUTH_BYPASS is untouched: the bypass user is a real DB user, so the
-// context loads normally (bypass default is an admin → full access).
 // ═══════════════════════════════════════════════════════════════════
 
 const pool = require('../db/pool');

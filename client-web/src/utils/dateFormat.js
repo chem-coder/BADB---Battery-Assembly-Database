@@ -139,3 +139,56 @@ export function formatDateShortMsk(input) {
     month: '2-digit',
   });
 }
+
+/**
+ * d054 batch-times helpers — the constructor's `datetime-iso` fields hold
+ * a NAIVE Moscow wall-clock string 'YYYY-MM-DDTHH:mm[:ss]' in state (what
+ * the date+time inputs edit), while the backend stores TIMESTAMPTZ.
+ * These two convert at the save/restore boundary. MSK is fixed UTC+3
+ * (no DST since 2014), so the offset can be a constant.
+ */
+
+/**
+ * Backend TIMESTAMPTZ ISO → naive MSK 'YYYY-MM-DDTHH:mm:ss' for the
+ * date+time inputs. '' for null/unparseable.
+ */
+export function isoToMskDateTimeInput(raw) {
+  const d = safeDate(raw);
+  if (!d) return '';
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: MSK,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(d).map((p) => [p.type, p.value])
+  );
+  // en-CA with hour12:false can render midnight as '24' — normalize.
+  const hour = parts.hour === '24' ? '00' : parts.hour;
+  return `${parts.year}-${parts.month}-${parts.day}T${hour}:${parts.minute}:${parts.second}`;
+}
+
+/**
+ * Naive MSK 'YYYY-MM-DDTHH:mm[:ss]' (or bare 'YYYY-MM-DD') → ISO with an
+ * explicit +03:00 offset for the backend. '' / null → null.
+ */
+export function mskDateTimeInputToIso(naive) {
+  if (!naive) return null;
+  const s = String(naive).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00+03:00`;
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!m) return null;
+  return `${m[1]}T${m[2]}:${m[3]}:${m[4] || '00'}+03:00`;
+}
+
+/**
+ * Current moment as a naive MSK 'YYYY-MM-DDTHH:mm:ss' — default for the
+ * batch-creation field in the create dialog (glovebox batch starts now).
+ */
+export function nowMskDateTimeInput(now = new Date()) {
+  return isoToMskDateTimeInput(now.toISOString());
+}

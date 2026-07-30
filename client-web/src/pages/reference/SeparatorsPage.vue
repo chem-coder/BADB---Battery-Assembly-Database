@@ -13,8 +13,10 @@
  *   - uses `sep_id` (legacy DB column) instead of canonical `separator_id`;
  *   - files block delegated to <RecordFiles>.
  */
-import { ref, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import api from '@/services/api';
+import { isoDateToMskInput } from '@/utils/dateFormat';
+import { withStoredValueOption } from '@/utils/selectOptions';
 import { usePrintHandlers } from '@/composables/usePrintHandlers';
 
 import RowOpenPage from '@/components/parity/RowOpenPage.vue';
@@ -41,6 +43,10 @@ const AIR_PERM_UNITS = [
   { value: 'Gurley_s',  label: 'Gurley, с' },
   { value: 'cm3/cm2/s', label: 'см³/(см²·с)' },
 ];
+
+const DEPLETED_DISABLED_TITLE =
+  'Дата доступна только для статусов «использован» и «брак»: '
+  + 'при статусе «доступен» сервер сохраняет её пустой';
 
 // ── List + structures ────────────────────────────────────────────────
 const separators = ref([]);
@@ -98,8 +104,25 @@ function asNumberOrNull(v) {
 
 function asDateOrNull(v) {
   if (!v) return null;
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) {
+    // Format from LOCAL date parts — toISOString() converts to UTC and
+    // shifts the picked day one back for any timezone east of UTC (MSK).
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, '0');
+    const d = String(v.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
   return v;
+}
+
+// Backend depleted_at (DATE, may arrive as a UTC-shifted timestamp) → local
+// Date for the DatePicker: normalise to the MSK calendar day, then build the
+// Date from parts so the round-trip via asDateOrNull keeps the same day.
+function parseDepletedAt(raw) {
+  const iso = isoDateToMskInput(raw);
+  if (!iso) return null;
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
 async function loadOne(id) {
@@ -119,7 +142,7 @@ async function loadOne(id) {
       porosity: item.porosity ?? '',
       comments: item.comments || '',
       status: item.status || 'available',
-      depleted_at: item.depleted_at ? new Date(item.depleted_at) : null,
+      depleted_at: parseDepletedAt(item.depleted_at),
     },
   };
 }
@@ -171,6 +194,31 @@ const ctx = useRowOpenForm({
   },
 });
 
+// A physical copy is a NEW roll: never inherit the source's lifecycle
+// (used/scrap status + depleted date). Vanilla duplicateSeparator() seeds
+// status 'available' / depleted_at '' the same way.
+async function onRowDuplicate(item) {
+  const formBefore = ctx.form.value;
+  await ctx.openDuplicate(item);
+  // openDuplicate replaces form.value on success; unchanged identity means
+  // it aborted (unsaved guard declined / load error) — leave the form alone.
+  if (ctx.form.value === formBefore) return;
+  ctx.form.value.status = 'available';
+  ctx.form.value.depleted_at = null;
+}
+
+// Backend (routes/separators.js) forces depleted_at to NULL whenever status
+// is 'available' — a date typed in that state would silently vanish on save.
+// Mirror the rule: the picker is only editable for used/scrap.
+const depletedEditable = computed(() => ctx.form.value.status !== 'available');
+
+// Legacy DB rows carry free-text units (e.g. 'с/100 мл') not present in
+// AIR_PERM_UNITS — surface the stored value as an extra option so it
+// displays and round-trips unchanged.
+const airPermUnitOptions = computed(() =>
+  withStoredValueOption(AIR_PERM_UNITS, ctx.form.value.air_perm_units),
+);
+
 // ── Filters ──────────────────────────────────────────────────────────
 const filters = ref([
   { field: 'text', type: 'text', placeholder: 'Название, поставщик, бренд...', label: 'Поиск' },
@@ -190,7 +238,9 @@ watch(structureOptions, (opts) => {
     type: 'select',
     label: 'Структура',
     emptyOption: 'Все структуры',
-    options: opts.map((o) => ({ value: String(o.value), label: o.label })),
+    // Keep numeric values: rows carry numeric structure_id and the filter
+    // compare is strict (===) — String() values would never match any row.
+    options: opts.map((o) => ({ value: o.value, label: o.label })),
   };
   const idx = filters.value.findIndex((x) => x.field === 'structure_id');
   if (idx >= 0) filters.value.splice(idx, 1, f);
@@ -251,7 +301,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('separators', ctx);
     @create="(name) => ctx.openCreate(name)"
     @row-click="ctx.openEdit"
     @row-print="onRowPrint"
-    @row-duplicate="ctx.openDuplicate"
+    @row-duplicate="onRowDuplicate"
   >
     <template #col-name="{ data }">
       <strong>{{ data.name }}</strong>
@@ -358,7 +408,7 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('separators', ctx);
             />
             <Select
               v-model="ctx.form.value.air_perm_units"
-              :options="AIR_PERM_UNITS"
+              :options="airPermUnitOptions"
               option-label="label"
               option-value="value"
               placeholder="— ед. изм. —"
@@ -383,6 +433,8 @@ const { onRowPrint, onHeaderPrint } = usePrintHandlers('separators', ctx);
             placeholder="дд.мм.гггг"
             class="w-full"
             show-icon
+            :disabled="!depletedEditable"
+            :title="depletedEditable ? undefined : DEPLETED_DISABLED_TITLE"
           />
 
           <label for="sep-comments">Комментарии</label>

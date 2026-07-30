@@ -7,7 +7,7 @@ import api from '@/services/api'
 import { shapeForFormFactor, isConfigCodeValidFor } from '@/config/electrodeStages'
 import { isoDateToMskInput } from '@/utils/dateFormat'
 
-export function useElectrodeState({ batchId }) {
+export function useElectrodeState({ batchId, onSaveError } = {}) {
   const currentBatchId = ref(batchId)
   const loading = ref(false)
   const saving = ref(false)
@@ -147,7 +147,10 @@ export function useElectrodeState({ batchId }) {
         await saveStep(stageCode)
         setDirty(stageCode, false)
       } catch (e) {
+        // NEVER swallow a failed save silently (2026-07-30 battery
+        // incident) — surface it; dirty flag stays true.
         console.error(`Auto-save failed for ${stageCode}:`, e)
+        onSaveError?.(stageCode, e)
       } finally {
         _savingNow[stageCode] = false
       }
@@ -172,6 +175,18 @@ export function useElectrodeState({ batchId }) {
         if (general.target_config_code && !isConfigCodeValidFor(value, general.target_config_code)) {
           general.target_config_code = ''
           general.target_config_other = ''
+        }
+      }
+      // Cascade: shape → drop contradictory dimensions (mirrors
+      // BatchCreateDialog's null-by-shape rule: circle has no
+      // length/width, rectangle has no diameter). Covers both a direct
+      // shape edit and the form-factor cascade above.
+      if (fieldKey === 'shape' || fieldKey === 'target_form_factor') {
+        if (general.shape === 'circle') {
+          general.length_mm = ''
+          general.width_mm = ''
+        } else if (general.shape === 'rectangle') {
+          general.diameter_mm = ''
         }
       }
       // Cascade: target_config_code !== 'other' → clear target_config_other
@@ -199,8 +214,13 @@ export function useElectrodeState({ batchId }) {
           : []
         await api.put(`/api/electrodes/electrode-cut-batches/${currentBatchId.value}`, {
           // M:N — backend writes electrode_cut_batch_projects (d029).
-          project_ids: pids,
-          project_id: pids[0] || null, // legacy echo for old code paths
+          // When the multiselect is empty (e.g. cleared via show-clear),
+          // OMIT both project keys: an omitted key keeps the existing
+          // links server-side (getPayloadProjectIds → null → current),
+          // while sending [] would strip every project link (data loss).
+          ...(pids.length > 0
+            ? { project_ids: pids, project_id: pids[0] } // legacy echo for old code paths
+            : {}),
           item_created_at: general.item_created_at || null,
           is_test_batch: !!general.is_test_batch,
           target_form_factor: general.target_form_factor || null,
@@ -209,9 +229,12 @@ export function useElectrodeState({ batchId }) {
             ? (general.target_config_other || null)
             : null,
           shape: general.shape || null,
-          diameter_mm: general.diameter_mm || null,
-          length_mm: general.length_mm || null,
-          width_mm: general.width_mm || null,
+          // Null-by-shape (mirrors BatchCreateDialog): never persist a
+          // diameter for a rectangle batch or length/width for a circle
+          // one — a form-factor switch must not leave stale geometry.
+          diameter_mm: general.shape === 'circle' ? (general.diameter_mm || null) : null,
+          length_mm: general.shape === 'rectangle' ? (general.length_mm || null) : null,
+          width_mm: general.shape === 'rectangle' ? (general.width_mm || null) : null,
           comments: general.comments || null,
         })
       } else if (code === 'drying') {

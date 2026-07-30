@@ -92,8 +92,10 @@ endpoints:
   session state;
 - admins can create/edit/deactivate users and reset passwords from the UI;
 - role and access effects can be inspected from the UI;
-- bypass remains a development tool, not the normal way to operate the app;
-- smoke/manual checks cover the authenticated user path, not only bypass.
+- the development bypass was fully removed on 2026-07-29 (it mis-attributed
+  created_by/updated_by to the bypass user); all environments use real logins;
+- smoke/manual checks cover the authenticated user path (the smoke harness
+  signs its own JWT).
 
 ## 2026-06-08: Documentation Needed Verification And Systematization
 
