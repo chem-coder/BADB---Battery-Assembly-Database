@@ -279,6 +279,7 @@ async function fetchBatteryReport(queryable, batteryId) {
             b.created_by,
             u.name AS created_by_name,
             b.battery_notes,
+            b.purpose,
             b.item_created_at,
             b.created_at,
             b.updated_at

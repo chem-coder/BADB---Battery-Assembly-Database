@@ -1444,7 +1444,9 @@ router.post('/:id/access', auth, requireModify, async (req, res) => {
     expires_in_days,
   } = req.body;
 
-  if (!['view', 'edit', 'admin'].includes(access_level)) {
+  // 'none' = explicit deny (d044) — valid for user grants only; the legacy
+  // project_department_access CHECK was intentionally left at view/edit/admin.
+  if (!['view', 'edit', 'admin', 'none'].includes(access_level)) {
     return res.status(400).json({ error: 'Некорректный уровень доступа' });
   }
 
@@ -1459,6 +1461,10 @@ router.post('/:id/access', auth, requireModify, async (req, res) => {
 
   if (userIds.length === 0 && deptIds.length === 0) {
     return res.status(400).json({ error: 'Не указаны получатели доступа' });
+  }
+
+  if (access_level === 'none' && deptIds.length > 0) {
+    return res.status(400).json({ error: 'Уровень «none» недоступен для отделов' });
   }
 
   // Compute expires_at

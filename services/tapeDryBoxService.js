@@ -211,13 +211,9 @@ function getFiniteTemperatureOrFallback(value, fallback) {
 }
 
 function assertFinalDryingStartedAfterRequested(requestedStartedAt, finalDrying) {
-  if (!finalDrying?.ended_at) {
-    throw statusError('Сначала завершите этап II.4 сушки ленты после каландрирования', 400);
-  }
-
-  if (isBeforeIso(requestedStartedAt, finalDrying.ended_at)) {
-    throw statusError('Последняя сушка не может начаться раньше окончания этапа II.4', 400);
-  }
+  // P2 (2026-07-30, drybox_removal_plan.md, approved): the closet-tracking
+  // gate is retired — dry-box routes stay for vanilla compatibility but no
+  // longer require a finished final drying. Intentionally a no-op.
 }
 
 async function saveTapeDryBoxParameters(pool, tapeId, payload, updatedBy) {
@@ -317,14 +313,8 @@ async function removeTapeFromDryBox(pool, tapeId, updatedBy) {
     const currentState = await fetchTapeDryBoxState(client, tapeId);
     const finalDrying = await fetchLatestPressedTapeDryingStep(client, tapeId);
 
-    if (!finalDrying?.ended_at) {
-      throw statusError('Сначала завершите этап II.4 сушки ленты после каландрирования', 400);
-    }
-
-    const nextStartedAt = currentState?.started_at || finalDrying.ended_at;
-    if (isBeforeIso(nextStartedAt, finalDrying.ended_at)) {
-      throw statusError('Последняя сушка не может начаться раньше окончания этапа II.4', 400);
-    }
+    // P2 (2026-07-30): gate retired — see assertFinalDryingStartedAfterRequested.
+    const nextStartedAt = currentState?.started_at || finalDrying?.ended_at || new Date().toISOString();
 
     await upsertTapeDryBoxState(client, {
       tapeId,

@@ -46,33 +46,61 @@ function getTodayDateString() {
   return `${year}-${month}-${day}`;
 }
 
+// The Moscow calendar day of a stored instant, as YYYY-MM-DD.
+function mskCalendarDay(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(d.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+// d054: batteries.item_created_at is TIMESTAMPTZ (batch assembly start).
+// Accepts either a bare date `ГГГГ-ММ-ДД` (vanilla's date input — pinned
+// to midnight Europe/Moscow so the stored instant is deterministic
+// regardless of the server's TZ) or a full ISO datetime (Vue sends an
+// explicit +03:00 offset). Returns the string to store, or null to keep
+// the current value.
 function normalizeOptionalItemCreatedAtDate(value) {
   if (value === undefined || value === null || value === '') {
     return null;
   }
 
   const raw = String(value).trim();
-  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) {
-    throw statusError('Дата создания аккумулятора должна быть в формате ГГГГ-ММ-ДД', 400);
+
+  const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    const [, yearText, monthText, dayText] = dateOnly;
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+
+    if (
+      parsed.getUTCFullYear() !== year ||
+      parsed.getUTCMonth() !== month - 1 ||
+      parsed.getUTCDate() !== day
+    ) {
+      throw statusError('Некорректная дата создания партии', 400);
+    }
+
+    if (raw > getTodayDateString()) {
+      throw statusError('Дата создания партии не может быть в будущем', 400);
+    }
+
+    return `${raw}T00:00:00+03:00`;
   }
 
-  const [, yearText, monthText, dayText] = match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-
-  if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() !== month - 1 ||
-    parsed.getUTCDate() !== day
-  ) {
-    throw statusError('Некорректная дата создания аккумулятора', 400);
+  // Full ISO datetime — must parse to a real instant.
+  const parsed = new Date(raw);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw statusError('Дата создания партии должна быть в формате ГГГГ-ММ-ДД или ISO-датой со временем', 400);
   }
-
-  if (raw > getTodayDateString()) {
-    throw statusError('Дата создания аккумулятора не может быть в будущем', 400);
+  if (parsed.getTime() > Date.now()) {
+    throw statusError('Дата создания партии не может быть в будущем', 400);
   }
 
   return raw;
@@ -236,7 +264,7 @@ async function saveIdentityConfig(queryable, batteryId, formFactor, payload, use
 async function fetchCurrentIdentityContext(queryable, batteryId) {
   const [batteryRes, coinRes, sourcesRes, projectsRows] = await Promise.all([
     queryable.query(
-      'SELECT project_id, form_factor, created_by, item_created_at, battery_notes, status FROM batteries WHERE battery_id = $1',
+      'SELECT project_id, form_factor, created_by, item_created_at, battery_notes, purpose, status FROM batteries WHERE battery_id = $1',
       [batteryId]
     ),
     queryable.query(
@@ -340,9 +368,10 @@ async function createBattery(pool, payload, createdByUserId) {
         created_at,
         updated_at,
         item_created_at,
-        battery_notes
+        battery_notes,
+        purpose
       )
-      VALUES ($1, $2, $3, now(), now(), COALESCE($4::date, CURRENT_DATE), $5)
+      VALUES ($1, $2, $3, now(), now(), COALESCE($4::date, CURRENT_DATE), $5, $6)
       RETURNING *
       `,
       [
@@ -350,7 +379,8 @@ async function createBattery(pool, payload, createdByUserId) {
         formFactor,
         createdByUserId,
         itemCreatedAtDate,
-        payload.battery_notes || null
+        payload.battery_notes || null,
+        payload.purpose || null
       ]
     );
 
@@ -398,6 +428,7 @@ async function listBatteries(pool) {
       b.created_by,
       u_created.name AS created_by_name,
       b.battery_notes AS notes,
+      b.purpose,
       b.item_created_at,
       b.created_at,
       b.updated_by,
@@ -464,6 +495,7 @@ async function getBattery(pool, batteryId) {
       b.created_by,
       u.name AS created_by_name,
       b.battery_notes AS notes,
+      b.purpose,
       b.item_created_at,
       b.created_at,
       b.updated_at
@@ -530,7 +562,24 @@ async function updateBattery(pool, batteryId, payload, userId) {
 
   const currentContext = await fetchCurrentIdentityContext(pool, batteryId);
   const current = currentContext.battery;
-  const itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
+  let itemCreatedAtDate = normalizeOptionalItemCreatedAtDate(payload.item_created_at);
+  // Vanilla's form sends a DATE-ONLY value on every meta save. If that
+  // calendar day (MSK) matches what is already stored, keep the stored
+  // instant — otherwise a date-only client would silently reset the
+  // batch time-of-day (d054) to midnight on unrelated edits. A genuinely
+  // changed day still lands as midnight MSK, as intended.
+  const rawItemCreatedAt = typeof payload.item_created_at === 'string'
+    ? payload.item_created_at.trim()
+    : payload.item_created_at;
+  if (
+    itemCreatedAtDate &&
+    current.item_created_at &&
+    typeof rawItemCreatedAt === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(rawItemCreatedAt) &&
+    mskCalendarDay(current.item_created_at) === rawItemCreatedAt
+  ) {
+    itemCreatedAtDate = null; // keep the stored value
+  }
   const payloadProjectIds = getPayloadProjectIds(payload);
   const finalProjectIds = payloadProjectIds || currentContext.projectIds || [current.project_id];
 
@@ -540,6 +589,7 @@ async function updateBattery(pool, batteryId, payload, userId) {
     created_by: current.created_by,
     item_created_at: itemCreatedAtDate ?? current.item_created_at,
     battery_notes: payload.battery_notes !== undefined ? payload.battery_notes : current.battery_notes,
+    purpose: payload.purpose !== undefined ? payload.purpose : current.purpose,
     status: payload.status !== undefined ? payload.status : current.status,
   };
 
@@ -572,10 +622,11 @@ async function updateBattery(pool, batteryId, payload, userId) {
         created_by = $3,
         item_created_at = $4,
         battery_notes = $5,
-        status = $6,
-        updated_by = $7,
+        purpose = $6,
+        status = $7,
+        updated_by = $8,
         updated_at = now()
-      WHERE battery_id = $8
+      WHERE battery_id = $9
       RETURNING
         battery_id,
         project_id,
@@ -583,6 +634,7 @@ async function updateBattery(pool, batteryId, payload, userId) {
         created_by,
         item_created_at,
         battery_notes AS notes,
+        purpose,
         status,
         created_at,
         updated_by,
@@ -594,6 +646,7 @@ async function updateBattery(pool, batteryId, payload, userId) {
         newVals.created_by,
         newVals.item_created_at,
         newVals.battery_notes,
+        newVals.purpose,
         newVals.status,
         userId,
         batteryId

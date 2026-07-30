@@ -4,7 +4,7 @@
  * BADB vanilla API smoke/regression harness.
  *
  * This script restores a full SQL dump into a throwaway database, starts the
- * Express API against that database with auth bypass, exercises the endpoints
+ * Express API against that database with a real signed JWT, exercises the endpoints
  * used by the vanilla public UI, and then cleans up.
  *
  * Usage:
@@ -17,6 +17,12 @@ const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
+const jwt = require('jsonwebtoken');
+
+// The spawned API gets this secret via env; the harness signs a real JWT
+// for the smoke login with it. (AUTH_BYPASS was removed 2026-07-29 —
+// requests authenticate exactly like production.)
+const SMOKE_JWT_SECRET = 'badb-smoke-harness-secret';
 
 const ROOT = path.join(__dirname, '..');
 const LOCAL_ONLY_DUMP = path.join(ROOT, 'sql_backups', 'local_only', '0424_badb_app_v1_full.sql');
@@ -54,7 +60,10 @@ const POST_DUMP_MIGRATIONS = [
   path.join(ROOT, 'migrations', 'd050_recipe_slot_marker_am.sql'),
   path.join(ROOT, 'migrations', 'd051_backfill_ledger_rows_d044_d046.sql'),
   path.join(ROOT, 'migrations', 'd052_materials_manufacturer_families.sql'),
-  path.join(ROOT, 'migrations', 'd053_tape_and_batch_files.sql')
+  path.join(ROOT, 'migrations', 'd053_tape_and_batch_files.sql'),
+  path.join(ROOT, 'migrations', 'd054_battery_batch_times.sql'),
+  path.join(ROOT, 'migrations', 'd055_battery_purpose.sql'),
+  path.join(ROOT, 'migrations', 'd056_tape_storage_notes.sql')
 ];
 
 function parseArgs(argv) {
@@ -62,7 +71,7 @@ function parseArgs(argv) {
     dump: DEFAULT_DUMP,
     db: DEFAULT_DB,
     port: null,
-    bypassLogin: DEFAULT_LOGIN,
+    smokeLogin: DEFAULT_LOGIN,
     keepDb: false,
     keepServer: false,
     restoreOnly: false,
@@ -74,7 +83,7 @@ function parseArgs(argv) {
     if (arg.startsWith('--dump=')) opts.dump = path.resolve(ROOT, arg.slice('--dump='.length));
     else if (arg.startsWith('--db=')) opts.db = arg.slice('--db='.length);
     else if (arg.startsWith('--port=')) opts.port = Number(arg.slice('--port='.length));
-    else if (arg.startsWith('--bypass-login=')) opts.bypassLogin = arg.slice('--bypass-login='.length);
+    else if (arg.startsWith('--login=')) opts.smokeLogin = arg.slice('--login='.length);
     else if (arg === '--keep-db') opts.keepDb = true;
     else if (arg === '--keep-server') opts.keepServer = true;
     else if (arg === '--restore-only') opts.restoreOnly = true;
@@ -107,7 +116,7 @@ Options:
   --dump=<path>          SQL dump to restore
   --db=<name>            Throwaway DB name; must start with badb_app_v1_smoke
   --port=<port>          API port; random free port by default
-  --bypass-login=<login> Auth-bypass login; default ${DEFAULT_LOGIN}
+  --login=<login>        Login to run smoke requests as; default ${DEFAULT_LOGIN}
   --get-only             Skip write-path smoke tests
   --restore-only         Restore dump, then exit
   --keep-db              Do not drop smoke DB at the end
@@ -202,13 +211,15 @@ async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForApi(baseUrl, serverLog) {
+async function waitForApi(baseUrl, serverLog, token) {
   const deadline = Date.now() + 20000;
   let lastError = null;
 
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${baseUrl}/api/users`);
+      const res = await fetch(`${baseUrl}/api/users`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (res.ok) return;
       lastError = new Error(`HTTP ${res.status}: ${await res.text()}`);
     } catch (err) {
@@ -220,7 +231,27 @@ async function waitForApi(baseUrl, serverLog) {
   throw new Error(`API did not become ready. Last error: ${lastError?.message || 'unknown'}\n${serverLog()}`);
 }
 
-function startApi({ db, port, bypassLogin, verbose }) {
+// Sign a real JWT for the smoke login. Reads user_id/role/token_version
+// from the restored throwaway DB so the token passes middleware/auth.js's
+// token_version + active checks.
+function mintSmokeToken(opts, tools) {
+  const login = String(opts.smokeLogin).replace(/'/g, "''");
+  const output = run(tools.psql, [
+    '-d', opts.db, '-Atc',
+    `SELECT user_id || '|' || role || '|' || token_version FROM users WHERE lower(login) = lower('${login}') AND active IS NOT FALSE LIMIT 1;`
+  ], { quiet: true }).trim();
+  if (!output) {
+    throw new Error(`Smoke login not found or inactive in ${opts.db}: ${opts.smokeLogin}`);
+  }
+  const [userId, role, tokenVersion] = output.split('|');
+  return jwt.sign(
+    { userId: Number(userId), login: opts.smokeLogin, role, tokenVersion: Number(tokenVersion) },
+    SMOKE_JWT_SECRET,
+    { expiresIn: '2h' }
+  );
+}
+
+function startApi({ db, port, verbose }) {
   const lines = [];
   const proc = spawn(process.execPath, ['server.js'], {
     cwd: ROOT,
@@ -228,8 +259,7 @@ function startApi({ db, port, bypassLogin, verbose }) {
       ...process.env,
       DB_NAME: db,
       PORT: String(port),
-      AUTH_BYPASS: 'true',
-      BYPASS_LOGIN: bypassLogin
+      JWT_SECRET: SMOKE_JWT_SECRET
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -271,17 +301,21 @@ function installGlobalErrorContext() {
 }
 
 class SmokeClient {
-  constructor(baseUrl, { verbose = false } = {}) {
+  constructor(baseUrl, { verbose = false, token = null } = {}) {
     this.baseUrl = baseUrl;
     this.verbose = verbose;
+    this.token = token;
     this.checks = [];
     this.failures = [];
   }
 
   async request(method, endpoint, body, accept = [200, 201, 204]) {
+    const headers = {};
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
     const res = await fetch(this.baseUrl + endpoint, {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body)
     });
 
@@ -1978,10 +2012,11 @@ async function main() {
     const port = opts.port || await getFreePort();
     const baseUrl = `http://127.0.0.1:${port}`;
     log(`Starting API on ${baseUrl}`);
-    server = startApi({ db: opts.db, port, bypassLogin: opts.bypassLogin, verbose: opts.verbose });
-    await waitForApi(baseUrl, server.log);
+    server = startApi({ db: opts.db, port, verbose: opts.verbose });
+    const token = mintSmokeToken(opts, tools);
+    await waitForApi(baseUrl, server.log, token);
 
-    const client = new SmokeClient(baseUrl, { verbose: opts.verbose });
+    const client = new SmokeClient(baseUrl, { verbose: opts.verbose, token });
     log('Running vanilla GET smoke tests');
     const seed = await runGetSmoke(client);
     client.assertNoFailures('GET smoke');
