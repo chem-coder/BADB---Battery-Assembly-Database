@@ -119,7 +119,9 @@ async function saveStructure() {
 
   const payload = {
     name: form.value.name,
-    structure_comments: form.value.structure_comments.trim() || null,
+    // Backend (routes/structures.js) reads/returns `comments`; the form key
+    // stays `structure_comments` for display — map at the payload boundary.
+    comments: form.value.structure_comments.trim() || null,
   }
 
   try {

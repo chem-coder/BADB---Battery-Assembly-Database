@@ -29,6 +29,8 @@ import { todayIsoMsk } from '@/utils/dateFormat';
 const FORM_FACTOR_OPTIONS = [
   { value: 'coin', label: 'Монеточный' },
   { value: 'pouch', label: 'Пакетный' },
+  // Vanilla order + label (2-electrodes.html #electrodes-target_form_factor).
+  { value: 'prism', label: 'Призматическая' },
   { value: 'cylindrical', label: 'Цилиндрический' },
 ];
 
@@ -44,6 +46,13 @@ const CONFIG_BY_FORM_FACTOR = {
     { value: '86x56', label: '86 × 56' },
     { value: 'other', label: 'Другое' },
   ],
+  // Same codes as pouch — d036 CHECK allows prism 103x83/86x56/other
+  // (services/electrodeCutBatchService.js TARGET_CONFIG_CODES_BY_FORM_FACTOR).
+  prism: [
+    { value: '103x83', label: '103 × 83' },
+    { value: '86x56', label: '86 × 56' },
+    { value: 'other', label: 'Другое' },
+  ],
   cylindrical: [
     { value: '18650', label: '18650' },
     { value: '21700', label: '21700' },
@@ -53,7 +62,7 @@ const CONFIG_BY_FORM_FACTOR = {
 
 function shapeForFormFactor(ff) {
   if (ff === 'coin') return 'circle';
-  if (ff === 'pouch' || ff === 'cylindrical') return 'rectangle';
+  if (ff === 'pouch' || ff === 'prism' || ff === 'cylindrical') return 'rectangle';
   return '';
 }
 

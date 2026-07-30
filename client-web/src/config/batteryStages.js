@@ -37,10 +37,18 @@ export const BATTERY_STAGES = [
       { key: 'form_factor', label: 'Форм-фактор', type: 'select', options: [
         { value: 'coin', label: 'Монеточный' },
         { value: 'pouch', label: 'Пакетный' },
+        // d036 + docs/current/batteries.md: prism is its own form_factor
+        // but intentionally reuses the pouch-like config (battery_pouch_config).
+        { value: 'prism', label: 'Призматическая' },
         { value: 'cylindrical', label: 'Цилиндрический' },
       ]},
       { key: 'project_ids', label: 'Проекты', type: 'multiselect', ref: 'projects' },
-      { key: 'item_created_at', label: 'Дата создания партии', type: 'date' },
+      // d054: batteries are assembled in glovebox BATCHES — this is the
+      // batch assembly start moment (stored per battery as TIMESTAMPTZ).
+      // State holds a naive MSK 'YYYY-MM-DDTHH:mm:ss' string; the
+      // composable converts at the save/restore boundary.
+      { key: 'item_created_at', label: 'Дата и время создания партии', type: 'datetime-iso' },
+      { key: 'purpose', label: 'Цель партии', type: 'textarea' },
       { key: 'battery_notes', label: 'Заметки', type: 'textarea' },
     ],
   },
@@ -68,15 +76,24 @@ export const BATTERY_STAGES = [
         { value: 'ES', label: 'E-S' },
         { value: 'SE', label: 'S-E' },
       ]},
-      { key: 'half_cell_type', label: 'Тип полуячейки', type: 'text', showIfFormFactor: 'coin' },
+      // Vanilla parity (3-batteries.html #coin_half_cell_type): a SELECT.
+      // Was type:'text' — free-typed values like «anode v Li» broke the
+      // exact-match role logic in AssemblyPage (_cathode_is_li/_anode_is_li)
+      // and killed batch selection (2026-07-30).
+      { key: 'half_cell_type', label: 'Тип полуячейки', type: 'select', showIfFormFactor: 'coin', options: [
+        { value: 'cathode_vs_li', label: 'Катодный материал || Li/Li⁺' },
+        { value: 'anode_vs_li', label: 'Анодный материал || Li/Li⁺' },
+      ]},
       { key: 'spacer_thickness_mm', label: 'Толщина спейсера, мм', type: 'number', showIfFormFactor: 'coin' },
       { key: 'spacer_count', label: 'Кол-во спейсеров', type: 'number', showIfFormFactor: 'coin' },
       { key: 'spacer_notes', label: 'Заметки (спейсер)', type: 'textarea', showIfFormFactor: 'coin' },
       { key: 'li_foil_notes', label: 'Li фольга', type: 'textarea', showIfFormFactor: 'coin' },
       // ── Pouch-cell fields (Dalia's new schema: battery_pouch_config) ──
-      { key: 'pouch_case_size_code', label: 'Корпус (пауч)', type: 'select', showIfFormFactor: 'pouch', options: POUCH_CASE_SIZE_OPTIONS },
-      { key: 'pouch_case_size_other', label: 'Другой корпус', type: 'text', showIfFormFactor: 'pouch' },
-      { key: 'pouch_notes', label: 'Заметки (пауч)', type: 'textarea', showIfFormFactor: 'pouch' },
+      // Prism reuses the pouch config table + fields (d036) — hence the
+      // ['pouch', 'prism'] visibility (showIfFormFactor accepts arrays).
+      { key: 'pouch_case_size_code', label: 'Корпус (пауч)', type: 'select', showIfFormFactor: ['pouch', 'prism'], options: POUCH_CASE_SIZE_OPTIONS },
+      { key: 'pouch_case_size_other', label: 'Другой корпус', type: 'text', showIfFormFactor: ['pouch', 'prism'] },
+      { key: 'pouch_notes', label: 'Заметки (пауч)', type: 'textarea', showIfFormFactor: ['pouch', 'prism'] },
       // ── Cylindrical-cell fields (battery_cyl_config) ──
       { key: 'cyl_size_code', label: 'Размер (цил.)', type: 'select', showIfFormFactor: 'cylindrical', options: CYL_SIZE_OPTIONS },
       { key: 'cyl_notes', label: 'Заметки (цил.)', type: 'textarea', showIfFormFactor: 'cylindrical' },
@@ -133,6 +150,9 @@ export const BATTERY_STAGES = [
     icon: 'pi pi-check-circle',
     hasApiStep: true,
     fields: [
+      // d054: the batch testing moment (OCV/ESR measured for the whole
+      // glovebox batch; stored per battery in battery_qc.tested_at).
+      { key: 'tested_at', label: 'Дата и время тестирования партии', type: 'datetime-iso' },
       { key: 'ocv_v', label: 'OCV, В', type: 'number' },
       { key: 'esr_mohm', label: 'ESR, мОм', type: 'number' },
       { key: 'qc_notes', label: 'Заметки КК', type: 'textarea' },

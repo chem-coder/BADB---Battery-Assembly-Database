@@ -500,4 +500,73 @@ describe('ElectrodeBatchPanel.vue', () => {
       expect(w.find('.dialog-stub').text()).toContain('#99');
     });
   });
+
+  describe('restore scrapped electrode (vanilla parity)', () => {
+    function mountWithScrapped() {
+      api.get.mockImplementation((url) => {
+        if (url.endsWith('/electrodes')) return Promise.resolve({ data: [
+          { electrode_id: 55, number_in_batch: 1, electrode_mass_g: 1.5,
+            status_code: 3, scrapped_reason: 'повреждён край' },
+        ]});
+        if (url.endsWith('/foil-masses')) return Promise.resolve({ data: [] });
+        if (url.endsWith('/report')) return Promise.resolve({ data: {} });
+        return Promise.resolve({ data: null });
+      });
+      return mount(ElectrodeBatchPanel, {
+        props: { batchId: 7 },
+        global: { stubs: makeStubs() },
+      });
+    }
+
+    it('scrapped row shows ↩ (no scrap button); confirm-accept PUTs status 1 with extras nulled, then reloads', async () => {
+      const w = mountWithScrapped();
+      await flushPromises();
+
+      // Scrapped row: restore visible, scrap hidden.
+      expect(w.find('[data-icon="pi pi-ban"]').exists()).toBe(false);
+      const restoreBtn = w.find('[data-icon="pi pi-undo"]');
+      expect(restoreBtn.exists()).toBe(true);
+
+      api.get.mockClear();
+      api.put.mockResolvedValue({ data: {} });
+      await restoreBtn.trigger('click');
+
+      expect(confirmRequire).toHaveBeenCalledTimes(1);
+      const opts = confirmRequire._lastOpts;
+      expect(opts.message).toContain('#55');
+      expect(opts.acceptLabel).toBe('Вернуть');
+
+      await opts.accept();
+      await flushPromises();
+
+      // Same endpoint + payload as vanilla restoreScrappedElectrode.
+      expect(api.put).toHaveBeenCalledTimes(1);
+      expect(api.put).toHaveBeenCalledWith('/api/electrodes/55/status', {
+        status_code: 1,
+        scrapped_reason: null,
+        used_in_battery_id: null,
+      });
+
+      // Panel refreshes the electrode list after the restore.
+      const electrodeGets = api.get.mock.calls.filter((c) => c[0].endsWith('/electrodes'));
+      expect(electrodeGets.length).toBe(1);
+    });
+
+    it('available row (status 1) shows no restore button', async () => {
+      api.get.mockImplementation((url) => {
+        if (url.endsWith('/electrodes')) return Promise.resolve({ data: [
+          { electrode_id: 1, electrode_mass_g: 1.2, status_code: 1 },
+        ]});
+        if (url.endsWith('/foil-masses')) return Promise.resolve({ data: [] });
+        if (url.endsWith('/report')) return Promise.resolve({ data: {} });
+        return Promise.resolve({ data: null });
+      });
+      const w = mount(ElectrodeBatchPanel, {
+        props: { batchId: 7 },
+        global: { stubs: makeStubs() },
+      });
+      await flushPromises();
+      expect(w.find('[data-icon="pi pi-undo"]').exists()).toBe(false);
+    });
+  });
 });

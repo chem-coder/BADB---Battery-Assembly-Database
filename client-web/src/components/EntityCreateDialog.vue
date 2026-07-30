@@ -7,7 +7,7 @@
  *
  * Fields schema (passed via :fields prop):
  *   { key, label, type, required?, options?, placeholder?, defaultValue? }
- *   type ∈ 'text' | 'select' | 'multiselect' | 'date'
+ *   type ∈ 'text' | 'select' | 'multiselect' | 'date' | 'datetime'
  *
  * Duplicate / prefill: pass `:initial-values="{ key: value, ... }"` to
  * seed the form with copied data (e.g. «Дублировать ленту» copies the
@@ -40,6 +40,7 @@ import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import DSMultiSelect from '@/components/ds/DSMultiSelect.vue';
 import DateInputISO from '@/components/parity/DateInputISO.vue';
+import DateTimeWithNow from '@/components/parity/DateTimeWithNow.vue';
 
 const props = defineProps({
   visible: { type: Boolean, required: true },
@@ -114,7 +115,39 @@ function onCancel() {
   emit('update:visible', false);
 }
 
+// ── `datetime` fields ──────────────────────────────────────────────
+// Value convention: naive MSK string 'YYYY-MM-DDTHH:mm[:ss]' (same as
+// the constructor's datetime-iso fields). Split/combine for the
+// DateTimeWithNow primitive; time without date is undefined → ''.
+function dtDatePart(v) {
+  const m = String(v || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : '';
+}
+function dtTimePart(v) {
+  const m = String(v || '').match(/T(\d{2}:\d{2})/);
+  return m ? m[1] : '';
+}
+function onDtUpdate(key, date, time) {
+  values.value[key] = date ? `${date}T${time || '00:00'}:00` : '';
+}
+
+// ── Overlay click-through guard ────────────────────────────────────
+// PrimeVue closes an open Select/MultiSelect panel on an outside click,
+// but that same click still reaches whatever it landed on. When the
+// user dismissed the projects dropdown by clicking «Создать», the form
+// submitted half-filled (Dalia, 2026-07-29). Track open overlays and
+// swallow a submit that arrives while one is open or within the same
+// click of its closing.
+const overlaysOpen = ref(0);
+let overlayClosedAt = 0;
+function onOverlayShow() { overlaysOpen.value += 1; }
+function onOverlayHide() {
+  overlaysOpen.value = Math.max(0, overlaysOpen.value - 1);
+  overlayClosedAt = Date.now();
+}
+
 function onCreate() {
+  if (overlaysOpen.value > 0 || Date.now() - overlayClosedAt < 350) return;
   if (!canSubmit.value) return;
   submitting.value = true;
   const payload = {};
@@ -179,6 +212,8 @@ defineExpose({
           show-clear
           :autofocus="idx === 0"
           class="ec-input"
+          @show="onOverlayShow"
+          @hide="onOverlayHide"
         />
         <!-- DSMultiSelect encapsulates the project's MultiSelect defaults
              (no chip, counter label, show-clear, auto-filter). -->
@@ -189,13 +224,26 @@ defineExpose({
           :options="f.options"
           :placeholder="f.placeholder || '— выбрать —'"
           class="ec-input"
+          @show="onOverlayShow"
+          @hide="onOverlayHide"
         />
         <DateInputISO
           v-else-if="f.type === 'date'"
           :id="`ec-${f.key}`"
           v-model="values[f.key]"
           :placeholder="f.placeholder || 'дд.мм.гггг'"
+          :max="f.max || ''"
           class="ec-input"
+        />
+        <!-- Real date+time binding (naive MSK string) — used for the
+             batch assembly start on battery creation (d054). -->
+        <DateTimeWithNow
+          v-else-if="f.type === 'datetime'"
+          :date="dtDatePart(values[f.key])"
+          :time="dtTimePart(values[f.key])"
+          class="ec-input"
+          @update:date="(d) => onDtUpdate(f.key, d, dtTimePart(values[f.key]))"
+          @update:time="(t) => onDtUpdate(f.key, dtDatePart(values[f.key]), t)"
         />
         <!-- Optional per-field action, e.g. «+ Новая рецептура…» opening a
              quick-create flow whose result lands back in this field via

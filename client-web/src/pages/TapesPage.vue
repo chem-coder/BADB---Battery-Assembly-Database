@@ -184,6 +184,9 @@ const tapeCreateFields = computed(() => [
     type: 'date',
     required: false,
     defaultValue: todayIsoMsk(),
+    // Can be backdated, never future-dated (guard mirrors the
+    // constructor's general_info field in tapeStages.js).
+    max: todayIsoMsk(),
   },
 ])
 
@@ -527,12 +530,12 @@ function formatDate(dt) {
         <span v-else class="ts-cell-empty">—</span>
       </template>
 
-      <!-- Custom cell: availability status (audit #11, #14) -->
+      <!-- Custom cell: availability (P2 2026-07-30 — closet tracking
+           retired; the only meaningful split is активна/израсходована.
+           Legacy in_dry_box/out_of_dry_box values display as «активна»). -->
       <template #col-availability_status="{ data }">
-        <span v-if="data.availability_status === 'in_dry_box'" class="badge badge-4">В шкафу</span>
-        <span v-else-if="data.availability_status === 'out_of_dry_box'" class="badge badge-5">Извлечена</span>
-        <span v-else-if="data.availability_status === 'depleted'" class="badge badge-8">Изр.</span>
-        <span v-else class="ts-cell-empty">—</span>
+        <span v-if="data.availability_status === 'depleted'" class="badge badge-8">Изр.</span>
+        <span v-else class="badge badge-4">Активна</span>
       </template>
 
       <!-- Custom cell: Прогресс (8 сегментов = 8 этапов) -->
@@ -586,7 +589,10 @@ function formatDate(dt) {
          vue-vs-backend-audit-2026-05.md #6. Mounted only when a tape
          is active in the constructor so the panel scopes to one tape
          at a time. -->
-    <TapeDryBoxPanel :tape-id="activeTapeState?.currentTapeId?.value || null" />
+    <TapeDryBoxPanel
+      :tape-id="activeTapeState?.currentTapeId?.value || null"
+      :tape-state="activeTapeState"
+    />
 
     <!-- Файлы ленты (d053): «Акт сборки», Excel и прочие документы,
          привязанные к активной ленте конструктора. -->

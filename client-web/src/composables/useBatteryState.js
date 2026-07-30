@@ -4,7 +4,7 @@
  */
 import { ref, reactive, computed } from 'vue'
 import api from '@/services/api'
-import { isoDateToMskInput } from '@/utils/dateFormat'
+import { isoToMskDateTimeInput, mskDateTimeInputToIso } from '@/utils/dateFormat'
 
 // Coerce an input value to a finite number or null. Preserves zero —
 // critical for physical measurements where 0 is a legitimate reading
@@ -31,7 +31,7 @@ function electrodeSourceRowHasValue(r) {
   return Boolean(r && (r.tape_id || r.cut_batch_id || String(r.source_notes || '').trim()))
 }
 
-export function useBatteryState({ batteryId }) {
+export function useBatteryState({ batteryId, onSaveError } = {}) {
   const currentBatchId = ref(batteryId)
   const loading = ref(false)
   const saving = ref(false)
@@ -53,10 +53,11 @@ export function useBatteryState({ batteryId }) {
     name: '',
     form_factor: '',
     project_ids: [],
-    // Business date — column `item_created_at` (d035), distinct from
-    // audit `created_at`.
+    // Batch assembly start (d035 date → d054 TIMESTAMPTZ). Held as a
+    // naive MSK 'YYYY-MM-DDTHH:mm:ss' string for the datetime-iso field.
     item_created_at: '',
     battery_notes: '',
+    purpose: '',
   })
 
   const steps = reactive({
@@ -101,6 +102,9 @@ export function useBatteryState({ batteryId }) {
     // of the phantom fields (separator_layout, electrolyte_assembly_notes)
     // that used to live here.
     qc: {
+      // Batch testing moment (d054 battery_qc.tested_at) — naive MSK
+      // datetime string, same convention as general.item_created_at.
+      tested_at: '',
       ocv_v: '',
       esr_mohm: '',
       qc_notes: '',
@@ -211,7 +215,11 @@ export function useBatteryState({ batteryId }) {
         await saveStep(stageCode)
         setDirty(stageCode, false)
       } catch (e) {
+        // NEVER swallow a failed save silently — surface it to the page
+        // (toast) so unsaved data is not discovered days later. Dirty flag
+        // stays true, so the stage still shows as unsaved.
         console.error(`Auto-save failed for battery ${stageCode}:`, e)
+        onSaveError?.(stageCode, e)
       } finally {
         _savingNow[stageCode] = false
       }
@@ -245,7 +253,8 @@ export function useBatteryState({ batteryId }) {
     if (newFormFactor !== 'coin') {
       for (const k of COIN_CONFIG_FIELDS) steps.config[k] = ''
     }
-    if (newFormFactor !== 'pouch') {
+    // Prism reuses the pouch config (d036) — pouch fields survive both.
+    if (newFormFactor !== 'pouch' && newFormFactor !== 'prism') {
       for (const k of POUCH_CONFIG_FIELDS) steps.config[k] = ''
     }
     if (newFormFactor !== 'cylindrical') {
@@ -303,17 +312,24 @@ export function useBatteryState({ batteryId }) {
           project_ids: pids,
           project_id: pids[0] || undefined, // legacy echo
           form_factor: general.form_factor || undefined,
-          item_created_at: general.item_created_at || null,
+          // Naive MSK state → explicit +03:00 ISO (d054 TIMESTAMPTZ).
+          // null = keep the stored value (backend PATCH semantics).
+          item_created_at: mskDateTimeInputToIso(general.item_created_at),
           battery_notes: general.battery_notes || null,
+          purpose: general.purpose || null,
         })
       } else if (code === 'config') {
         const c = steps.config
-        // Route by form factor:
-        //   coin        → PATCH /battery_coin_config/:id
-        //   pouch       → POST  /battery_pouch_config    (upsert)
-        //   cylindrical → POST  /battery_cyl_config      (upsert)
-        if (general.form_factor === 'pouch') {
+        // Route by form factor — ALL via POST upserts (ON CONFLICT).
+        // The PATCH variants 404 while the config row does not exist,
+        // which is exactly the state of a battery created in Vue (config
+        // rows appear only on first save) — that 404 silently ate the
+        // whole stage until 2026-07-30.
+        if (general.form_factor === 'pouch' || general.form_factor === 'prism') {
           // Pouch config uses POST (upsert semantics in Dalia's backend).
+          // Prism intentionally reuses battery_pouch_config (d036,
+          // docs/current/batteries.md) — routing it to the coin default
+          // silently saved prism configs into battery_coin_config.
           await api.post(`/api/batteries/battery_pouch_config`, {
             battery_id: id,
             pouch_case_size_code: c.pouch_case_size_code || null,
@@ -335,7 +351,8 @@ export function useBatteryState({ batteryId }) {
           // some half-cell recipes) is preserved instead of dropped by
           // `|| null`. Enum/text fields keep `|| null` — empty string is
           // not a meaningful "zero" for them.
-          await api.patch(`/api/batteries/battery_coin_config/${id}`, {
+          await api.post(`/api/batteries/battery_coin_config`, {
+            battery_id: id,
             coin_cell_mode: c.coin_cell_mode || null,
             coin_size_code: c.coin_size_code || null,
             half_cell_type: c.half_cell_type || null,
@@ -375,15 +392,19 @@ export function useBatteryState({ batteryId }) {
         })
       } else if (code === 'separator') {
         const s = steps.separator
-        await api.patch(`/api/batteries/battery_sep_config/${id}`, {
+        // POST = ON CONFLICT upsert; PATCH 404s while no row exists yet.
+        await api.post(`/api/batteries/battery_sep_config`, {
+          battery_id: id,
           separator_id: s.separator_id || null,
           separator_notes: s.separator_notes || null,
         })
       } else if (code === 'electrolyte') {
         const el = steps.electrolyte
-        await api.patch(`/api/batteries/battery_electrolyte/${id}`, {
+        // POST = ON CONFLICT upsert; PATCH 404s while no row exists yet.
+        await api.post(`/api/batteries/battery_electrolyte`, {
+          battery_id: id,
           electrolyte_id: el.electrolyte_id || null,
-          electrolyte_total_ul: el.electrolyte_total_ul || null,
+          electrolyte_total_ul: toNum(el.electrolyte_total_ul),
           electrolyte_notes: el.electrolyte_notes || null,
         })
       } else if (code === 'qc') {
@@ -394,6 +415,9 @@ export function useBatteryState({ batteryId }) {
         // mapping empty strings and non-numeric input to null.
         await api.post('/api/batteries/battery_qc', {
           battery_id: id,
+          // Explicit null clears the batch-testing time; the backend only
+          // preserves the stored value when the key is ABSENT (vanilla).
+          tested_at: mskDateTimeInputToIso(steps.qc.tested_at),
           ocv_v: toNum(steps.qc.ocv_v),
           esr_mohm: toNum(steps.qc.esr_mohm),
           qc_notes: steps.qc.qc_notes || null,
@@ -430,11 +454,12 @@ export function useBatteryState({ batteryId }) {
       } else {
         general.project_ids = []
       }
-      // DATE column comes back as an ISO instant at MSK midnight —
-      // recover the Moscow calendar day so the picker shows the entered
-      // date, not the UTC-shifted previous day. See isoDateToMskInput.
-      general.item_created_at = isoDateToMskInput(b.item_created_at)
+      // TIMESTAMPTZ (d054) comes back as a UTC ISO instant — re-read it
+      // as Moscow wall-clock for the date+time inputs. Pre-d054 rows are
+      // MSK midnight, which renders as an empty-looking 00:00:00 time.
+      general.item_created_at = isoToMskDateTimeInput(b.item_created_at)
       general.battery_notes = b.notes || ''
+      general.purpose = b.purpose || ''
 
       // Entity metadata
       meta.created_by_name = b.created_by_name || null
@@ -442,8 +467,8 @@ export function useBatteryState({ batteryId }) {
       meta.updated_by_name = b.updated_by_name || null
       meta.updated_at = b.updated_at || null
 
-      // Load config — route by form_factor
-      if (general.form_factor === 'pouch') {
+      // Load config — route by form_factor (prism reuses pouch, d036)
+      if (general.form_factor === 'pouch' || general.form_factor === 'prism') {
         try {
           const { data: pouch } = await api.get(`/api/batteries/battery_pouch_config/${id}`)
           if (pouch) {
@@ -525,6 +550,7 @@ export function useBatteryState({ batteryId }) {
       try {
         const { data: qc } = await api.get(`/api/batteries/battery_qc/${id}`)
         if (qc) {
+          steps.qc.tested_at = isoToMskDateTimeInput(qc.tested_at)
           steps.qc.ocv_v = qc.ocv_v ?? ''
           steps.qc.esr_mohm = qc.esr_mohm ?? ''
           steps.qc.qc_notes = qc.qc_notes || ''
@@ -542,7 +568,7 @@ export function useBatteryState({ batteryId }) {
   function stageStatus(code) {
     if (code === 'general') return currentBatchId.value ? 'done' : 'pending'
     if (code === 'config') {
-      if (general.form_factor === 'pouch') {
+      if (general.form_factor === 'pouch' || general.form_factor === 'prism') {
         return steps.config.pouch_case_size_code ? 'done' : 'pending'
       }
       if (general.form_factor === 'cylindrical') {
@@ -557,7 +583,7 @@ export function useBatteryState({ batteryId }) {
     }
     if (code === 'separator') return steps.separator.separator_id ? 'done' : 'pending'
     if (code === 'electrolyte') return steps.electrolyte.electrolyte_id ? 'done' : 'pending'
-    if (code === 'qc') return steps.qc.ocv_v || steps.qc.esr_mohm ? 'done' : 'pending'
+    if (code === 'qc') return steps.qc.ocv_v || steps.qc.esr_mohm || steps.qc.tested_at ? 'done' : 'pending'
     return 'pending'
   }
 

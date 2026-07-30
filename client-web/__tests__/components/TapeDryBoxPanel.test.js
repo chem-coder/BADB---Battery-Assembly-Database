@@ -1,170 +1,124 @@
-// Component test for src/components/TapeDryBoxPanel.vue
+// Component test for src/components/TapeDryBoxPanel.vue — the P2
+// «Хранение ленты» card (2026-07-30, docs/future/drybox_removal_plan.md).
 //
-// Surfaces audit #6 — the 6 dry-box endpoints. Tests focus on the
-// status-driven action button visibility (the panel's core UX) and
-// that the load + place + remove + deplete flows hit the right URLs.
-// PrimeVue Button/InputNumber/InputText/Textarea are stubbed so the
-// tests don't pull in the full theme runtime.
+// The closet workflow (place/remove/return + parameter editor) is retired.
+// Pinned behavior:
+//   - storage notes bind to tapeState.general.storageNotes and blur calls
+//     tapeState.saveGeneral() (single owner of the save path);
+//   - deplete stays: confirm → POST /dry-box-state/deplete → reload;
+//   - depleted state disables editing and hides the deplete button;
+//   - historical dry-box rows render as a read-only archive line.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
+import { reactive } from 'vue';
 
 vi.mock('@/services/api', () => ({
   default: { get: vi.fn(), put: vi.fn(), post: vi.fn() },
 }));
-
 vi.mock('primevue/usetoast', () => ({ useToast: () => ({ add: vi.fn() }) }));
 vi.mock('@/utils/errorClassifier', () => ({ toastApiError: vi.fn() }));
-vi.mock('@/composables/useNotify', () => ({
-  useNotify: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
-}));
 
 import api from '@/services/api';
 import TapeDryBoxPanel from '@/components/TapeDryBoxPanel.vue';
 
 const ButtonStub = {
   name: 'Button',
-  props: ['label', 'icon', 'severity', 'outlined', 'text', 'loading'],
+  props: ['label', 'icon', 'severity', 'outlined', 'size', 'disabled'],
   emits: ['click'],
-  template: `<button class="btn-stub" :data-label="label" :disabled="loading" @click="$emit('click')">{{ label }}</button>`,
+  template: `<button class="btn-stub" :data-label="label" :disabled="disabled" @click="$emit('click')">{{ label }}</button>`,
 };
-const FieldStub = {
-  name: 'InputText',
-  props: ['modelValue', 'disabled'],
-  template: `<input class="input-stub" />`,
+const AreaStub = {
+  name: 'Textarea',
+  props: ['modelValue', 'disabled', 'rows', 'autoResize', 'placeholder', 'id'],
+  emits: ['update:modelValue', 'blur'],
+  template: `<textarea class="area-stub" :disabled="disabled" :value="modelValue"
+    @input="$emit('update:modelValue', $event.target.value)" @blur="$emit('blur')" />`,
 };
-const NumberStub = { ...FieldStub, name: 'InputNumber' };
-const AreaStub = { ...FieldStub, name: 'Textarea' };
 
-function mountPanel(state, tapeId = 42) {
-  api.get.mockResolvedValueOnce({ data: state });
-  return mount(TapeDryBoxPanel, {
-    props: { tapeId },
-    global: {
-      stubs: {
-        Button: ButtonStub,
-        InputText: FieldStub,
-        InputNumber: NumberStub,
-        Textarea: AreaStub,
-      },
-    },
-  });
+function makeTapeState() {
+  return {
+    general: reactive({ storageNotes: 'вынута 30.07 на 30 мин' }),
+    saveGeneral: vi.fn().mockResolvedValue(1),
+  };
 }
 
-describe('TapeDryBoxPanel.vue', () => {
+function mountCard(state, tapeState = makeTapeState(), tapeId = 42) {
+  api.get.mockResolvedValueOnce({ data: state });
+  const wrapper = mount(TapeDryBoxPanel, {
+    props: { tapeId, tapeState },
+    global: { stubs: { Button: ButtonStub, Textarea: AreaStub } },
+  });
+  return { wrapper, tapeState };
+}
+
+describe('TapeDryBoxPanel.vue — «Хранение ленты» card (P2)', () => {
   beforeEach(() => {
     api.get.mockReset();
-    api.put.mockReset();
     api.post.mockReset();
+    api.put.mockReset();
+    vi.restoreAllMocks();
   });
 
-  describe('initial state — status badge + action buttons', () => {
-    it('null status → "Не помещалась" badge + only "Поместить в шкаф" button', async () => {
-      const w = mountPanel({ availability_status: null, has_final_dry_box_storage: false });
-      await flushPromises();
-      expect(w.text()).toContain('Не помещалась');
-      const labels = w.findAll('.btn-stub').map((b) => b.attributes('data-label'));
-      expect(labels).toContain('Поместить в шкаф');
-      expect(labels).not.toContain('Извлечь');
-      expect(labels).not.toContain('Вернуть в шкаф');
-    });
+  it('renders notes from tapeState and saves via saveGeneral on blur', async () => {
+    const { wrapper, tapeState } = mountCard({ availability_status: null });
+    await flushPromises();
 
-    it('in_dry_box + has_final_dry_box_storage → shows Сохранить + Извлечь + Списать', async () => {
-      const w = mountPanel({
-        availability_status: 'in_dry_box',
-        started_at: '2026-05-01T10:00:00Z',
-        has_final_dry_box_storage: true,
-      });
-      await flushPromises();
-      expect(w.text()).toContain('В шкафу');
-      const labels = w.findAll('.btn-stub').map((b) => b.attributes('data-label'));
-      // No more «Сохранить параметры» — param fields autosave on blur
-      // (Dima 2026-05-28). Only state-transition buttons remain.
-      expect(labels).not.toContain('Сохранить параметры');
-      expect(labels).toContain('Извлечь');
-      expect(labels).toContain('Списать');
-    });
+    const area = wrapper.find('.area-stub');
+    expect(area.element.value).toBe('вынута 30.07 на 30 мин');
 
-    it('in_dry_box BUT no final dry — "Извлечь" hidden (backend would 400)', async () => {
-      const w = mountPanel({
-        availability_status: 'in_dry_box',
-        has_final_dry_box_storage: false,
-      });
-      await flushPromises();
-      const labels = w.findAll('.btn-stub').map((b) => b.attributes('data-label'));
-      expect(labels).not.toContain('Извлечь');
-    });
+    await area.setValue('вернула И.И.');
+    expect(tapeState.general.storageNotes).toBe('вернула И.И.');
 
-    it('out_of_dry_box → "Вернуть в шкаф" + "Списать"', async () => {
-      const w = mountPanel({ availability_status: 'out_of_dry_box' });
-      await flushPromises();
-      expect(w.text()).toContain('Извлечена');
-      const labels = w.findAll('.btn-stub').map((b) => b.attributes('data-label'));
-      expect(labels).toContain('Вернуть в шкаф');
-      expect(labels).toContain('Списать');
-    });
-
-    it('depleted → no action buttons (terminal)', async () => {
-      const w = mountPanel({ availability_status: 'depleted' });
-      await flushPromises();
-      expect(w.text()).toContain('Израсходована');
-      const labels = w.findAll('.btn-stub').map((b) => b.attributes('data-label'));
-      expect(labels).not.toContain('Поместить в шкаф');
-      expect(labels).not.toContain('Извлечь');
-      expect(labels).not.toContain('Вернуть в шкаф');
-      expect(labels).not.toContain('Списать');
-    });
+    await area.trigger('blur');
+    await flushPromises();
+    expect(tapeState.saveGeneral).toHaveBeenCalledTimes(1);
   });
 
-  describe('endpoints', () => {
-    it('GET on mount hits /api/tapes/:id/dry-box-state', async () => {
-      api.get.mockResolvedValueOnce({ data: { availability_status: null } });
-      mount(TapeDryBoxPanel, {
-        props: { tapeId: 123 },
-        global: { stubs: { Button: ButtonStub, InputText: FieldStub, InputNumber: NumberStub, Textarea: AreaStub } },
-      });
-      await flushPromises();
-      expect(api.get).toHaveBeenCalledWith('/api/tapes/123/dry-box-state');
-    });
+  it('no closet buttons exist; deplete confirms and POSTs the deplete endpoint', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    api.post.mockResolvedValue({ data: {} });
+    const { wrapper } = mountCard({ availability_status: 'out_of_dry_box' });
+    await flushPromises();
 
-    it('"Поместить в шкаф" → POST place-now', async () => {
-      const w = mountPanel({ availability_status: null });
-      await flushPromises();
-      api.post.mockResolvedValueOnce({ data: { availability_status: 'in_dry_box' } });
-      const btn = w.findAll('.btn-stub').find((b) => b.attributes('data-label') === 'Поместить в шкаф');
-      await btn.trigger('click');
-      await flushPromises();
-      expect(api.post).toHaveBeenCalledWith(
-        expect.stringMatching(/\/dry-box-state\/place-now$/),
-        expect.any(Object),
-      );
-    });
+    const labels = wrapper.findAll('.btn-stub').map(b => b.attributes('data-label'));
+    expect(labels).toEqual(['Лента израсходована']);
 
-    it('"Извлечь" → POST remove-now', async () => {
-      const w = mountPanel({
-        availability_status: 'in_dry_box',
-        has_final_dry_box_storage: true,
-      });
-      await flushPromises();
-      api.post.mockResolvedValueOnce({ data: { availability_status: 'out_of_dry_box' } });
-      const btn = w.findAll('.btn-stub').find((b) => b.attributes('data-label') === 'Извлечь');
-      await btn.trigger('click');
-      await flushPromises();
-      expect(api.post).toHaveBeenCalledWith(
-        expect.stringMatching(/\/dry-box-state\/remove-now$/),
-        expect.any(Object),
-      );
-    });
+    api.get.mockResolvedValueOnce({ data: { availability_status: 'depleted' } });
+    await wrapper.find('.btn-stub').trigger('click');
+    await flushPromises();
+    expect(api.post).toHaveBeenCalledWith('/api/tapes/42/dry-box-state/deplete');
   });
 
-  describe('null tapeId', () => {
-    it('does not render anything when tapeId is null', () => {
-      const w = mount(TapeDryBoxPanel, {
-        props: { tapeId: null },
-        global: { stubs: { Button: ButtonStub, InputText: FieldStub, InputNumber: NumberStub, Textarea: AreaStub } },
-      });
-      expect(w.find('.tdb-card').exists()).toBe(false);
-      expect(api.get).not.toHaveBeenCalled();
+  it('depleted tape: textarea disabled, deplete button hidden', async () => {
+    const { wrapper } = mountCard({ availability_status: 'depleted' });
+    await flushPromises();
+    expect(wrapper.find('.area-stub').attributes('disabled')).toBeDefined();
+    expect(wrapper.findAll('.btn-stub')).toHaveLength(0);
+    expect(wrapper.text()).toContain('израсходована');
+  });
+
+  it('historical dry-box record renders as a read-only archive line', async () => {
+    const { wrapper } = mountCard({
+      availability_status: 'out_of_dry_box',
+      started_at: '2026-07-01T10:00:00Z',
+      removed_at: '2026-07-02T12:00:00Z',
+      temperature_c: 25,
+      atmosphere: 'air',
     });
+    await flushPromises();
+    const archive = wrapper.find('.sc-archive');
+    expect(archive.exists()).toBe(true);
+    expect(archive.text()).toContain('помещена');
+    expect(archive.text()).toContain('извлечена');
+    expect(archive.text()).toContain('25 °C');
+  });
+
+  it('deplete declined in confirm → no POST', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { wrapper } = mountCard({ availability_status: null });
+    await flushPromises();
+    await wrapper.find('.btn-stub').trigger('click');
+    expect(api.post).not.toHaveBeenCalled();
   });
 });

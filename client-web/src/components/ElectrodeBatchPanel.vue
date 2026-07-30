@@ -373,6 +373,35 @@ async function confirmScrap() {
   }
 }
 
+// Restore a scrapped electrode back to «Доступен» — vanilla parity
+// (restoreScrappedElectrode in public/js/2-electrodes.js): same
+// /status endpoint, status_code 1 with both extras nulled.
+function restoreScrappedElectrode(e) {
+  confirm.require({
+    message: `Вернуть электрод #${e.electrode_id} в доступные?`,
+    header: 'Возврат электрода',
+    icon: 'pi pi-question-circle',
+    acceptLabel: 'Вернуть',
+    rejectLabel: 'Отмена',
+    accept: async () => {
+      startSave();
+      try {
+        await api.put(`/api/electrodes/${e.electrode_id}/status`, {
+          status_code: 1,
+          scrapped_reason: null,
+          used_in_battery_id: null,
+        });
+        await loadElectrodes(props.batchId);
+        scheduleCapacityReload(props.batchId);
+      } catch (err) {
+        toastApiError(toast, err, 'Ошибка возврата электрода в доступные');
+      } finally {
+        endSave();
+      }
+    },
+  });
+}
+
 function deleteElectrode(e) {
   if (e._new) {
     // Look the row up by identity — the display index comes from the
@@ -721,6 +750,16 @@ function fmtCap(val) {
                     size="small"
                     title="Списать"
                     @click="scrapElectrode(e)"
+                  />
+                  <Button
+                    v-if="!e._new && e.status_code === 3"
+                    icon="pi pi-undo"
+                    severity="secondary"
+                    text
+                    rounded
+                    size="small"
+                    title="Вернуть в доступные"
+                    @click="restoreScrappedElectrode(e)"
                   />
                   <Button
                     icon="pi pi-trash"

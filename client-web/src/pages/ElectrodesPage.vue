@@ -126,6 +126,7 @@ function formatShapeDisplay(b) {
     : b.target_config_code
   const ffLabel = ff === 'coin' ? 'Монета'
     : ff === 'pouch' ? 'Пакет'
+    : ff === 'prism' ? 'Призма'
     : ff === 'cylindrical' ? 'Цилиндр'
     : ''
 
@@ -383,7 +384,12 @@ function handleHintGo(action) {
 }
 
 function electrodeStateFactory(id) {
-  return useElectrodeState({ batchId: id })
+  return useElectrodeState({
+    batchId: id,
+    // Surface auto-save failures (2026-07-30 battery incident).
+    onSaveError: (stageCode, err) =>
+      toastApiError(toast, err, `Не сохранилось: партия #${id}, секция «${stageCode}»`),
+  })
 }
 
 // ── Guided delete (mirrors Batteries + vanilla 2-electrodes.js) ──

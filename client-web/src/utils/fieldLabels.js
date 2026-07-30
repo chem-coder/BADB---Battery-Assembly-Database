@@ -156,6 +156,7 @@ const LABELS_BY_ENTITY = {
   battery: {
     form_factor:      'Форм-фактор',
     battery_notes:    'Заметки',
+    purpose:          'Цель партии',
   },
 
   // ─── Battery coin config ───

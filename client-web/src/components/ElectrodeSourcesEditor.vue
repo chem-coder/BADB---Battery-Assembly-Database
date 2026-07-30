@@ -148,7 +148,10 @@ function batchOptionsFor(idx) {
     if (row.tape_id && String(b.tape_id) !== String(row.tape_id)) return false
     if (!expectedShape.value) return false // no form factor → no options
     if (b.shape !== expectedShape.value) return false
-    if (b.target_form_factor !== props.formFactor) return false
+    // 2026-07-30 (Dalia): rectangle batches are interchangeable across
+    // pouch/prism/cylindrical — shape is authoritative, target_form_factor
+    // is a hint. Coin stays strict via the circle shape + sidedness rules.
+    if (expectedShape.value !== 'rectangle' && b.target_form_factor !== props.formFactor) return false
     if (props.formFactor === 'coin' && batchSidedness(b) !== 'one_sided') return false
     return true
   })
@@ -160,9 +163,22 @@ function batchOptionsFor(idx) {
   return opts
 }
 
-const batchPlaceholder = computed(() =>
-  !props.formFactor ? '— сначала выберите форм-фактор —' : ''
-)
+// Explain WHY the batch list is empty instead of showing a mute blank
+// dropdown (2026-07-30: user could not tell that her circle batches were
+// cut from two-sided tapes, which coin cells reject).
+const batchPlaceholder = computed(() => {
+  if (!props.formFactor) return '— сначала выберите форм-фактор —'
+  return ''
+})
+
+function emptyBatchHint(idx) {
+  if (!props.formFactor) return ''
+  if (batchOptionsFor(idx).length > 0) return ''
+  if (props.formFactor === 'coin') {
+    return 'Нет совместимых партий: для монетной ячейки нужны круглые электроды, вырубленные из ОДНОСТОРОННЕЙ ленты нужной роли.'
+  }
+  return 'Нет совместимых партий: нужны прямоугольные электроды с лент нужной роли (форм-фактор вырубки не важен — прямоугольники взаимозаменяемы).'
+}
 
 // ── Selection handlers ──
 function onTapeSelect(idx, tapeId) {
@@ -327,6 +343,11 @@ const roleLabel = computed(() => (props.role === 'cathode' ? 'Катодная' 
           @click.stop="clearAcValue(idx, 'batch')"
         ><i class="pi pi-times"></i></button>
       </div>
+      <small
+        v-if="emptyBatchHint(idx)"
+        class="es-empty-hint"
+        style="display:block; color:var(--p-orange-600, #c77700); margin-top:2px;"
+      >{{ emptyBatchHint(idx) }}</small>
 
       <textarea
         class="es-notes"

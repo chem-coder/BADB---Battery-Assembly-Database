@@ -11,8 +11,10 @@ import { todayIsoMsk } from '@/utils/dateFormat'
 import { toastApiError } from '@/utils/errorClassifier'
 import { validateComposition, sumPercent, COMPOSITION_TOLERANCE } from '@/utils/materialComposition'
 import { nameFingerprint } from '@/utils/nameFingerprint'
+import { familyForSave } from '@/utils/materialFamilySave'
 import PageHeader from '@/components/PageHeader.vue'
 import InputText from 'primevue/inputtext'
+import Textarea from 'primevue/textarea'
 import Checkbox from 'primevue/checkbox'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
@@ -277,13 +279,20 @@ const editForm = ref({ name: '', role: '', family: '', manufacturer: '' })
 async function saveMaterialEdit() {
   const name = editForm.value.name.trim()
   if (!name) return
+  // The PUT always overwrites family with the payload value, but the
+  // family control is only shown for active roles — for other roles we
+  // must resend the stored value, or editing (or switching the role
+  // away from active) would silently NULL it (vanilla preserves it).
+  const stored = materials.value.find(m => m.material_id === selectedMaterialId.value)
   try {
     await api.put(`/api/materials/${selectedMaterialId.value}`, {
       name,
       role: editForm.value.role,
-      family: familyApplies(editForm.value.role)
-        ? ((editForm.value.family || '').trim() || null)
-        : null,
+      family: familyForSave({
+        applies: familyApplies(editForm.value.role),
+        formValue: editForm.value.family,
+        storedValue: stored?.family,
+      }),
       manufacturer: (editForm.value.manufacturer || '').trim() || null,
     })
     toast.add({ severity: 'success', summary: 'Материал обновлён', life: 3000 })
@@ -1111,11 +1120,16 @@ function onEditKeydown(e, saveFn, cancelFn) {
                       class="inst-name-input"
                       @keydown="onEditKeydown($event, () => saveEditInstance(inst), cancelEditInstance)"
                     />
-                    <InputText
+                    <!-- Textarea, not InputText: notes are multiline and a
+                         single-line input flattens stored line breaks on
+                         save. Enter types a newline here — save via ✓. -->
+                    <Textarea
                       v-model="editInstanceForm.notes"
                       placeholder="Комментарий"
                       class="inst-notes-input"
-                      @keydown="onEditKeydown($event, () => saveEditInstance(inst), cancelEditInstance)"
+                      autoResize
+                      :rows="2"
+                      @keydown.escape="cancelEditInstance"
                     />
                     <Button icon="pi pi-check" text @click="saveEditInstance(inst)" />
                     <Button icon="pi pi-times" text severity="secondary" @click="cancelEditInstance" />
@@ -1164,10 +1178,12 @@ function onEditKeydown(e, saveFn, cancelFn) {
                               />
                             </td>
                             <td>
-                              <InputText
+                              <Textarea
                                 v-model="editComponentForm.notes"
                                 placeholder="Комментарий"
-                                @keydown="onEditKeydown($event, () => saveEditComponent(comp, inst.material_instance_id), cancelEditComponent)"
+                                autoResize
+                                :rows="2"
+                                @keydown.escape="cancelEditComponent"
                               />
                             </td>
                             <td>
@@ -1492,11 +1508,12 @@ function onEditKeydown(e, saveFn, cancelFn) {
                     @keydown.enter.prevent="saveNewInstance"
                     @keydown.escape="resetInstanceCreate"
                   />
-                  <InputText
+                  <Textarea
                     v-model="newInstanceForm.notes"
                     placeholder="Комментарий"
                     class="input-flex"
-                    @keydown.enter.prevent="saveNewInstance"
+                    autoResize
+                    :rows="2"
                     @keydown.escape="resetInstanceCreate"
                   />
                   <Button icon="pi pi-check" text @click="saveNewInstance" />

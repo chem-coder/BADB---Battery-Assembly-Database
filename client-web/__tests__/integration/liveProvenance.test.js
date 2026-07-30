@@ -2,15 +2,17 @@
 /**
  * Live-интеграция «Перепроверить»: реальные точки из dev-БД через API →
  * computeStreamSummary → сравнение с хранимым cycling_cycle_summary.
- * Требует поднятый dev-сервер (3003) — поэтому запускается ТОЛЬКО явно:
- *     LIVE=1 npx vitest run __tests__/integration/liveProvenance.test.js
+ * Требует поднятый dev-сервер (3003) и НАСТОЯЩИЙ JWT (auth-bypass удалён
+ * 2026-07-29) — поэтому запускается ТОЛЬКО явно:
+ *     LIVE=1 LIVE_TOKEN=<jwt из sessionStorage после логина> \
+ *       npx vitest run __tests__/integration/liveProvenance.test.js
  * В обычном прогоне (CI) — скипается.
  */
 import { describe, it, expect } from 'vitest'
 import { computeStreamSummary } from '@/utils/metricsEngine'
 
-const LIVE = !!process.env.LIVE
-const H = { Authorization: 'Bearer bypass' }
+const LIVE = !!process.env.LIVE && !!process.env.LIVE_TOKEN
+const H = { Authorization: `Bearer ${process.env.LIVE_TOKEN}` }
 const BASE = 'http://localhost:3003'
 
 describe.skipIf(!LIVE)('live: пересчёт против реальной БД (session 1, cycle 2)', () => {

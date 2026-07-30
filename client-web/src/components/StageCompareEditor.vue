@@ -84,6 +84,13 @@ function fieldComponentProps(tid, field) {
   return field.componentProps(ts?.general || {}, ts?.steps || {}, props.refs)
 }
 
+// Upper date bound for `date` fields. The schema's `max` may be a
+// function so "today" is computed at render time (itemCreatedAt must
+// never lie in the future — future-date guard, d035/d054 family).
+function fieldMaxDate(field) {
+  return (typeof field.max === 'function' ? field.max() : field.max) || ''
+}
+
 const visibleFields = computed(() => {
   return fields.value.filter(field => {
     if (typeof field.visibleIf === 'function'
@@ -783,6 +790,7 @@ function onColDragEnd(e) {
             <DateInputISO
               v-else-if="field.type === 'date'"
               :model-value="getValue(tid, field.key) || ''"
+              :max="fieldMaxDate(field)"
               @update:model-value="setValue(tid, field.key, $event)"
             />
             <div v-else-if="field.type === 'mixing-balls'" class="ce-balls-cell">

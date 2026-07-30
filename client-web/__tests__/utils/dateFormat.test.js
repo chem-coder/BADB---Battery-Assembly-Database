@@ -63,3 +63,47 @@ describe('todayIsoMsk', () => {
     expect(todayIsoMsk(new Date('2026-05-12T22:30:00.000Z'))).toBe('2026-05-13');
   });
 });
+
+// ── d054 batch-times converters ──────────────────────────────────────
+// State convention: naive MSK wall-clock 'YYYY-MM-DDTHH:mm:ss'; backend
+// stores TIMESTAMPTZ. MSK is fixed UTC+3.
+import { isoToMskDateTimeInput, mskDateTimeInputToIso } from '@/utils/dateFormat';
+
+describe('isoToMskDateTimeInput', () => {
+  it('converts a UTC instant to Moscow wall-clock', () => {
+    expect(isoToMskDateTimeInput('2026-07-29T11:30:00.000Z')).toBe('2026-07-29T14:30:00');
+  });
+
+  it('MSK midnight (pre-d054 backfill) keeps its own calendar day', () => {
+    // Stored instant for old DATE 2026-05-12 = 2026-05-11T21:00Z.
+    expect(isoToMskDateTimeInput('2026-05-11T21:00:00.000Z')).toBe('2026-05-12T00:00:00');
+  });
+
+  it('null/garbage → empty string', () => {
+    expect(isoToMskDateTimeInput(null)).toBe('');
+    expect(isoToMskDateTimeInput('not-a-date')).toBe('');
+  });
+});
+
+describe('mskDateTimeInputToIso', () => {
+  it('appends the fixed MSK offset', () => {
+    expect(mskDateTimeInputToIso('2026-07-29T14:30:00')).toBe('2026-07-29T14:30:00+03:00');
+    expect(mskDateTimeInputToIso('2026-07-29T14:30')).toBe('2026-07-29T14:30:00+03:00');
+  });
+
+  it('bare date → MSK midnight', () => {
+    expect(mskDateTimeInputToIso('2026-07-29')).toBe('2026-07-29T00:00:00+03:00');
+  });
+
+  it('empty/invalid → null (PATCH keep-current semantics)', () => {
+    expect(mskDateTimeInputToIso('')).toBe(null);
+    expect(mskDateTimeInputToIso(null)).toBe(null);
+    expect(mskDateTimeInputToIso('29.07.2026')).toBe(null);
+  });
+
+  it('round-trips with isoToMskDateTimeInput', () => {
+    const naive = '2026-07-29T09:05:00';
+    const iso = mskDateTimeInputToIso(naive);
+    expect(isoToMskDateTimeInput(new Date(iso).toISOString())).toBe(naive);
+  });
+});

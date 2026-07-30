@@ -7,6 +7,8 @@
 export const TARGET_FORM_FACTOR_OPTIONS = [
   { value: 'coin', label: 'Монеточный' },
   { value: 'pouch', label: 'Пакетный' },
+  // Vanilla order + label (2-electrodes.html #electrodes-target_form_factor).
+  { value: 'prism', label: 'Призматическая' },
   { value: 'cylindrical', label: 'Цилиндрический' },
 ]
 
@@ -18,6 +20,13 @@ export const TARGET_CONFIG_CODE_OPTIONS_BY_FORM_FACTOR = {
     { value: 'other', label: 'Другое' },
   ],
   pouch: [
+    { value: '103x83', label: '103 × 83' },
+    { value: '86x56', label: '86 × 56' },
+    { value: 'other', label: 'Другое' },
+  ],
+  // Same codes as pouch — d036 CHECK allows prism 103x83/86x56/other
+  // (services/electrodeCutBatchService.js TARGET_CONFIG_CODES_BY_FORM_FACTOR).
+  prism: [
     { value: '103x83', label: '103 × 83' },
     { value: '86x56', label: '86 × 56' },
     { value: 'other', label: 'Другое' },
@@ -47,7 +56,7 @@ export const ALL_TARGET_CONFIG_CODE_OPTIONS = (() => {
 // Shape auto-derived from form factor (coin → circle, else → rectangle)
 export function shapeForFormFactor(formFactor) {
   if (formFactor === 'coin') return 'circle'
-  if (formFactor === 'pouch' || formFactor === 'cylindrical') return 'rectangle'
+  if (formFactor === 'pouch' || formFactor === 'prism' || formFactor === 'cylindrical') return 'rectangle'
   return ''
 }
 
