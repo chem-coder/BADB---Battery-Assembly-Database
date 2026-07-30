@@ -7,10 +7,6 @@ if (process.env.NODE_ENV === 'production') {
     console.error('FATAL: JWT_SECRET must be set in production');
     process.exit(1);
   }
-  if (process.env.AUTH_BYPASS === 'true') {
-    console.error('FATAL: AUTH_BYPASS must NOT be enabled in production');
-    process.exit(1);
-  }
 }
 
 pool.query('SELECT 1')

@@ -83,7 +83,7 @@ Do not run `npm start` in one terminal and `npm run dev` in another unless you a
 
 ### 2026-07-17 change: backend port pinned in dev scripts (Windows note)
 
-The `dev` and `dev:bypass` scripts in `package.json` now start the backend as
+The `dev` script in `package.json` starts the backend as
 `PORT=3003 nodemon server.js` instead of plain `nodemon server.js`.
 
 Why: Claude Code's browser preview injects `PORT=5173` (the Vite port) into
@@ -93,9 +93,9 @@ with 502. Pinning `PORT=3003` is harmless everywhere else because `3003` is
 already the default in `config/index.js`.
 
 **Windows/lab install:** the `VAR=value` prefix is POSIX shell syntax and does
-not work in cmd.exe or PowerShell — so `npm run dev` and `npm run dev:bypass`
-will fail on Windows as written. This does not affect the lab machine's normal
-path, which is the production build served by Express:
+not work in cmd.exe or PowerShell — so `npm run dev` will fail on Windows as
+written. This does not affect the lab machine's normal path, which is the
+production build served by Express:
 
 ```powershell
 npm run build:web
@@ -105,26 +105,17 @@ npm start
 `npm start` (`node server.js`) has no env prefix and is unchanged. If you ever
 do need the Vite dev server on Windows, run the two halves in separate
 terminals (`node server.js` and `npm run dev --prefix client-web`) or use
-Git Bash/WSL. Never set `AUTH_BYPASS` on the lab machine — production startup
-refuses it (`server.js`), and the lab must use real logins.
+Git Bash/WSL.
 
-## Development Auth Bypass
+## Authentication in Development
 
-For local development only:
-
-```bash
-AUTH_BYPASS=true BYPASS_LOGIN=dkmaraulayte npm run dev
-```
-
-Backend only:
-
-```bash
-AUTH_BYPASS=true BYPASS_LOGIN=dkmaraulayte npm start
-```
-
-`AUTH_BYPASS=true` makes `middleware/auth.js` attach a real user from the database by login, then fall back to the first admin, then any user, then a temporary hardcoded development user if the DB is not ready.
-
-Production startup refuses to run if `AUTH_BYPASS=true`.
+There is no auth bypass. The former `AUTH_BYPASS`/`BYPASS_LOGIN` mechanism
+(and the `dev:bypass` npm script) was removed on 2026-07-29: it stamped every
+request with the configured bypass user regardless of who was actually logged
+in, which corrupted `created_by`/`updated_by` attribution. Development uses
+the same flow as production — start the app, open the login screen, sign in
+with your own account. The smoke harness (`npm run smoke:vanilla`) signs its
+own JWT against the throwaway database instead.
 
 ## Useful Environment Overrides
 
@@ -146,12 +137,6 @@ Production must set:
 JWT_SECRET=<real-secret>
 ```
 
-Production must not set:
-
-```bash
-AUTH_BYPASS=true
-```
-
 ## Windows Notes
 
 Use PostgreSQL 16 and current Node.js LTS compatible with the checked-in dependencies. Do not edit `config/index.js` just to change the database user; use environment variables instead.
@@ -162,8 +147,6 @@ PowerShell example:
 cd C:\path\to\BADB_main
 $env:DB_USER = "postgres"
 $env:DB_NAME = "badb_app_v1"
-$env:AUTH_BYPASS = "true"
-$env:BYPASS_LOGIN = "dkmaraulayte"
 npm run dev
 ```
 
@@ -173,8 +156,6 @@ npm run dev
 cd C:\path\to\BADB_main
 set DB_USER=postgres
 set DB_NAME=badb_app_v1
-set AUTH_BYPASS=true
-set BYPASS_LOGIN=dkmaraulayte
 npm run dev
 ```
 

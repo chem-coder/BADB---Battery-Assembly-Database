@@ -31,8 +31,6 @@ browser, and the policy is: **one browser profile = one active shared session.**
 - Identity is never derived from IP address.
 - Different users for dev/testing require **separate browser profiles, a different
   browser, or an incognito/private window** (each has its own `localStorage`).
-- Dev auth bypass (`config.authBypass`) is unchanged: no token is issued, `/me`
-  returns the bypass user, and cross-tab token events are ignored.
 - The local logout button still runs the page unsaved-change/logout guard before
   clearing the session; remote (other-tab) logout shows the login overlay rather
   than silently discarding in-progress edits.
@@ -44,8 +42,9 @@ browser, and the policy is: **one browser profile = one active shared session.**
   routes that write ownership metadata.
 - Workflow operator fields that describe lab work, such as
   `tape_process_steps.performed_by`, remain explicit payload fields.
-- Auth bypass is development-only. `server.js` refuses to start in production
-  when `AUTH_BYPASS=true`.
+- There is NO auth bypass (removed 2026-07-29 — it attributed every write to
+  the configured bypass user regardless of the real session; development uses
+  real logins, and the smoke harness signs its own JWT).
 - Guided battery delete is intentionally `auth`-only: any authenticated user can
   run the approved delete workflow after preflight, hard-block checks, typed
   confirmation, electrode disposition selection, and audit logging.
@@ -92,5 +91,5 @@ browser, and the policy is: **one browser profile = one active shared session.**
 ## Smoke Coverage
 
 `npm run smoke:vanilla` attempts to forge `created_by` / `updated_by` with a
-different valid user and asserts that the API records the authenticated bypass
-user instead.
+different valid user and asserts that the API records the authenticated smoke
+user (real JWT) instead.
